@@ -1,0 +1,59 @@
+/* ── CHAT FEATURE MODULE STYLES ── */
+
+.chat-contacts { width: 280px; background: #fff; border: 1.5px solid var(--blue-light); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
+.chat-contacts-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.chat-contacts-hdr span { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .07em; }
+.new-chat-btn { background: var(--blue-light); border: none; color: var(--blue); width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: .2s; flex-shrink: 0; }
+.new-chat-btn:hover { background: var(--blue); color: #fff; }
+.new-chat-btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.5; }
+.contact-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.contact-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: 0.2s; position: relative; }
+.contact-row:hover, .contact-row.active-contact { background: var(--blue-light); }
+.contact-avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, var(--blue), #60a5fa); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.contact-avatar.group-avatar { background: linear-gradient(135deg, var(--gold), #fbbf24); }
+.contact-info { min-width: 0; flex: 1; }
+.contact-info h4 { font-size: 13.5px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contact-info span { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.contact-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.contact-time { font-size: 10px; color: var(--text-muted); }
+.contact-unread { background: var(--blue); color: #fff; font-size: 10px; font-weight: 700; min-width: 17px; height: 17px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+.contact-empty { font-size: 12.5px; color: var(--text-muted); text-align: center; padding: 24px 8px; line-height: 1.6; }
+.chat-window { flex: 1; background: #fff; border: 1.5px solid var(--blue-light); border-radius: 16px; display: flex; flex-direction: column; box-shadow: var(--shadow); overflow: hidden; }
+.cw-header { background: var(--blue); padding: 14px 18px; display: flex; align-items: center; gap: 12px; }
+.cw-header .cw-name { font-weight: 700; color: #fff; font-size: 14px; }
+.cw-header .cw-role { font-size: 11.5px; color: rgba(255,255,255,0.72); }
+.cw-messages { flex: 1; padding: 16px; overflow-y: auto; background: #f8fafc; display: flex; flex-direction: column; gap: 10px; min-height: 300px; }
+.cw-empty, .cw-loading { margin: auto; font-size: 13px; color: var(--text-muted); text-align: center; }
+.msg-bubble { max-width: 70%; padding: 8px 14px 9px; border-radius: 14px; font-size: 13px; line-height: 1.5; }
+.msg-bubble.them { background: #e2e8f0; color: var(--text-primary); align-self: flex-start; }
+.msg-bubble.me   { background: var(--blue); color: #fff; align-self: flex-end; }
+.msg-sender { font-size: 10.5px; font-weight: 700; opacity: .75; margin-bottom: 2px; }
+.msg-time { font-size: 9.5px; opacity: .6; margin-top: 3px; text-align: right; }
+.cw-input-area { border-top: 1px solid var(--blue-light); display: flex; align-items: center; position: relative; }
+.cw-input-area input { flex: 1; border: none; outline: none; padding: 14px 16px; font-size: 13.5px; font-family: 'Plus Jakarta Sans', sans-serif; background: #fff; }
+.cw-emoji-btn { width: 42px; background: none; border: none; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: .2s; border-radius: 8px; }
+.cw-emoji-btn:hover { background: var(--blue-light); }
+.cw-send { width: 52px; background: var(--blue); border: none; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.cw-send svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cw-send:hover { background: #d97706; }
+.chat-layout { display: flex; gap: 16px; }
+.cw-mute-banner { flex: 1; display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-size: 12.5px; color: #92400e; background: #fffbeb; }
+.cw-mute-banner.permanent { color: #991b1b; background: #fef2f2; }
+.cw-mute-banner svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+
+.emoji-picker { position: absolute; bottom: calc(100% + 8px); left: 8px; width: 260px; max-height: 220px; overflow-y: auto; background: #fff; border: 1.5px solid var(--blue-light); border-radius: 12px; box-shadow: 0 8px 24px rgba(15,23,42,.14); padding: 10px; display: none; grid-template-columns: repeat(8, 1fr); gap: 2px; z-index: 20; }
+.emoji-picker.open { display: grid; }
+.emoji-picker button { background: none; border: none; font-size: 18px; line-height: 1; padding: 5px 0; border-radius: 6px; cursor: pointer; transition: .15s; }
+.emoji-picker button:hover { background: var(--blue-light); }
+
+.nc-search { width: 100%; border: 1.5px solid var(--blue-light); border-radius: 10px; padding: 11px 14px; font-size: 13.5px; font-family: 'Plus Jakarta Sans', sans-serif; outline: none; }
+.nc-search:focus { border-color: var(--blue); }
+.nc-contact-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.nc-contact-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 10px; cursor: pointer; transition: .15s; }
+.nc-contact-row:hover { background: var(--blue-light); }
+.nc-contact-row.picked { background: var(--blue-light); }
+.nc-contact-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--blue); flex-shrink: 0; }
+.nc-empty { font-size: 12.5px; color: var(--text-muted); text-align: center; padding: 16px; }
+.nc-group-name { width: 100%; border: 1.5px solid var(--blue-light); border-radius: 10px; padding: 11px 14px; font-size: 13.5px; font-family: 'Plus Jakarta Sans', sans-serif; outline: none; }
+.nc-group-name:focus { border-color: var(--blue); }
+.nc-picked-count { font-size: 11.5px; color: var(--text-muted); }

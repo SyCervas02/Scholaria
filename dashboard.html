@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Scholaria • Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css"/>
+  <link rel="stylesheet" href="css/modules/materials.css"/>
+  <link rel="stylesheet" href="css/modules/quiz.css"/>
+  <link rel="stylesheet" href="css/modules/chat.css"/>
+  <link rel="stylesheet" href="css/modules/admin.css"/>
+
+  <!-- CDN Dependencies -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<button class="chat-fab" id="chatFab" onclick="goToChat()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;display:block;">
+    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+  </svg>
+</button>
+
+<body>
+
+  <header class="top-nav">
+    <button class="hamburger" id="hamburger-toggle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:block;">
+        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+    <div class="logo">
+      <svg class="logo-svg" id="brandLogoSvg" viewBox="0 0 216 52" xmlns="http://www.w3.org/2000/svg" aria-label="Scholaria E-Learning">
+        <rect x="0" y="4" width="44" height="44" rx="10" fill="#0f172a"/>
+        <rect x="4" y="11" width="14" height="30" rx="2" fill="#ffffff"/>
+        <rect x="6" y="15" width="8" height="2" rx="1" fill="#d1d5db"/>
+        <rect x="6" y="19" width="10" height="2" rx="1" fill="#d1d5db"/>
+        <rect x="6" y="23" width="6" height="2" rx="1" fill="#d1d5db"/>
+        <rect x="6" y="27" width="9" height="2" rx="1" fill="#d1d5db"/>
+        <rect x="15" y="9" width="13" height="34" rx="2" fill="#f59e0b"/>
+        <rect x="18" y="15" width="7" height="2" rx="1" fill="#1d4ed8" opacity="0.8"/>
+        <rect x="18" y="19" width="7" height="2" rx="1" fill="#1d4ed8" opacity="0.8"/>
+        <rect x="18" y="23" width="7" height="2" rx="1" fill="#1d4ed8" opacity="0.8"/>
+        <rect x="26" y="12" width="14" height="20" rx="2" fill="#1e293b"/>
+        <rect x="27" y="13" width="12" height="12" rx="1" fill="#f59e0b"/>
+        <polygon points="31,16 31,23 37,19.5" fill="#ffffff"/>
+        <circle cx="29" cy="27" r="1" fill="#475569"/>
+        <circle cx="33" cy="27" r="1" fill="#475569"/>
+        <circle cx="37" cy="27" r="1" fill="#475569"/>
+        <rect x="11" y="22" width="4" height="18" rx="2" fill="#2563eb" transform="rotate(-38 13 28)"/>
+        <polygon points="8,35 10,41 14,37" fill="#93c5fd"/>
+        <circle cx="40" cy="9" r="7" fill="#7c3aed"/>
+        <polyline points="37,9 39.5,12 44,6" fill="none" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="52" y="30" font-family="'Syne',sans-serif" font-weight="800" font-size="22" letter-spacing="0"><tspan id="wm-schol" fill="#2563eb">schol</tspan><tspan id="wm-aria" fill="#f59e0b">aria</tspan></text>
+        <rect id="ul-schol" x="52" y="34" width="0" height="2.5" rx="1.2" fill="#2563eb"/>
+        <rect id="ul-aria" x="52" y="34" width="0" height="2.5" rx="1.2" fill="#f59e0b"/>
+        <text x="52" y="47" font-family="'Plus Jakarta Sans',sans-serif" font-weight="700" font-size="9" fill="#94a3b8" letter-spacing="2">E-LEARNING</text>
+      </svg>
+    </div>
+    <div class="search-bar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:var(--blue);flex-shrink:0;">
+        <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+      </svg>
+      <input type="text" placeholder="Search courses, paths, or skills..."/>
+    </div>
+    <div class="nav-right">
+
+      <div class="notif-wrap" id="notifWrap">
+        <button class="icon-btn" id="notifBtn" onclick="toggleNotif()" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
+          </svg>
+          <span class="badge" id="notifBadge">3</span>
+        </button>
+
+        <div class="notif-dropdown" id="notifDropdown">
+          <div class="notif-header">
+            <span class="notif-title">Announcements</span>
+            <button class="notif-mark-all" onclick="markAllRead()">Mark all read</button>
+          </div>
+          <div class="notif-list" id="notifList">
+            <div class="notif-item unread" data-id="1">
+              <div class="notif-dot"></div>
+              <div class="notif-body">
+                <p class="notif-msg">&#128226; <strong>Web Systems &#8211; Quiz 3</strong> is now available. Complete it before Jun 20.</p>
+                <span class="notif-time">2 hours ago</span>
+              </div>
+            </div>
+            <div class="notif-item unread" data-id="2">
+              <div class="notif-dot"></div>
+              <div class="notif-body">
+                <p class="notif-msg">&#128196; New material uploaded: <strong>Q1 Lesson 3 &#8211; Web Systems.pdf</strong></p>
+                <span class="notif-time">1 day ago</span>
+              </div>
+            </div>
+            <div class="notif-item unread" data-id="3">
+              <div class="notif-dot"></div>
+              <div class="notif-body">
+                <p class="notif-msg">&#127881; Your score on <strong>Programming &#8211; Quiz 1</strong> has been released: <strong>92%</strong></p>
+                <span class="notif-time">2 days ago</span>
+              </div>
+            </div>
+            <div class="notif-item" data-id="4">
+              <div class="notif-dot"></div>
+              <div class="notif-body">
+                <p class="notif-msg">&#128197; Reminder: <strong>Cybersecurity Midterm</strong> is scheduled for Jun 22.</p>
+                <span class="notif-time">3 days ago</span>
+              </div>
+            </div>
+            <div class="notif-item" data-id="5">
+              <div class="notif-dot"></div>
+              <div class="notif-body">
+                <p class="notif-msg">&#9989; Your Q1 progress report is now available under <strong>My Progress</strong>.</p>
+                <span class="notif-time">5 days ago</span>
+              </div>
+            </div>
+          </div>
+          <div class="notif-footer">
+            <button class="notif-view-all" onclick="renderPage('progress');closeNotif();">View all activity</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile">
+        <div class="avatar" id="userAvatar">JA</div>
+        <span class="nav-username" id="userName">User</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <aside class="sidebar" id="sidebar">
+      <nav class="menu" id="sidebarMenu">
+      </nav>
+      <div class="sidebar-footer">
+        <button class="logout-btn" onclick="logout()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Logout
+        </button>
+      </div>
+    </aside>
+
+    <main class="main" id="mainContent">
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal-overlay" id="quizModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3>Create New Quiz</h3>
+          <span>Generate questions straight from your teaching material</span>
+        </div>
+        <button class="modal-x" onclick="closeQuizModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="quizModalBody"></div>
+      <div class="modal-foot" id="quizModalFoot"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="takeQuizModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3 id="takeQuizModalTitle">Quiz</h3>
+          <span id="takeQuizModalSubtitle"></span>
+        </div>
+        <button class="modal-x" onclick="closeTakeQuizModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="takeQuizModalBody"></div>
+      <div class="modal-foot" id="takeQuizModalFoot"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="addUserModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3>Add User</h3>
+          <span>Register a new student or teacher to the system</span>
+        </div>
+        <button class="modal-x" onclick="closeAddUserModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="addUserModalBody"></div>
+      <div class="modal-foot" id="addUserModalFoot"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="materialModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3>Upload Material</h3>
+          <span>Share a learning resource with your students</span>
+        </div>
+        <button class="modal-x" onclick="closeMaterialModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="materialModalBody"></div>
+      <div class="modal-foot" id="materialModalFoot"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="newChatModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3>New Chat</h3>
+          <span>Pick one person for a 1:1 chat, or several to start a group</span>
+        </div>
+        <button class="modal-x" onclick="closeNewChatModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="newChatModalBody"></div>
+      <div class="modal-foot" id="newChatModalFoot"></div>
+    </div>
+  </div>
+
+  <!-- Modular Scripts -->
+  <script src="js/core/ui-helpers.js"></script>
+  <script src="js/modules/repository/materials.js"></script>
+  <script src="js/modules/quizzes/take-quiz.js"></script>
+  <script src="js/modules/quizzes/item-analysis.js"></script>
+  <script src="js/modules/quizzes/quiz-generator.js"></script>
+  <script src="js/modules/chat/chat.js"></script>
+  <script src="js/modules/admin/user-management.js"></script>
+  <script src="js/core/sidebar.js"></script>
+  <script src="js/core/auth.js"></script>
+</body>
+</html>

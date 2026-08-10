@@ -1,0 +1,441 @@
+/* ── REAL-TIME CHAT MODULE ── */
+
+let chatConversations = [];
+let activeConversationId = null;
+let seenMessageIds = new Set();
+let chatRealtimeChannel = null;
+const newChatState = { selected: new Set(), search: '', loaded: false, directory: [] };
+
+async function loadChatsPage() {
+  await loadConversationsFromDB();
+  renderContactsList();
+  if (chatConversations.length > 0) {
+    openConversation(chatConversations[0].id);
+  } else {
+    renderInputArea();
+  }
+  ensureChatRealtimeSubscription();
+}
+
+async function loadConversationsFromDB() {
+  if (!CURRENT_PROFILE) return;
+  const { data: partRows, error } = await db
+    .from('conversation_participants')
+    .select('conversation_id, conversations(id, is_group, title, created_by, created_at)')
+    .eq('user_id', CURRENT_PROFILE.id);
+  if (error) { console.error('Failed to load conversations:', error.message); return; }
+
+  const prevUnread = {};
+  chatConversations.forEach(c => { prevUnread[c.id] = c.unread; });
+
+  const convIds = (partRows || []).map(r => r.conversation_id);
+  if (convIds.length === 0) { chatConversations = []; return; }
+
+  const { data: allParts } = await db
+    .from('conversation_participants')
+    .select('conversation_id, user_id, full_name, role')
+    .in('conversation_id', convIds);
+
+  const { data: lastMsgs } = await db
+    .from('messages')
+    .select('id, conversation_id, body, sender_id, sender_name, created_at')
+    .in('conversation_id', convIds)
+    .order('created_at', { ascending: false });
+
+  const lastByConv = {};
+  (lastMsgs || []).forEach(m => { if (!lastByConv[m.conversation_id]) lastByConv[m.conversation_id] = m; });
+
+  chatConversations = (partRows || []).map(r => {
+    const conv = r.conversations;
+    const participants = (allParts || []).filter(p => p.conversation_id === conv.id);
+    const last = lastByConv[conv.id];
+    return {
+      id: conv.id,
+      isGroup: conv.is_group,
+      title: conv.title,
+      participants,
+      lastMessage: last ? last.body : '',
+      lastMessageAt: last ? last.created_at : conv.created_at,
+      unread: prevUnread[conv.id] || 0
+    };
+  }).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+}
+
+function conversationOther(conv) {
+  return conv.participants.find(p => p.user_id !== CURRENT_PROFILE.id);
+}
+function conversationLabel(conv) {
+  if (conv.isGroup) return conv.title || conv.participants.map(p => p.full_name.split(',')[0]).join(', ');
+  const other = conversationOther(conv);
+  return other ? other.full_name : 'Conversation';
+}
+function conversationSub(conv) {
+  if (conv.isGroup) return `${conv.participants.length} members`;
+  const other = conversationOther(conv);
+  return other ? other.role.charAt(0).toUpperCase() + other.role.slice(1) : '';
+}
+function conversationInitials(conv) {
+  if (conv.isGroup) return '👥';
+  const other = conversationOther(conv);
+  return other ? initialsFor(other.full_name) : '?';
+}
+function formatMsgTime(iso, shortForList) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (shortForList) {
+    return sameDay
+      ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function renderContactsList() {
+  const box = document.getElementById('chatContactList');
+  if (!box) return;
+  if (chatConversations.length === 0) {
+    box.innerHTML = `<div class="contact-empty">No conversations yet.<br>Tap + above to message a teacher, student, or start a group.</div>`;
+    return;
+  }
+  box.innerHTML = chatConversations.map(c => `
+    <div class="contact-row ${c.id === activeConversationId ? 'active-contact' : ''}" data-conv="${c.id}" onclick="openConversation('${c.id}')">
+      <div class="contact-avatar ${c.isGroup ? 'group-avatar' : ''}">${conversationInitials(c)}</div>
+      <div class="contact-info">
+        <h4>${escHtml(conversationLabel(c))}</h4>
+        <span>${escHtml(c.lastMessage || 'No messages yet')}</span>
+      </div>
+      <div class="contact-meta">
+        <span class="contact-time">${formatMsgTime(c.lastMessageAt, true)}</span>
+        ${c.unread > 0 ? `<span class="contact-unread">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+async function openConversation(id) {
+  activeConversationId = id;
+  const conv = chatConversations.find(c => c.id === id);
+  if (!conv) return;
+  conv.unread = 0;
+  renderContactsList();
+
+  const avatar = document.getElementById('cwAvatar');
+  const name = document.getElementById('cwName');
+  const role = document.getElementById('cwRole');
+  const msgsBox = document.getElementById('cwMessages');
+
+  if (avatar) {
+    avatar.className = 'contact-avatar' + (conv.isGroup ? ' group-avatar' : '');
+    avatar.textContent = conversationInitials(conv);
+  }
+  if (name) name.textContent = conversationLabel(conv);
+  if (role) role.textContent = conversationSub(conv);
+  renderInputArea();
+  if (msgsBox) msgsBox.innerHTML = '<div class="cw-loading">Loading messages…</div>';
+
+  const { data, error } = await db.from('messages')
+    .select('*').eq('conversation_id', id).order('created_at', { ascending: true });
+  if (error) { console.error('Failed to load messages:', error.message); return; }
+  (data || []).forEach(m => seenMessageIds.add(m.id));
+  renderMessages(conv, data || []);
+}
+
+function renderMessages(conv, msgs) {
+  const box = document.getElementById('cwMessages');
+  if (!box) return;
+  box.innerHTML = msgs.length
+    ? msgs.map(m => messageBubbleHtml(conv, m)).join('')
+    : '<div class="cw-empty">No messages yet — say hi!</div>';
+  box.scrollTop = box.scrollHeight;
+}
+
+function messageBubbleHtml(conv, m) {
+  const mine = m.sender_id === CURRENT_PROFILE.id;
+  const showName = conv.isGroup && !mine;
+  return `<div class="msg-bubble ${mine ? 'me' : 'them'}" data-mid="${m.id}">
+    ${showName ? `<div class="msg-sender">${escHtml(m.sender_name)}</div>` : ''}
+    <div class="msg-text">${escHtml(m.body)}</div>
+    <div class="msg-time">${formatMsgTime(m.created_at)}</div>
+  </div>`;
+}
+
+function renderInputArea() {
+  const area = document.getElementById('cwInputArea');
+  if (!area) return;
+  const warnIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+
+  if (CURRENT_PROFILE.permanently_muted) {
+    area.innerHTML = `<div class="cw-mute-banner permanent">${warnIcon}<span>You've been muted from chat for repeated inappropriate language. Please visit or message the Guidance Office to be unmuted.</span></div>`;
+    return;
+  }
+  if (CURRENT_PROFILE.muted_until && new Date(CURRENT_PROFILE.muted_until) > new Date()) {
+    const untilDate = new Date(CURRENT_PROFILE.muted_until);
+    const sameDay = untilDate.toDateString() === new Date().toDateString();
+    const until = sameDay
+      ? untilDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : untilDate.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    area.innerHTML = `<div class="cw-mute-banner">${warnIcon}<span>You're temporarily muted for inappropriate language. You can chat again after ${until}.</span></div>`;
+    return;
+  }
+
+  area.innerHTML = `
+    <button class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" onclick="toggleEmojiPicker(event)">🙂</button>
+    <div class="emoji-picker" id="cwEmojiPicker"></div>
+    <input type="text" id="cwInput" placeholder="${activeConversationId ? 'Type a message…' : 'Select a conversation'}" onkeypress="if(event.key==='Enter')sendChatMsg()" ${activeConversationId ? '' : 'disabled'}>
+    <button class="cw-send" onclick="sendChatMsg()">${iconSend()}</button>`;
+}
+
+async function refreshOwnMuteStatus() {
+  const { data, error } = await db.from('users')
+    .select('profanity_strikes, muted_until, permanently_muted')
+    .eq('id', CURRENT_PROFILE.id).single();
+  if (error || !data) return;
+  Object.assign(CURRENT_PROFILE, data);
+  if (currentPage === 'chats') renderInputArea();
+}
+
+async function sendChatMsg() {
+  const input = document.getElementById('cwInput');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text || !activeConversationId) return;
+  if (CURRENT_PROFILE.permanently_muted || (CURRENT_PROFILE.muted_until && new Date(CURRENT_PROFILE.muted_until) > new Date())) {
+    renderInputArea();
+    return;
+  }
+  const conv = chatConversations.find(c => c.id === activeConversationId);
+  if (!conv) return;
+  input.value = '';
+
+  const box = document.getElementById('cwMessages');
+  const empty = box.querySelector('.cw-empty');
+  if (empty) empty.remove();
+  const tempId = 'temp-' + Date.now();
+  const optimistic = { id: tempId, sender_id: CURRENT_PROFILE.id, sender_name: CURRENT_PROFILE.full_name, body: text, created_at: new Date().toISOString() };
+  box.insertAdjacentHTML('beforeend', messageBubbleHtml(conv, optimistic));
+  box.scrollTop = box.scrollHeight;
+
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) {
+    const failedBubble = box.querySelector(`[data-mid="${tempId}"]`);
+    if (failedBubble) failedBubble.remove();
+    showToast('Your session expired — please log in again', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/chat/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({ conversationId: activeConversationId, text })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      const failedBubble = box.querySelector(`[data-mid="${tempId}"]`);
+      if (failedBubble) failedBubble.remove();
+      showToast(
+        data.error === 'CHAT_MUTED_PERMANENT'
+          ? "You're muted from chat — visit or message Guidance to be unmuted."
+          : data.error === 'CHAT_MUTED_UNTIL'
+            ? "You're temporarily muted for inappropriate language."
+            : (data.error || 'Message failed to send'),
+        'error'
+      );
+      await refreshOwnMuteStatus();
+      return;
+    }
+
+    seenMessageIds.add(data.id);
+    const sentBubble = box.querySelector(`[data-mid="${tempId}"]`);
+    if (sentBubble) {
+      sentBubble.dataset.mid = data.id;
+      const textEl = sentBubble.querySelector('.msg-text');
+      if (textEl) textEl.textContent = data.body;
+    }
+    if (data.warning) showToast(data.warning, 'error');
+
+    conv.lastMessage = data.body;
+    conv.lastMessageAt = data.created_at;
+    chatConversations.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+    if (currentPage === 'chats') renderContactsList();
+    await refreshOwnMuteStatus();
+  } catch (err) {
+    const failedBubble = box.querySelector(`[data-mid="${tempId}"]`);
+    if (failedBubble) failedBubble.remove();
+    console.error('Failed to send message:', err.message);
+    showToast('Message failed to send', 'error');
+  }
+}
+
+function ensureChatRealtimeSubscription() {
+  if (chatRealtimeChannel) return;
+  chatRealtimeChannel = db.channel('messages-listener')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+      handleIncomingMessage(payload.new);
+    })
+    .subscribe();
+}
+
+function handleIncomingMessage(msg) {
+  if (seenMessageIds.has(msg.id)) return;
+  seenMessageIds.add(msg.id);
+
+  const conv = chatConversations.find(c => c.id === msg.conversation_id);
+  if (!conv) {
+    loadConversationsFromDB().then(renderContactsList);
+    return;
+  }
+
+  conv.lastMessage = msg.body;
+  conv.lastMessageAt = msg.created_at;
+
+  const isMine = msg.sender_id === CURRENT_PROFILE.id;
+  const isOpen = currentPage === 'chats' && activeConversationId === conv.id;
+
+  if (isOpen) {
+    const box = document.getElementById('cwMessages');
+    if (box) {
+      const empty = box.querySelector('.cw-empty');
+      if (empty) empty.remove();
+      box.insertAdjacentHTML('beforeend', messageBubbleHtml(conv, msg));
+      box.scrollTop = box.scrollHeight;
+    }
+  } else if (!isMine) {
+    conv.unread = (conv.unread || 0) + 1;
+  }
+
+  chatConversations.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+  if (currentPage === 'chats') renderContactsList();
+}
+
+async function openNewChatModal() {
+  newChatState.selected = new Set();
+  newChatState.search = '';
+  document.getElementById('newChatModal').classList.add('active');
+  document.getElementById('newChatModalBody').innerHTML = '<div class="nc-empty">Loading people…</div>';
+  document.getElementById('newChatModalFoot').innerHTML = '';
+  if (!newChatState.loaded) {
+    const { data, error } = await db.rpc('list_contacts');
+    if (error) { showToast('Could not load contact list', 'error'); console.error(error.message); return; }
+    newChatState.directory = data || [];
+    newChatState.loaded = true;
+  }
+  renderNewChatModal();
+}
+function closeNewChatModal() {
+  document.getElementById('newChatModal').classList.remove('active');
+}
+function ncToggleContact(id) {
+  if (newChatState.selected.has(id)) newChatState.selected.delete(id);
+  else newChatState.selected.add(id);
+  renderNewChatModal();
+}
+function ncFilterContacts(v) {
+  newChatState.search = v;
+  renderNewChatModal();
+}
+function renderNewChatModal() {
+  const body = document.getElementById('newChatModalBody');
+  const q = newChatState.search.trim().toLowerCase();
+  const filtered = newChatState.directory.filter(c =>
+    !q || c.full_name.toLowerCase().includes(q) || c.role.toLowerCase().includes(q));
+  const rowsHtml = filtered.length ? filtered.map(c => `
+    <label class="nc-contact-row ${newChatState.selected.has(c.id) ? 'picked' : ''}">
+      <input type="checkbox" ${newChatState.selected.has(c.id) ? 'checked' : ''} onchange="ncToggleContact('${c.id}')">
+      <div class="contact-avatar" style="width:32px;height:32px;font-size:11px;">${initialsFor(c.full_name)}</div>
+      <div class="contact-info"><h4>${escHtml(c.full_name)}</h4><span>${escHtml(c.role.charAt(0).toUpperCase() + c.role.slice(1))}${c.school_id ? ' · ' + escHtml(c.school_id) : ''}</span></div>
+    </label>`).join('') : `<div class="nc-empty">No matching people found.</div>`;
+
+  body.innerHTML = `
+    <input type="text" class="nc-search" placeholder="Search by name or role…" value="${escHtml(newChatState.search)}" oninput="ncFilterContacts(this.value)">
+    <div class="nc-contact-list">${rowsHtml}</div>
+    ${newChatState.selected.size > 1 ? `
+      <div class="gen-field"><label>Group name (optional)</label>
+        <input type="text" class="nc-group-name" id="ncGroupName" placeholder="e.g. Grade 12 STEM — Section A">
+      </div>` : ''}`;
+
+  const n = newChatState.selected.size;
+  document.getElementById('newChatModalFoot').innerHTML = `
+    <span class="nc-picked-count">${n} selected</span>
+    <div style="display:flex;gap:10px;">
+      <button class="foot-btn-secondary" onclick="closeNewChatModal()">Cancel</button>
+      <button class="foot-btn-secondary" style="border-color:var(--blue);color:var(--blue);" ${n === 0 ? 'disabled' : ''} onclick="ncCreateConversation()">${iconPlus()} ${n > 1 ? 'Start Group Chat' : 'Start Chat'}</button>
+    </div>`;
+}
+
+async function ncCreateConversation() {
+  const ids = Array.from(newChatState.selected);
+  if (ids.length === 0) return;
+  const isGroup = ids.length > 1;
+
+  if (!isGroup) {
+    const targetId = ids[0];
+    const existing = chatConversations.find(c =>
+      !c.isGroup && c.participants.some(p => p.user_id === targetId));
+    if (existing) {
+      closeNewChatModal();
+      openConversation(existing.id);
+      return;
+    }
+  }
+
+  const picked = newChatState.directory.filter(c => newChatState.selected.has(c.id));
+  const groupNameInput = document.getElementById('ncGroupName');
+  const title = isGroup
+    ? ((groupNameInput && groupNameInput.value.trim()) || picked.map(p => p.full_name.split(',')[0]).join(', '))
+    : null;
+
+  const { data: conv, error: convErr } = await db.from('conversations')
+    .insert({ is_group: isGroup, title, created_by: CURRENT_PROFILE.id })
+    .select().single();
+  if (convErr) { showToast('Could not start conversation', 'error'); console.error(convErr.message); return; }
+
+  const participantRows = [
+    { conversation_id: conv.id, user_id: CURRENT_PROFILE.id, full_name: CURRENT_PROFILE.full_name, role: ROLE },
+    ...picked.map(p => ({ conversation_id: conv.id, user_id: p.id, full_name: p.full_name, role: p.role }))
+  ];
+  const { error: partErr } = await db.from('conversation_participants').insert(participantRows);
+  if (partErr) { showToast('Could not add participants', 'error'); console.error(partErr.message); return; }
+
+  closeNewChatModal();
+  await loadConversationsFromDB();
+  renderContactsList();
+  openConversation(conv.id);
+}
+
+const EMOJI_LIST = [
+  '😀','😁','😂','🤣','😊','😍','😘','😜','🤔','😎','😴','😭','😡','🥳','😇','🙃',
+  '👍','👎','👏','🙌','🙏','💪','✌️','🤝','👋','❤️','💙','💛','💚','🔥','⭐','✅',
+  '📚','✏️','📌','📎','⏰','🎉','🏫','💡','❓','❗','😅','😢','🥰','🤗','😬','🙄'
+];
+function toggleEmojiPicker(e) {
+  e.stopPropagation();
+  const picker = document.getElementById('cwEmojiPicker');
+  if (!picker) return;
+  if (picker.classList.contains('open')) { picker.classList.remove('open'); return; }
+  if (!picker.innerHTML) {
+    picker.innerHTML = EMOJI_LIST.map(em => `<button type="button" onclick="insertEmoji('${em}')">${em}</button>`).join('');
+  }
+  picker.classList.add('open');
+}
+function insertEmoji(emoji) {
+  const input = document.getElementById('cwInput');
+  if (!input) return;
+  const start = input.selectionStart != null ? input.selectionStart : input.value.length;
+  const end = input.selectionEnd != null ? input.selectionEnd : input.value.length;
+  input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+  input.focus();
+  input.selectionStart = input.selectionEnd = start + emoji.length;
+}
+document.addEventListener('click', e => {
+  const picker = document.getElementById('cwEmojiPicker');
+  const btn = document.getElementById('cwEmojiBtn');
+  if (picker && picker.classList.contains('open') && !picker.contains(e.target) && e.target !== btn) {
+    picker.classList.remove('open');
+  }
+});

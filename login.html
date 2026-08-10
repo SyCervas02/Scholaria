@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haven Of Wisdom Academy – Scholaria Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #dce8f5;
+            overflow: hidden;
+        }
+
+        /* ── BACKGROUND ── */
+        .bg-layer {
+            position: fixed; inset: 0;
+            background: linear-gradient(135deg, #c9ddf0 0%, #dce8f5 40%, #e8d8f0 100%);
+            z-index: 0;
+        }
+        .bg-orb {
+            position: fixed; border-radius: 50%; filter: blur(80px); opacity: 0.45; z-index: 0;
+            pointer-events: none;
+        }
+        .o1 { width: 500px; height: 500px; background: #a8c8e8; top: -150px; left: -100px; }
+        .o2 { width: 400px; height: 400px; background: #c8b8e8; bottom: -100px; right: -100px; }
+        .o3 { width: 300px; height: 300px; background: #b8d8f0; top: 40%; left: 60%; }
+
+        /* ── CARD ── */
+        .card-wrap {
+            position: relative; z-index: 1;
+            width: 100%; max-width: 500px;
+            padding: 20px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(30, 60, 120, 0.18), 0 4px 16px rgba(30,60,120,0.1);
+            overflow: hidden;
+        }
+
+        /* ── HEADER ── */
+        .card-header {
+            background: linear-gradient(135deg, #2a4db5 0%, #1e3a8a 100%);
+            padding: 28px 28px 24px;
+            color: #fff;
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .logo-wrap {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-img {
+            width: 52px; height: 52px;
+            border-radius: 12px;
+            border: 2px solid rgba(255,255,255,0.35);
+            object-fit: cover;
+            background: #fff;
+        }
+
+        .logo-text h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 17px;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1.2;
+        }
+
+        .logo-text span {
+            font-size: 10.5px;
+            font-weight: 500;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.65);
+        }
+
+        .back-pill {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25);
+            color: #fff;
+            border-radius: 50px;
+            padding: 7px 14px;
+            font-size: 12.5px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .back-pill:hover { background: rgba(255,255,255,0.25); }
+        .back-pill svg { width: 14px; height: 14px; }
+
+        .header-title {}
+
+        .role-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 50px;
+            padding: 5px 12px;
+            font-size: 11.5px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 10px;
+        }
+        .role-badge svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+        .tab-label {
+            font-family: 'Playfair Display', serif;
+            font-size: 26px;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1.2;
+            margin-bottom: 5px;
+        }
+
+        .tab-sub {
+            font-size: 13.5px;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 14px;
+        }
+
+        .gold-rule {
+            width: 36px; height: 3px;
+            background: #d4a017;
+            border-radius: 2px;
+        }
+
+        /* ── BODY ── */
+        .card-body { padding: 24px 24px 28px; }
+
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* ── ROLE LIST ── */
+        .role-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .role-card {
+            width: 100%;
+            background: #f8fbff;
+            border: 1.5px solid #e0ebfa;
+            border-radius: 14px;
+            padding: 16px 18px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            text-align: left;
+            font-family: 'DM Sans', sans-serif;
+        }
+        .role-card:hover {
+            border-color: #2a4db5;
+            box-shadow: 0 4px 20px rgba(42,77,181,0.13);
+            transform: translateY(-1px);
+            background: #fff;
+        }
+
+        .role-icon {
+            width: 46px; height: 46px;
+            border-radius: 12px;
+            background: #2a4db5;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .role-icon svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .role-icon.gold { background: #d4a017; }
+
+        .role-text { flex: 1; }
+        .role-text h3 { font-size: 15px; font-weight: 700; color: #1e3a8a; margin-bottom: 2px; }
+        .role-text p { font-size: 12.5px; color: #6b7280; }
+
+        .role-arrow svg { width: 18px; height: 18px; stroke: #9ca3af; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+        /* ── FIELDS ── */
+        .field { margin-bottom: 16px; }
+        .field label {
+            display: block;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 7px;
+            letter-spacing: 0.02em;
+        }
+
+        .input-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-wrap input {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1.5px solid #e0ebfa;
+            border-radius: 10px;
+            font-size: 14px;
+            color: #1e293b;
+            background: #f9fbff;
+            font-family: 'DM Sans', sans-serif;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+        .input-wrap input:focus {
+            border-color: #2a4db5;
+            box-shadow: 0 0 0 3px rgba(42,77,181,0.12);
+            background: #fff;
+        }
+        .input-wrap input.valid   { border-color: #059669; }
+        .input-wrap input.invalid { border-color: #dc2626; }
+
+        .eye-btn {
+            position: absolute; right: 12px;
+            background: none; border: none; cursor: pointer;
+            padding: 4px; color: #9ca3af;
+            display: flex; align-items: center;
+        }
+        .eye-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .input-wrap input[type="password"] { padding-right: 44px; }
+
+        .field-error {
+            font-size: 11.5px;
+            color: #dc2626;
+            margin-top: 5px;
+            min-height: 16px;
+        }
+
+        .code-field {
+            width: 100%;
+            padding: 13px 16px;
+            border: 1.5px solid #e0ebfa;
+            border-radius: 10px;
+            font-size: 15px;
+            letter-spacing: 0.18em;
+            text-align: center;
+            text-transform: uppercase;
+            font-family: 'DM Sans', sans-serif;
+            color: #1e3a8a;
+            background: #f9fbff;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .code-field:focus { border-color: #2a4db5; box-shadow: 0 0 0 3px rgba(42,77,181,0.12); background: #fff; }
+        .code-field.valid   { border-color: #059669; }
+        .code-field.invalid { border-color: #dc2626; }
+
+        .helper-text {
+            font-size: 13px;
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 18px;
+            padding: 12px 14px;
+            background: #f0f5ff;
+            border-radius: 10px;
+            border-left: 3px solid #2a4db5;
+        }
+        .helper-text strong { color: #1e3a8a; }
+
+        /* ── SUBMIT BUTTON ── */
+        .submit-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #2a4db5 0%, #1e3a8a 100%);
+            color: #fff;
+            border: none;
+            border-radius: 11px;
+            padding: 13px;
+            font-size: 14.5px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            transition: opacity 0.2s, transform 0.15s;
+            margin-top: 6px;
+        }
+        .submit-btn:hover { opacity: 0.92; transform: translateY(-1px); }
+        .submit-btn:active { transform: translateY(0); }
+
+        /* ── DIVIDER ── */
+        .divider {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 12.5px;
+        }
+        .divider a { color: #2a4db5; text-decoration: none; font-weight: 500; }
+        .divider a:hover { text-decoration: underline; }
+        .divider a#demoLink { color: #d4a017; }
+        .divider a#demoLink:hover { color: #a87d0f; text-decoration: underline; }
+        .divider a.disabled { pointer-events: none; opacity: 0.5; }
+
+        /* ── TOAST ── */
+        .toast {
+            position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: #1e293b; color: #fff;
+            padding: 11px 20px; border-radius: 10px;
+            font-size: 13.5px; font-weight: 500;
+            display: flex; align-items: center; gap: 9px;
+            opacity: 0; transition: all 0.3s ease;
+            pointer-events: none; z-index: 999; white-space: nowrap;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.success { background: #059669; }
+        .toast.error   { background: #dc2626; }
+        .toast-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+</head>
+<body>
+
+<div class="bg-layer"></div>
+<div class="bg-orb o1"></div>
+<div class="bg-orb o2"></div>
+<div class="bg-orb o3"></div>
+
+<div class="card-wrap">
+    <div class="card">
+
+        <!-- ── HEADER ── -->
+        <div class="card-header">
+            <div class="header-top">
+                <div class="logo-wrap">
+                    <img
+                        class="logo-img"
+                        src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcScCkfSrtsFMNsKCJP2dgy9MZjcuOXUXgQKug&s"
+                        alt="Haven of Wisdom Academy"
+                        crossorigin="anonymous"
+                    >
+                    <div class="logo-text">
+                        <h1>Haven Of Wisdom</h1>
+                        <span>Academy · Scholaria Portal</span>
+                    </div>
+                </div>
+                <button class="back-pill" id="backBtn" onclick="goToRoleSelect()" style="display:none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M19 12H5"/>
+                        <path d="M12 19l-7-7 7-7"/>
+                    </svg>
+                    Change Role
+                </button>
+            </div>
+            <div class="header-title">
+                <div id="roleBadgeWrap"></div>
+                <div class="tab-label" id="tabLabel">Welcome to Scholaria</div>
+                <div class="tab-sub"  id="tabSub">Select your role to continue</div>
+                <div class="gold-rule"></div>
+            </div>
+        </div>
+
+        <!-- ── BODY ── -->
+        <div class="card-body">
+
+            <!-- STEP 1: ROLE SELECTION -->
+            <div class="view active" id="roleView">
+                <div class="role-list">
+
+                    <button class="role-card" onclick="selectRole('student')">
+                        <div class="role-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                                <path d="M6 12v5c3 1.5 9 1.5 12 0v-5"/>
+                            </svg>
+                        </div>
+                        <div class="role-text">
+                            <h3>Student</h3>
+                            <p>Access materials, quizzes, and progress</p>
+                        </div>
+                        <div class="role-arrow">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                        </div>
+                    </button>
+
+                    <button class="role-card" onclick="selectRole('teacher')">
+                        <div class="role-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/>
+                                <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>
+                            </svg>
+                        </div>
+                        <div class="role-text">
+                            <h3>Teacher</h3>
+                            <p>Manage materials, quizzes, and class records</p>
+                        </div>
+                        <div class="role-arrow">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                        </div>
+                    </button>
+
+                    <button class="role-card" onclick="selectRole('admin')">
+                        <div class="role-icon gold">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/>
+                                <path d="M9 12l2 2 4-4"/>
+                            </svg>
+                        </div>
+                        <div class="role-text">
+                            <h3>School Admin</h3>
+                            <p>Department head access &mdash; code required</p>
+                        </div>
+                        <div class="role-arrow">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                        </div>
+                    </button>
+
+                </div>
+            </div>
+
+            <!-- STEP 2 (ADMIN ONLY): ADMIN CODE GATE -->
+            <div class="view" id="adminCodeView">
+                <p class="helper-text">
+                    The <strong>School Admin Portal</strong> is restricted to the Senior High School
+                    Department Head. Enter the institutional admin code provided by Haven of Wisdom
+                    Academy to proceed.
+                </p>
+
+                <div class="field">
+                    <label>Admin Access Code</label>
+                    <div class="input-wrap">
+                        <input type="text" id="admin-code" class="code-field" placeholder="• • • • • •" maxlength="20" oninput="clearError('admin-code-err'); resetFieldState('admin-code')">
+                    </div>
+                    <div class="field-error" id="admin-code-err"></div>
+                </div>
+
+                <button class="submit-btn" onclick="verifyAdminCode()">Verify Code</button>
+            </div>
+
+            <!-- STEP 3: LOGIN -->
+            <div class="view" id="loginView">
+
+                <div class="field">
+                    <label id="l-id-label">Student ID</label>
+                    <div class="input-wrap">
+                        <input type="text" id="l-id" placeholder="e.g. HWA-2024-001" maxlength="20" oninput="validateId('l-id','l-id-err')">
+                    </div>
+                    <div class="field-error" id="l-id-err"></div>
+                </div>
+
+                <div class="field">
+                    <label>Password</label>
+                    <div class="input-wrap">
+                        <input type="password" id="l-pw" placeholder="Enter your password" oninput="validateRequired('l-pw','l-pw-err')">
+                        <button class="eye-btn" type="button" onclick="toggleEye('l-pw', this)" aria-label="Toggle password visibility">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="field-error" id="l-pw-err"></div>
+                </div>
+
+                <button class="submit-btn" id="loginSubmitBtn" onclick="handleLogin()">Login to Portal</button>
+
+                <div class="divider">
+                    <a href="#" id="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+    /* ════════════════════════════════════════
+       SUPABASE + BACKEND INIT
+       Same project the dashboard uses — the anon key below is public
+       by design (Supabase's RLS is what actually protects data, see
+       scholaria_auth_schema.sql). Never put the SERVICE ROLE key here.
+    ════════════════════════════════════════ */
+    const SUPABASE_URL  = 'https://qxpsbewbgdwkermxeeso.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cHNiZXdiZ2R3a2VybXhlZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDgzMTgsImV4cCI6MjA5ODI4NDMxOH0.cmG-pVotNZ5KI81_8XsUN5AL5vNVYOPFy8oHegz6cvg';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    const API_BASE = 'http://localhost:3001';
+
+    let currentRole = null;
+    let currentView = 'roleView';
+
+    // Institutional admin access code, provided by Haven of Wisdom Academy.
+    // Gates entry to the admin login form only — the real account check
+    // still happens against Supabase in handleLogin(), same as any other role.
+    const ADMIN_CODE = "HWA-ADMIN-2026";
+
+    const ROLE_CONFIG = {
+        student: {
+            title: 'Welcome Back',
+            sub: 'Sign in to your student account',
+            idLabel: 'Student ID',
+            idPlaceholder: 'e.g. HWA-2024-001',
+            idPattern: /^HWA-\d{4}-\d{3,}$/,
+            idError: 'Format: HWA-YYYY-NNN',
+            badgeLabel: 'Student Portal'
+        },
+        teacher: {
+            title: 'Welcome Back',
+            sub: 'Sign in to your teacher account',
+            idLabel: 'Teacher ID',
+            idPlaceholder: 'e.g. HWA-T-2024-001',
+            idPattern: /^HWA-T-\d{4}-\d{3,}$/,
+            idError: 'Format: HWA-T-YYYY-NNN',
+            badgeLabel: 'Teacher Portal'
+        },
+        admin: {
+            title: 'Welcome, Admin',
+            sub: 'Sign in to the School Admin portal',
+            idLabel: 'Admin ID',
+            idPlaceholder: 'e.g. HWA-A-2024-001',
+            idPattern: /^HWA-A-\d{4}-\d{3,}$/,
+            idError: 'Format: HWA-A-YYYY-NNN',
+            badgeLabel: 'Admin Portal'
+        }
+    };
+
+    const ROLE_ICONS = {
+        student: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 1.5 9 1.5 12 0v-5"/></svg>`,
+        teacher: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>`,
+        admin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/><path d="M9 12l2 2 4-4"/></svg>`
+    };
+
+    const ICONS = {
+        success: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>`,
+        error: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+        info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+    };
+
+    function showView(viewId) {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(viewId).classList.add('active');
+        currentView = viewId;
+        const backBtn = document.getElementById('backBtn');
+        backBtn.style.display = (viewId === 'roleView') ? 'none' : 'flex';
+    }
+
+    function goToRoleSelect() {
+        currentRole = null;
+        document.getElementById('roleBadgeWrap').innerHTML = '';
+        document.getElementById('tabLabel').textContent = 'Welcome to Scholaria';
+        document.getElementById('tabSub').textContent = 'Select your role to continue';
+        document.getElementById('admin-code').value = '';
+        resetFieldState('admin-code');
+        clearError('admin-code-err');
+        showView('roleView');
+    }
+
+    function selectRole(role) {
+        currentRole = role;
+        const cfg = ROLE_CONFIG[role];
+        document.getElementById('roleBadgeWrap').innerHTML =
+            `<div class="role-badge">${ROLE_ICONS[role]}${cfg.badgeLabel}</div>`;
+        if (role === 'admin') {
+            // Admin gets an extra gate in front of the real login form:
+            // the institutional code below. The account itself is still
+            // provisioned by another admin and checked against Supabase
+            // in handleLogin() — the code only decides who gets to see
+            // the admin login form at all.
+            document.getElementById('tabLabel').textContent = 'Admin Verification';
+            document.getElementById('tabSub').textContent = 'Restricted access — code required';
+            showView('adminCodeView');
+        } else {
+            applyRoleToLoginForm(role);
+            document.getElementById('tabLabel').textContent = cfg.title;
+            document.getElementById('tabSub').textContent = cfg.sub;
+            showView('loginView');
+        }
+    }
+
+    function verifyAdminCode() {
+        const code = document.getElementById('admin-code').value.trim().toUpperCase();
+        if (!code) { setFieldState('admin-code', 'admin-code-err', false, 'Admin code is required'); return; }
+        if (code !== ADMIN_CODE) {
+            setFieldState('admin-code', 'admin-code-err', false, 'Incorrect admin code. Please try again.');
+            showToast('Incorrect admin code', 'error');
+            return;
+        }
+        setFieldState('admin-code', 'admin-code-err', true, '');
+        showToast('Admin code verified', 'success');
+        setTimeout(() => {
+            applyRoleToLoginForm('admin');
+            const cfg = ROLE_CONFIG.admin;
+            document.getElementById('tabLabel').textContent = cfg.title;
+            document.getElementById('tabSub').textContent = cfg.sub;
+            showView('loginView');
+        }, 600);
+    }
+
+    function applyRoleToLoginForm(role) {
+        const cfg = ROLE_CONFIG[role];
+        document.getElementById('l-id-label').textContent = cfg.idLabel;
+        document.getElementById('l-id').placeholder = cfg.idPlaceholder;
+        document.getElementById('l-id').value = '';
+        document.getElementById('l-pw').value = '';
+        clearError('l-id-err'); clearError('l-pw-err');
+        resetFieldState('l-id'); resetFieldState('l-pw');
+    }
+
+    function toggleEye(inputId, btn) {
+        const inp = document.getElementById(inputId);
+        const show = inp.type === 'password';
+        inp.type = show ? 'text' : 'password';
+        btn.innerHTML = show
+            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    }
+
+    function setFieldState(id, errId, ok, msg) {
+        const el = document.getElementById(id);
+        const er = document.getElementById(errId);
+        el.classList.toggle('valid',   ok && el.value.length > 0);
+        el.classList.toggle('invalid', !ok && el.value.length > 0);
+        if (er) er.textContent = ok ? '' : msg;
+        return ok;
+    }
+
+    function resetFieldState(id) {
+        const el = document.getElementById(id);
+        el.classList.remove('valid', 'invalid');
+    }
+
+    function clearError(errId) {
+        const er = document.getElementById(errId);
+        if (er) er.textContent = '';
+    }
+
+    function validateId(id, errId) {
+        const val = document.getElementById(id).value.trim();
+        const cfg = ROLE_CONFIG[currentRole];
+        const ok  = cfg.idPattern.test(val) || val.length === 0;
+        return setFieldState(id, errId, ok || val.length === 0, cfg.idError);
+    }
+
+    function validateRequired(id, errId) {
+        const val = document.getElementById(id).value;
+        const ok  = val.length >= 6;
+        return setFieldState(id, errId, ok || val.length === 0, 'At least 6 characters required');
+    }
+
+    function showToast(msg, type = 'info') {
+        const t = document.getElementById('toast');
+        const icon = ICONS[type] || ICONS.info;
+        t.innerHTML = `<span class="toast-icon">${icon}</span><span>${msg}</span>`;
+        t.className = 'toast show ' + type;
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function setLoginBusy(busy) {
+        const btn = document.getElementById('loginSubmitBtn');
+        btn.disabled = busy;
+        btn.textContent = busy ? 'Logging in…' : 'Login to Portal';
+    }
+
+    /* Real login. School ID is what the person types (matches the ID
+       on their account), but Supabase Auth signs in with email — so we
+       first resolve ID -> email through a SECURITY DEFINER RPC that
+       only ever returns an email string, never a full row (see
+       scholaria_auth_schema.sql). We never say which part was wrong —
+       "invalid ID or password" either way — so a login form can't be
+       used to enumerate which School IDs exist. */
+    async function handleLogin() {
+        const cfg = ROLE_CONFIG[currentRole];
+        const id = document.getElementById('l-id').value.trim();
+        const pw = document.getElementById('l-pw').value;
+        if (!id) { document.getElementById('l-id-err').textContent = cfg.idLabel + ' is required'; return; }
+        if (!pw) { document.getElementById('l-pw-err').textContent = 'Password is required'; return; }
+
+        setLoginBusy(true);
+        try {
+            const { data: email, error: lookupErr } = await db.rpc('email_for_school_id', { p_school_id: id });
+            if (lookupErr || !email) { showToast('Invalid ID or password', 'error'); return; }
+
+            const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email, password: pw });
+            if (authErr || !authData.session) { showToast('Invalid ID or password', 'error'); return; }
+
+            const { data: profile, error: profileErr } = await db
+                .from('users').select('role, is_active, is_demo').eq('id', authData.user.id).single();
+
+            if (profileErr || !profile || profile.role !== currentRole || profile.is_active === false) {
+                await db.auth.signOut();
+                showToast(`This ID isn't registered as a ${cfg.badgeLabel.replace(' Portal','')}`, 'error');
+                return;
+            }
+
+            // Admin created this account with a temp password and flagged
+            // must_reset_password in the login's own metadata. Route to a
+            // forced reset before letting them into the dashboard proper.
+            if (authData.user.user_metadata && authData.user.user_metadata.must_reset_password) {
+                window.location.href = 'reset-password.html';
+                return;
+            }
+
+            showToast('Logging in…', 'success');
+            window.location.href = 'dashboard.html';
+        } finally {
+            setLoginBusy(false);
+        }
+    }
+
+    /* Demo login. Goes through the backend (POST /api/auth/demo-login)
+       so the demo account's real password never has to live in this
+       page's JS — the server signs in on our behalf and just hands back
+       a session. The backend returns 404 whenever DEMO_MODE is off, so
+       this button quietly stops working the moment a real deployment
+       disables it — no change needed here. */
+   async function handleDemoLogin() {
+        if (!currentRole) {
+            showToast('Please select a role first', 'error');
+            return;
+        }
+        const link = document.getElementById('demoLink');
+        link.textContent = 'Loading demo…';
+        link.classList.add('disabled');
+        try {
+            const res = await fetch(`${API_BASE}/api/auth/demo-login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role: currentRole })
+            });
+            if (res.status === 404) {
+                showToast('Demo mode is currently disabled', 'error');
+                return;
+            }
+            if (!res.ok) { showToast('Demo login is temporarily unavailable', 'error'); return; }
+            const { access_token, refresh_token } = await res.json();
+            const { error } = await db.auth.setSession({ access_token, refresh_token });
+            if (error) { showToast('Demo login is temporarily unavailable', 'error'); return; }
+            window.location.href = 'dashboard.html';
+        } catch {
+            showToast('Could not reach the server', 'error');
+        } finally {
+            link.textContent = 'Skip for now (development mode) →';
+            link.classList.remove('disabled');
+        }
+    }
+
+    /* If a session already exists (e.g. the person hit the back button
+       after logging in), skip straight to the dashboard instead of
+       showing the login form again. */
+    (async () => {
+        const { data } = await db.auth.getSession();
+        if (data.session) window.location.href = 'dashboard.html';
+    })();
+</script>
+</body>
+</html>
