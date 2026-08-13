@@ -36,10 +36,17 @@ function initDashboardShell() {
   document.getElementById('userAvatar').textContent = initialsFor(CURRENT_PROFILE.full_name);
 
   if (CURRENT_PROFILE.is_demo) {
-    const banner = document.createElement('div');
-    banner.className = 'demo-mode-banner';
-    banner.textContent = `You're viewing a demo ${ROLE} account — sample data only, nothing here is a real student's record.`;
-    document.body.prepend(banner);
+    document.body.classList.add('has-demo-banner');
+    if (!document.querySelector('.demo-mode-banner')) {
+      const banner = document.createElement('div');
+      banner.className = 'demo-mode-banner';
+      banner.textContent = `You're viewing a demo ${ROLE} account — sample data only, nothing here is a real student's record.`;
+      document.body.prepend(banner);
+    }
+  } else {
+    document.body.classList.remove('has-demo-banner');
+    const existingBanner = document.querySelector('.demo-mode-banner');
+    if (existingBanner) existingBanner.remove();
   }
 
   const sidebarMenu = document.getElementById('sidebarMenu');
@@ -54,6 +61,7 @@ function initDashboardShell() {
   });
 
   renderPage('dashboard');
+  refreshNotificationsUI();
   loadConversationsFromDB().then(ensureChatRealtimeSubscription);
 }
 
@@ -136,7 +144,7 @@ function studentPage(page) {
 
     case 'materials': return `
       <div class="section-hdr"><h2>My Materials</h2></div>
-      ${renderMaterialsList('student')}`;
+      <div id="materialsListWrap">${renderMaterialsList('student')}</div>`;
 
     case 'quizzes': {
       const attemptsByQuiz = new Map(myQuizAttempts.map(a => [a.quiz_id, a]));
@@ -194,6 +202,12 @@ function studentPage(page) {
 }
 
 /* ── TEACHER PAGES ── */
+let classRecSectionFilter = '';
+function setClassRecSectionFilter(sec) {
+  classRecSectionFilter = sec;
+  renderPage('classrec');
+}
+
 function teacherPage(page) {
   switch(page) {
     case 'dashboard': {
@@ -259,7 +273,7 @@ function teacherPage(page) {
           <button class="add-btn" onclick="openMaterialModal()">${iconPlus()} Upload Material</button>
         </div>
       </div>
-      ${renderMaterialsList('teacher')}`;
+      <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
 
     case 'quiz': {
       const myQuizzes = customQuizzes.filter(q => q.createdBy === CURRENT_PROFILE.id);
@@ -294,13 +308,19 @@ function teacherPage(page) {
 
       return `
       <div class="section-hdr"><h2>Item Analysis Report</h2>
-        <select class="user-filter-select" onchange="setAnalysisQuiz(this.value)">
-          ${myQuizzesForAnalysis.map(q => `<option value="${q.id}" ${q.id === analysisSelectedQuizId ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
-        </select>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <select class="user-filter-select" onchange="setAnalysisSectionFilter(this.value)">
+            <option value="">All Sections (Demo)</option>
+            ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec} (Demo)</option>`).join('')}
+          </select>
+          <select class="user-filter-select" onchange="setAnalysisQuiz(this.value)">
+            ${myQuizzesForAnalysis.map(q => `<option value="${q.id}" ${q.id === analysisSelectedQuizId ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div class="announcement-card" style="margin-bottom:0;">
         <h3>${escHtml(selectedQuiz.title)}</h3>
-        <p>${attemptCount} submission${attemptCount === 1 ? '' : 's'} · ${escHtml(selectedQuiz.status)}${attemptCount ? ' · Average Score: ' + avgScore + '%' : ''}</p>
+        <p>${attemptCount} submission${attemptCount === 1 ? '' : 's'}${analysisSectionFilter ? ' · ' + escHtml(analysisSectionFilter) + ' (Demo)' : ''} · ${escHtml(selectedQuiz.status)}${attemptCount ? ' · Average Score: ' + avgScore + '%' : ''}</p>
         <div class="ann-meta">Recomputed live from actual submitted quiz attempts — refreshes each time you open this page.</div>
       </div>
       <div class="score-table">
@@ -322,21 +342,47 @@ function teacherPage(page) {
       </div>`;
     }
 
-    case 'classrec': return `
+    case 'classrec': {
+      const allEntries = [
+        { name: 'Asis, J.', section: 'Section A', subject: 'Web Systems', q1: 85, q2: 88, sw: 80, pt: 90, avg: 85.75 },
+        { name: 'Callanta, B.', section: 'Section A', subject: 'Web Systems', q1: 90, q2: 92, sw: 88, pt: 95, avg: 91.25 },
+        { name: 'Cervas, S.', section: 'Section B', subject: 'Web Systems', q1: 78, q2: 75, sw: 60, pt: 72, avg: 71.25 },
+        { name: 'Esguerra, M.', section: 'Section C', subject: 'Web Systems', q1: 88, q2: 91, sw: 82, pt: 87, avg: 87.00 }
+      ];
+      const filteredEntries = classRecSectionFilter
+        ? allEntries.filter(e => e.section === classRecSectionFilter)
+        : allEntries;
+
+      return `
       <div class="section-hdr"><h2>Class Record</h2>
-        <button class="add-btn">${iconPlus()} Add Entry</button>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <select class="user-filter-select" onchange="setClassRecSectionFilter(this.value)">
+            <option value="">All Sections (Demo)</option>
+            ${SECTIONS.map(sec => `<option value="${sec}" ${classRecSectionFilter === sec ? 'selected' : ''}>${sec} (Demo)</option>`).join('')}
+          </select>
+          <button class="add-btn">${iconPlus()} Add Entry</button>
+        </div>
       </div>
       <div class="score-table">
         <table>
-          <thead><tr><th>Student</th><th>Subject</th><th>Quiz 1</th><th>Quiz 2</th><th>Seatwork</th><th>Perf. Task</th><th>Average</th></tr></thead>
+          <thead><tr><th>Student</th><th>Section</th><th>Subject</th><th>Quiz 1</th><th>Quiz 2</th><th>Seatwork</th><th>Perf. Task</th><th>Average</th></tr></thead>
           <tbody>
-            <tr><td>Asis, J.</td><td>Web Systems</td><td class="score-val">85</td><td class="score-val good">88</td><td class="score-val">80</td><td class="score-val good">90</td><td class="score-val good">85.75</td></tr>
-            <tr><td>Callanta, B.</td><td>Web Systems</td><td class="score-val good">90</td><td class="score-val good">92</td><td class="score-val good">88</td><td class="score-val good">95</td><td class="score-val good">91.25</td></tr>
-            <tr><td>Cervas, S.</td><td>Web Systems</td><td class="score-val">78</td><td class="score-val">75</td><td class="score-val low">60</td><td class="score-val">72</td><td class="score-val">71.25</td></tr>
-            <tr><td>Esguerra, M.</td><td>Web Systems</td><td class="score-val good">88</td><td class="score-val good">91</td><td class="score-val">82</td><td class="score-val good">87</td><td class="score-val good">87.00</td></tr>
+            ${filteredEntries.length ? filteredEntries.map(e => `
+              <tr>
+                <td>${escHtml(e.name)}</td>
+                <td><span class="user-role-badge student">${escHtml(e.section)}</span></td>
+                <td>${escHtml(e.subject)}</td>
+                <td class="score-val ${e.q1 >= 88 ? 'good' : e.q1 < 75 ? 'low' : ''}">${e.q1}</td>
+                <td class="score-val ${e.q2 >= 88 ? 'good' : e.q2 < 75 ? 'low' : ''}">${e.q2}</td>
+                <td class="score-val ${e.sw >= 88 ? 'good' : e.sw < 75 ? 'low' : ''}">${e.sw}</td>
+                <td class="score-val ${e.pt >= 88 ? 'good' : e.pt < 75 ? 'low' : ''}">${e.pt}</td>
+                <td class="score-val ${e.avg >= 85 ? 'good' : e.avg < 75 ? 'low' : ''}">${e.avg.toFixed(2)}</td>
+              </tr>`).join('')
+              : `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:20px;">No student records found for ${escHtml(classRecSectionFilter)}.</td></tr>`}
           </tbody>
         </table>
       </div>`;
+    }
 
     case 'chats': return buildChatPage('teacher');
 
@@ -364,7 +410,13 @@ function adminPage(page) {
       const pendingQuizzes = customQuizzes.filter(q => q.status === 'pending');
       const totalStudents = registeredUsers.filter(u => u.role === 'student').length;
       const totalTeachers = registeredUsers.filter(u => u.role === 'teacher').length;
+      const totalAdmins = registeredUsers.filter(u => u.role === 'admin').length;
       const activeQuizzes = customQuizzes.filter(q => q.status === 'active');
+
+      const permMuted = registeredUsers.filter(u => u.permanentlyMuted).length;
+      const tempMuted = registeredUsers.filter(u => !u.permanentlyMuted && u.mutedUntil && new Date(u.mutedUntil) > new Date()).length;
+      const totalMuted = permMuted + tempMuted;
+
       const recentApproved = [
         ...materialsData.filter(m => m.status === 'approved').map(m => ({
           title: m.title, type: 'Material', by: m.uploaded_by_name || '', at: m.created_at
@@ -391,11 +443,15 @@ function adminPage(page) {
         </div>
         <div class="info-card">
           <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">Total Users</div><div class="ic-num">${registeredUsers.length}</div></div></div>
-          <p>${totalStudents} students · ${totalTeachers} teachers</p>
+          <p>${totalStudents} student${totalStudents !== 1 ? 's' : ''} · ${totalTeachers} teacher${totalTeachers !== 1 ? 's' : ''}${totalAdmins > 0 ? ` · ${totalAdmins} admin${totalAdmins !== 1 ? 's' : ''}` : ''}</p>
         </div>
         <div class="info-card">
           <div class="ic-head"><div class="ic-icon green">${iconQuiz()}</div><div><div class="ic-sub">Active Quizzes</div><div class="ic-num green">${activeQuizzes.length}</div></div></div>
           <p>Across all strands and grade levels</p>
+        </div>
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon red">${iconMute()}</div><div><div class="ic-sub">Muted Accounts</div><div class="ic-num red">${totalMuted}</div></div></div>
+          <p>${totalMuted} temporary account${totalMuted !== 1 ? 's' : ''}</p>
         </div>
       </div>
       <div>
@@ -424,7 +480,7 @@ function adminPage(page) {
         <button class="mm-tab ${materialsAdminTab === 'pending' ? 'active' : ''}" onclick="setMaterialsAdminTab('pending')">Pending${materialsData.filter(m=>m.status==='pending').length ? ` (${materialsData.filter(m=>m.status==='pending').length})` : ''}</button>
         <button class="mm-tab ${materialsAdminTab === 'approved' ? 'active' : ''}" onclick="setMaterialsAdminTab('approved')">Approved${materialsData.filter(m=>m.status==='approved').length ? ` (${materialsData.filter(m=>m.status==='approved').length})` : ''}</button>
       </div>
-      ${renderMaterialsList('admin')}`;
+      <div id="materialsListWrap">${renderMaterialsList('admin')}</div>`;
 
     case 'approval': return `
       <div class="section-hdr"><h2>Content Approval</h2>
@@ -434,7 +490,7 @@ function adminPage(page) {
         <h3>Approval Queue</h3>
         <p>All materials and quizzes submitted by teachers require your approval before they become visible to students.</p>
       </div>
-      <div>
+      <div id="approvalListWrap">
         ${renderApprovalMaterialRows()}
       </div>`;
 

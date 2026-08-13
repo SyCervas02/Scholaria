@@ -306,8 +306,8 @@
         }
         .divider a { color: #2a4db5; text-decoration: none; font-weight: 500; }
         .divider a:hover { text-decoration: underline; }
-        .divider a#demoLink { color: #d4a017; }
-        .divider a#demoLink:hover { color: #a87d0f; text-decoration: underline; }
+        .divider a.demoLink { color: #d4a017; }
+        .divider a.demoLink:hover { color: #a87d0f; text-decoration: underline; }
         .divider a.disabled { pointer-events: none; opacity: 0.5; }
 
         /* ── TOAST ── */
@@ -437,12 +437,16 @@
                 <div class="field">
                     <label>Admin Access Code</label>
                     <div class="input-wrap">
-                        <input type="text" id="admin-code" class="code-field" placeholder="• • • • • •" maxlength="20" oninput="clearError('admin-code-err'); resetFieldState('admin-code')">
+                        <input type="text" id="admin-code" class="code-field" placeholder="• • • • • •" maxlength="20" oninput="clearError('admin-code-err'); resetFieldState('admin-code')" onkeydown="if(event.key==='Enter') verifyAdminCode()">
                     </div>
                     <div class="field-error" id="admin-code-err"></div>
                 </div>
 
                 <button class="submit-btn" onclick="verifyAdminCode()">Verify Code</button>
+
+                <div class="divider">
+                    <a href="#" class="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
+                </div>
             </div>
 
             <!-- STEP 3: LOGIN -->
@@ -451,7 +455,7 @@
                 <div class="field">
                     <label id="l-id-label">Student ID</label>
                     <div class="input-wrap">
-                        <input type="text" id="l-id" placeholder="e.g. HWA-2024-001" maxlength="20" oninput="validateId('l-id','l-id-err')">
+                        <input type="text" id="l-id" placeholder="e.g. HWA-2024-001" maxlength="20" oninput="validateId('l-id','l-id-err')" onkeydown="if(event.key==='Enter') handleLogin()">
                     </div>
                     <div class="field-error" id="l-id-err"></div>
                 </div>
@@ -459,7 +463,7 @@
                 <div class="field">
                     <label>Password</label>
                     <div class="input-wrap">
-                        <input type="password" id="l-pw" placeholder="Enter your password" oninput="validateRequired('l-pw','l-pw-err')">
+                        <input type="password" id="l-pw" placeholder="Enter your password" oninput="validateRequired('l-pw','l-pw-err')" onkeydown="if(event.key==='Enter') handleLogin()">
                         <button class="eye-btn" type="button" onclick="toggleEye('l-pw', this)" aria-label="Toggle password visibility">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -473,7 +477,7 @@
                 <button class="submit-btn" id="loginSubmitBtn" onclick="handleLogin()">Login to Portal</button>
 
                 <div class="divider">
-                    <a href="#" id="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
+                    <a href="#" class="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
                 </div>
             </div>
 
@@ -511,8 +515,8 @@
             sub: 'Sign in to your student account',
             idLabel: 'Student ID',
             idPlaceholder: 'e.g. HWA-2024-001',
-            idPattern: /^HWA-\d{4}-\d{3,}$/,
-            idError: 'Format: HWA-YYYY-NNN',
+            idPattern: /^HWA-(DEMO-\d+|\d{4}-\d{3,})$/,
+            idError: 'Format: HWA-YYYY-NNN or HWA-DEMO-001',
             badgeLabel: 'Student Portal'
         },
         teacher: {
@@ -520,8 +524,8 @@
             sub: 'Sign in to your teacher account',
             idLabel: 'Teacher ID',
             idPlaceholder: 'e.g. HWA-T-2024-001',
-            idPattern: /^HWA-T-\d{4}-\d{3,}$/,
-            idError: 'Format: HWA-T-YYYY-NNN',
+            idPattern: /^HWA-T-(DEMO|\d{4}-\d{3,})$/,
+            idError: 'Format: HWA-T-YYYY-NNN or HWA-T-DEMO',
             badgeLabel: 'Teacher Portal'
         },
         admin: {
@@ -529,8 +533,8 @@
             sub: 'Sign in to the School Admin portal',
             idLabel: 'Admin ID',
             idPlaceholder: 'e.g. HWA-A-2024-001',
-            idPattern: /^HWA-A-\d{4}-\d{3,}$/,
-            idError: 'Format: HWA-A-YYYY-NNN',
+            idPattern: /^HWA-A-(DEMO|\d{4}-\d{3,})$/,
+            idError: 'Format: HWA-A-YYYY-NNN or HWA-A-DEMO',
             badgeLabel: 'Admin Portal'
         }
     };
@@ -724,14 +728,13 @@
        a session. The backend returns 404 whenever DEMO_MODE is off, so
        this button quietly stops working the moment a real deployment
        disables it — no change needed here. */
-   async function handleDemoLogin() {
+    async function handleDemoLogin() {
         if (!currentRole) {
             showToast('Please select a role first', 'error');
             return;
         }
-        const link = document.getElementById('demoLink');
-        link.textContent = 'Loading demo…';
-        link.classList.add('disabled');
+        const links = document.querySelectorAll('.demoLink');
+        links.forEach(l => { l.textContent = 'Loading demo…'; l.classList.add('disabled'); });
         try {
             const res = await fetch(`${API_BASE}/api/auth/demo-login`, {
                 method: 'POST',
@@ -742,6 +745,10 @@
                 showToast('Demo mode is currently disabled', 'error');
                 return;
             }
+            if (res.status === 429) {
+                showToast('Too many requests — please wait a few seconds', 'error');
+                return;
+            }
             if (!res.ok) { showToast('Demo login is temporarily unavailable', 'error'); return; }
             const { access_token, refresh_token } = await res.json();
             const { error } = await db.auth.setSession({ access_token, refresh_token });
@@ -750,8 +757,7 @@
         } catch {
             showToast('Could not reach the server', 'error');
         } finally {
-            link.textContent = 'Skip for now (development mode) →';
-            link.classList.remove('disabled');
+            links.forEach(l => { l.textContent = 'Skip for now (development mode) →'; l.classList.remove('disabled'); });
         }
     }
 

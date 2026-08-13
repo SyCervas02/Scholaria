@@ -18,12 +18,13 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Basic rate limiting on the API routes
+// Basic rate limiting on the API routes (auth routes skipped so rate limits never block logins)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200,                 // limit each IP to 200 requests per window
+  max: 500,                 // limit each IP per window
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path.startsWith('/auth/'),
 });
 app.use('/api/', apiLimiter);
 

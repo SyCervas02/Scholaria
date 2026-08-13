@@ -26,7 +26,11 @@
   --radius-sm: 10px;
   --sidebar-w: 228px;
   --nav-h: 60px;
-  --banner-h: 40px; /* reserved height for the demo mode banner */
+  --banner-h: 0px;
+}
+
+body.has-demo-banner {
+  --banner-h: 40px;
 }
 
 body {

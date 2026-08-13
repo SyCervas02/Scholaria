@@ -5,26 +5,37 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 let customQuizzes = [];
 
+let isFetchingQuizzes = false;
+
 async function loadQuizzesFromDB() {
-  const { data, error } = await db.from('quizzes').select('*').order('created_at', { ascending: false });
-  if (error) { console.error('Failed to load quizzes:', error.message); return; }
-  customQuizzes = (data || []).map(q => ({
-    id: q.id,
-    createdBy: q.created_by,
-    subject: q.subject,
-    strand: q.strand,
-    sections: q.sections,
-    createdAt: q.created_at,
-    title: q.title + (q.is_demo ? ' (Demo)' : ''),
-    meta: q.is_demo
-      ? `${q.subject || 'General'} · ${(q.questions||[]).length} items · Sample data`
-      : `${[q.subject || 'General', q.strand, q.sections].filter(Boolean).join(' · ')} · ${(q.questions||[]).length} items · ${q.status === 'pending' ? 'Pending admin approval' : q.status}`,
-    isDemo: q.is_demo,
-    status: q.status,
-    questions: q.questions || []
-  }));
-  if (currentPage === 'quiz' || currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'analysis') {
-    renderPage(currentPage);
+  if (isFetchingQuizzes) return;
+  isFetchingQuizzes = true;
+  try {
+    const { data, error } = await db.from('quizzes').select('*').order('created_at', { ascending: false });
+    if (error) { console.error('Failed to load quizzes:', error.message); return; }
+    customQuizzes = (data || []).map(q => ({
+      id: q.id,
+      createdBy: q.created_by,
+      subject: q.subject,
+      strand: q.strand,
+      sections: q.sections,
+      createdAt: q.created_at,
+      title: q.title + (q.is_demo ? ' (Demo)' : ''),
+      meta: q.is_demo
+        ? `${q.subject || 'General'} · ${(q.questions||[]).length} items · Sample data`
+        : `${[q.subject || 'General', q.strand, q.sections].filter(Boolean).join(' · ')} · ${(q.questions||[]).length} items · ${q.status === 'pending' ? 'Pending admin approval' : q.status}`,
+      isDemo: q.is_demo,
+      status: q.status,
+      questions: q.questions || []
+    }));
+  } finally {
+    isFetchingQuizzes = false;
+  }
+  if (typeof currentPage !== 'undefined' && currentPage === 'dashboard') {
+    const mainContent = document.getElementById('mainContent');
+    if (mainContent && typeof getPageContent === 'function') {
+      mainContent.innerHTML = getPageContent(ROLE, 'dashboard');
+    }
   }
 }
 
@@ -66,9 +77,45 @@ function toggleFormat(key) {
   renderQuizModal();
 }
 
+function getAvailableSubjectsForQuizGen() {
+  const selectedStrands = Array.from(quizGen.strands);
+  if (typeof getFilteredSubjects === 'function') {
+    if (selectedStrands.length === 1) {
+      return getFilteredSubjects(selectedStrands[0], quizGen.gradeLevel);
+    }
+    if (selectedStrands.length > 1) {
+      const combined = [];
+      selectedStrands.forEach(st => {
+        getFilteredSubjects(st, quizGen.gradeLevel).forEach(sub => {
+          if (!combined.includes(sub)) combined.push(sub);
+        });
+      });
+      return combined;
+    }
+    return getFilteredSubjects(null, quizGen.gradeLevel);
+  }
+  const subjectsMap = typeof SUBJECTS_BY_STRAND !== 'undefined' ? SUBJECTS_BY_STRAND : {};
+  if (selectedStrands.length === 0) {
+    const all = [];
+    Object.values(subjectsMap).forEach(list => {
+      list.forEach(sub => { if (!all.includes(sub)) all.push(sub); });
+    });
+    return all;
+  }
+  const filtered = [];
+  selectedStrands.forEach(str => {
+    (subjectsMap[str] || []).forEach(sub => { if (!filtered.includes(sub)) filtered.push(sub); });
+  });
+  return filtered;
+}
+
 function toggleQuizStrand(s) {
   if (quizGen.strands.has(s)) quizGen.strands.delete(s);
   else quizGen.strands.add(s);
+  const availableSubjects = getAvailableSubjectsForQuizGen();
+  if (quizGen.subject && availableSubjects.length > 0 && !availableSubjects.includes(quizGen.subject)) {
+    quizGen.subject = '';
+  }
   renderQuizModal();
 }
 
@@ -97,7 +144,10 @@ function handleFileInput(input) {
   }
   quizGen.file = file;
   quizGen.fileText = '';
-  if (!quizGen.subject) quizGen.subject = file.name.replace(/\.[^.]+$/, '');
+  if (!quizGen.title) quizGen.title = file.name.replace(/\.[^.]+$/, '');
+  const availSubs = getAvailableSubjectsForQuizGen();
+  const matchedSub = availSubs.find(s => s.toLowerCase() === file.name.replace(/\.[^.]+$/, '').toLowerCase());
+  if (!quizGen.subject && matchedSub) quizGen.subject = matchedSub;
   renderQuizModal();
   extractFileText(file, ext)
     .then(text => { quizGen.fileText = text; })
@@ -202,23 +252,39 @@ function applyGeneratedQuestions(list, isDemo) {
 
 function buildDemoQuestions() {
   const name = quizGen.file ? quizGen.file.name : 'your file';
+  const selectedFormats = Array.from(quizGen.formats);
+  if (selectedFormats.length === 0) selectedFormats.push('mc', 'id', 'match');
+
+  const targetCount = (typeof quizGen.count === 'number' && quizGen.count > 0) ? quizGen.count : 10;
   const demo = [];
-  if (quizGen.formats.has('mc')) demo.push({
-    type: 'multiple_choice',
-    question: `Sample multiple choice item — connect QUIZ_API_ENDPOINT to generate real questions from "${name}".`,
-    options: ['Sample option A', 'Sample option B', 'Sample option C', 'Sample option D'],
-    answer: 'Sample option A'
-  });
-  if (quizGen.formats.has('id')) demo.push({
-    type: 'identification',
-    question: 'Sample identification item — placeholder until the AI backend is connected.',
-    answer: 'Sample answer'
-  });
-  if (quizGen.formats.has('match')) demo.push({
-    type: 'matching',
-    instructions: 'Sample matching set — placeholder until the AI backend is connected.',
-    pairs: [{ left: 'Sample term A', right: 'Sample definition A' }, { left: 'Sample term B', right: 'Sample definition B' }]
-  });
+
+  const samplePool = {
+    mc: (i) => ({
+      type: 'multiple_choice',
+      question: `Question ${i + 1} (Multiple Choice) — sample generated item from "${name}".`,
+      options: ['Sample option A', 'Sample option B', 'Sample option C', 'Sample option D'],
+      answer: 'Sample option A'
+    }),
+    id: (i) => ({
+      type: 'identification',
+      question: `Question ${i + 1} (Identification) — sample generated prompt from "${name}".`,
+      answer: 'Sample answer'
+    }),
+    match: (i) => ({
+      type: 'matching',
+      instructions: `Question ${i + 1} (Matching Type) — sample matching set from "${name}".`,
+      pairs: [
+        { left: `Term ${i + 1}A`, right: `Definition ${i + 1}A` },
+        { left: `Term ${i + 1}B`, right: `Definition ${i + 1}B` }
+      ]
+    })
+  };
+
+  for (let i = 0; i < targetCount; i++) {
+    const fmt = selectedFormats[i % selectedFormats.length];
+    demo.push(samplePool[fmt](i));
+  }
+
   return demo;
 }
 
@@ -243,11 +309,14 @@ async function saveQuiz() {
   if (quizGen.questions.length === 0) { showToast('Nothing to save yet', 'error'); return; }
   const isDemo = quizGen.questions.some(q => q._demo);
   const title = quizGen.title || (quizGen.subject ? quizGen.subject + ' – AI Generated Quiz' : 'AI Generated Quiz');
+  const { data: { session } } = await db.auth.getSession();
+  const userId = session?.user?.id || CURRENT_PROFILE?.id;
   const { error } = await db.from('quizzes').insert({
     title: title,
     subject: quizGen.subject || null,
     strand: quizGen.strands.size ? Array.from(quizGen.strands).join(', ') : null,
     sections: quizGen.sections.size ? Array.from(quizGen.sections).join(', ') : null,
+    created_by: userId,
     questions: quizGen.questions,
     status: 'pending',
     is_demo: isDemo
@@ -255,8 +324,47 @@ async function saveQuiz() {
   if (error) {
     showToast('Failed to save quiz: ' + error.message, 'error'); return;
   }
+  if (typeof addNotification === 'function') {
+    addNotification({
+      targetRole: 'admin',
+      title: 'New Quiz Pending Review',
+      message: `Teacher ${CURRENT_PROFILE?.full_name || 'A teacher'} submitted "${title}" for approval.`,
+      type: 'approval'
+    });
+  }
   closeQuizModal();
   showToast(isDemo ? 'Demo quiz saved for preview' : 'Quiz submitted for admin approval', isDemo ? 'info' : 'success');
+  await loadQuizzesFromDB();
+}
+
+async function approveQuiz(id) {
+  const quiz = customQuizzes.find(q => q.id === id);
+  const { error } = await db.from('quizzes').update({ status: 'approved' }).eq('id', id);
+  if (error) { showToast('Failed to approve quiz: ' + error.message, 'error'); return; }
+  showToast('Quiz approved', 'success');
+  if (quiz && typeof addNotification === 'function') {
+    addNotification({
+      targetUserId: quiz.createdBy,
+      targetRole: 'teacher',
+      title: 'Quiz Approved',
+      message: `Your quiz "${quiz.title}" has been approved by the Admin and is now live.`,
+      type: 'quiz'
+    });
+    addNotification({
+      targetRole: 'student',
+      title: 'New Quiz Available',
+      message: `New quiz "${quiz.title}" (${quiz.subject || 'General'}) is now available under Quizzes.`,
+      type: 'quiz'
+    });
+  }
+  await loadQuizzesFromDB();
+}
+
+async function rejectQuiz(id) {
+  if (!confirm('Deny this quiz? It will be permanently deleted from the approval queue.')) return;
+  const { error } = await db.from('quizzes').delete().eq('id', id);
+  if (error) { showToast('Failed to deny quiz: ' + error.message, 'error'); return; }
+  showToast('Quiz denied and deleted', 'success');
   await loadQuizzesFromDB();
 }
 
@@ -297,14 +405,20 @@ function renderQuizModal() {
         <p>Live team-based review game for the whole class</p>
       </div>
     </div>
-    <div class="gen-row">
-      <div class="gen-field"><label>Quiz Title</label><input type="text" placeholder="e.g. Cybersecurity – Quiz 4" value="${escHtml(quizGen.title)}" oninput="updateTitle(this.value)"></div>
-      <div class="gen-field"><label>Subject</label><input type="text" placeholder="e.g. Cybersecurity Fundamentals" value="${escHtml(quizGen.subject)}" oninput="updateSubject(this.value)"></div>
-    </div>
     <div class="gen-field">
-      <label>Target Strands <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(leave blank for all)</span></label>
+      <label>Target Strands <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select strand to filter subject list)</span></label>
       <div class="format-grid">
         ${STRANDS.map(s => `<div class="format-chip ${quizGen.strands.has(s) ? 'on' : ''}" onclick="toggleQuizStrand('${s}')">${s}</div>`).join('')}
+      </div>
+    </div>
+    <div class="gen-row">
+      <div class="gen-field"><label>Quiz Title</label><input type="text" placeholder="e.g. Cybersecurity – Quiz 4" value="${escHtml(quizGen.title)}" oninput="updateTitle(this.value)"></div>
+      <div class="gen-field"><label>Subject</label>
+        <select onchange="updateSubject(this.value)">
+          <option value="" disabled ${!quizGen.subject ? 'selected' : ''}>${quizGen.strands.size > 0 ? 'Select subject' : 'Select subject (All Strands)'}</option>
+          ${getAvailableSubjectsForQuizGen().map(sub => `<option value="${escHtml(sub)}" ${quizGen.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
+          ${(quizGen.subject && !getAvailableSubjectsForQuizGen().includes(quizGen.subject)) ? `<option value="${escHtml(quizGen.subject)}" selected>${escHtml(quizGen.subject)}</option>` : ''}
+        </select>
       </div>
     </div>
     <div class="gen-field">

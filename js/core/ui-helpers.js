@@ -1,5 +1,9 @@
 /* ── UI HELPERS, TOASTS, NOTIFICATIONS & ICONS ── */
 
+const STRANDS = ['STEM', 'HUMSS', 'ABM', 'TVL'];
+const GRADE_LEVELS = ['Grade 11', 'Grade 12'];
+const SECTIONS = ['Section A', 'Section B', 'Section C', 'Section D'];
+
 function showToast(msg, type = 'info') {
   const toast = document.getElementById('toast');
   if (!toast) return;
@@ -24,28 +28,7 @@ function initialsFor(fullName) {
   return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
 }
 
-/* ── NOTIFICATIONS DROPDOWN ── */
-function toggleNotif() {
-  const dropdown = document.getElementById('notifDropdown');
-  if (dropdown) dropdown.classList.toggle('open');
-}
 
-function closeNotif() {
-  const dropdown = document.getElementById('notifDropdown');
-  if (dropdown) dropdown.classList.remove('open');
-}
-
-document.addEventListener('click', e => {
-  const wrap = document.getElementById('notifWrap');
-  if (wrap && !wrap.contains(e.target)) closeNotif();
-});
-
-function markAllRead() {
-  document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
-  const badge = document.getElementById('notifBadge');
-  if (badge) badge.style.display = 'none';
-  showToast('All notifications marked as read', 'success');
-}
 
 /* ── SVG ICONS ── */
 function iconCheck()   { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`; }
@@ -71,6 +54,7 @@ function iconGamepad() { return `<svg viewBox="0 0 24 24"><rect x="2" y="6" widt
 function iconTrash()   { return `<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>`; }
 function iconClose()   { return `<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`; }
 function iconDoc()     { return `<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`; }
+function iconMute()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`; }
 
 async function logout() {
   await db.auth.signOut();

@@ -1,29 +1,46 @@
 /* ── USER MANAGEMENT MODULE (ADMIN) ── */
 
-const STRANDS = ['STEM', 'HUMSS', 'ABM'];
-const GRADE_LEVELS = ['Grade 11', 'Grade 12'];
-const SECTIONS = ['Section A', 'Section B', 'Section C', 'Section D'];
+
 
 let registeredUsers = [];
+let isFetchingUsers = false;
+
+function renderUserTableRows() {
+  const tbody = document.getElementById('userTableBody');
+  if (!tbody) return;
+  tbody.innerHTML = registeredUsers.map(u => renderUserRow(u)).join('');
+  filterUserTable();
+}
 
 async function loadUsersFromDB() {
-  const { data, error } = await db.from('users').select('*').order('created_at', { ascending: false });
-  if (error) { console.error('Failed to load users:', error.message); return; }
-  registeredUsers = (data || []).map(u => ({
-    name: u.full_name,
-    id: u.school_id,
-    role: u.role,
-    detail: u.role === 'student'
-      ? `${u.strand || ''} — ${u.grade_level || ''}`
-      : (u.subjects || u.strand || ''),
-    strand: u.strand || '',
-    dbId: u.id,
-    permanentlyMuted: !!u.permanently_muted,
-    mutedUntil: u.muted_until || null,
-    strikes: u.profanity_strikes || 0
-  }));
-  if (currentPage === 'users' || currentPage === 'dashboard') {
-    renderPage(currentPage);
+  if (isFetchingUsers) return;
+  isFetchingUsers = true;
+  try {
+    const { data, error } = await db.from('users').select('*').order('created_at', { ascending: false });
+    if (error) { console.error('Failed to load users:', error.message); return; }
+    registeredUsers = (data || []).map(u => ({
+      name: u.full_name,
+      id: u.school_id,
+      role: u.role,
+      detail: u.role === 'student'
+        ? `${u.strand || ''} — ${u.grade_level || ''}`
+        : (u.subjects || u.strand || ''),
+      strand: u.strand || '',
+      dbId: u.id,
+      permanentlyMuted: !!u.permanently_muted,
+      mutedUntil: u.muted_until || null,
+      strikes: u.profanity_strikes || 0
+    }));
+    if (typeof currentPage !== 'undefined' && currentPage === 'users') {
+      renderUserTableRows();
+    } else if (typeof currentPage !== 'undefined' && currentPage === 'dashboard') {
+      const mainContent = document.getElementById('mainContent');
+      if (mainContent && typeof getPageContent === 'function') {
+        mainContent.innerHTML = getPageContent(ROLE, 'dashboard');
+      }
+    }
+  } finally {
+    isFetchingUsers = false;
   }
 }
 

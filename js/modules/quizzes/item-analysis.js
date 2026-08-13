@@ -1,8 +1,14 @@
 /* ── ITEM ANALYSIS MODULE (TEACHER) ── */
 
 let analysisSelectedQuizId = null;
+let analysisSectionFilter = '';
 let analysisAttemptsCache = {};
 let analysisFetchInFlightFor = null;
+
+function setAnalysisSectionFilter(sec) {
+  analysisSectionFilter = sec;
+  renderPage('analysis');
+}
 
 function buildAnalysisRows(quiz, attempts) {
   if (!quiz) return [];
