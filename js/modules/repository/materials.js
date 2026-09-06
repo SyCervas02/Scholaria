@@ -197,6 +197,12 @@ const SUBJECTS_BY_STRAND = {
 let materialsData = [];
 let materialsStrandFilter = '';
 let materialsAdminTab = 'pending';
+let activeSubjectFilter = null; // course.id or null
+
+function setActiveSubjectMaterials(courseId) {
+  activeSubjectFilter = courseId;
+  renderMaterialsContainer();
+}
 
 function setMaterialsStrandFilter(value) {
   materialsStrandFilter = value;
@@ -249,8 +255,21 @@ async function loadMaterialsFromDB() {
     if (!res.ok) { showToast(data.error || 'Could not load materials', 'error'); return; }
     materialsData = data;
   } catch (err) {
-    console.error('Failed to load materials:', err.message);
-    showToast('Could not reach the server for materials', 'error');
+    console.warn('Backend API server offline, querying Supabase directly:', err.message);
+    try {
+      let query = db.from('materials').select('*').order('created_at', { ascending: false });
+      if (ROLE === 'student' && CURRENT_PROFILE.strand) {
+        query = query.or(`strand.eq.${CURRENT_PROFILE.strand},strand.is.null`);
+      } else if (materialsStrandFilter) {
+        query = query.eq('strand', materialsStrandFilter);
+      }
+      const { data, error } = await query;
+      if (!error && data) {
+        materialsData = data;
+      }
+    } catch (e) {
+      console.error('Supabase direct query failed:', e.message);
+    }
     return;
   } finally {
     isFetchingMaterials = false;
@@ -284,14 +303,137 @@ function updateApprovalBadge() {
 }
 
 function renderMaterialsList(role) {
+  // If role is student or viewing subject repository:
+  const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
+  const enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
+    ? COURSES_DATABASE.filter(c => typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true)
+    : [];
+
+  // ── INDIVIDUAL SUBJECT DETAIL VIEW ──
+  if (activeSubjectFilter) {
+    const course = enrolledCourses.find(c => c.id === activeSubjectFilter) || COURSES_DATABASE.find(c => c.id === activeSubjectFilter);
+    if (course) {
+      const subjectUploads = materialsData.filter(m => {
+        if (!m.subject) return false;
+        const s = m.subject.toLowerCase();
+        const t = course.title.toLowerCase();
+        return s.includes(t) || t.includes(s);
+      });
+
+      const docs = course.documents || [];
+
+      return `
+      <div class="subject-hub">
+        <div class="sh-breadcrumb">
+          <button class="sh-back-btn" onclick="setActiveSubjectMaterials(null)">
+            <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+            Back to All Subjects
+          </button>
+          <span class="sh-bc-sep">/</span>
+          <span class="sh-bc-curr">${escHtml(course.title)} (${escHtml(course.code)})</span>
+        </div>
+
+        <div class="sh-hero-card">
+          <div class="sh-hero-body">
+            <div class="sh-hero-tags">
+              <span class="sh-tag track">${escHtml(course.track || 'Specialized Track')}</span>
+              <span class="sh-tag strand">${escHtml(course.strand)} Strand</span>
+              <span class="sh-tag sem">${escHtml(course.semester || '1st Semester')} · ${escHtml(course.gradeLevel || 'Grade 11')}</span>
+            </div>
+            <h2 class="sh-title">${escHtml(course.title)}</h2>
+            <p class="sh-desc">${escHtml(course.description || 'Curriculum learning modules, lecture notes, lab guides, and problem sets.')}</p>
+            
+            <div class="sh-meta-row">
+              <div class="sh-instructor">
+                <div class="sh-avatar">${course.instructor ? course.instructor.charAt(course.instructor.startsWith('Dr.') ? 4 : course.instructor.startsWith('Prof.') ? 6 : course.instructor.startsWith('Engr.') ? 6 : course.instructor.startsWith('Ms.') ? 4 : 0) : 'U'}</div>
+                <span>Instructor: <strong>${escHtml(course.instructor)}</strong></span>
+              </div>
+              <div class="sh-progress-box">
+                <span>Course Completion: <strong>${course.progress}%</strong></span>
+                <div class="sh-progress-track"><div class="sh-progress-fill" style="width:${course.progress}%;"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sh-modules-section">
+          <div class="sh-sec-hdr">
+            <div>
+              <h3>Curriculum Learning Modules & PDF Files</h3>
+              <span>Official DepEd & Haven of Wisdom Academy handouts for ${escHtml(course.title)}</span>
+            </div>
+            <span class="sh-count-pill">${docs.length} PDF ${docs.length === 1 ? 'File' : 'Files'}</span>
+          </div>
+
+          <div class="pdf-modules-grid">
+            ${docs.map((doc, idx) => `
+              <div class="pdf-module-card">
+                <div class="pm-head">
+                  <div class="pm-icon-wrap">
+                    <svg viewBox="0 0 24 24" class="pm-pdf-svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <span class="pm-pdf-tag">PDF</span>
+                  </div>
+                  <div class="pm-title-block">
+                    <span class="pm-filename">${escHtml(doc.fileName)}</span>
+                    <h4 class="pm-title">${escHtml(doc.title)}</h4>
+                  </div>
+                </div>
+
+                <p class="pm-topics">${escHtml(doc.topics)}</p>
+
+                <div class="pm-foot">
+                  <div class="pm-meta">
+                    <span>${doc.size}</span> · <span>${doc.pages} Pages</span> · <span>${doc.date}</span>
+                  </div>
+                  <div class="pm-actions">
+                    <button class="pm-preview-btn" onclick="previewSubjectPdf('${course.id}', '${doc.id}')" title="Preview PDF document in browser">
+                      <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      Preview
+                    </button>
+                    <button class="pm-dl-btn" onclick="downloadSubjectPdf('${course.id}', '${doc.id}')" title="Download ${escHtml(doc.fileName)}">
+                      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      Download
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        ${subjectUploads.length ? `
+          <div class="sh-uploads-section" style="margin-top:24px;">
+            <div class="sh-sec-hdr">
+              <div>
+                <h3>Teacher Uploaded Supplementary Materials</h3>
+                <span>Direct classroom uploads for ${escHtml(course.title)}</span>
+              </div>
+              <span class="sh-count-pill">${subjectUploads.length} File${subjectUploads.length === 1 ? '' : 's'}</span>
+            </div>
+            <div class="file-list">
+              ${subjectUploads.map(m => `
+                <div class="file-row">
+                  <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
+                  <div class="file-info">
+                    <h4>${escHtml(m.title)}</h4>
+                    <span>${escHtml(m.uploaded_by_name || 'Teacher')} · ${new Date(m.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <button class="dl-btn" onclick="downloadMaterial('${m.id}')">Download</button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>`;
+    }
+  }
+
+  // ── ALL SUBJECTS OVERVIEW / FILTER TABS ──
   let list = materialsData;
   if (role === 'teacher') {
     list = materialsData.filter(m => m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE.id);
   } else if (role === 'admin') {
     list = materialsAdminTab === 'all' ? materialsData.slice() : materialsData.filter(m => m.status === materialsAdminTab);
-  }
-  if (!list.length) {
-    return `<div class="file-list"><p style="padding:20px;color:var(--text-muted);font-size:13px;">${role === 'admin' ? `No ${materialsAdminTab === 'all' ? '' : materialsAdminTab + ' '}materials.` : 'No materials yet.'}</p></div>`;
   }
 
   const renderRow = (m) => {
@@ -325,7 +467,134 @@ function renderMaterialsList(role) {
     `).join('');
   }
 
-  return `<div class="file-list">${list.map(renderRow).join('')}</div>`;
+  // Student / Teacher View: Show Subject Cards with individual PDF folders
+  return `
+    <div class="subjects-materials-wrapper">
+      <div class="subject-chips-bar">
+        <button class="subject-chip active" onclick="setActiveSubjectMaterials(null)">All Enrolled Subjects</button>
+        ${enrolledCourses.map(c => `
+          <button class="subject-chip" onclick="setActiveSubjectMaterials('${c.id}')">
+            ${escHtml(c.title)} <span class="sc-badge">${c.documents ? c.documents.length : c.modules}</span>
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="subjects-folder-grid">
+        ${enrolledCourses.map(course => {
+          const docs = course.documents || [];
+          return `
+            <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')">
+              <div class="sfc-thumb" style="background-image:url('${course.cover}');">
+                <span class="sfc-code">${course.code}</span>
+                <span class="sfc-strand">${course.strand}</span>
+              </div>
+              <div class="sfc-body">
+                <h4 class="sfc-title">${escHtml(course.title)}</h4>
+                <p class="sfc-instructor">👤 ${escHtml(course.instructor)}</p>
+                <div class="sfc-foot">
+                  <span class="sfc-doc-count">${docs.length} PDF ${docs.length === 1 ? 'Module' : 'Modules'}</span>
+                  <span class="sfc-open-btn">View Files →</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      ${list.length ? `
+        <div style="margin-top:28px;">
+          <div class="section-hdr"><h2>Recent Classroom Materials</h2></div>
+          <div class="file-list">${list.map(renderRow).join('')}</div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function previewSubjectPdf(courseId, docId) {
+  const course = (typeof COURSES_DATABASE !== 'undefined') ? COURSES_DATABASE.find(c => c.id === courseId) : null;
+  const doc = course?.documents?.find(d => d.id === docId);
+  if (!doc) return;
+
+  const modal = document.getElementById('docPreviewModal');
+  const titleEl = document.getElementById('docPreviewTitle');
+  const subEl = document.getElementById('docPreviewSubtitle');
+  const bodyEl = document.getElementById('docPreviewBody');
+  const dlBtn = document.getElementById('docPreviewDlBtn');
+
+  if (titleEl) titleEl.textContent = doc.title;
+  if (subEl) subEl.textContent = `${course.title} (${course.code}) · ${doc.fileName} · ${doc.pages} Pages · ${doc.size}`;
+  if (dlBtn) dlBtn.onclick = () => downloadSubjectPdf(courseId, docId);
+
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div class="doc-viewer-card">
+        <div class="doc-viewer-header">
+          <div class="doc-vh-left">
+            <span class="doc-type-badge">PDF Document</span>
+            <span class="doc-topic-tag">${escHtml(course.track || 'Specialized Track')}</span>
+          </div>
+          <span class="doc-page-count">Page 1 of ${doc.pages}</span>
+        </div>
+        
+        <div class="doc-content-simulator">
+          <div class="doc-paper">
+            <div class="doc-paper-header">
+              <div class="doc-school-name">HAVEN OF WISDOM ACADEMY</div>
+              <div class="doc-school-sub">Senior High School Academic Department · ${escHtml(course.strand)} Strand</div>
+              <div class="doc-divider"></div>
+            </div>
+            
+            <div class="doc-paper-title">${escHtml(doc.title)}</div>
+            <div class="doc-paper-meta">Subject: <strong>${escHtml(course.title)} (${escHtml(course.code)})</strong> | Instructor: <strong>${escHtml(course.instructor)}</strong></div>
+            
+            <div class="doc-section-heading">I. Learning Competencies & Objectives</div>
+            <p class="doc-body-p">In this module, students are expected to comprehend and demonstrate proficiency in: ${escHtml(doc.topics)}</p>
+            
+            <div class="doc-section-heading">II. Key Concepts & Overview</div>
+            <p class="doc-body-p">This instructional resource contains formal definitions, illustrative step-by-step problem sets, and guided laboratory worksheets prepared for ${escHtml(course.gradeLevel)} students.</p>
+            
+            <div class="doc-highlight-box">
+              <strong>Module Resource Summary:</strong><br/>
+              • Document File: <code>${escHtml(doc.fileName)}</code><br/>
+              • Total Length: ${doc.pages} pages with practice activities & self-check assessments.<br/>
+              • Release Date: ${doc.date}
+            </div>
+
+            <div class="doc-section-heading">III. Discussion & Guided Activities</div>
+            <p class="doc-body-p">Detailed diagrams, mathematical derivations, and exercise sheets follow in the complete downloadable PDF version.</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (modal) modal.classList.add('active');
+}
+
+function closeDocPreviewModal() {
+  const modal = document.getElementById('docPreviewModal');
+  if (modal) modal.classList.remove('active');
+}
+
+function downloadSubjectPdf(courseId, docId) {
+  const course = (typeof COURSES_DATABASE !== 'undefined') ? COURSES_DATABASE.find(c => c.id === courseId) : null;
+  const doc = course?.documents?.find(d => d.id === docId);
+  if (!doc) return;
+
+  showToast(`Downloading "${doc.fileName}"…`, 'success');
+
+  const textContent = `%PDF-1.4\n% HAVEN OF WISDOM ACADEMY\n% Course: ${course.title} (${course.code})\n% Module: ${doc.title}\n% File: ${doc.fileName}\n% Instructor: ${course.instructor}\n% Topics: ${doc.topics}\n% Pages: ${doc.pages}\n\n==============================================\nHAVEN OF WISDOM ACADEMY - SENIOR HIGH SCHOOL\n${course.title.toUpperCase()} (${course.code})\n${doc.title}\nInstructor: ${course.instructor}\n==============================================\n\nOVERVIEW & TOPICS:\n${doc.topics}\n\nThis is the official curriculum learning material for Haven of Wisdom Academy students.\n`;
+  
+  const blob = new Blob([textContent], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = doc.fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function renderApprovalMaterialRows() {

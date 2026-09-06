@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="genBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#0f2b5c"/>
+      <stop offset="50%" stop-color="#061838"/>
+      <stop offset="100%" stop-color="#020a17"/>
+    </radialGradient>
+    <radialGradient id="starBurst" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="40%" stop-color="#0284c7" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#genBg)"/>
+
+  <!-- TOP-LEFT: Scholastic Shield & Torch of Knowledge -->
+  <g transform="translate(140, 100)">
+    <path d="M 0,0 L 180,0 L 180,120 C 180,200 90,260 90,260 C 90,260 0,200 0,120 Z" fill="#1e3a8a" stroke="#38bdf8" stroke-width="4"/>
+    <!-- Torch -->
+    <path d="M 80,180 L 100,180 L 95,90 L 85,90 Z" fill="#f59e0b"/>
+    <ellipse cx="90" cy="70" rx="20" ry="30" fill="#f97316"/>
+    <ellipse cx="90" cy="70" rx="10" ry="18" fill="#fde047"/>
+  </g>
+
+  <!-- HERO RIGHT: Glowing Graduation Cap & Academic Achievement Star -->
+  <g transform="translate(1550, 360)">
+    <circle cx="0" cy="0" r="220" fill="url(#starBurst)"/>
+    
+    <!-- Cap Diamond Board -->
+    <polygon points="0,-90 190,-10 0,70 -190,-10" fill="#0f172a" stroke="#38bdf8" stroke-width="4"/>
+    <!-- Skull Cap Base -->
+    <path d="M -80,15 Q 0,120 80,15 L 80,55 Q 0,160 -80,55 Z" fill="#0284c7" stroke="#38bdf8" stroke-width="2"/>
+    <!-- Button & Tassel -->
+    <circle cx="0" cy="-10" r="10" fill="#f59e0b"/>
+    <path d="M 0,-10 Q 90,-20 120,80" stroke="#f59e0b" stroke-width="4" fill="none"/>
+    <rect x="110" y="80" width="20" height="40" rx="4" fill="#f59e0b"/>
+  </g>
+
+  <!-- Aurora Waves at bottom -->
+  <path d="M 0,840 Q 480,720 960,820 T 1920,780 L 1920,1080 L 0,1080 Z" fill="#0284c7" opacity="0.35"/>
+  <path d="M 0,920 Q 520,840 1040,940 T 1920,880 L 1920,1080 L 0,1080 Z" fill="#0369a1" opacity="0.6"/>
+</svg>

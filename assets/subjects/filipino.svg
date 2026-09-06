@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="filBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </radialGradient>
+    <radialGradient id="sunGold" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="40%" stop-color="#fbbf24"/>
+      <stop offset="80%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#filBg)"/>
+
+  <!-- HERO RIGHT: 8-RAYED PHILIPPINE GOLDEN SUN & 3 STARS -->
+  <g transform="translate(1550, 320)">
+    <!-- Sun Disc -->
+    <circle cx="0" cy="0" r="95" fill="url(#sunGold)" stroke="#fef08a" stroke-width="3"/>
+    
+    <!-- 8 Main Sun Rays with dual secondary split -->
+    <g fill="#fbbf24">
+      <!-- 0 deg -->
+      <polygon points="-12,-90 0,-190 12,-90"/>
+      <polygon points="-6,-90 -20,-170 0,-90"/>
+      <polygon points="0,-90 20,-170 6,-90"/>
+      <!-- 45 deg -->
+      <g transform="rotate(45)">
+        <polygon points="-12,-90 0,-190 12,-90"/>
+        <polygon points="-6,-90 -20,-170 0,-90"/>
+        <polygon points="0,-90 20,-170 6,-90"/>
+      </g>
+      <!-- 90 deg -->
+      <g transform="rotate(90)">
+        <polygon points="-12,-90 0,-190 12,-90"/>
+        <polygon points="-6,-90 -20,-170 0,-90"/>
+        <polygon points="0,-90 20,-170 6,-90"/>
+      </g>
+      <!-- 135 deg -->
+      <g transform="rotate(135)">
+        <polygon points="-12,-90 0,-190 12,-90"/>
+        <polygon points="-6,-90 -20,-170 0,-90"/>
+        <polygon points="0,-90 20,-170 6,-90"/>
+      </g>
+      <!-- 180 deg -->
+      <g transform="rotate(180)">
+        <polygon points="-12,-90 0,-190 12,-90"/>
+        <polygon points="-6,-90 -20,-170 0,-90"/>
+        <polygon points="0,-90 20,-170 6,-90"/>
+      </g>
+      <!-- 225 deg -->
+      <g transform="rotate(225)">
+        <polygon points="-12,-90 0,-190 12,-90"/>
+        <polygon points="-6,-90 -20,-170 0,-90"/>
+        <polygon points="0,-90 20,-170 6,-90"/>
+      </g>
+      <!-- 270 deg -->
+      <g transform="rotate(270)">
+        <polygon points="-12,-90 0,-190 12,-90"/>
+        <polygon points="-6,-90 -20,-170 0,-90"/>
+        <polygon points="0,-90 20,-170 6,-90"/>
+      </g>
+      <!-- 315 deg -->
+      <g transform="rotate(315)">
+        <polygon points="-12,-90 0,-190 12,-90"/>
+        <polygon points="-6,-90 -20,-170 0,-90"/>
+        <polygon points="0,-90 20,-170 6,-90"/>
+      </g>
+    </g>
+
+    <!-- 3 Golden Stars (Luzon, Visayas, Mindanao) -->
+    <polygon points="-240,-120 -230,-90 -200,-90 -225,-70 -215,-40 -240,-60 -265,-40 -255,-70 -280,-90 -250,-90" fill="#fde047"/>
+    <polygon points="240,-120 250,-90 280,-90 255,-70 265,-40 240,-60 215,-40 225,-70 200,-90 230,-90" fill="#fde047"/>
+    <polygon points="0,240 10,270 40,270 15,290 25,320 0,300 -25,320 -15,290 -40,270 -10,270" fill="#fde047"/>
+  </g>
+
+  <!-- TOP-LEFT: Baybayin Script Characters -->
+  <g transform="translate(140, 120)">
+    <rect x="0" y="0" width="380" height="130" rx="14" fill="rgba(255, 255, 255, 0.08)" stroke="#f59e0b" stroke-width="2"/>
+    <text x="25" y="55" fill="#fde047" font-size="44" font-family="sans-serif">ᜊ  ᜌ  ᜈᜒ  ᜑ  ᜈ᜔</text>
+    <text x="25" y="100" fill="#93c5fd" font-size="20" font-family="sans-serif" font-weight="bold">Bayanihan • Wika at Kultura</text>
+  </g>
+
+  <!-- BOTTOM: Mayon Volcano Perfect Cone Silhouette & Rice Terraces -->
+  <g fill="#0f766e" opacity="0.8">
+    <path d="M 0,1080 L 180,820 L 360,1080 Z"/>
+    <!-- Mayon Cone -->
+    <path d="M 120,1080 Q 480,680 720,680 Q 960,680 1320,1080 Z" fill="#047857"/>
+  </g>
+  <!-- Scarlet Ribbon -->
+  <path d="M 0,980 Q 480,840 960,940 T 1920,920 L 1920,1080 L 0,1080 Z" fill="#dc2626" opacity="0.85"/>
+</svg>
