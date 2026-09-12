@@ -1,0 +1,448 @@
+/* ── COURSES MODULE — LIGHT THEME STYLING FOR HAVEN OF WISDOM ACADEMY ── */
+
+.courses-widget {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: var(--shadow, 0 1px 8px rgba(15,23,42,0.06), 0 4px 20px rgba(37,99,235,0.05));
+  border: 1.5px solid var(--blue-light, #e8f0fe);
+  margin-bottom: 24px;
+  color: var(--text-primary, #0f172a);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.cw-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.cw-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cw-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+}
+
+.cw-subtitle {
+  font-size: 12.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Options Bar / Filter Row */
+.cw-filters-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.cw-left-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cw-tab-group {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 30px;
+  border: 1px solid #e2e8f0;
+}
+
+.cw-tab {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 18px;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+}
+
+.cw-tab.active {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+}
+
+.cw-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.cw-tab:not(.active) .cw-count {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.cw-nav-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cw-slide-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.cw-slide-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+  transform: scale(1.05);
+}
+
+.cw-slide-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.5;
+}
+
+/* Cards Carousel / Grid */
+.cw-cards-grid {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding-bottom: 8px;
+  scrollbar-width: none; /* Firefox */
+}
+
+.cw-cards-grid::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
+
+.cw-card {
+  width: 290px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border: 1.5px solid #e8f0fe;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  position: relative;
+  cursor: pointer;
+}
+
+.cw-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.12);
+  border-color: #93c5fd;
+}
+
+.cw-card:hover .cw-view-link svg {
+  transform: translateX(4px);
+}
+
+.cw-card.locked {
+  opacity: 0.8;
+}
+
+.cw-card.locked:hover {
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+/* Thumbnail */
+.cw-thumb {
+  height: 145px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.cw-thumb-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.35) 0%, rgba(15, 23, 42, 0) 40%, rgba(15, 23, 42, 0.65) 100%);
+  pointer-events: none;
+}
+
+.cw-thumb-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+}
+
+.cw-track-badge {
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(6px);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.cw-strand-badge {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  color: #0284c7;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 12px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border: 1px solid rgba(2, 132, 199, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.cw-strand-badge.locked-badge {
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+.cw-thumb-bottom {
+  position: relative;
+  z-index: 2;
+}
+
+.cw-sem-tag {
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.cw-lock-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(3px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  gap: 6px;
+  z-index: 3;
+}
+
+.cw-lock-overlay svg {
+  width: 28px;
+  height: 28px;
+  stroke: #ef4444;
+  fill: none;
+  stroke-width: 2;
+}
+
+.cw-lock-overlay span {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fecaca;
+  text-align: center;
+  padding: 0 12px;
+}
+
+/* Card Content */
+.cw-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.cw-code-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cw-course-code {
+  font-size: 11px;
+  font-weight: 800;
+  color: #0284c7;
+  letter-spacing: 0.5px;
+}
+
+.cw-mod-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f8fafc;
+  padding: 2px 8px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.cw-mod-chip svg {
+  width: 12px;
+  height: 12px;
+  stroke: #64748b;
+}
+
+.cw-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+  height: 42px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Instructor Row */
+.cw-instructor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cw-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0284c7, #38bdf8);
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cw-instructor-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Progress Section */
+.cw-progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.cw-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.cw-progress-text {
+  color: #64748b;
+}
+
+.cw-progress-pct {
+  color: #0284c7;
+}
+
+.cw-progress-pct.done {
+  color: #059669;
+}
+
+.cw-progress-bar-track {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.cw-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0284c7, #38bdf8);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+
+.cw-progress-bar-fill.done {
+  background: linear-gradient(90deg, #059669, #10b981);
+}
+
+/* Card Footer */
+.cw-card-foot {
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.cw-view-link {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0284c7;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.2s ease;
+}
+
+.cw-view-link svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.5;
+  transition: transform 0.2s ease;
+}
+
+.cw-card:hover .cw-view-link {
+  color: #0369a1;
+}

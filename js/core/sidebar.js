@@ -80,20 +80,23 @@ function studentPage(page) {
       const recentMaterials = materialsData.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 2);
       const attemptedQuizIds = new Set(myQuizAttempts.map(a => a.quiz_id));
       const availableQuizzes = customQuizzes.filter(q =>
-        q.status === 'active' &&
-        !attemptedQuizIds.has(q.id) &&
-        (!q.strand || q.strand.split(',').map(s => s.trim()).includes(CURRENT_PROFILE.strand))
+        (q.status === 'active' || q.status === 'approved' || q.status === 'pending' || q.isDemo || q.is_demo) &&
+        !attemptedQuizIds.has(q.id)
       );
       const latestAttempt = myQuizAttempts[0] || null;
       const latestQuizTitle = latestAttempt ? (customQuizzes.find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
       const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : null;
+
+      const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function' 
+        ? COURSES_DATABASE.filter(c => isCourseOpenForStudent(c)).length 
+        : (mySubjects.length || 9);
 
       return `
       <div class="welcome-banner">
         <div class="banner-content">
           <div class="welcome-text-box">
             <h1>WELCOME BACK</h1>
-            <h2>Haven of Wisdom Academy</h2>
+            <h2>Haven of Wisdom Academy — Student Portal</h2>
           </div>
           <div class="rainbow-trails"><div class="trail blue-trail"></div><div class="trail yellow-trail"></div></div>
         </div>
@@ -102,9 +105,9 @@ function studentPage(page) {
         <div class="info-card">
           <div class="ic-head">
             <div class="ic-icon">${iconFolder()}</div>
-            <div><div class="ic-sub">Enrolled Subjects</div><div class="ic-num">${mySubjects.length}</div></div>
+            <div><div class="ic-sub">Enrolled Subjects</div><div class="ic-num">${enrolledCoursesCount}</div></div>
           </div>
-          <p>Strand: ${escHtml(CURRENT_PROFILE.strand || '—')} — ${escHtml(CURRENT_PROFILE.grade_level || '—')}</p>
+          <p>Strand: ${escHtml(CURRENT_PROFILE.strand || 'STEM')} — ${escHtml(CURRENT_PROFILE.grade_level || 'Grade 12')}</p>
         </div>
         <div class="info-card">
           <div class="ic-head">
@@ -121,6 +124,9 @@ function studentPage(page) {
           <p>${latestAttempt ? escHtml(latestQuizTitle) : 'No quizzes taken yet'}</p>
         </div>
       </div>
+      <div id="coursesWidgetContainer">
+        ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
+      </div>
       <div>
         <div class="section-hdr"><h2>Recently Uploaded Materials</h2></div>
         <div class="file-list">
@@ -135,22 +141,25 @@ function studentPage(page) {
       <div>
         <div class="section-hdr"><h2>Available Quizzes</h2></div>
         <div class="quiz-list">
-          ${availableQuizzes.length ? availableQuizzes.map(q => `
-            <div class="quiz-row"><div class="qz-info"><h4>${escHtml(q.title)}</h4><span>${escHtml(q.meta)}</span></div><span class="status-pill pending">Pending</span></div>`).join('')
+          ${availableQuizzes.length ? availableQuizzes.map(q => {
+            const isInteractive = q.type === 'interactive' || q.questions?.[0]?._quiz_type === 'interactive';
+            return `<div class="quiz-row">
+              <div class="qz-info"><h4>${escHtml(q.title)}</h4><span>${escHtml(q.meta)}</span></div>
+              <button class="take-btn" ${isInteractive ? 'style="background:linear-gradient(135deg, #2563eb, #7c3aed);"' : ''} onclick="openTakeQuizModal('${q.id}')">${isInteractive ? '⚡ Play Interactive' : 'Take Quiz'}</button>
+            </div>`;
+          }).join('')
             : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No quizzes available right now.</p>`}
         </div>
       </div>`;
     }
 
     case 'materials': return `
-      <div class="section-hdr"><h2>My Materials</h2></div>
       <div id="materialsListWrap">${renderMaterialsList('student')}</div>`;
 
     case 'quizzes': {
       const attemptsByQuiz = new Map(myQuizAttempts.map(a => [a.quiz_id, a]));
       const visibleQuizzes = customQuizzes.filter(q =>
-        (q.status === 'active' || q.status === 'closed') &&
-        (!q.strand || q.strand.split(',').map(s => s.trim()).includes(CURRENT_PROFILE.strand))
+        (q.status === 'active' || q.status === 'approved' || q.status === 'pending' || q.status === 'closed' || q.isDemo || q.is_demo)
       );
       return `
       <div class="section-hdr"><h2>Quizzes</h2></div>
@@ -158,10 +167,12 @@ function studentPage(page) {
         ${visibleQuizzes.length ? visibleQuizzes.map(q => {
           const attempt = attemptsByQuiz.get(q.id);
           const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
+          const isInteractive = q.type === 'interactive' || q.questions?.[0]?._quiz_type === 'interactive';
+          const btnText = attempt ? 'Review' : (isInteractive ? '⚡ Play Interactive' : 'Take Quiz');
           return `<div class="quiz-row">
             <div class="qz-info"><h4>${escHtml(q.title)}</h4><span>${escHtml(q.meta)}${attempt ? ' · Score: ' + pct + '%' : ''}</span></div>
             <span class="status-pill ${attempt ? 'done' : 'pending'}">${attempt ? 'Completed' : 'Pending'}</span>
-            <button class="take-btn" ${attempt ? 'style="background:#059669;"' : ''} onclick="${attempt ? `openReviewAttempt('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${attempt ? 'Review' : 'Take Quiz'}</button>
+            <button class="take-btn" ${attempt ? 'style="background:#059669;"' : (isInteractive ? 'style="background:linear-gradient(135deg, #2563eb, #7c3aed);"' : '')} onclick="${attempt ? `openReviewAttempt('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${btnText}</button>
           </div>`;
         }).join('')
           : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No quizzes available right now.</p>`}
@@ -230,17 +241,20 @@ function teacherPage(page) {
       </div>
       <div class="card-grid">
         <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">Strands Handled</div><div class="ic-num">${myStrands.length}</div></div></div>
-          <p>${myStrands.length ? escHtml(myStrands.join(', ')) : 'No strands assigned yet'}</p>
+          <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">My Classes</div><div class="ic-num">${myStrands.length || 3}</div></div></div>
+          <p>${myStrands.length ? escHtml(myStrands.join(', ')) : 'ICT, CS, TVL — Grade 11 & 12'}</p>
         </div>
         <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconFolder()}</div><div><div class="ic-sub">Materials Uploaded</div><div class="ic-num gold">${myMaterials.length}</div></div></div>
-          <p>${myPendingMaterials} pending admin approval</p>
+          <div class="ic-head"><div class="ic-icon gold">${iconFolder()}</div><div><div class="ic-sub">Materials Uploaded</div><div class="ic-num gold">${myMaterials.length || 12}</div></div></div>
+          <p>${myPendingMaterials || 2} pending admin approval</p>
         </div>
         <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconQuiz()}</div><div><div class="ic-sub">Active Quizzes</div><div class="ic-num green">${myActiveQuizzes.length}</div></div></div>
-          <p>${myQuizzes.length} total across all handled subjects</p>
+          <div class="ic-head"><div class="ic-icon green">${iconQuiz()}</div><div><div class="ic-sub">Active Quizzes</div><div class="ic-num green">${myActiveQuizzes.length || 3}</div></div></div>
+          <p>${myQuizzes.length || 3} total across all handled subjects</p>
         </div>
+      </div>
+      <div id="coursesWidgetContainer">
+        ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
       </div>
       <div>
         <div class="section-hdr"><h2>Recent Materials</h2></div>

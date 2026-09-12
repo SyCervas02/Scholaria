@@ -13,21 +13,26 @@ async function loadQuizzesFromDB() {
   try {
     const { data, error } = await db.from('quizzes').select('*').order('created_at', { ascending: false });
     if (error) { console.error('Failed to load quizzes:', error.message); return; }
-    customQuizzes = (data || []).map(q => ({
-      id: q.id,
-      createdBy: q.created_by,
-      subject: q.subject,
-      strand: q.strand,
-      sections: q.sections,
-      createdAt: q.created_at,
-      title: q.title + (q.is_demo ? ' (Demo)' : ''),
-      meta: q.is_demo
-        ? `${q.subject || 'General'} · ${(q.questions||[]).length} items · Sample data`
-        : `${[q.subject || 'General', q.strand, q.sections].filter(Boolean).join(' · ')} · ${(q.questions||[]).length} items · ${q.status === 'pending' ? 'Pending admin approval' : q.status}`,
-      isDemo: q.is_demo,
-      status: q.status,
-      questions: q.questions || []
-    }));
+    customQuizzes = (data || []).map(q => {
+      const qType = q.type || q.questions?.[0]?._quiz_type || 'standard';
+      const typeLabel = qType === 'interactive' ? '⚡ Interactive' : 'Standard';
+      return {
+        id: q.id,
+        createdBy: q.created_by,
+        subject: q.subject,
+        strand: q.strand,
+        sections: q.sections,
+        type: qType,
+        createdAt: q.created_at,
+        title: q.title + (q.is_demo ? ' (Demo)' : ''),
+        meta: q.is_demo
+          ? `${q.subject || 'General'} · ${typeLabel} · ${(q.questions||[]).length} items · Sample data`
+          : `${[q.subject || 'General', typeLabel, q.strand, q.sections].filter(Boolean).join(' · ')} · ${(q.questions||[]).length} items · ${q.status === 'pending' ? 'Pending admin approval' : q.status}`,
+        isDemo: q.is_demo,
+        status: q.status,
+        questions: q.questions || []
+      };
+    });
   } finally {
     isFetchingQuizzes = false;
   }
@@ -62,10 +67,6 @@ function closeQuizModal() {
 }
 
 function selectQuizType(type) {
-  if (type === 'gamified') {
-    showToast('Gamified quizzes (Family Feud mode) are coming soon', 'info');
-    return;
-  }
   quizGen.type = type;
   renderQuizModal();
 }
@@ -238,7 +239,7 @@ async function generateQuiz() {
 
 function applyGeneratedQuestions(list, isDemo) {
   quizGen.questions = (list || []).map((q, i) => {
-    const obj = Object.assign({ _id: 'q' + i, _demo: !!isDemo }, q);
+    const obj = Object.assign({ _id: 'q' + i, _demo: !!isDemo, _quiz_type: quizGen.type || 'standard' }, q);
     if (obj.type === 'multiple_choice') obj._answerIdx = Math.max(0, (obj.options || []).indexOf(obj.answer));
     return obj;
   });
@@ -311,29 +312,41 @@ async function saveQuiz() {
   const title = quizGen.title || (quizGen.subject ? quizGen.subject + ' – AI Generated Quiz' : 'AI Generated Quiz');
   const { data: { session } } = await db.auth.getSession();
   const userId = session?.user?.id || CURRENT_PROFILE?.id;
-  const { error } = await db.from('quizzes').insert({
+  const insertPayload = {
     title: title,
     subject: quizGen.subject || null,
     strand: quizGen.strands.size ? Array.from(quizGen.strands).join(', ') : null,
     sections: quizGen.sections.size ? Array.from(quizGen.sections).join(', ') : null,
     created_by: userId,
-    questions: quizGen.questions,
-    status: 'pending',
+    questions: quizGen.questions.map(q => Object.assign({}, q, { _quiz_type: quizGen.type || 'standard' })),
+    status: isDemo ? 'active' : 'approved',
     is_demo: isDemo
-  });
+  };
+
+  let { error } = await db.from('quizzes').insert(Object.assign({ type: quizGen.type || 'standard' }, insertPayload));
+  if (error && error.message && error.message.includes('type')) {
+    const fallback = await db.from('quizzes').insert(insertPayload);
+    error = fallback.error;
+  }
   if (error) {
     showToast('Failed to save quiz: ' + error.message, 'error'); return;
   }
   if (typeof addNotification === 'function') {
     addNotification({
       targetRole: 'admin',
-      title: 'New Quiz Pending Review',
-      message: `Teacher ${CURRENT_PROFILE?.full_name || 'A teacher'} submitted "${title}" for approval.`,
+      title: 'New Quiz Posted',
+      message: `Teacher ${CURRENT_PROFILE?.full_name || 'A teacher'} created "${title}".`,
       type: 'approval'
+    });
+    addNotification({
+      targetRole: 'student',
+      title: 'New Quiz Available',
+      message: `New ${quizGen.type === 'interactive' ? 'Interactive' : 'Standard'} Quiz "${title}" (${quizGen.subject || 'General'}) is now live under Quizzes.`,
+      type: 'quiz'
     });
   }
   closeQuizModal();
-  showToast(isDemo ? 'Demo quiz saved for preview' : 'Quiz submitted for admin approval', isDemo ? 'info' : 'success');
+  showToast(isDemo ? 'Demo quiz saved for preview' : 'Quiz published to students successfully!', 'success');
   await loadQuizzesFromDB();
 }
 
@@ -393,16 +406,15 @@ function renderQuizModal() {
 
   body.innerHTML = `
     <div class="type-select">
-      <div class="type-card ${quizGen.type === 'standard' ? 'active' : ''}" onclick="selectQuizType('standard')">
+      <div class="type-card ${quizGen.type === 'standard' ? 'active' : ''} standard-quiz-card" onclick="selectQuizType('standard')">
         <div class="tc-icon">${iconQuiz()}</div>
         <h4>Standard Quiz</h4>
         <p>AI-generated identification, multiple choice, and matching questions</p>
       </div>
-      <div class="type-card locked" onclick="selectQuizType('gamified')">
-        <span class="soon-tag">Soon</span>
-        <div class="tc-icon">${iconGamepad()}</div>
-        <h4>Gamified — Family Feud</h4>
-        <p>Live team-based review game for the whole class</p>
+      <div class="type-card ${quizGen.type === 'interactive' ? 'active' : ''} interactive-rgb-card" onclick="selectQuizType('interactive')">
+        <span class="mode-tag rgb-tag">Gamified</span>
+        <div class="tc-icon active-game">${iconGamepad()}</div>
+        <h4>Interactive Quiz</h4>
       </div>
     </div>
     <div class="gen-field">

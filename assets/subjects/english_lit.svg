@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="engBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </radialGradient>
+    <linearGradient id="bookPage" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="50%" stop-color="#fde68a"/>
+      <stop offset="100%" stop-color="#fef3c7"/>
+    </linearGradient>
+    <radialGradient id="lampGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fde047" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#f59e0b" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#b45309" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#engBg)"/>
+
+  <!-- TOP-LEFT: Classical Library Lantern & Bookshelf Archway -->
+  <g transform="translate(140, 100)">
+    <circle cx="120" cy="120" r="140" fill="url(#lampGlow)"/>
+    <!-- Lantern Silhouette -->
+    <path d="M 120,20 L 140,60 L 100,60 Z" fill="#f59e0b"/>
+    <rect x="90" y="60" width="60" height="90" rx="6" fill="#fef08a" stroke="#78350f" stroke-width="4"/>
+    <line x1="120" y1="60" x2="120" y2="150" stroke="#78350f" stroke-width="3"/>
+    <line x1="90" y1="105" x2="150" y2="105" stroke="#78350f" stroke-width="3"/>
+    
+    <!-- Floating Quotes & Words -->
+    <g font-family="Georgia, serif" font-style="italic" fill="#fde68a" opacity="0.8">
+      <text x="240" y="120" font-size="28">&ldquo;Words possess wondrous power.&rdquo;</text>
+      <text x="260" y="170" font-size="20">&mdash; Literature &amp; Rhetoric</text>
+    </g>
+  </g>
+
+  <!-- HERO RIGHT: Giant Glowing Open Book & Feather Quill Pen -->
+  <g transform="translate(1540, 380)">
+    <!-- Book Spine & Cover -->
+    <path d="M 0,160 Q -180,180 -260,140 L -260,-40 Q -180,0 0,-20 Q 180,0 260,-40 L 260,140 Q 180,180 0,160 Z" fill="#78350f" stroke="#b45309" stroke-width="5"/>
+    
+    <!-- Left Page -->
+    <path d="M 0,150 Q -160,165 -245,130 L -245,-30 Q -160,0 0,-15 Z" fill="url(#bookPage)"/>
+    <!-- Right Page -->
+    <path d="M 0,150 Q 160,165 245,130 L 245,-30 Q 160,0 0,-15 Z" fill="url(#bookPage)"/>
+
+    <!-- Page Text Lines -->
+    <g stroke="#92400e" stroke-width="2.5" opacity="0.6">
+      <line x1="-210" y1="10" x2="-40" y2="18"/>
+      <line x1="-210" y1="40" x2="-40" y2="48"/>
+      <line x1="-210" y1="70" x2="-40" y2="78"/>
+      <line x1="-210" y1="100" x2="-60" y2="108"/>
+
+      <line x1="40" y1="18" x2="210" y2="10"/>
+      <line x1="40" y1="48" x2="210" y2="40"/>
+      <line x1="40" y1="78" x2="210" y2="70"/>
+      <line x1="40" y1="108" x2="180" y2="100"/>
+    </g>
+
+    <!-- Golden Feather Quill Pen -->
+    <g transform="translate(60, -120) rotate(-45)">
+      <path d="M 0,0 C 30,-120 70,-180 120,-220 C 80,-150 40,-80 0,-10 Z" fill="#fbbf24" stroke="#f59e0b" stroke-width="2"/>
+      <path d="M 0,-10 L -10,30 L 5,10 Z" fill="#d97706"/>
+      <line x1="0" y1="-10" x2="80" y2="-170" stroke="#b45309" stroke-width="2"/>
+    </g>
+
+    <!-- Floating Letters ascending into the sky -->
+    <g font-family="Georgia, serif" font-weight="bold" fill="#fde047" opacity="0.85">
+      <text x="-120" y="-120" font-size="36">A</text>
+      <text x="-40" y="-170" font-size="30">B</text>
+      <text x="40" y="-190" font-size="40">C</text>
+      <text x="140" y="-140" font-size="32">&amp;</text>
+      <text x="-80" y="-230" font-size="28">§</text>
+    </g>
+  </g>
+</svg>
