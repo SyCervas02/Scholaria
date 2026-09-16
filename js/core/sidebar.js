@@ -767,11 +767,17 @@ function studentPage(page) {
       <div>
         <div class="section-hdr"><h2>Available Quizzes</h2></div>
         <div class="quiz-list">
-          ${availableQuizzes.length ? availableQuizzes.map(q => `
+          ${availableQuizzes.length ? availableQuizzes.map(q => {
+            const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+            return `
             <div class="quiz-row">
-              <div class="qz-info"><h4>${escHtml(q.title)}</h4><span>${escHtml(q.meta)}</span></div>
-              <button class="take-btn" onclick="openTakeQuizModal('${q.id}')">Take Quiz</button>
-            </div>`).join('') : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No pending quizzes right now.</p>`}
+              <div class="qz-info">
+                <h4>${escHtml(q.title)} ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;margin-left:6px;">🎮 Interactive</span>' : ''}</h4>
+                <span>${escHtml(q.meta)}</span>
+              </div>
+              <button class="take-btn" style="${isInter ? 'background:linear-gradient(135deg,#0284c7,#8b5cf6);' : ''}" onclick="${isInter ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${isInter ? 'Play Quiz' : 'Take Quiz'}</button>
+            </div>`;
+          }).join('') : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No pending quizzes right now.</p>`}
         </div>
       </div>`;
     }
@@ -795,14 +801,15 @@ function studentPage(page) {
           const dueMs = (q.dueDate || q.due_date) ? new Date(q.dueDate || q.due_date).getTime() : null;
           const isExpired = !attempt && dueMs && nowMs > dueMs;
           const dueFormatted = dueMs ? new Date(dueMs).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+          const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
 
           return `<div class="quiz-row" style="${isExpired ? 'opacity:0.75;' : ''}">
             <div class="qz-info">
-              <h4>${escHtml(q.title)}</h4>
+              <h4>${escHtml(q.title)} ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;margin-left:6px;">🎮 Interactive</span>' : ''}</h4>
               <span>${escHtml(q.meta)}${attempt ? ' · Score: ' + pct + '%' : ''}${dueFormatted ? ' · 🕒 Due: ' + escHtml(dueFormatted) : ''}</span>
             </div>
             <span class="status-pill ${attempt ? 'done' : isExpired ? 'low' : 'pending'}" style="${isExpired ? 'background:#fee2e2;color:#991b1b;' : ''}">${attempt ? 'Completed' : isExpired ? 'Expired' : 'Pending'}</span>
-            <button class="take-btn" ${attempt ? 'style="background:#059669;"' : isExpired ? 'disabled style="background:#94a3b8;cursor:not-allowed;opacity:0.65;"' : ''} onclick="${attempt ? `openReviewAttempt('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${attempt ? 'Review' : isExpired ? 'Expired' : 'Take Quiz'}</button>
+            <button class="take-btn" ${attempt ? 'style="background:#059669;"' : isExpired ? 'disabled style="background:#94a3b8;cursor:not-allowed;opacity:0.65;"' : isInter ? 'style="background:linear-gradient(135deg,#0284c7,#8b5cf6);"' : ''} onclick="${attempt ? `openReviewAttempt('${q.id}')` : isInter ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${attempt ? 'Review' : isExpired ? 'Expired' : isInter ? 'Play Quiz' : 'Take Quiz'}</button>
           </div>`;
         }).join('')
           : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No quizzes available right now.</p>`}
@@ -984,9 +991,9 @@ function studentPage(page) {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         Review
                        </button>`
-                    : `<button class="table-act-btn take" onclick="openTakeQuizModal('${q.id}')">
+                    : `<button class="table-act-btn take" onclick="${(q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">
                         <svg viewBox="0 0 24 24"><polygon points="6 4 18 12 6 20 6 4"/></svg>
-                        Take Quiz
+                        ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}
                        </button>`}
                 </td>
               </tr>`;

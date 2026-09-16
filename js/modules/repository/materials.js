@@ -438,7 +438,7 @@ function renderMaterialsList(role) {
                                   <h5 class="sw-lq-title">${escHtml(linkedQuiz.title)}</h5>
                                   <span class="sw-lq-meta">${(linkedQuiz.questions||[]).length} items</span>
                                 </div>
-                                <button class="sw-btn quiz" onclick="openTakeQuizModal('${linkedQuiz.id}')">Take Quiz</button>
+                                <button class="sw-btn quiz" onclick="${(linkedQuiz.type === 'interactive' || linkedQuiz.quiz_type === 'interactive') ? `openInteractiveQuiz('${linkedQuiz.id}')` : `openTakeQuizModal('${linkedQuiz.id}')`}">${(linkedQuiz.type === 'interactive' || linkedQuiz.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}</button>
                               </div>
                             ` : ''}
                           </div>
@@ -463,7 +463,7 @@ function renderMaterialsList(role) {
                             <span>${(q.questions||[]).length} items${attempt ? ' · Score: ' + pct + '%' : ''}</span>
                           </div>
                           <span class="status-pill ${attempt ? 'done' : 'pending'}">${attempt ? 'Completed' : 'Pending'}</span>
-                          <button class="take-btn" ${attempt ? 'style="background:#059669;"' : ''} onclick="${attempt ? `openReviewAttempt('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${attempt ? 'Review' : 'Take Quiz'}</button>
+                          <button class="take-btn" ${attempt ? 'style="background:#059669;"' : (q.type === 'interactive' || q.quiz_type === 'interactive') ? 'style="background:linear-gradient(135deg,#0284c7,#8b5cf6);"' : ''} onclick="${attempt ? `openReviewAttempt('${q.id}')` : (q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${attempt ? 'Review' : (q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}</button>
                         </div>
                       `;
                     }).join('') : '<p style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;">No quizzes assigned for this subject yet.</p>'}
@@ -505,8 +505,8 @@ function renderMaterialsList(role) {
               <h4 class="sw-widget-title">Subject To-Do</h4>
               <div class="sw-todo-list">
                 ${subjectQuizzes.filter(q => !attempts.some(a => a.quiz_id === q.id)).slice(0, 3).map(q => `
-                  <div class="sw-todo-item" onclick="openTakeQuizModal('${q.id}')">
-                    <span class="sw-todo-icon">📝</span>
+                  <div class="sw-todo-item" onclick="${(q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">
+                    <span class="sw-todo-icon">${(q.type === 'interactive' || q.quiz_type === 'interactive') ? '🎮' : '📝'}</span>
                     <div class="sw-todo-info">
                       <h5>${escHtml(q.title)}</h5>
                       <span>${(q.questions||[]).length} items · Pending</span>

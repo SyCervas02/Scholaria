@@ -12,23 +12,32 @@ async function loadQuizzesFromDB() {
   try {
     const { data, error } = await db.from('quizzes').select('*').order('created_at', { ascending: false });
     if (error) { console.error('Failed to load quizzes:', error.message); return; }
-    customQuizzes = (data || []).map(q => ({
-      id: q.id,
-      createdBy: q.created_by,
-      subject: q.subject,
-      strand: q.strand,
-      sections: q.sections,
-      gradeLevel: q.grade_level,
-      grade_level: q.grade_level,
-      createdAt: q.created_at,
-      title: q.title + (q.is_demo ? ' (Demo)' : ''),
-      meta: q.is_demo
-        ? `${q.subject || 'General'} · ${(q.questions||[]).length} items · Sample data`
-        : `${[q.subject || 'General', q.strand].filter(Boolean).join(' · ')} · ${(q.questions||[]).length} items · ${q.status || 'active'}`,
-      isDemo: q.is_demo,
-      status: q.status || 'active',
-      questions: q.questions || []
-    }));
+    customQuizzes = (data || []).map(q => {
+      const firstQ = (q.questions && q.questions[0]) || {};
+      const qMeta = firstQ._meta || {};
+      const quizType = q.quiz_type || q.type || firstQ._quizType || qMeta.quizType || 'standard';
+      const timerPerQuestion = q.timer_per_question || firstQ._timerPerQuestion || qMeta.timerPerQuestion || 0;
+      return {
+        id: q.id,
+        createdBy: q.created_by,
+        subject: q.subject,
+        strand: q.strand,
+        sections: q.sections,
+        gradeLevel: q.grade_level,
+        grade_level: q.grade_level,
+        createdAt: q.created_at,
+        title: q.title + (q.is_demo ? ' (Demo)' : ''),
+        type: quizType,
+        quiz_type: quizType,
+        timerPerQuestion: timerPerQuestion,
+        meta: q.is_demo
+          ? `${q.subject || 'General'} · ${(q.questions||[]).length} items · Sample data`
+          : `${[q.subject || 'General', q.strand].filter(Boolean).join(' · ')} · ${(q.questions||[]).length} items · ${quizType === 'interactive' ? '🎮 Interactive · ' : ''}${q.status || 'active'}`,
+        isDemo: q.is_demo,
+        status: q.status || 'active',
+        questions: q.questions || []
+      };
+    });
   } finally {
     isFetchingQuizzes = false;
   }
@@ -52,6 +61,7 @@ const quizGen = {
   gradeLevel: 'Grade 11',
   lesson: '',
   dueDate: '',
+  timerPerQuestion: 30, // 0 = untimed, or 15, 30, 45, 60
   questions: [], errorMsg: ''
 };
 
@@ -111,6 +121,7 @@ function openQuizModal() {
     gradeLevel: 'Grade 11',
     lesson: '',
     dueDate: '',
+    timerPerQuestion: 30,
     questions: [], errorMsg: ''
   });
   document.getElementById('quizModal').classList.add('active');
@@ -122,10 +133,6 @@ function closeQuizModal() {
 }
 
 function selectQuizType(type) {
-  if (type === 'gamified' || type === 'interactive') {
-    showToast('Interactive quizzes are coming soon', 'info');
-    return;
-  }
   quizGen.type = type;
   renderQuizModal();
 }
@@ -533,6 +540,21 @@ async function saveQuiz() {
   const quizStatus = isAdmin ? 'active' : 'pending';
   const targetSectionsStr = quizGen.sections.size ? Array.from(quizGen.sections).join(', ') : null;
 
+  const isInteractive = quizGen.type === 'interactive';
+
+  // Attach metadata to questions so interactive type and timer are preserved inside questions JSONB without needing extra DB columns
+  const questionsToSave = (quizGen.questions || []).map((q, idx) => ({
+    ...q,
+    _quizType: quizGen.type || 'standard',
+    _timerPerQuestion: quizGen.timerPerQuestion || 0,
+    ...(idx === 0 ? {
+      _meta: {
+        quizType: quizGen.type || 'standard',
+        timerPerQuestion: quizGen.timerPerQuestion || 0
+      }
+    } : {})
+  }));
+
   const quizRow = {
     title: title,
     subject: quizGen.subject || null,
@@ -542,13 +564,13 @@ async function saveQuiz() {
     lesson: quizGen.lesson || '',
     due_date: quizGen.dueDate || null,
     created_by: userId,
-    questions: quizGen.questions,
+    questions: questionsToSave,
     status: quizStatus,
     is_demo: isDemo
   };
 
   let { error } = await db.from('quizzes').insert(quizRow);
-  if (error && error.message.includes('due_date')) {
+  if (error && error.message && error.message.includes('due_date')) {
     delete quizRow.due_date;
     const retry = await db.from('quizzes').insert(quizRow);
     error = retry.error;
@@ -667,13 +689,38 @@ function renderQuizModal() {
         <h4>Standard Quiz</h4>
         <p>AI-generated identification, multiple choice, and matching questions</p>
       </div>
-      <div class="type-card locked" onclick="selectQuizType('interactive')">
-        <span class="soon-tag">Soon</span>
-        <div class="tc-icon">${iconGamepad()}</div>
+      <div class="type-card ${quizGen.type === 'interactive' ? 'active' : ''}" onclick="selectQuizType('interactive')">
+        <span class="soon-tag" style="background:#e0f2fe;color:#0284c7;">🎮 Game</span>
+        <div class="tc-icon" style="${quizGen.type === 'interactive' ? 'background:linear-gradient(135deg, #0284c7, #8b5cf6);' : ''}">${iconGamepad()}</div>
         <h4>Interactive</h4>
-        <p>Live team-based review game for the whole class</p>
+        <p>Animated gamified cards, drag & drop matching, and question timer</p>
       </div>
     </div>
+    ${quizGen.type === 'interactive' ? `
+    <div class="gen-field" style="background:#f0f7ff;border:1.5px solid #bae6fd;border-radius:14px;padding:14px;margin-top:6px;">
+      <label style="color:#0284c7;display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <span>⏱️</span> Question Timer (Per Item)
+      </label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${[
+          { val: 0, label: 'Untimed' },
+          { val: 15, label: '15s' },
+          { val: 30, label: '30s' },
+          { val: 45, label: '45s' },
+          { val: 60, label: '60s' }
+        ].map(t => `
+          <div class="format-chip ${quizGen.timerPerQuestion === t.val ? 'on' : ''}" 
+               style="border-radius:10px;padding:6px 14px;font-size:12px;"
+               onclick="quizGen.timerPerQuestion = ${t.val}; renderQuizModal();">
+            ${t.label}
+          </div>
+        `).join('')}
+      </div>
+      <span style="font-size:11.5px;color:#64748b;margin-top:6px;display:block;">
+        Students will see an animated timer countdown on each question in the arena.
+      </span>
+    </div>
+    ` : ''}
     <div class="gen-field">
       <label>Target Strands <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select strand to filter subject list)</span></label>
       <div class="format-grid">
@@ -823,12 +870,15 @@ function renderQuizModal() {
 function renderQuestionCard(q) {
   const tagClass = q.type === 'multiple_choice' ? 'mc' : q.type === 'identification' ? 'id' : 'match';
   const tagLabel = q.type === 'multiple_choice' ? 'Multiple Choice' : q.type === 'identification' ? 'Identification' : 'Matching Type';
+  const cardLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  const cardColors = ['#22c55e', '#8b5cf6', '#f97316', '#06b6d4', '#ec4899', '#3b82f6', '#14b8a6', '#6366f1'];
   let body = '';
   if (q.type === 'multiple_choice') {
     body = `<textarea rows="2" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question)}</textarea>
       <div class="qr-options">${(q.options || []).map((opt, i) => `
         <div class="qr-opt-row">
           <input type="radio" name="ans-${q._id}" ${i === q._answerIdx ? 'checked' : ''} onchange="setAnswerIndex('${q._id}', ${i})" title="Mark as correct answer">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${cardColors[i] || '#64748b'};color:#fff;font-size:11px;font-weight:800;flex-shrink:0;">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
           <input type="text" value="${escHtml(opt)}" oninput="editOption('${q._id}', ${i}, this.value)">
           ${(q.options || []).length > 2 ? `<button class="qr-opt-del-btn" title="Remove this choice" onclick="removeOption('${q._id}', ${i})">&times;</button>` : ''}
         </div>`).join('')}</div>
@@ -844,9 +894,11 @@ function renderQuestionCard(q) {
       <input type="text" value="${escHtml(q.instructions || '')}" oninput="editQuestion('${q._id}','instructions',this.value)">
       <div class="qr-pairs">${(q.pairs || []).map((p, i) => `
         <div class="qr-pair-row">
-          <input type="text" value="${escHtml(p.left)}" oninput="editPair('${q._id}', ${i}, 'left', this.value)">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#0284c7;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;">${i + 1}</span>
+          <input type="text" value="${escHtml(p.left)}" oninput="editPair('${q._id}', ${i}, 'left', this.value)" placeholder="Prompt ${i + 1}">
           <span>&harr;</span>
-          <input type="text" value="${escHtml(p.right)}" oninput="editPair('${q._id}', ${i}, 'right', this.value)">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#8b5cf6;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
+          <input type="text" value="${escHtml(p.right)}" oninput="editPair('${q._id}', ${i}, 'right', this.value)" placeholder="Match ${cardLetters[i] || String.fromCharCode(65 + i)}">
         </div>`).join('')}</div>`;
   }
   return `<div class="qresult-card">
