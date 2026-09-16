@@ -1,15 +1,141 @@
-/* ── USER MANAGEMENT MODULE (ADMIN) ── */
+const DEFAULT_SEED_USERS = [
+  { name: 'Student John Doe', id: 'HWA-2026-002', dbId: 'seed_stud_1', role: 'student', gradeLevel: 'Grade 11', strand: 'STEM', section: 'Section A', createdAt: '2026-08-19' },
+  { name: 'Esguerra, Michael N.', id: 'HWA-2026-001', dbId: 'seed_stud_2', role: 'student', gradeLevel: 'Grade 11', strand: 'STEM', section: 'Section A', createdAt: '2026-07-21' },
+  { name: 'Joseph Andrew Asis', id: 'HWA-DEMO-001', dbId: 'seed_stud_3', role: 'student', gradeLevel: 'Grade 12', strand: 'STEM', section: 'Section A', createdAt: '2026-07-04' },
+  { name: 'Cervas, Symon Pete T.', id: 'HWA-2024-002', dbId: 'seed_stud_4', role: 'student', gradeLevel: 'Grade 12', strand: 'HUMSS', section: 'Section A', createdAt: '2026-06-29' }
+];
 
-
-
-let registeredUsers = [];
+let registeredUsers = [...DEFAULT_SEED_USERS];
 let isFetchingUsers = false;
+let adminUserTab = 'students'; // 'students' | 'teachers'
 
-function renderUserTableRows() {
-  const tbody = document.getElementById('userTableBody');
-  if (!tbody) return;
-  tbody.innerHTML = registeredUsers.map(u => renderUserRow(u)).join('');
-  filterUserTable();
+function setAdminUserTab(tab) {
+  adminUserTab = tab;
+  const wrap = document.getElementById('userManagementContentWrap');
+  if (wrap) {
+    wrap.innerHTML = renderUserManagementContent();
+  }
+}
+
+function formatDateCreated(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch {
+    return '—';
+  }
+}
+
+function renderStudentRow(u) {
+  const canUnmute = ROLE === 'admin' && (u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
+  return `<tr>
+    <td><strong>${escHtml(u.name)}</strong></td>
+    <td><code style="font-size:12px;background:#f0f6ff;padding:2px 6px;border-radius:4px;color:var(--blue);">${escHtml(u.id)}</code></td>
+    <td><span class="au-grade-pill on" style="padding:2px 8px;font-size:11px;">${escHtml(u.gradeLevel || 'Grade 11')}</span></td>
+    <td><span class="role-tag student">${escHtml(u.strand || 'N/A')}</span></td>
+    <td>${escHtml(u.section || '—')}</td>
+    <td class="date-val">${formatDateCreated(u.createdAt)}</td>
+    <td>${chatStatusHtml(u)}</td>
+    <td><span class="action-link">Edit</span> &nbsp; <span class="action-link" style="color:#dc2626">Deactivate</span>${canUnmute ? ` &nbsp; <span class="action-link" style="color:#2563eb" onclick="adminUnmuteUser('${u.dbId}')">Unmute</span>` : ''}</td>
+  </tr>`;
+}
+
+function renderTeacherRow(u) {
+  const canUnmute = ROLE === 'admin' && (u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
+  return `<tr>
+    <td><strong>${escHtml(u.name)}</strong></td>
+    <td><code style="font-size:12px;background:#fffbeb;padding:2px 6px;border-radius:4px;color:#d97706;">${escHtml(u.id)}</code></td>
+    <td><span class="role-tag teacher">${escHtml(u.subjects || u.strand || 'General')}</span></td>
+    <td><span style="font-size:12px;font-weight:600;color:var(--text-secondary);">Grade 11 & 12</span></td>
+    <td>${escHtml(u.section || 'All / None')}</td>
+    <td class="date-val">${formatDateCreated(u.createdAt)}</td>
+    <td>${chatStatusHtml(u)}</td>
+    <td><span class="action-link">Edit</span> &nbsp; <span class="action-link" style="color:#dc2626">Deactivate</span>${canUnmute ? ` &nbsp; <span class="action-link" style="color:#2563eb" onclick="adminUnmuteUser('${u.dbId}')">Unmute</span>` : ''}</td>
+  </tr>`;
+}
+
+function renderUserManagementContent() {
+  const students = registeredUsers.filter(u => u.role === 'student');
+  const teachers = registeredUsers.filter(u => u.role === 'teacher');
+  const isStudentTab = adminUserTab === 'students';
+
+  return `
+    <div class="um-tabs">
+      <button class="um-tab ${isStudentTab ? 'active' : ''}" onclick="setAdminUserTab('students')">
+        ${iconProfile()} Students <span class="um-badge">${students.length}</span>
+      </button>
+      <button class="um-tab teacher-tab ${!isStudentTab ? 'active' : ''}" onclick="setAdminUserTab('teachers')">
+        ${iconUsers()} Teachers <span class="um-badge">${teachers.length}</span>
+      </button>
+    </div>
+
+    <div class="user-search-row">
+      <div class="user-search-wrap">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" id="userSearchInput" placeholder="Search by name, ID, or strand…" oninput="filterUserTable()">
+      </div>
+
+      ${isStudentTab ? `
+        <select class="user-filter-select" id="userGradeFilter" onchange="filterUserTable()">
+          <option value="">All Grade Levels</option>
+          <option value="Grade 11">Grade 11</option>
+          <option value="Grade 12">Grade 12</option>
+        </select>
+      ` : ''}
+
+      <select class="user-filter-select" id="userStrandFilter" onchange="filterUserTable()">
+        <option value="">All Strands</option>
+        <option value="STEM">STEM</option>
+        <option value="HUMSS">HUMSS</option>
+        <option value="ABM">ABM</option>
+      </select>
+
+      <select class="user-filter-select" id="userDateSort" onchange="filterUserTable()">
+        <option value="newest">Newest First</option>
+        <option value="oldest">Oldest First</option>
+      </select>
+    </div>
+
+    <div class="user-table" id="userTableWrap">
+      <table>
+        <thead>
+          ${isStudentTab ? `
+            <tr>
+              <th>Student Name</th>
+              <th>Student ID</th>
+              <th>Grade Level</th>
+              <th>Strand</th>
+              <th>Section</th>
+              <th>Date Created</th>
+              <th>Chat Status</th>
+              <th>Actions</th>
+            </tr>
+          ` : `
+            <tr>
+              <th>Teacher Name</th>
+              <th>Teacher ID</th>
+              <th>Handled Strands / Subjects</th>
+              <th>Target Levels</th>
+              <th>Assigned Section</th>
+              <th>Date Created</th>
+              <th>Chat Status</th>
+              <th>Actions</th>
+            </tr>
+          `}
+        </thead>
+        <tbody id="userTableBody">
+          ${isStudentTab
+            ? students.map(u => renderStudentRow(u)).join('')
+            : teachers.map(u => renderTeacherRow(u)).join('')
+          }
+        </tbody>
+      </table>
+      <div id="userNoResults" style="${(isStudentTab ? students.length : teachers.length) === 0 ? '' : 'display:none;'}padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
+        No ${isStudentTab ? 'students' : 'teachers'} found matching the filter criteria.
+      </div>
+    </div>
+  `;
 }
 
 async function loadUsersFromDB() {
@@ -18,25 +144,36 @@ async function loadUsersFromDB() {
   try {
     const { data, error } = await db.from('users').select('*').order('created_at', { ascending: false });
     if (error) { console.error('Failed to load users:', error.message); return; }
-    registeredUsers = (data || []).map(u => ({
+    const fetchedUsers = (data || []).map(u => ({
       name: u.full_name,
       id: u.school_id,
       role: u.role,
       detail: u.role === 'student'
         ? `${u.strand || ''} — ${u.grade_level || ''}`
-        : (u.subjects || u.strand || ''),
+        : (u.section ? `${u.subjects || u.strand || ''} (${u.section})` : (u.subjects || u.strand || '')),
       strand: u.strand || '',
+      gradeLevel: u.grade_level || '',
+      section: u.section || '',
+      subjects: u.subjects || '',
+      email: u.email || '',
+      createdAt: u.created_at || null,
       dbId: u.id,
       permanentlyMuted: !!u.permanently_muted,
       mutedUntil: u.muted_until || null,
       strikes: u.profanity_strikes || 0
     }));
+
+    const existingNames = new Set(fetchedUsers.map(u => u.name.toLowerCase()));
+    const missingSeeds = DEFAULT_SEED_USERS.filter(su => !existingNames.has(su.name.toLowerCase()));
+    registeredUsers = [...fetchedUsers, ...missingSeeds];
+
     if (typeof currentPage !== 'undefined' && currentPage === 'users') {
-      renderUserTableRows();
-    } else if (typeof currentPage !== 'undefined' && currentPage === 'dashboard') {
+      const wrap = document.getElementById('userManagementContentWrap');
+      if (wrap) wrap.innerHTML = renderUserManagementContent();
+    } else if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'classrec')) {
       const mainContent = document.getElementById('mainContent');
       if (mainContent && typeof getPageContent === 'function') {
-        mainContent.innerHTML = getPageContent(ROLE, 'dashboard');
+        mainContent.innerHTML = getPageContent(ROLE, currentPage);
       }
     }
   } finally {
@@ -46,22 +183,10 @@ async function loadUsersFromDB() {
 
 function chatStatusHtml(u) {
   const stillMuted = u.mutedUntil && new Date(u.mutedUntil) > new Date();
-  if (u.permanentlyMuted) return `<span style="color:#dc2626;font-weight:600;">Muted (${u.strikes} strikes) — needs admin unmute</span>`;
+  if (u.permanentlyMuted) return `<span style="color:#dc2626;font-weight:600;">Muted (${u.strikes} strikes)</span>`;
   if (stillMuted) return `<span style="color:#b45309;">Muted until ${new Date(u.mutedUntil).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>`;
   if (u.strikes > 0) return `<span style="color:var(--text-muted);">${u.strikes} strike${u.strikes > 1 ? 's' : ''}</span>`;
   return `<span style="color:var(--text-muted);">Clean</span>`;
-}
-
-function renderUserRow(u) {
-  const canUnmute = ROLE === 'admin' && (u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
-  return `<tr data-role="${u.role}" data-strand="${u.strand}" data-search="${(u.name + u.id + u.detail).toLowerCase()}">
-    <td>${escHtml(u.name)}</td>
-    <td>${escHtml(u.id)}</td>
-    <td><span class="role-tag ${u.role}">${u.role === 'student' ? 'Student' : 'Teacher'}</span></td>
-    <td>${escHtml(u.detail)}</td>
-    <td>${chatStatusHtml(u)}</td>
-    <td><span class="action-link">Edit</span> &nbsp; <span class="action-link" style="color:#dc2626">Deactivate</span>${canUnmute ? ` &nbsp; <span class="action-link" style="color:#2563eb" onclick="adminUnmuteUser('${u.dbId}')">Unmute</span>` : ''}</td>
-  </tr>`;
 }
 
 async function adminUnmuteUser(userId) {
@@ -73,23 +198,38 @@ async function adminUnmuteUser(userId) {
 
 function filterUserTable() {
   const q = (document.getElementById('userSearchInput')?.value || '').toLowerCase();
-  const role = document.getElementById('userRoleFilter')?.value || '';
+  const grade = document.getElementById('userGradeFilter')?.value || '';
   const strand = document.getElementById('userStrandFilter')?.value || '';
-  const rows = document.querySelectorAll('#userTableBody tr');
-  let visible = 0;
-  rows.forEach(r => {
-    const matchSearch = !q || r.dataset.search.includes(q);
-    const matchRole   = !role || r.dataset.role === role;
-    const matchStrand = !strand || r.dataset.strand === strand;
-    const show = matchSearch && matchRole && matchStrand;
-    r.style.display = show ? '' : 'none';
-    if (show) visible++;
+  const dateSort = document.getElementById('userDateSort')?.value || 'newest';
+
+  const isStudentTab = adminUserTab === 'students';
+  let list = registeredUsers.filter(u => u.role === (isStudentTab ? 'student' : 'teacher'));
+
+  list = list.filter(u => {
+    const matchSearch = !q || (u.name + u.id + (u.subjects || '') + (u.strand || '')).toLowerCase().includes(q);
+    const matchGrade = !grade || u.gradeLevel === grade;
+    const matchStrand = !strand || (u.strand && u.strand.includes(strand)) || (u.subjects && u.subjects.includes(strand));
+    return matchSearch && matchGrade && matchStrand;
   });
+
+  list.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateSort === 'oldest' ? timeA - timeB : timeB - timeA;
+  });
+
+  const tbody = document.getElementById('userTableBody');
   const noRes = document.getElementById('userNoResults');
-  if (noRes) noRes.style.display = visible === 0 ? 'block' : 'none';
   const table = document.querySelector('#userTableWrap table');
-  if (table) table.style.display = visible === 0 ? 'none' : '';
+
+  if (tbody) {
+    tbody.innerHTML = list.map(u => isStudentTab ? renderStudentRow(u) : renderTeacherRow(u)).join('');
+  }
+
+  if (noRes) noRes.style.display = list.length === 0 ? 'block' : 'none';
+  if (table) table.style.display = list.length === 0 ? 'none' : '';
 }
+
 
 const addUser = {
   step: 'type',
@@ -118,6 +258,12 @@ function closeAddUserModal() {
 
 function auSelectType(t) {
   addUser.userType = t;
+  // For teacher, default section to null/None
+  if (t === 'teacher') {
+    addUser.section = null;
+  } else {
+    addUser.section = 'Section A';
+  }
   if (addUser.bulkFile) { addUser.bulkFile = null; addUser.bulkMapped = []; }
   renderAddUserModal();
 }
@@ -187,11 +333,13 @@ function resolveBulkRows() {
       role: addUser.userType,
       strand: mapped.strand || fallbackStrand,
       grade_level: isStudent ? (mapped.grade_level || addUser.grade) : null,
-      section: isStudent ? (mapped.section || addUser.section) : null,
+      section: mapped.section || (!isStudent ? (addUser.section || null) : addUser.section),
       subjects: !isStudent ? (mapped.subjects || Array.from(addUser.strands).join(', ')) : null,
       detail: isStudent
         ? `${mapped.strand || fallbackStrand} — ${mapped.grade_level || addUser.grade}`
-        : (mapped.subjects || Array.from(addUser.strands).join(', '))
+        : (mapped.section || addUser.section 
+            ? `${mapped.subjects || Array.from(addUser.strands).join(', ')} (${mapped.section || addUser.section})`
+            : (mapped.subjects || Array.from(addUser.strands).join(', ')))
     });
   });
 
@@ -211,7 +359,7 @@ function parseCsvText(text) {
 }
 
 function auHandleBulkFile(input) {
-  const file = input.files[0];
+  const file = input.files[0] || null;
   if (!file) return;
   const ext = file.name.split('.').pop().toLowerCase();
   if (!['xlsx', 'xls', 'csv'].includes(ext)) {
@@ -270,7 +418,8 @@ function renderFormatExampleTable() {
     : [
         { header: 'Name',     required: true },
         { header: 'Email',    required: true },
-        { header: 'Subjects', required: false }
+        { header: 'Subjects', required: false },
+        { header: 'Section',  required: false }
       ];
 
   const sampleRows = isStudent
@@ -280,15 +429,15 @@ function renderFormatExampleTable() {
         ['Santos, Pedro L.',     'pedro.santos@sample.edu.ph', '', '', '']
       ]
     : [
-        ['Garcia, Ramon C.',  'ramon.garcia@sample.edu.ph', 'Web Systems, Programming'],
-        ['Torres, Liza M.',   'liza.torres@sample.edu.ph', 'Research, Statistics'],
-        ['Fernandez, Paul B.', 'paul.fernandez@sample.edu.ph', '']
+        ['Garcia, Ramon C.',  'ramon.garcia@sample.edu.ph', 'Web Systems, Programming', 'Section A'],
+        ['Torres, Liza M.',   'liza.torres@sample.edu.ph', 'Research, Statistics', ''],
+        ['Fernandez, Paul B.', 'paul.fernandez@sample.edu.ph', '', '']
       ];
 
   return `
     <div class="au-format-wrap">
       <div class="au-format-note">
-        Upload a spreadsheet with these column headers in row 1 (naming is flexible — "Grade", "Grade Level", and "grade_level" all work the same). Only <b>Name</b> and <b>Email</b> are required; blank cells for anything else fall back to whichever ${isStudent ? 'Strand/Grade/Section' : 'Strand'} chips are selected above.
+        Upload a spreadsheet with these column headers in row 1 (naming is flexible — "Grade", "Grade Level", and "grade_level" all work the same). Only <b>Name</b> and <b>Email</b> are required; blank cells for anything else fall back to whichever ${isStudent ? 'Strand/Grade/Section' : 'Strand/Section'} chips are selected above.
       </div>
       <div class="au-format-table-scroll">
         <table class="au-format-table">
@@ -320,12 +469,12 @@ function auBuildSingleFromForm() {
     email: addUser.email.trim(),
     role: addUser.userType,
     grade_level: isStudent ? addUser.grade : null,
-    section: isStudent ? addUser.section : null,
+    section: addUser.section || null,
     strand: Array.from(addUser.strands)[0] || null,
     subjects: !isStudent ? Array.from(addUser.strands).join(', ') : null,
     detail: isStudent
       ? `${Array.from(addUser.strands)[0]} — ${addUser.grade}`
-      : Array.from(addUser.strands).join(', ')
+      : (addUser.section ? `${Array.from(addUser.strands).join(', ')} (${addUser.section})` : Array.from(addUser.strands).join(', '))
   };
   return { user };
 }
@@ -452,21 +601,26 @@ function renderAddUserModal() {
       ${!isStudent ? `<div style="font-size:11px;color:var(--text-muted);margin-top:5px;">Select all strands this teacher is capable of handling</div>` : ''}
     </div>
 
-    ${isStudent ? `
     <div class="gen-row">
+      ${isStudent ? `
       <div class="gen-field">
         <label>Grade Level</label>
         <div class="au-grade-pills">
           ${GRADE_LEVELS.map(g => `<div class="au-grade-pill ${addUser.grade === g ? 'on' : ''}" onclick="auSetGrade('${g}')">${g}</div>`).join('')}
         </div>
-      </div>
+      </div>` : ''}
       <div class="gen-field">
-        <label>Section</label>
+        <label>Section ${!isStudent ? '<span style="text-transform:none;font-weight:500;color:var(--text-muted);">(optional)</span>' : ''}</label>
         <div class="au-grade-pills">
-          ${SECTIONS.map(s => `<div class="au-grade-pill ${addUser.section === s ? 'on' : ''}" onclick="auSetSection('${s}')">${s}</div>`).join('')}
+          ${(!isStudent ? ['None', ...SECTIONS] : SECTIONS).map(s => {
+            const isSelected = (!isStudent && s === 'None') ? (!addUser.section) : (addUser.section === s);
+            const label = s;
+            const clickVal = s === 'None' ? null : s;
+            return `<div class="au-grade-pill ${isSelected ? 'on' : ''}" onclick="auSetSection(${clickVal ? `'${clickVal}'` : 'null'})">${label}</div>`;
+          }).join('')}
         </div>
       </div>
-    </div>` : ''}
+    </div>
 
     <div class="au-divider">Import in bulk (recommended)</div>
 
@@ -496,7 +650,7 @@ function renderAddUserModal() {
     <label class="au-bulk-zone" for="auBulkInput">
       <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/></svg>
       <div class="dz-title">Import from Excel or CSV</div>
-      <div class="dz-sub">Columns: Name, Email, Strand, Grade Level (students) or Strands (teachers)</div>
+      <div class="dz-sub">Columns: Name, Email, Strand, Grade Level (students) or Strands, Section (optional for teachers)</div>
     </label>
     <input type="file" id="auBulkInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="auHandleBulkFile(this)">
     <button type="button" class="au-format-toggle" id="auFormatExampleBtn" onclick="auToggleFormatExample()">

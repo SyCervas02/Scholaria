@@ -1,0 +1,552 @@
+/* ── ANNOUNCEMENTS & EMERGENCY BULLETIN MODULE STYLES ── */
+
+/* Sticky Emergency Top Banner */
+.emergency-top-banner {
+  position: fixed;
+  top: var(--banner-h, 0px);
+  left: 0; right: 0;
+  height: var(--anc-banner-h, 46px);
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: #ffffff;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.3);
+  z-index: 105;
+  animation: slideDownBanner 0.3s ease;
+}
+
+@keyframes slideDownBanner {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.eb-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.eb-badge {
+  background: #ffffff;
+  color: #dc2626;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.eb-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.eb-text strong {
+  font-weight: 800;
+}
+
+.eb-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.eb-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.eb-btn:hover {
+  background: #ffffff;
+  color: #dc2626;
+}
+
+.eb-close-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eb-close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.eb-close-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.5;
+}
+
+/* Announcements Hub Page */
+.anc-page-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.anc-filter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  background: #ffffff;
+  border: 1.5px solid #e8f0fe;
+  border-radius: 16px;
+  padding: 14px 18px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.anc-chip-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.anc-chip {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.anc-chip:hover {
+  border-color: #0284c7;
+  color: #0284c7;
+  background: #f0f9ff;
+}
+
+.anc-chip.active {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #ffffff;
+}
+
+.anc-chip-count {
+  background: rgba(0, 0, 0, 0.1);
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.anc-chip.active .anc-chip-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+
+/* Expiry Preset Buttons */
+.anc-preset-btn {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.anc-preset-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+}
+
+.anc-preset-btn:hover {
+  border-color: #0284c7;
+  color: #0284c7;
+  background: #f0f9ff;
+}
+
+.anc-preset-btn.active {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #ffffff;
+}
+
+/* Archive Toggle Pill Group (Right Side of Filter Bar) */
+.anc-archive-toggle-wrap {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.anc-archive-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.anc-archive-tab svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+}
+
+.anc-archive-tab:hover {
+  color: #0f172a;
+}
+
+.anc-archive-tab.active {
+  background: #ffffff;
+  color: #0284c7;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.anc-grid {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+}
+
+.anc-main-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.anc-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .anc-grid {
+    flex-direction: column;
+  }
+  .anc-sidebar {
+    width: 100%;
+  }
+}
+
+/* Announcement Cards */
+.anc-card {
+  background: #ffffff;
+  border: 1.5px solid #e8f0fe;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.anc-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.08);
+}
+
+.anc-card.emergency {
+  border-left: 5px solid #dc2626;
+}
+
+.anc-card.academic {
+  border-left: 5px solid #0284c7;
+}
+
+.anc-card.event {
+  border-left: 5px solid #059669;
+}
+
+.anc-card.general {
+  border-left: 5px solid #64748b;
+}
+
+.anc-card.others {
+  border-left: 5px solid #7c3aed;
+}
+
+.anc-card-header {
+  padding: 16px 20px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.anc-cat-tag {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.anc-cat-tag.emergency { background: #fee2e2; color: #dc2626; }
+.anc-cat-tag.academic { background: #e0f2fe; color: #0369a1; }
+.anc-cat-tag.event { background: #dcfce7; color: #15803d; }
+.anc-cat-tag.general { background: #f1f5f9; color: #475569; }
+.anc-cat-tag.others { background: #ede9fe; color: #6d28d9; }
+
+.anc-meta {
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.anc-card-body {
+  padding: 0 20px 16px;
+}
+
+.anc-card-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+
+.anc-card-msg {
+  font-size: 13.5px;
+  color: #334155;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.anc-hotline-box {
+  margin-top: 14px;
+  background: #fff5f5;
+  border: 1.5px solid #fecaca;
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.anc-hotline-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.anc-hotline-chip {
+  background: #ffffff;
+  border: 1.5px solid #fca5a5;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  color: #991b1b;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.anc-hotline-chip:hover {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}
+
+.anc-hotline-num {
+  font-weight: 800;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.anc-card-foot {
+  padding: 12px 20px;
+  border-top: 1px solid #f1f5f9;
+  background: #fafcff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.anc-author-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.anc-author-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0284c7, #38bdf8);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sidebar Directory & Broadcast Card */
+.anc-widget-card {
+  background: #ffffff;
+  border: 1.5px solid #e8f0fe;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.anc-widget-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+
+.anc-dir-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.anc-dir-item:last-child {
+  border-bottom: none;
+}
+
+.anc-dir-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #e0f2fe;
+  color: #0369a1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.anc-dir-details h5 {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.anc-dir-details span {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Announcement Modal */
+.anc-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.anc-form-field label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0284c7;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.anc-form-input,
+.anc-form-select,
+.anc-form-textarea {
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  background: #f8fbff;
+  transition: 0.2s;
+}
+
+.anc-form-input:focus,
+.anc-form-select:focus,
+.anc-form-textarea:focus {
+  border-color: #0284c7;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
+}
+
+.anc-radio-group,
+.anc-checkbox-group {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.anc-radio-label,
+.anc-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+}
