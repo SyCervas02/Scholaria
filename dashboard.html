@@ -5,13 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Scholaria • Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="dashboard.css?v=10013"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css?v=10013"/>
-  <link rel="stylesheet" href="css/modules/materials.css?v=10013"/>
-  <link rel="stylesheet" href="css/modules/quiz.css?v=10013"/>
-  <link rel="stylesheet" href="css/modules/chat.css?v=10013"/>
-  <link rel="stylesheet" href="css/modules/admin.css?v=10013"/>
-  <link rel="stylesheet" href="css/modules/courses.css?v=10013"/>
+  <link rel="stylesheet" href="dashboard.css"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css"/>
+  <link rel="stylesheet" href="css/modules/materials.css"/>
+  <link rel="stylesheet" href="css/modules/quiz.css"/>
+  <link rel="stylesheet" href="css/modules/chat.css"/>
+  <link rel="stylesheet" href="css/modules/admin.css"/>
+  <link rel="stylesheet" href="css/modules/courses.css"/>
+  <link rel="stylesheet" href="css/modules/announcements.css"/>
+  <link rel="stylesheet" href="css/modules/interactive-quiz.css"/>
 
   <!-- CDN Dependencies -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -35,27 +37,8 @@
       </svg>
     </button>
     <div class="logo">
-      <svg class="logo-svg" id="brandLogoSvg" viewBox="0 0 216 52" xmlns="http://www.w3.org/2000/svg" aria-label="Scholaria E-Learning">
-        <rect x="0" y="4" width="44" height="44" rx="10" fill="#0f172a"/>
-        <rect x="4" y="11" width="14" height="30" rx="2" fill="#ffffff"/>
-        <rect x="6" y="15" width="8" height="2" rx="1" fill="#d1d5db"/>
-        <rect x="6" y="19" width="10" height="2" rx="1" fill="#d1d5db"/>
-        <rect x="6" y="23" width="6" height="2" rx="1" fill="#d1d5db"/>
-        <rect x="6" y="27" width="9" height="2" rx="1" fill="#d1d5db"/>
-        <rect x="15" y="9" width="13" height="34" rx="2" fill="#f59e0b"/>
-        <rect x="18" y="15" width="7" height="2" rx="1" fill="#1d4ed8" opacity="0.8"/>
-        <rect x="18" y="19" width="7" height="2" rx="1" fill="#1d4ed8" opacity="0.8"/>
-        <rect x="18" y="23" width="7" height="2" rx="1" fill="#1d4ed8" opacity="0.8"/>
-        <rect x="26" y="12" width="14" height="20" rx="2" fill="#1e293b"/>
-        <rect x="27" y="13" width="12" height="12" rx="1" fill="#f59e0b"/>
-        <polygon points="31,16 31,23 37,19.5" fill="#ffffff"/>
-        <circle cx="29" cy="27" r="1" fill="#475569"/>
-        <circle cx="33" cy="27" r="1" fill="#475569"/>
-        <circle cx="37" cy="27" r="1" fill="#475569"/>
-        <rect x="11" y="22" width="4" height="18" rx="2" fill="#2563eb" transform="rotate(-38 13 28)"/>
-        <polygon points="8,35 10,41 14,37" fill="#93c5fd"/>
-        <circle cx="40" cy="9" r="7" fill="#7c3aed"/>
-        <polyline points="37,9 39.5,12 44,6" fill="none" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <svg class="logo-svg" id="brandLogoSvg" viewBox="0 0 216 52" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-label="Scholaria E-Learning">
+        <image href="assets/logo.png" xlink:href="assets/logo.png" x="0" y="4" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
         <text x="52" y="30" font-family="'Syne',sans-serif" font-weight="800" font-size="22" letter-spacing="0"><tspan id="wm-schol" fill="#2563eb">schol</tspan><tspan id="wm-aria" fill="#f59e0b">aria</tspan></text>
         <rect id="ul-schol" x="52" y="34" width="0" height="2.5" rx="1.2" fill="#2563eb"/>
         <rect id="ul-aria" x="52" y="34" width="0" height="2.5" rx="1.2" fill="#f59e0b"/>
@@ -121,7 +104,7 @@
             </div>
           </div>
           <div class="notif-footer">
-            <button class="notif-view-all" onclick="renderPage('progress');closeNotif();">View all activity</button>
+            <button class="notif-view-all" onclick="renderPage('notifications');closeNotif();">View all activity</button>
           </div>
         </div>
       </div>
@@ -132,6 +115,8 @@
       </div>
     </div>
   </header>
+
+  <div id="emergencyBannerContainer"></div>
 
   <div class="layout">
 
@@ -181,6 +166,8 @@
       <div class="modal-foot" id="takeQuizModalFoot"></div>
     </div>
   </div>
+
+  <div class="interactive-quiz-overlay" id="interactiveQuizModal"></div>
 
   <div class="modal-overlay" id="addUserModal">
     <div class="modal-card">
@@ -252,17 +239,360 @@
     </div>
   </div>
 
+  <!-- ANNOUNCEMENT CREATOR MODAL -->
+  <div class="modal-overlay" id="ancModal">
+    <div class="modal-card" style="max-width:860px;width:90%;border-radius:18px;">
+      <div class="modal-head" style="border-bottom:1px solid #f1f5f9;padding:16px 24px;">
+        <div>
+          <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#0f172a;">Create School Announcement</h3>
+          <span style="font-size:12px;color:var(--text-muted);">Post critical advisories, class suspension notices, and attach emergency hotlines</span>
+        </div>
+        <button class="modal-x" onclick="closeCreateAnnouncementModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:16px;padding:20px 24px;">
+        <!-- Title & Category Row -->
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;">
+          <div class="anc-form-field">
+            <label>Announcement Title</label>
+            <input type="text" class="anc-form-input" id="ancTitleInput" value="Class Suspension & Asynchronous Learning Shift" placeholder="e.g. Class Suspension Notice"/>
+          </div>
+          <div class="anc-form-field">
+            <div style="display:flex;justify-content:space-between;align-items:center;white-space:nowrap;gap:4px;">
+              <label style="margin:0;white-space:nowrap;">Announcement Category</label>
+              <button type="button" id="ancResetCatBtn" onclick="resetAncCategorySelect()" style="display:none;background:none;border:none;color:#0284c7;font-size:11px;font-weight:700;cursor:pointer;padding:0;white-space:nowrap;">↩ Back</button>
+            </div>
+            <select class="anc-form-select" id="ancCategoryInput" onchange="handleAncCategoryChange(this.value)">
+              <option value="emergency" selected>Emergency & Class Suspension</option>
+              <option value="academic">Academic Update</option>
+              <option value="event">Event</option>
+              <option value="others">Others (Type custom category…)</option>
+            </select>
+            <input type="text" class="anc-form-input" id="ancCustomCategoryInput" placeholder="Type custom category (e.g. Club Activity)" style="display:none;"/>
+          </div>
+        </div>
+
+        <!-- Select Priority -->
+        <div class="anc-form-field">
+          <label>Select Priority</label>
+          <div class="anc-radio-group" style="margin-top:4px;">
+            <label class="anc-radio-label">
+              <input type="radio" name="ancPriority" value="critical" checked/> 🔴 Critical Emergency (Sticky Top Banner)
+            </label>
+            <label class="anc-radio-label">
+              <input type="radio" name="ancPriority" value="important"/> ⚪ Important
+            </label>
+            <label class="anc-radio-label">
+              <input type="radio" name="ancPriority" value="normal"/> ⚪ Normal
+            </label>
+          </div>
+        </div>
+
+        <!-- Select Audience -->
+        <div class="anc-form-field">
+          <label>Select Audience</label>
+          <div class="anc-checkbox-group" style="margin-top:4px;display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;">
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="All Students" checked onchange="handleAncAudienceToggle()"/> All Students</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="All Teachers" checked/> All Teachers</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="STEM Strand" checked/> STEM Strand</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="HUMSS Strand" checked/> HUMSS Strand</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="ABM Strand"/> ABM Strand</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="TVL Strand"/> TVL Strand</label>
+          </div>
+        </div>
+
+        <!-- Message Body with Toolbar -->
+        <div class="anc-form-field">
+          <label>Message Body</label>
+          <div style="border:1.5px solid #bfdbfe;border-radius:12px;overflow:hidden;background:#fff;">
+            <!-- Rich Text Format Toolbar -->
+            <div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569;">
+              <strong style="cursor:pointer;" title="Bold">B</strong>
+              <span style="font-style:italic;cursor:pointer;" title="Italic">I</span>
+              <span style="cursor:pointer;" title="Link">🔗</span>
+              <span style="cursor:pointer;" title="Bullet List">≡</span>
+              <span style="cursor:pointer;" title="Numbered List">1.</span>
+              <span style="cursor:pointer;" title="Quote">“</span>
+              <span style="cursor:pointer;" title="Image">📷</span>
+              <span style="cursor:pointer;" title="Attachment">📎</span>
+            </div>
+            <textarea class="anc-form-textarea" id="ancMessageInput" rows="3" style="border:none;border-radius:0;background:transparent;width:100%;box-shadow:none;" placeholder="Dear Scholaria Community, due to severe weather advisories, classes are suspended. In case of emergencies, please call the attached hotlines below.">Dear Scholaria Community, due to typhoon advisories, face-to-face classes are suspended tomorrow. Students may contact the emergency hotlines below if urgent assistance is needed. Stay safe!</textarea>
+            <div style="text-align:right;font-size:11px;color:#94a3b8;padding:4px 12px 6px;">char count (185/2000)</div>
+          </div>
+        </div>
+
+        <!-- Announcement Expiration / Validity Deadline Section -->
+        <div class="anc-form-field">
+          <label style="display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;color:#0284c7;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Announcement Expiration Validity
+          </label>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
+              <button type="button" class="anc-preset-btn active" id="preset24h" onclick="setAncExpiryPreset('24h')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                24 Hours
+              </button>
+              <button type="button" class="anc-preset-btn" id="preset3d" onclick="setAncExpiryPreset('3d')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                3 Days
+              </button>
+              <button type="button" class="anc-preset-btn" id="preset1w" onclick="setAncExpiryPreset('1w')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                1 Week
+              </button>
+              <button type="button" class="anc-preset-btn" id="presetPerm" onclick="setAncExpiryPreset('perm')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-2.67 0-4.664-1.9-6.178-4-1.514 2.1-3.508 4-6.178 4-5.096 0-5.096-8 0-8 2.67 0 4.664 1.9 6.178 4 1.514-2.1 3.508-4 6.178-4z"/></svg>
+                Permanent
+              </button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Active Until:</span>
+              <input type="datetime-local" class="anc-form-input" id="ancExpiryInput" style="padding:6px 10px;font-size:12px;width:auto;" onchange="onAncExpiryInputChange()"/>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attachment Section (City of Imus Emergency Hotlines) -->
+        <div class="anc-form-field">
+          <label>Attach City of Imus Emergency Hotlines</label>
+          <div style="display:flex;align-items:center;gap:12px;background:#fff5f5;border:1.5px solid #fecaca;border-radius:12px;padding:10px 14px;">
+            <div style="background:#ffffff;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:700;color:#991b1b;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              <span>📎 Attach Hotlines</span>
+            </div>
+
+            <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
+              <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:4px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;">
+                <input type="checkbox" name="ancHotline" value="hl_imus_cdrrmo" checked/> 🚨 CDRRMO (046) 515-1358
+              </label>
+              <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:4px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;">
+                <input type="checkbox" name="ancHotline" value="hl_imus_bfp" checked/> 🚒 BFP (046) 970-5161
+              </label>
+              <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:4px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;">
+                <input type="checkbox" name="ancHotline" value="hl_imus_pnp" checked/> 🚓 PNP (046) 471-3993
+              </label>
+              <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:4px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;">
+                <input type="checkbox" name="ancHotline" value="hl_imus_hospital" checked/> 🏥 Med Center (046) 471-9487
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot" style="border-top:1px solid #f1f5f9;padding:14px 24px;display:flex;justify-content:flex-end;gap:10px;">
+        <button class="pf-save" style="background:#64748b;border-radius:8px;" onclick="closeCreateAnnouncementModal()">Cancel</button>
+        <button class="pf-save" style="background:#0284c7;border-radius:8px;display:flex;align-items:center;gap:6px;" onclick="submitCreateAnnouncement()">
+          Broadcast Announcement
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CITY OF IMUS EMERGENCY HOTLINE DIRECTORY MODAL -->
+  <div class="modal-overlay" id="hotlineDirectoryModal">
+    <div class="modal-card" style="max-width:540px;">
+      <div class="modal-head" style="background:#fff5f5;border-bottom:1px solid #fecaca;">
+        <div>
+          <h3 style="color:#b91c1c;display:flex;align-items:center;gap:8px;">📞 City of Imus Emergency Hotlines</h3>
+          <span style="font-size:12px;color:#7f1d1d;">Official emergency contact directory from the Schools Division of Imus City</span>
+        </div>
+        <button class="modal-x" onclick="closeEmergencyHotlinesModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:10px;padding:20px;max-height:420px;overflow-y:auto;">
+        <a href="tel:0465151358" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-space-between;font-size:13px;">
+          <span>🚨 <strong>City Disaster Risk Reduction (CDRRMO Imus)</strong></span>
+          <span class="anc-hotline-num">(046) 515-1358</span>
+        </a>
+        <a href="tel:0469705161" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
+          <span>🚒 <strong>Bureau of Fire Department (BFP Imus)</strong></span>
+          <span class="anc-hotline-num">(046) 970-5161</span>
+        </a>
+        <a href="tel:0464713993" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
+          <span>🚓 <strong>Imus PNP Police Station</strong></span>
+          <span class="anc-hotline-num">(046) 471-3993</span>
+        </a>
+        <a href="tel:0464719487" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
+          <span>🏥 <strong>Medical Center Imus</strong></span>
+          <span class="anc-hotline-num">(046) 471-9487</span>
+        </a>
+        <a href="tel:0464712732" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
+          <span>🏛️ <strong>Imus City Hall (Office of the Mayor)</strong></span>
+          <span class="anc-hotline-num">(046) 471-2732</span>
+        </a>
+        <a href="tel:0464715560" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
+          <span>🩺 <strong>Imus City Health Center</strong></span>
+          <span class="anc-hotline-num">(046) 471-5560</span>
+        </a>
+        <a href="tel:911" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
+          <span>🆘 <strong>National Emergency Hotline</strong></span>
+          <span class="anc-hotline-num">911</span>
+        </a>
+        <a href="tel:143" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
+          <span>⛑️ <strong>Philippine Red Cross</strong></span>
+          <span class="anc-hotline-num">143</span>
+        </a>
+      </div>
+
+      <div class="modal-foot">
+        <button class="pf-save" style="background:#dc2626;" onclick="closeEmergencyHotlinesModal()">Close Directory</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TWO-FACTOR AUTHENTICATION (2FA) SETUP MODAL -->
+  <div class="modal-overlay" id="twoFactorModal">
+    <div class="modal-card" style="max-width:480px;border-radius:18px;">
+      <div class="modal-head" style="border-bottom:1px solid #f1f5f9;padding:18px 24px;">
+        <div>
+          <h3 style="font-family:'Syne',sans-serif;font-size:17px;font-weight:700;color:#0f172a;">Two-Factor Authentication (2FA)</h3>
+          <span style="font-size:12px;color:var(--text-muted);">Secure your account with Google or Microsoft Authenticator</span>
+        </div>
+        <button class="modal-x" onclick="closeTwoFactorModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body" id="twoFactorModalBody" style="padding:20px 24px;">
+        <div style="text-align:center;padding:10px 0;" id="twoFactorLoading">
+          <p style="color:var(--text-muted);font-size:13px;">Generating Authenticator QR code…</p>
+        </div>
+        <div id="twoFactorContent" style="display:none;flex-direction:column;gap:14px;align-items:center;">
+          <div style="font-size:12.5px;color:var(--text-secondary);text-align:center;line-height:1.5;">
+            1. Open <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong> on your phone.<br>
+            2. Scan the QR code below:
+          </div>
+          <div id="twoFactorQrWrap" style="background:#fff;padding:12px;border:1.5px solid var(--blue-light);border-radius:12px;display:flex;justify-content:center;"></div>
+          <div style="font-size:11.5px;color:var(--text-muted);text-align:center;">
+            Manual entry code: <code id="twoFactorSecretCode" style="background:#f1f5f9;padding:2px 6px;border-radius:4px;color:var(--blue);font-weight:600;"></code>
+          </div>
+          <div style="width:100%;margin-top:6px;">
+            <label style="display:block;font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">3. Enter 6-digit confirmation code</label>
+            <input type="text" id="twoFactorConfirmCode" class="code-field" placeholder="• • • • • •" maxlength="6" inputmode="numeric" style="text-align:center;letter-spacing:0.18em;font-size:16px;">
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot" id="twoFactorModalFoot" style="padding:14px 24px;display:flex;justify-content:space-between;">
+        <button class="foot-btn-secondary" onclick="closeTwoFactorModal()">Cancel</button>
+        <button class="gen-btn" id="twoFactorActivateBtn" onclick="confirmTwoFactorEnrollment()" style="background:var(--blue);">Activate 2FA</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD / EDIT CLASS RECORD ENTRY MODAL -->
+  <div class="modal-overlay" id="classRecModal">
+    <div class="modal-card" style="max-width:500px;border-radius:18px;">
+      <div class="modal-head" style="border-bottom:1px solid #f1f5f9;padding:16px 24px;">
+        <div>
+          <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#0f172a;">Add / Edit Class Record Entry</h3>
+          <span style="font-size:12px;color:var(--text-muted);">Enter or adjust student assessment scores and subject grades</span>
+        </div>
+        <button class="modal-x" onclick="closeAddClassRecordModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;padding:20px 24px;">
+        <div class="anc-form-field">
+          <label>Select Student</label>
+          <select class="anc-form-select" id="crStudentSelect"></select>
+        </div>
+
+        <div class="anc-form-field">
+          <label>Select Quiz / Assessment</label>
+          <select class="anc-form-select" id="crQuizSelect"></select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="anc-form-field">
+            <label>Subject</label>
+            <input type="text" class="anc-form-input" id="crSubjInput" value="Web Systems"/>
+          </div>
+          <div class="anc-form-field">
+            <label>Grade / Score (%)</label>
+            <input type="number" class="anc-form-input" id="crScoreInput" min="0" max="100" value="85" placeholder="e.g. 90"/>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot" style="padding:14px 24px;display:flex;justify-content:space-between;">
+        <button class="foot-btn-secondary" onclick="closeAddClassRecordModal()">Cancel</button>
+        <button class="gen-btn" onclick="submitAddClassRecord()" style="background:var(--blue);">Save Record Entry</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAILED STUDENT GRADE INSPECTION PANEL MODAL -->
+  <div class="modal-overlay" id="studentGradePanel">
+    <div class="modal-card" style="max-width:720px;width:92%;border-radius:20px;">
+      <div class="modal-head" style="border-bottom:1px solid #f1f5f9;padding:18px 24px;">
+        <div>
+          <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#0f172a;" id="sgpStudentName">Student Grade Breakdown</h3>
+          <span style="font-size:12px;color:var(--text-muted);" id="sgpStudentMeta">Individual quiz performance & attempt history</span>
+        </div>
+        <button class="modal-x" onclick="closeStudentGradePanel()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding:20px 24px;display:flex;flex-direction:column;gap:16px;">
+        <!-- STATS BAR -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;background:#f8fafc;padding:14px;border-radius:14px;border:1px solid #e2e8f0;">
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Quizzes Taken</div>
+            <div style="font-size:18px;font-weight:800;color:#0f172a;margin-top:2px;" id="sgpQuizzesTaken">0</div>
+          </div>
+          <div style="text-align:center;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Overall Grade</div>
+            <div style="font-size:18px;font-weight:800;color:var(--blue);margin-top:2px;" id="sgpOverallGrade">—</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Academic Status</div>
+            <div style="font-size:13px;font-weight:700;color:#059669;margin-top:4px;" id="sgpStatusBadge">Good Standing</div>
+          </div>
+        </div>
+
+        <!-- FILTER & SORT BAR -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:13px;font-weight:700;color:#0f172a;">Quiz Attempts Breakdown</span>
+          <div style="display:flex;gap:8px;">
+            <select class="user-filter-select" id="sgpSortSelect" onchange="renderStudentGradePanelContent()" style="padding:5px 10px;font-size:12px;">
+              <option value="newest">Newest First</option>
+              <option value="highest">Highest Score</option>
+              <option value="lowest">Lowest Score</option>
+              <option value="title">Quiz Title (A-Z)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- QUIZZES BREAKDOWN LIST -->
+        <div id="sgpQuizzesList" style="display:flex;flex-direction:column;gap:10px;max-height:360px;overflow-y:auto;padding-right:4px;"></div>
+      </div>
+
+      <div class="modal-foot" style="padding:14px 24px;display:flex;justify-content:flex-end;">
+        <button class="foot-btn-secondary" onclick="closeStudentGradePanel()">Close Panel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modular Scripts -->
-  <script src="js/core/ui-helpers.js?v=10017"></script>
-  <script src="js/core/notifications.js?v=10017"></script>
-  <script src="js/modules/repository/materials.js?v=10017"></script>
-  <script src="js/modules/quizzes/take-quiz.js?v=10017"></script>
-  <script src="js/modules/quizzes/item-analysis.js?v=10017"></script>
-  <script src="js/modules/quizzes/quiz-generator.js?v=10017"></script>
-  <script src="js/modules/chat/chat.js?v=10017"></script>
-  <script src="js/modules/admin/user-management.js?v=10017"></script>
-  <script src="js/modules/courses.js?v=10017"></script>
-  <script src="js/core/sidebar.js?v=10017"></script>
-  <script src="js/core/auth.js?v=10017"></script>
+  <script src="js/core/ui-helpers.js"></script>
+  <script src="js/core/notifications.js"></script>
+  <script src="js/core/announcements.js"></script>
+  <script src="js/modules/repository/materials.js"></script>
+  <script src="js/modules/quizzes/take-quiz.js"></script>
+  <script src="js/modules/quizzes/interactive-player.js"></script>
+  <script src="js/modules/quizzes/item-analysis.js"></script>
+  <script src="js/modules/quizzes/quiz-generator.js"></script>
+  <script src="js/modules/chat/chat.js"></script>
+  <script src="js/modules/admin/user-management.js"></script>
+  <script src="js/modules/courses.js"></script>
+  <script src="js/core/sidebar.js"></script>
+  <script src="js/core/auth.js"></script>
 </body>
 </html>

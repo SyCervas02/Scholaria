@@ -12,38 +12,469 @@
             font-family: 'DM Sans', sans-serif;
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
+            background: #ffffff;
+            color: #1e293b;
+            overflow-x: hidden;
+            overflow-y: auto;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* ── PORTAL HEADER (STI STYLE) ── */
+        .portal-header {
+            position: sticky;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+            height: 72px;
+            display: flex;
+            align-items: center;
+        }
+        .portal-header-inner {
+            width: 100%;
+            max-width: 100%;
+            margin: 0;
+            padding: 0 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .portal-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            text-decoration: none;
+            color: inherit;
+        }
+        .portal-brand-logo {
+            width: 48px;
+            height: 48px;
+            object-fit: contain;
+            border-radius: 10px;
+        }
+        .portal-brand-text {
+            display: flex;
+            flex-direction: column;
+        }
+        .portal-brand-title {
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+            font-size: 19px;
+            color: #0f2759;
+            letter-spacing: -0.2px;
+            line-height: 1.2;
+        }
+        .portal-brand-sub {
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .portal-nav-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .portal-login-btn {
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: #dce8f5;
-            overflow: hidden;
+            gap: 8px;
+            background: #0072bc;
+            color: #ffffff;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0, 114, 188, 0.25);
+            transition: all 0.2s ease;
+        }
+        .portal-login-btn:hover {
+            background: #005a96;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0, 114, 188, 0.35);
+        }
+        .portal-login-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke-width: 2.5;
         }
 
-        /* ── BACKGROUND ── */
-        .bg-layer {
-            position: fixed; inset: 0;
-            background: linear-gradient(135deg, #c9ddf0 0%, #dce8f5 40%, #e8d8f0 100%);
-            z-index: 0;
+        /* ── HERO CAROUSEL ── */
+        .portal-hero {
+            position: relative;
+            width: 100%;
+            height: 520px;
+            background: #08152c;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .bg-orb {
-            position: fixed; border-radius: 50%; filter: blur(80px); opacity: 0.45; z-index: 0;
+        @media (min-width: 1024px) {
+            .portal-hero {
+                height: 580px;
+            }
+        }
+        @media (max-width: 640px) {
+            .portal-hero {
+                height: 380px;
+            }
+        }
+        .hero-slider-track {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .hero-slide {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.6s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .hero-slide.active {
+            opacity: 1;
+            visibility: visible;
+            z-index: 1;
+        }
+        .hero-slide-backdrop {
+            position: absolute;
+            inset: -20px;
+            background-size: cover;
+            background-position: center;
+            filter: blur(28px) brightness(0.48);
+            transform: scale(1.08);
+            z-index: 1;
+        }
+        .hero-slide-img {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            image-rendering: -webkit-optimize-contrast;
+        }
+        /* Navigation Arrows */
+        .slider-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            color: #0f2759;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+        .slider-arrow:hover {
+            background: #ffffff;
+            transform: translateY(-50%) scale(1.1);
+            box-shadow: 0 6px 22px rgba(0, 0, 0, 0.3);
+        }
+        .slider-arrow.prev { left: 24px; }
+        .slider-arrow.next { right: 24px; }
+        .slider-arrow svg {
+            width: 24px;
+            height: 24px;
+            stroke-width: 2.5;
+        }
+        @media (max-width: 640px) {
+            .slider-arrow {
+                width: 38px;
+                height: 38px;
+            }
+            .slider-arrow.prev { left: 12px; }
+            .slider-arrow.next { right: 12px; }
+            .slider-arrow svg { width: 18px; height: 18px; }
+        }
+        /* Dots */
+        .slider-dots {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.45);
+            padding: 6px 14px;
+            border-radius: 30px;
+            backdrop-filter: blur(4px);
+        }
+        .slider-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.45);
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .slider-dot.active {
+            width: 28px;
+            border-radius: 10px;
+            background: #ffffff;
+        }
+
+        /* ── MISSION & VISION SECTION ── */
+        .portal-section {
+            width: 100%;
+            padding: 64px 24px 72px;
+            background: #ffffff;
+        }
+        .portal-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section-header-wrap {
+            text-align: center;
+            max-width: 680px;
+            margin: 0 auto 48px;
+        }
+        .section-tag {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #0072bc;
+            background: #e0f2fe;
+            padding: 4px 14px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+        }
+        .section-headline {
+            font-family: 'Playfair Display', serif;
+            font-size: 32px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 12px;
+            line-height: 1.25;
+        }
+        .section-subtext {
+            font-size: 15px;
+            color: #64748b;
+            line-height: 1.6;
+        }
+        .mission-vision-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 28px;
+        }
+        .mv-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 36px 30px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .mv-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+            border-color: #cbd5e1;
+        }
+        .mv-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #0072bc, #38bdf8);
+        }
+        .mv-card.mission::before {
+            background: linear-gradient(90deg, #2a4db5, #f59e0b);
+        }
+        .mv-card.values::before {
+            background: linear-gradient(90deg, #059669, #10b981);
+        }
+        .mv-icon-wrap {
+            width: 54px;
+            height: 54px;
+            border-radius: 14px;
+            background: #e0f2fe;
+            color: #0072bc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .mv-card.mission .mv-icon-wrap {
+            background: #eff6ff;
+            color: #2a4db5;
+        }
+        .mv-card.values .mv-icon-wrap {
+            background: #ecfdf5;
+            color: #059669;
+        }
+        .mv-icon-wrap svg {
+            width: 26px;
+            height: 26px;
+        }
+        .mv-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 22px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 14px;
+        }
+        .mv-text {
+            font-size: 14.5px;
+            color: #475569;
+            line-height: 1.7;
+            flex-grow: 1;
+        }
+
+        /* ── PORTAL FOOTER ── */
+        .portal-footer {
+            background: #0f172a;
+            color: #94a3b8;
+            padding: 36px 24px;
+            border-top: 1px solid #1e293b;
+            margin-top: auto;
+        }
+        .portal-footer-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .footer-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .footer-brand-logo {
+            width: 38px;
+            height: 38px;
+            object-fit: contain;
+            border-radius: 8px;
+            background: #fff;
+            padding: 2px;
+        }
+        .footer-brand-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+        .footer-brand-desc {
+            font-size: 12px;
+            color: #64748b;
+        }
+        .footer-meta {
+            font-size: 12.5px;
+            color: #64748b;
+            text-align: right;
+        }
+        @media (max-width: 640px) {
+            .footer-meta {
+                text-align: left;
+            }
+        }
+
+        /* ── MODAL OVERLAY FOR LOGIN PANEL ── */
+        .login-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 16px;
+            opacity: 0;
             pointer-events: none;
+            visibility: hidden;
+            transition: opacity 0.28s ease, visibility 0.28s ease;
+            overflow-y: auto;
         }
-        .o1 { width: 500px; height: 500px; background: #a8c8e8; top: -150px; left: -100px; }
-        .o2 { width: 400px; height: 400px; background: #c8b8e8; bottom: -100px; right: -100px; }
-        .o3 { width: 300px; height: 300px; background: #b8d8f0; top: 40%; left: 60%; }
+        .login-modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+            visibility: visible;
+        }
+        .login-modal-overlay .card-wrap {
+            position: relative;
+            z-index: 1001;
+            width: 100%;
+            max-width: 480px;
+            margin: auto;
+            padding: 0;
+            transform: scale(0.92) translateY(12px);
+            transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .login-modal-overlay.open .card-wrap {
+            transform: scale(1) translateY(0);
+        }
 
         /* ── CARD ── */
-        .card-wrap {
-            position: relative; z-index: 1;
-            width: 100%; max-width: 500px;
-            padding: 20px;
+        .card {
+            position: relative;
+            background: #fff;
+            border-radius: 22px;
+            box-shadow: 0 25px 70px rgba(15, 23, 42, 0.3), 0 6px 20px rgba(42, 77, 181, 0.12);
+            overflow: hidden;
         }
 
-        .card {
-            background: #fff;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(30, 60, 120, 0.18), 0 4px 16px rgba(30,60,120,0.1);
-            overflow: hidden;
+        .modal-close-btn {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.18);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+        .modal-close-btn:hover {
+            background: rgba(255, 255, 255, 0.35);
+            transform: rotate(90deg) scale(1.05);
+        }
+        .modal-close-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2.5;
         }
 
         /* ── HEADER ── */
@@ -104,6 +535,7 @@
             cursor: pointer;
             transition: background 0.2s;
             font-family: 'DM Sans', sans-serif;
+            margin-right: 36px;
         }
         .back-pill:hover { background: rgba(255,255,255,0.25); }
         .back-pill svg { width: 14px; height: 14px; }
@@ -312,30 +744,148 @@
 
         /* ── TOAST ── */
         .toast {
-            position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
-            background: #1e293b; color: #fff;
-            padding: 11px 20px; border-radius: 10px;
-            font-size: 13.5px; font-weight: 500;
-            display: flex; align-items: center; gap: 9px;
-            opacity: 0; transition: all 0.3s ease;
-            pointer-events: none; z-index: 999; white-space: nowrap;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            position: fixed;
+            bottom: 32px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #1e293b;
+            color: #fff;
+            padding: 12px 22px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            opacity: 0;
+            transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+            pointer-events: none;
+            z-index: 99999;
+            white-space: nowrap;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2);
         }
-        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-        .toast.success { background: #059669; }
-        .toast.error   { background: #dc2626; }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        .toast.success { background: #059669; border: 1px solid #10b981; }
+        .toast.error   { background: #dc2626; border: 1px solid #ef4444; }
+        .toast.info    { background: #2563eb; border: 1px solid #3b82f6; }
         .toast-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
     </style>
 </head>
 <body>
 
-<div class="bg-layer"></div>
-<div class="bg-orb o1"></div>
-<div class="bg-orb o2"></div>
-<div class="bg-orb o3"></div>
+  <!-- PORTAL HEADER (STI STYLE) -->
+  <header class="portal-header">
+    <div class="portal-header-inner">
+      <a href="login.html" class="portal-brand">
+        <img src="assets/logo.png" alt="Haven of Wisdom Academy Logo" class="portal-brand-logo">
+        <div class="portal-brand-text">
+          <span class="portal-brand-title">Haven Of Wisdom Academy</span>
+          <span class="portal-brand-sub">Scholaria E-Learning Portal</span>
+        </div>
+      </a>
+      <div class="portal-nav-right">
+        <button class="portal-login-btn" onclick="openLoginModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Log in
+        </button>
+      </div>
+    </div>
+  </header>
 
-<div class="card-wrap">
+  <!-- HERO CAROUSEL -->
+  <section class="portal-hero">
+    <div class="hero-slider-track">
+      <!-- Slide 1 -->
+      <div class="hero-slide active">
+        <div class="hero-slide-backdrop" style="background-image: url('assets/slide1.png');"></div>
+        <img src="assets/slide1.png" alt="Haven of Wisdom Academy Admission Now Open" class="hero-slide-img">
+      </div>
+      <!-- Slide 2 -->
+      <div class="hero-slide">
+        <div class="hero-slide-backdrop" style="background-image: url('assets/slide2.png');"></div>
+        <img src="assets/slide2.png" alt="Haven of Wisdom Academy Senior High School" class="hero-slide-img">
+      </div>
+    </div>
+
+    <!-- Arrow Buttons -->
+    <button class="slider-arrow prev" onclick="prevSlide()" aria-label="Previous image">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <button class="slider-arrow next" onclick="nextSlide()" aria-label="Next image">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+
+    <!-- Slide Dots -->
+    <div class="slider-dots">
+      <span class="slider-dot active" onclick="goToSlide(0)"></span>
+      <span class="slider-dot" onclick="goToSlide(1)"></span>
+    </div>
+  </section>
+
+  <!-- MISSION & VISION SECTION (AT THE BOTTOM) -->
+  <section class="portal-section">
+    <div class="portal-container">
+      <div class="section-header-wrap">
+        <span class="section-tag">About Haven of Wisdom</span>
+        <h2 class="section-headline">The Best Foundation For Your Child's Education</h2>
+        <p class="section-subtext">Committed to academic excellence, Christian values, and developing well-rounded individuals prepared for the future.</p>
+      </div>
+
+      <div class="mission-vision-grid">
+        <!-- Vision Card -->
+        <div class="mv-card">
+          <div class="mv-icon-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </div>
+          <h3 class="mv-title">VISION</h3>
+          <p class="mv-text">To be an institution of academic excellence and personal development that empowers students to be lifelong learners, globally competent, responsible, and productive members of our society.</p>
+        </div>
+
+        <!-- Mission Card -->
+        <div class="mv-card mission">
+          <div class="mv-icon-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <h3 class="mv-title">MISSION</h3>
+          <p class="mv-text">To provide a continuing tradition of excellence dedicated to give relevant and responsive quality education within a safe, nurturing, and supportive environment to prepare our diverse students for future endeavor.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PORTAL FOOTER -->
+  <footer class="portal-footer">
+    <div class="portal-footer-inner">
+      <div class="footer-brand">
+        <img src="assets/logo.png" alt="Haven of Wisdom Academy" class="footer-brand-logo">
+        <div>
+          <div class="footer-brand-title">Haven Of Wisdom Academy</div>
+          <div class="footer-brand-desc">Scholaria E-Learning Portal · Alapan, Imus, Cavite</div>
+        </div>
+      </div>
+      <div class="footer-meta">
+        <div>For inquiries: <strong>471 - 1386</strong></div>
+        <div style="margin-top:4px;">&copy; 2026 Haven of Wisdom Academy. All rights reserved.</div>
+      </div>
+    </div>
+  </footer>
+
+<!-- LOGIN MODAL OVERLAY -->
+<div class="login-modal-overlay" id="loginModalOverlay" onclick="handleBackdropClick(event)">
+  <div class="card-wrap">
     <div class="card">
+        <!-- Close Button for Modal -->
+        <button class="modal-close-btn" id="modalCloseBtn" onclick="closeLoginModal()" aria-label="Close modal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
 
         <!-- ── HEADER ── -->
         <div class="card-header">
@@ -343,7 +893,7 @@
                 <div class="logo-wrap">
                     <img
                         class="logo-img"
-                        src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcScCkfSrtsFMNsKCJP2dgy9MZjcuOXUXgQKug&s"
+                        src="assets/logo.png"
                         alt="Haven of Wisdom Academy"
                         crossorigin="anonymous"
                     >
@@ -426,26 +976,106 @@
                 </div>
             </div>
 
-            <!-- STEP 2 (ADMIN ONLY): ADMIN CODE GATE -->
-            <div class="view" id="adminCodeView">
-                <p class="helper-text">
-                    The <strong>School Admin Portal</strong> is restricted to the Senior High School
-                    Department Head. Enter the institutional admin code provided by Haven of Wisdom
-                    Academy to proceed.
+            <!-- STEP 2: ADMIN REGISTRATION & AUTHENTICATION -->
+            <div class="view" id="adminRegisterView">
+                <p class="helper-text" style="border-left-color:#d4a017;">
+                    <strong>School Admin Portal:</strong> Register the administrator account for the Senior High School Department Head. Institutional authorization key required.
                 </p>
 
                 <div class="field">
-                    <label>Admin Access Code</label>
+                    <label>Full Name</label>
                     <div class="input-wrap">
-                        <input type="text" id="admin-code" class="code-field" placeholder="• • • • • •" maxlength="20" oninput="clearError('admin-code-err'); resetFieldState('admin-code')" onkeydown="if(event.key==='Enter') verifyAdminCode()">
+                        <input type="text" id="reg-name" placeholder="e.g. Dr. Juan Santos" autocomplete="name" oninput="clearError('reg-name-err')">
                     </div>
-                    <div class="field-error" id="admin-code-err"></div>
+                    <div class="field-error" id="reg-name-err"></div>
                 </div>
 
-                <button class="submit-btn" onclick="verifyAdminCode()">Verify Code</button>
+                <div class="field">
+                    <label>Gmail / Official Email</label>
+                    <div class="input-wrap">
+                        <input type="email" id="reg-email" placeholder="e.g. admin@gmail.com or admin@hwa.edu.ph" autocomplete="email" oninput="clearError('reg-email-err')">
+                    </div>
+                    <div class="field-error" id="reg-email-err"></div>
+                </div>
+
+                <div class="field">
+                    <label>Password</label>
+                    <div class="input-wrap">
+                        <input type="password" id="reg-pw" placeholder="Create a secure password (min. 6 chars)" autocomplete="new-password" oninput="clearError('reg-pw-err')">
+                        <button class="eye-btn" type="button" onclick="toggleEye('reg-pw', this)" aria-label="Toggle password visibility">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="field-error" id="reg-pw-err"></div>
+                </div>
+
+                <div class="field">
+                    <label>Institutional Admin Key</label>
+                    <div class="input-wrap">
+                        <input type="password" id="reg-key" class="code-field" placeholder="• • • • • •" maxlength="100" autocomplete="new-password" oninput="clearError('reg-key-err')">
+                        <button class="eye-btn" type="button" onclick="toggleEye('reg-key', this)" aria-label="Toggle key visibility">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="field-error" id="reg-key-err"></div>
+                </div>
+
+                <button class="submit-btn" id="regAdminSubmitBtn" style="background:linear-gradient(135deg, #d4a017 0%, #b45309 100%);" onclick="handleRegisterAdmin()">
+                    Create Admin Account
+                </button>
+
+                <div style="margin-top:14px;text-align:center;">
+                    <a href="#" style="color:#2a4db5;font-weight:600;font-size:13px;text-decoration:none;" onclick="showAdminLoginView();return false;">
+                        Already registered? Sign in with your Gmail &rarr;
+                    </a>
+                </div>
 
                 <div class="divider">
                     <a href="#" class="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
+                </div>
+            </div>
+
+            <!-- STEP 2B: ADMIN 2FA GOOGLE AUTHENTICATOR ENROLLMENT -->
+            <div class="view" id="adminMfaSetupView">
+                <p class="helper-text" style="border-left-color:#2a4db5;">
+                    <strong>Google Authenticator Setup:</strong> Open <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong> on your phone and scan the QR code below.
+                </p>
+
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;margin:18px 0;text-align:center;">
+                    <div style="background:#ffffff;padding:16px;border:2px solid #e0ebfa;border-radius:18px;box-shadow:0 8px 24px rgba(30,60,120,0.08);display:inline-flex;align-items:center;justify-content:center;">
+                        <div id="regMfaQrContainer" style="width:190px;height:190px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:8px;">
+                            <p style="font-size:12px;color:#6b7280;">Loading QR Code…</p>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:12px;display:flex;flex-direction:column;align-items:center;gap:4px;">
+                        <span style="font-size:11.5px;color:#6b7280;font-weight:500;">Or enter this setup key manually:</span>
+                        <div style="display:inline-flex;align-items:center;gap:6px;background:#f0f5ff;border:1px solid #dce8f5;padding:4px 10px;border-radius:8px;">
+                            <code id="regMfaSecret" style="font-family:monospace;font-size:12px;color:#1e3a8a;font-weight:700;letter-spacing:1px;">—</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label style="text-align:center;display:block;">Enter 6-Digit Code from Authenticator App</label>
+                    <div class="input-wrap">
+                        <input type="text" id="reg-mfa-code" class="code-field" placeholder="• • • • • •" maxlength="6" inputmode="numeric" oninput="clearError('reg-mfa-code-err')" onkeydown="if(event.key==='Enter') verifyAdminRegistrationMfa()">
+                    </div>
+                    <div class="field-error" id="reg-mfa-code-err" style="text-align:center;"></div>
+                </div>
+
+                <button class="submit-btn" id="regMfaSubmitBtn" style="background:linear-gradient(135deg, #2a4db5 0%, #1e3a8a 100%);" onclick="verifyAdminRegistrationMfa()">
+                    Verify 2FA & Continue
+                </button>
+
+                <div class="divider" style="margin-top:14px;">
+                    <a href="#" onclick="showAdminLoginView();return false;">&larr; Cancel & back to login</a>
                 </div>
             </div>
 
@@ -455,7 +1085,7 @@
                 <div class="field">
                     <label id="l-id-label">Student ID</label>
                     <div class="input-wrap">
-                        <input type="text" id="l-id" placeholder="e.g. HWA-2024-001" maxlength="20" oninput="validateId('l-id','l-id-err')" onkeydown="if(event.key==='Enter') handleLogin()">
+                        <input type="text" id="l-id" placeholder="e.g. HWA-2024-001" maxlength="150" oninput="validateId('l-id','l-id-err')" onkeydown="if(event.key==='Enter') handleLogin()">
                     </div>
                     <div class="field-error" id="l-id-err"></div>
                 </div>
@@ -476,14 +1106,71 @@
 
                 <button class="submit-btn" id="loginSubmitBtn" onclick="handleLogin()">Login to Portal</button>
 
+                <div id="adminRegisterLinkWrap" style="margin-top:14px;text-align:center;display:none;">
+                    <a href="#" style="color:#2a4db5;font-weight:600;font-size:13px;text-decoration:none;" onclick="showAdminRegisterView();return false;">
+                        First time? Create Admin Account &rarr;
+                    </a>
+                </div>
+
                 <div class="divider">
                     <a href="#" class="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
+                </div>
+            </div>
+
+            <!-- STEP 4 (OPTIONAL): 2FA TOTP AUTHENTICATOR -->
+            <div class="view" id="totpView">
+                <p class="helper-text">
+                    <strong>Two-Factor Authentication:</strong> Enter the 6-digit verification code from your <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong> app.
+                </p>
+
+                <div class="field">
+                    <label>6-Digit Authenticator Code</label>
+                    <div class="input-wrap">
+                        <input type="text" id="totp-code" class="code-field" placeholder="• • • • • •" maxlength="6" inputmode="numeric" onkeydown="if(event.key==='Enter') verifyTotpCode()">
+                    </div>
+                    <div class="field-error" id="totp-code-err"></div>
+                </div>
+
+                <button class="submit-btn" id="totpSubmitBtn" onclick="verifyTotpCode()">Verify & Sign In</button>
+
+                <div class="divider" style="margin-top:14px;">
+                    <a href="#" onclick="showView('loginView');return false;">&larr; Cancel & back to login</a>
+                </div>
+            </div>
+
+            <!-- STEP 5 (ADMIN ONLY): INSTITUTIONAL KEY CONFIRMATION -->
+            <div class="view" id="adminKeyGateView">
+                <p class="helper-text" style="border-left-color:#d4a017;">
+                    <strong>Institutional Authorization:</strong> Enter the Institutional Admin Key provided by Haven of Wisdom Academy to confirm administrator credentials.
+                </p>
+
+                <div class="field">
+                    <label>Institutional Admin Key</label>
+                    <div class="input-wrap">
+                        <input type="password" id="gate-admin-key" class="code-field" placeholder="• • • • • •" maxlength="100" autocomplete="new-password" oninput="clearError('gate-admin-key-err')" onkeydown="if(event.key==='Enter') verifyAdminGateKey()">
+                        <button class="eye-btn" type="button" onclick="toggleEye('gate-admin-key', this)" aria-label="Toggle key visibility">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="field-error" id="gate-admin-key-err"></div>
+                </div>
+
+                <button class="submit-btn" id="adminGateSubmitBtn" style="background:linear-gradient(135deg, #d4a017 0%, #b45309 100%);" onclick="verifyAdminGateKey()">
+                    Authorize & Enter Dashboard
+                </button>
+
+                <div class="divider" style="margin-top:14px;">
+                    <a href="#" onclick="showAdminLoginView();return false;">&larr; Cancel & back to login</a>
                 </div>
             </div>
 
         </div>
     </div>
 </div>
+</div> <!-- /login-modal-overlay -->
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
@@ -531,10 +1218,10 @@
         admin: {
             title: 'Welcome, Admin',
             sub: 'Sign in to the School Admin portal',
-            idLabel: 'Admin ID',
-            idPlaceholder: 'e.g. HWA-A-2024-001',
-            idPattern: /^HWA-A-(DEMO|\d{4}-\d{3,})$/,
-            idError: 'Format: HWA-A-YYYY-NNN or HWA-A-DEMO',
+            idLabel: 'Admin Gmail / Email',
+            idPlaceholder: 'e.g. admin@gmail.com or admin@hwa.edu.ph',
+            idPattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+            idError: 'Please enter a valid email address',
             badgeLabel: 'Admin Portal'
         }
     };
@@ -564,9 +1251,6 @@
         document.getElementById('roleBadgeWrap').innerHTML = '';
         document.getElementById('tabLabel').textContent = 'Welcome to Scholaria';
         document.getElementById('tabSub').textContent = 'Select your role to continue';
-        document.getElementById('admin-code').value = '';
-        resetFieldState('admin-code');
-        clearError('admin-code-err');
         showView('roleView');
     }
 
@@ -575,40 +1259,14 @@
         const cfg = ROLE_CONFIG[role];
         document.getElementById('roleBadgeWrap').innerHTML =
             `<div class="role-badge">${ROLE_ICONS[role]}${cfg.badgeLabel}</div>`;
-        if (role === 'admin') {
-            // Admin gets an extra gate in front of the real login form:
-            // the institutional code below. The account itself is still
-            // provisioned by another admin and checked against Supabase
-            // in handleLogin() — the code only decides who gets to see
-            // the admin login form at all.
-            document.getElementById('tabLabel').textContent = 'Admin Verification';
-            document.getElementById('tabSub').textContent = 'Restricted access — code required';
-            showView('adminCodeView');
-        } else {
-            applyRoleToLoginForm(role);
-            document.getElementById('tabLabel').textContent = cfg.title;
-            document.getElementById('tabSub').textContent = cfg.sub;
-            showView('loginView');
-        }
+        applyRoleToLoginForm(role);
+        document.getElementById('tabLabel').textContent = cfg.title;
+        document.getElementById('tabSub').textContent = cfg.sub;
+        showView('loginView');
     }
 
-    function verifyAdminCode() {
-        const code = document.getElementById('admin-code').value.trim().toUpperCase();
-        if (!code) { setFieldState('admin-code', 'admin-code-err', false, 'Admin code is required'); return; }
-        if (code !== ADMIN_CODE) {
-            setFieldState('admin-code', 'admin-code-err', false, 'Incorrect admin code. Please try again.');
-            showToast('Incorrect admin code', 'error');
-            return;
-        }
-        setFieldState('admin-code', 'admin-code-err', true, '');
-        showToast('Admin code verified', 'success');
-        setTimeout(() => {
-            applyRoleToLoginForm('admin');
-            const cfg = ROLE_CONFIG.admin;
-            document.getElementById('tabLabel').textContent = cfg.title;
-            document.getElementById('tabSub').textContent = cfg.sub;
-            showView('loginView');
-        }, 600);
+    function showAdminLoginView() {
+        selectRole('admin');
     }
 
     function applyRoleToLoginForm(role) {
@@ -619,6 +1277,8 @@
         document.getElementById('l-pw').value = '';
         clearError('l-id-err'); clearError('l-pw-err');
         resetFieldState('l-id'); resetFieldState('l-pw');
+        const adminLink = document.getElementById('adminRegisterLinkWrap');
+        if (adminLink) adminLink.style.display = (role === 'admin') ? 'block' : 'none';
     }
 
     function toggleEye(inputId, btn) {
@@ -627,7 +1287,7 @@
         inp.type = show ? 'text' : 'password';
         btn.innerHTML = show
             ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
-            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
     }
 
     function setFieldState(id, errId, ok, msg) {
@@ -649,8 +1309,29 @@
         if (er) er.textContent = '';
     }
 
+    function showError(errId, msg) {
+        const er = document.getElementById(errId);
+        if (er) {
+            er.textContent = msg;
+            er.style.display = 'block';
+        }
+        if (errId === 'l-pw-err') {
+            const el = document.getElementById('l-pw');
+            if (el) { el.classList.add('invalid'); el.classList.remove('valid'); }
+        }
+        if (errId === 'l-id-err') {
+            const el = document.getElementById('l-id');
+            if (el) { el.classList.add('invalid'); el.classList.remove('valid'); }
+        }
+    }
+
     function validateId(id, errId) {
-        const val = document.getElementById(id).value.trim();
+        const el = document.getElementById(id);
+        let val = el.value.trim();
+        if (currentRole !== 'admin') {
+            val = val.toUpperCase();
+            el.value = val;
+        }
         const cfg = ROLE_CONFIG[currentRole];
         const ok  = cfg.idPattern.test(val) || val.length === 0;
         return setFieldState(id, errId, ok || val.length === 0, cfg.idError);
@@ -662,12 +1343,15 @@
         return setFieldState(id, errId, ok || val.length === 0, 'At least 6 characters required');
     }
 
+    let toastTimer = null;
     function showToast(msg, type = 'info') {
         const t = document.getElementById('toast');
+        if (!t) return;
         const icon = ICONS[type] || ICONS.info;
         t.innerHTML = `<span class="toast-icon">${icon}</span><span>${msg}</span>`;
         t.className = 'toast show ' + type;
-        setTimeout(() => t.classList.remove('show'), 3000);
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
     }
 
     function setLoginBusy(busy) {
@@ -676,40 +1360,303 @@
         btn.textContent = busy ? 'Logging in…' : 'Login to Portal';
     }
 
-    /* Real login. School ID is what the person types (matches the ID
-       on their account), but Supabase Auth signs in with email — so we
-       first resolve ID -> email through a SECURITY DEFINER RPC that
-       only ever returns an email string, never a full row (see
-       scholaria_auth_schema.sql). We never say which part was wrong —
-       "invalid ID or password" either way — so a login form can't be
-       used to enumerate which School IDs exist. */
+    let pendingTotpFactorId = null;
+
+    function showAdminRegisterView() {
+        currentRole = 'admin';
+        document.getElementById('tabLabel').textContent = 'Admin Registration';
+        document.getElementById('tabSub').textContent = 'Register the primary institutional administrator';
+        document.getElementById('reg-key').value = '';
+        document.getElementById('reg-pw').value = '';
+        clearError('reg-key-err');
+        clearError('reg-name-err');
+        clearError('reg-email-err');
+        clearError('reg-pw-err');
+        showView('adminRegisterView');
+    }
+
+    let pendingRegistrationFactorId = null;
+
+    function renderMfaQrCode(qrData, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (!qrData) {
+            container.innerHTML = '<p style="font-size:12px;color:#6b7280;">Use the manual key below</p>';
+            return;
+        }
+
+        try {
+            if (qrData.startsWith('data:image/svg+xml;utf-8,')) {
+                const svgContent = decodeURIComponent(qrData.replace('data:image/svg+xml;utf-8,', ''));
+                container.innerHTML = svgContent;
+                const svg = container.querySelector('svg');
+                if (svg) {
+                    svg.setAttribute('width', '100%');
+                    svg.setAttribute('height', '100%');
+                    svg.style.display = 'block';
+                }
+            } else if (qrData.startsWith('<svg')) {
+                container.innerHTML = qrData;
+                const svg = container.querySelector('svg');
+                if (svg) {
+                    svg.setAttribute('width', '100%');
+                    svg.setAttribute('height', '100%');
+                    svg.style.display = 'block';
+                }
+            } else {
+                const img = document.createElement('img');
+                img.src = qrData;
+                img.alt = '2FA QR Code';
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.display = 'block';
+                img.style.objectFit = 'contain';
+                container.appendChild(img);
+            }
+        } catch (e) {
+            container.innerHTML = '<p style="font-size:12px;color:#6b7280;">Scan or enter manual key below</p>';
+        }
+    }
+
+    async function handleRegisterAdmin() {
+        const name = document.getElementById('reg-name').value.trim();
+        const email = document.getElementById('reg-email').value.trim();
+        const pw = document.getElementById('reg-pw').value;
+        const key = document.getElementById('reg-key').value.trim();
+
+        let hasErr = false;
+        if (!name) { document.getElementById('reg-name-err').textContent = 'Full name is required'; hasErr = true; }
+        if (!email || !/^\S+@\S+\.\S+$/.test(email)) { document.getElementById('reg-email-err').textContent = 'Valid Gmail or email is required'; hasErr = true; }
+        if (!pw || pw.length < 6) { document.getElementById('reg-pw-err').textContent = 'Password must be at least 6 characters'; hasErr = true; }
+        if (!key) { document.getElementById('reg-key-err').textContent = 'Admin institutional key is required'; hasErr = true; }
+        if (hasErr) return;
+
+        const btn = document.getElementById('regAdminSubmitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Verifying key & creating account…';
+
+        try {
+            const res = await fetch(`${API_BASE}/api/admin/register-original-admin`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ full_name: name, email, password: pw, admin_key: key })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                showToast(data.error || 'Registration failed', 'error');
+                return;
+            }
+
+            // Sign in to session
+            const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email, password: pw });
+            if (authErr || !authData.session) {
+                applyRoleToLoginForm('admin');
+                document.getElementById('l-id').value = email;
+                showView('loginView');
+                showToast(`Admin created! Please log in with ${email}`, 'info');
+                return;
+            }
+
+            // Clean up any stale unverified factors first
+            try {
+                const { data: factorList } = await db.auth.mfa.listFactors();
+                if (factorList?.totp) {
+                    for (const f of factorList.totp) {
+                        if (f.status === 'unverified') {
+                            await db.auth.mfa.unenroll({ factorId: f.id });
+                        }
+                    }
+                }
+            } catch (_) {}
+
+            // Enroll TOTP Factor for Google Authenticator
+            const { data: mfaData, error: mfaErr } = await db.auth.mfa.enroll({
+                factorType: 'totp',
+                issuer: 'Scholaria (Admin)'
+            });
+
+            if (mfaErr || !mfaData) {
+                showToast('Admin account created! Entering dashboard…', 'success');
+                setTimeout(() => { window.location.href = 'dashboard.html'; }, 1000);
+                return;
+            }
+
+            pendingRegistrationFactorId = mfaData.id;
+            renderMfaQrCode(mfaData.totp?.qr_code, 'regMfaQrContainer');
+            document.getElementById('regMfaSecret').textContent = mfaData.totp?.secret || '—';
+            document.getElementById('reg-mfa-code').value = '';
+            clearError('reg-mfa-code-err');
+
+            document.getElementById('tabLabel').textContent = '2FA Setup';
+            document.getElementById('tabSub').textContent = 'Scan QR Code with Google Authenticator';
+            showView('adminMfaSetupView');
+            showToast('Scan the QR code with Google Authenticator', 'info');
+        } catch (err) {
+            showToast('Could not reach the server to register', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Create Admin Account';
+        }
+    }
+
+    async function verifyAdminRegistrationMfa() {
+        const code = document.getElementById('reg-mfa-code').value.trim();
+        if (!code || code.length < 6) {
+            document.getElementById('reg-mfa-code-err').textContent = 'Please enter the 6-digit code from Google Authenticator';
+            return;
+        }
+
+        const btn = document.getElementById('regMfaSubmitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Verifying code…';
+
+        try {
+            const { data, error } = await db.auth.mfa.challengeAndVerify({
+                factorId: pendingRegistrationFactorId,
+                code: code
+            });
+
+            if (error) {
+                document.getElementById('reg-mfa-code-err').textContent = 'Invalid code. Check Google Authenticator and try again.';
+                showToast('Invalid 2FA code', 'error');
+                return;
+            }
+
+            showToast('2FA verified! Please confirm your Institutional Admin Key.', 'success');
+            document.getElementById('gate-admin-key').value = '';
+            clearError('gate-admin-key-err');
+            document.getElementById('tabLabel').textContent = 'Admin Authorization';
+            document.getElementById('tabSub').textContent = 'Enter the Institutional Admin Key';
+            showView('adminKeyGateView');
+        } catch (err) {
+            showToast('2FA verification failed', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Verify 2FA & Continue';
+        }
+    }
+
+    function verifyAdminGateKey() {
+        const key = document.getElementById('gate-admin-key').value.trim().toUpperCase();
+        if (!key) {
+            document.getElementById('gate-admin-key-err').textContent = 'Institutional admin key is required';
+            return;
+        }
+        if (key !== ADMIN_CODE) {
+            document.getElementById('gate-admin-key-err').textContent = 'Incorrect key. Please enter the valid institutional key.';
+            showToast('Incorrect institutional key', 'error');
+            return;
+        }
+
+        showToast('Admin authorized! Entering dashboard…', 'success');
+        setTimeout(() => {
+            window.location.href = 'dashboard.html';
+        }, 600);
+    }
+
     async function handleLogin() {
         const cfg = ROLE_CONFIG[currentRole];
-        const id = document.getElementById('l-id').value.trim();
+        const inputVal = document.getElementById('l-id').value.trim();
         const pw = document.getElementById('l-pw').value;
-        if (!id) { document.getElementById('l-id-err').textContent = cfg.idLabel + ' is required'; return; }
+        if (!inputVal) { document.getElementById('l-id-err').textContent = cfg.idLabel + ' is required'; return; }
         if (!pw) { document.getElementById('l-pw-err').textContent = 'Password is required'; return; }
 
         setLoginBusy(true);
         try {
-            const { data: email, error: lookupErr } = await db.rpc('email_for_school_id', { p_school_id: id });
-            if (lookupErr || !email) { showToast('Invalid ID or password', 'error'); return; }
+            let email = null;
+            if (currentRole === 'admin') {
+                if (inputVal.includes('@')) {
+                    email = inputVal.toLowerCase();
+                } else {
+                    const { data, error } = await db.rpc('email_for_school_id', { p_school_id: inputVal.toUpperCase() });
+                    if (!error && data) email = data;
+                    else email = inputVal;
+                }
+            } else {
+                const { data, error } = await db.rpc('email_for_school_id', { p_school_id: inputVal.toUpperCase() });
+                if (error || !data) {
+                    showError('l-id-err', 'Invalid ID or account not found');
+                    showToast('Invalid ID or password', 'error');
+                    return;
+                }
+                email = data;
+            }
 
             const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email, password: pw });
-            if (authErr || !authData.session) { showToast('Invalid ID or password', 'error'); return; }
+            if (authErr || !authData.session) {
+                showError('l-pw-err', 'Invalid password. Please try again.');
+                showToast('Invalid password', 'error');
+                return;
+            }
 
             const { data: profile, error: profileErr } = await db
                 .from('users').select('role, is_active, is_demo').eq('id', authData.user.id).single();
 
             if (profileErr || !profile || profile.role !== currentRole || profile.is_active === false) {
                 await db.auth.signOut();
-                showToast(`This ID isn't registered as a ${cfg.badgeLabel.replace(' Portal','')}`, 'error');
+                showToast(`This account isn't registered as a ${cfg.badgeLabel.replace(' Portal','')}`, 'error');
                 return;
             }
 
-            // Admin created this account with a temp password and flagged
-            // must_reset_password in the login's own metadata. Route to a
-            // forced reset before letting them into the dashboard proper.
+            // If Admin, check Google Authenticator TOTP
+            if (currentRole === 'admin') {
+                const { data: mfaFactors } = await db.auth.mfa.listFactors();
+                const totpFactor = mfaFactors?.totp?.find(f => f.status === 'verified');
+                if (totpFactor) {
+                    pendingTotpFactorId = totpFactor.id;
+                    document.getElementById('totp-code').value = '';
+                    clearError('totp-code-err');
+                    document.getElementById('tabLabel').textContent = '2FA Verification';
+                    document.getElementById('tabSub').textContent = 'Open your Google or Microsoft Authenticator app';
+                    showView('totpView');
+                    return;
+                } else {
+                    // Clean up any stale unverified factors first
+                    try {
+                        if (mfaFactors?.totp) {
+                            for (const f of mfaFactors.totp) {
+                                if (f.status === 'unverified') {
+                                    await db.auth.mfa.unenroll({ factorId: f.id });
+                                }
+                            }
+                        }
+                    } catch (_) {}
+
+                    // Admin has no 2FA setup yet — force enrollment with centered QR
+                    const { data: mfaData, error: mfaErr } = await db.auth.mfa.enroll({
+                        factorType: 'totp',
+                        issuer: 'Scholaria (Admin)'
+                    });
+                    if (mfaData && !mfaErr) {
+                        pendingRegistrationFactorId = mfaData.id;
+                        renderMfaQrCode(mfaData.totp?.qr_code, 'regMfaQrContainer');
+                        document.getElementById('regMfaSecret').textContent = mfaData.totp?.secret || '—';
+                        document.getElementById('reg-mfa-code').value = '';
+                        clearError('reg-mfa-code-err');
+                        document.getElementById('tabLabel').textContent = '2FA Setup Required';
+                        document.getElementById('tabSub').textContent = 'Scan QR Code with Google Authenticator';
+                        showView('adminMfaSetupView');
+                        showToast('Admin accounts require Google Authenticator', 'info');
+                        return;
+                    }
+                }
+            }
+
+            // Check if 2FA (TOTP) is enrolled for non-admin roles
+            const { data: mfaFactors } = await db.auth.mfa.listFactors();
+            const totpFactor = mfaFactors?.totp?.find(f => f.status === 'verified');
+            if (totpFactor) {
+                pendingTotpFactorId = totpFactor.id;
+                document.getElementById('totp-code').value = '';
+                clearError('totp-code-err');
+                document.getElementById('tabLabel').textContent = '2FA Verification';
+                document.getElementById('tabSub').textContent = 'Open your Google or Microsoft Authenticator app';
+                showView('totpView');
+                return;
+            }
+
             if (authData.user.user_metadata && authData.user.user_metadata.must_reset_password) {
                 window.location.href = 'reset-password.html';
                 return;
@@ -717,17 +1664,57 @@
 
             showToast('Logging in…', 'success');
             window.location.href = 'dashboard.html';
+        } catch (err) {
+            console.error('Login error:', err);
+            showError('l-pw-err', 'Invalid password. Please check your credentials.');
+            showToast('Invalid password', 'error');
         } finally {
             setLoginBusy(false);
         }
     }
 
-    /* Demo login. Goes through the backend (POST /api/auth/demo-login)
-       so the demo account's real password never has to live in this
-       page's JS — the server signs in on our behalf and just hands back
-       a session. The backend returns 404 whenever DEMO_MODE is off, so
-       this button quietly stops working the moment a real deployment
-       disables it — no change needed here. */
+    async function verifyTotpCode() {
+        const code = document.getElementById('totp-code').value.trim();
+        if (!code || code.length < 6) {
+            document.getElementById('totp-code-err').textContent = 'Please enter the 6-digit code';
+            return;
+        }
+
+        const btn = document.getElementById('totpSubmitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Verifying…';
+
+        try {
+            const { data, error } = await db.auth.mfa.challengeAndVerify({
+                factorId: pendingTotpFactorId,
+                code: code
+            });
+
+            if (error) {
+                document.getElementById('totp-code-err').textContent = 'Invalid code. Check your authenticator app and try again.';
+                showToast('Invalid 2FA code', 'error');
+                return;
+            }
+
+            if (currentRole === 'admin') {
+                document.getElementById('gate-admin-key').value = '';
+                clearError('gate-admin-key-err');
+                document.getElementById('tabLabel').textContent = 'Admin Authorization';
+                document.getElementById('tabSub').textContent = 'Enter the Institutional Admin Key';
+                showView('adminKeyGateView');
+                return;
+            }
+
+            showToast('Login successful', 'success');
+            window.location.href = 'dashboard.html';
+        } catch (err) {
+            showToast('2FA verification failed', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Verify & Sign In';
+        }
+    }
+
     async function handleDemoLogin() {
         if (!currentRole) {
             showToast('Please select a role first', 'error');
@@ -761,13 +1748,99 @@
         }
     }
 
-    /* If a session already exists (e.g. the person hit the back button
-       after logging in), skip straight to the dashboard instead of
-       showing the login form again. */
     (async () => {
         const { data } = await db.auth.getSession();
         if (data.session) window.location.href = 'dashboard.html';
     })();
+
+    /* ════════════════════════════════════════
+       STI-STYLE CAROUSEL & LOGIN MODAL CONTROLS
+    ════════════════════════════════════════ */
+    let currentSlideIndex = 0;
+    let slideTimer = null;
+
+    function showSlide(index) {
+        const slides = document.querySelectorAll('.hero-slide');
+        const dots = document.querySelectorAll('.slider-dot');
+        if (!slides.length) return;
+
+        if (index >= slides.length) currentSlideIndex = 0;
+        else if (index < 0) currentSlideIndex = slides.length - 1;
+        else currentSlideIndex = index;
+
+        slides.forEach((slide, i) => {
+            slide.classList.toggle('active', i === currentSlideIndex);
+        });
+        dots.forEach((dot, i) => {
+            dot.classList.toggle('active', i === currentSlideIndex);
+        });
+    }
+
+    function nextSlide() {
+        showSlide(currentSlideIndex + 1);
+        resetSlideTimer();
+    }
+
+    function prevSlide() {
+        showSlide(currentSlideIndex - 1);
+        resetSlideTimer();
+    }
+
+    function goToSlide(index) {
+        showSlide(index);
+        resetSlideTimer();
+    }
+
+    function startSlideTimer() {
+        stopSlideTimer();
+        slideTimer = setInterval(() => {
+            const overlay = document.getElementById('loginModalOverlay');
+            if (!overlay || !overlay.classList.contains('open')) {
+                showSlide(currentSlideIndex + 1);
+            }
+        }, 6000);
+    }
+
+    function stopSlideTimer() {
+        if (slideTimer) {
+            clearInterval(slideTimer);
+            slideTimer = null;
+        }
+    }
+
+    function resetSlideTimer() {
+        stopSlideTimer();
+        startSlideTimer();
+    }
+
+    function openLoginModal() {
+        const overlay = document.getElementById('loginModalOverlay');
+        if (overlay) {
+            overlay.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+    }
+
+    function closeLoginModal() {
+        const overlay = document.getElementById('loginModalOverlay');
+        if (overlay) {
+            overlay.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+    }
+
+    function handleBackdropClick(e) {
+        if (e.target.id === 'loginModalOverlay') {
+            closeLoginModal();
+        }
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeLoginModal();
+    });
+
+    // Start carousel auto-rotation on page load
+    startSlideTimer();
 </script>
 </body>
 </html>
