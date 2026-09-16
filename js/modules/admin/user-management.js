@@ -7,7 +7,10 @@ const DEFAULT_SEED_USERS = [
 
 let registeredUsers = [...DEFAULT_SEED_USERS];
 let isFetchingUsers = false;
-let adminUserTab = 'students'; // 'students' | 'teachers'
+let adminUserTab = 'students'; // 'students' | 'teachers' | 'sections'
+let sectionSearchQuery = '';
+let sectionGradeFilter = '';
+let sectionStrandFilter = '';
 
 function setAdminUserTab(tab) {
   adminUserTab = tab;
@@ -29,15 +32,16 @@ function formatDateCreated(ts) {
 
 function renderStudentRow(u) {
   const canUnmute = ROLE === 'admin' && (u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
+  const isUnassigned = !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—';
   return `<tr>
     <td><strong>${escHtml(u.name)}</strong></td>
     <td><code style="font-size:12px;background:#f0f6ff;padding:2px 6px;border-radius:4px;color:var(--blue);">${escHtml(u.id)}</code></td>
     <td><span class="au-grade-pill on" style="padding:2px 8px;font-size:11px;">${escHtml(u.gradeLevel || 'Grade 11')}</span></td>
     <td><span class="role-tag student">${escHtml(u.strand || 'N/A')}</span></td>
-    <td>${escHtml(u.section || '—')}</td>
+    <td>${isUnassigned ? '<span style="color:#d97706;font-weight:600;font-size:12px;background:#fef3c7;padding:2px 8px;border-radius:4px;">Unassigned</span>' : `<span class="sec-badge grade">${escHtml(u.section)}</span>`}</td>
     <td class="date-val">${formatDateCreated(u.createdAt)}</td>
     <td>${chatStatusHtml(u)}</td>
-    <td><span class="action-link">Edit</span> &nbsp; <span class="action-link" style="color:#dc2626">Deactivate</span>${canUnmute ? ` &nbsp; <span class="action-link" style="color:#2563eb" onclick="adminUnmuteUser('${u.dbId}')">Unmute</span>` : ''}</td>
+    <td><span class="action-link" onclick="openMassAssignForSingleStudent('${u.dbId || u.id}')">Assign Section</span>${canUnmute ? ` &nbsp; <span class="action-link" style="color:#2563eb" onclick="adminUnmuteUser('${u.dbId}')">Unmute</span>` : ''}</td>
   </tr>`;
 }
 
@@ -59,13 +63,14 @@ function renderUserManagementContent() {
   const students = registeredUsers.filter(u => u.role === 'student');
   const teachers = registeredUsers.filter(u => u.role === 'teacher');
   const isStudentTab = adminUserTab === 'students';
+  const isTeacherTab = adminUserTab === 'teachers';
 
   return `
     <div class="um-tabs">
       <button class="um-tab ${isStudentTab ? 'active' : ''}" onclick="setAdminUserTab('students')">
         ${iconProfile()} Students <span class="um-badge">${students.length}</span>
       </button>
-      <button class="um-tab teacher-tab ${!isStudentTab ? 'active' : ''}" onclick="setAdminUserTab('teachers')">
+      <button class="um-tab teacher-tab ${isTeacherTab ? 'active' : ''}" onclick="setAdminUserTab('teachers')">
         ${iconUsers()} Teachers <span class="um-badge">${teachers.length}</span>
       </button>
     </div>
@@ -89,7 +94,16 @@ function renderUserManagementContent() {
         <option value="STEM">STEM</option>
         <option value="HUMSS">HUMSS</option>
         <option value="ABM">ABM</option>
+        <option value="TVL">TVL</option>
       </select>
+
+      ${isStudentTab ? `
+        <select class="user-filter-select" id="userSectionFilter" onchange="filterUserTable()">
+          <option value="">All Sections</option>
+          <option value="Unassigned">Unassigned Only</option>
+          ${managedSections.map(s => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('')}
+        </select>
+      ` : ''}
 
       <select class="user-filter-select" id="userDateSort" onchange="filterUserTable()">
         <option value="newest">Newest First</option>
@@ -107,19 +121,19 @@ function renderUserManagementContent() {
               <th>Grade Level</th>
               <th>Strand</th>
               <th>Section</th>
-              <th>Date Created</th>
-              <th>Chat Status</th>
+              <th>Date Registered</th>
+              <th>Chat Access</th>
               <th>Actions</th>
             </tr>
           ` : `
             <tr>
               <th>Teacher Name</th>
               <th>Teacher ID</th>
-              <th>Handled Strands / Subjects</th>
-              <th>Target Levels</th>
-              <th>Assigned Section</th>
-              <th>Date Created</th>
-              <th>Chat Status</th>
+              <th>Strands Handled</th>
+              <th>Grade Level</th>
+              <th>Section Handled</th>
+              <th>Date Registered</th>
+              <th>Chat Access</th>
               <th>Actions</th>
             </tr>
           `}
@@ -209,7 +223,11 @@ function filterUserTable() {
     const matchSearch = !q || (u.name + u.id + (u.subjects || '') + (u.strand || '')).toLowerCase().includes(q);
     const matchGrade = !grade || u.gradeLevel === grade;
     const matchStrand = !strand || (u.strand && u.strand.includes(strand)) || (u.subjects && u.subjects.includes(strand));
-    return matchSearch && matchGrade && matchStrand;
+    const secFilter = document.getElementById('userSectionFilter')?.value || '';
+    const matchSection = !secFilter ? true :
+      secFilter === 'Unassigned' ? (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—') :
+      (u.section || '').trim().toLowerCase() === secFilter.trim().toLowerCase();
+    return matchSearch && matchGrade && matchStrand && matchSection;
   });
 
   list.sort((a, b) => {
@@ -230,12 +248,671 @@ function filterUserTable() {
   if (table) table.style.display = list.length === 0 ? 'none' : '';
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   SECTION MANAGEMENT & ROSTER BUILDER ENGINE
+   ═══════════════════════════════════════════════════════════════ */
+
+let activeRosterSection = null;
+let massAssignTargetSection = '';
+let massAssignSelectedIds = new Set();
+let massAssignFilterMode = 'unassigned'; // 'unassigned' | 'all'
+let massAssignSearchQuery = '';
+let massAssignGradeFilter = '';
+let massAssignStrandFilter = '';
+
+function renderSectionsTabContent() {
+  const unassignedStudents = registeredUsers.filter(u => u.role === 'student' && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—'));
+  const targetDefaultSection = managedSections[0]?.name || 'Section A';
+
+  return `
+    ${unassignedStudents.length > 0 ? `
+      <div class="sec-unassigned-banner">
+        <div class="sec-unassigned-info">
+          <div class="sec-unassigned-icon">${iconAlert()}</div>
+          <div>
+            <h4>${unassignedStudents.length} Unassigned Student${unassignedStudents.length !== 1 ? 's' : ''} Ready for Sectioning</h4>
+            <p>These students currently have no assigned class section and can be mass-enrolled into a section at any time.</p>
+          </div>
+        </div>
+        <button class="sec-unassigned-btn" onclick="openMassAssignModal('${escHtml(targetDefaultSection)}')">
+          ${iconUsers()} Mass Assign Now
+        </button>
+      </div>
+    ` : ''}
+
+    <div class="user-search-row">
+      <div class="user-search-wrap">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" id="sectionSearchInput" placeholder="Search section by name, adviser, or room…" value="${escHtml(sectionSearchQuery)}" oninput="filterSectionsView()">
+      </div>
+
+      <select class="user-filter-select" id="sectionGradeFilterSelect" onchange="filterSectionsView()">
+        <option value="" ${!sectionGradeFilter ? 'selected' : ''}>All Grade Levels</option>
+        <option value="Grade 11" ${sectionGradeFilter === 'Grade 11' ? 'selected' : ''}>Grade 11</option>
+        <option value="Grade 12" ${sectionGradeFilter === 'Grade 12' ? 'selected' : ''}>Grade 12</option>
+      </select>
+
+      <select class="user-filter-select" id="sectionStrandFilterSelect" onchange="filterSectionsView()">
+        <option value="" ${!sectionStrandFilter ? 'selected' : ''}>All Strands</option>
+        <option value="STEM" ${sectionStrandFilter === 'STEM' ? 'selected' : ''}>STEM</option>
+        <option value="HUMSS" ${sectionStrandFilter === 'HUMSS' ? 'selected' : ''}>HUMSS</option>
+        <option value="ABM" ${sectionStrandFilter === 'ABM' ? 'selected' : ''}>ABM</option>
+        <option value="TVL" ${sectionStrandFilter === 'TVL' ? 'selected' : ''}>TVL</option>
+      </select>
+
+    </div>
+
+    <div class="sections-grid" id="sectionsGridWrap">
+      ${renderSectionCards()}
+    </div>
+  `;
+}
+
+function filterSectionsView() {
+  sectionSearchQuery = document.getElementById('sectionSearchInput')?.value || '';
+  sectionGradeFilter = document.getElementById('sectionGradeFilterSelect')?.value || '';
+  sectionStrandFilter = document.getElementById('sectionStrandFilterSelect')?.value || '';
+
+  const wrap = document.getElementById('sectionsGridWrap');
+  if (wrap) wrap.innerHTML = renderSectionCards();
+}
+
+function renderSectionCards() {
+  let list = [...managedSections];
+  const q = sectionSearchQuery.toLowerCase().trim();
+
+  if (q) {
+    list = list.filter(s =>
+      (s.name || '').toLowerCase().includes(q) ||
+      (s.adviser || '').toLowerCase().includes(q) ||
+      (s.room || '').toLowerCase().includes(q) ||
+      (s.strand || '').toLowerCase().includes(q)
+    );
+  }
+  if (sectionGradeFilter) {
+    list = list.filter(s => s.gradeLevel === sectionGradeFilter);
+  }
+  if (sectionStrandFilter) {
+    list = list.filter(s => s.strand === sectionStrandFilter);
+  }
+
+  if (!list.length) {
+    return `
+      <div style="grid-column:1/-1;background:#fff;border:1.5px dashed var(--blue-light);border-radius:16px;padding:36px;text-align:center;color:var(--text-muted);">
+        <div style="width:44px;height:44px;margin:0 auto 12px;color:var(--blue-mid);">${iconFolder()}</div>
+        <h4 style="font-size:15px;color:var(--text-primary);margin-bottom:4px;">No Sections Found</h4>
+        <p style="font-size:13px;margin-bottom:16px;">No sections match your search or filter settings.</p>
+        <button class="foot-btn-secondary" onclick="openCreateSectionModal()">${iconPlus()} Create New Section</button>
+      </div>
+    `;
+  }
+
+  return list.map(s => {
+    const enrolledStudents = registeredUsers.filter(u =>
+      u.role === 'student' &&
+      (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
+    );
+
+    return `
+      <div class="section-card">
+        <div>
+          <div class="sec-card-head">
+            <div>
+              <div class="sec-card-title">${escHtml(s.name)}</div>
+            </div>
+            <span class="sec-badge count">${enrolledStudents.length} Student${enrolledStudents.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          <div class="sec-meta-badges">
+            <span class="sec-badge grade">${escHtml(s.gradeLevel || 'Grade 11')}</span>
+            <span class="sec-badge strand">${escHtml(s.strand || 'General')}</span>
+          </div>
+
+          <div class="sec-card-details">
+            <div><strong>Adviser:</strong> ${escHtml(s.adviser || 'Not Assigned')}</div>
+            <div><strong>Room / Location:</strong> ${escHtml(s.room || 'TBD')}</div>
+          </div>
+        </div>
+
+        <div class="sec-card-actions">
+          <button class="sec-btn-roster" onclick="openManageSectionModal('${escHtml(s.name)}')">
+            ${iconUsers()} Manage Section
+          </button>
+          <button class="sec-btn-icon delete" title="Delete Section" onclick="deleteSectionPrompt('${escHtml(s.id)}')">
+            ${iconTrash()}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ── Section Modal (Create / Edit) ── */
+let currentEditingSectionId = null;
+
+function openCreateSectionModal() {
+  currentEditingSectionId = null;
+  document.getElementById('sectionModalTitle').textContent = 'Create New Section';
+  document.getElementById('sectionModalSubtitle').textContent = 'Set up a new class section for student enrollment';
+  renderSectionModalForm({
+    name: '',
+    gradeLevel: 'Grade 11',
+    strand: 'STEM',
+    adviser: '',
+    room: ''
+  });
+  document.getElementById('sectionModal').classList.add('active');
+}
+
+function openEditSectionModal(secId) {
+  currentEditingSectionId = secId;
+  const sec = managedSections.find(s => s.id === secId);
+  if (!sec) return;
+
+  document.getElementById('sectionModalTitle').textContent = 'Edit Section';
+  document.getElementById('sectionModalSubtitle').textContent = `Update details for ${sec.name}`;
+  renderSectionModalForm(sec);
+  document.getElementById('sectionModal').classList.add('active');
+}
+
+function closeSectionModal() {
+  document.getElementById('sectionModal').classList.remove('active');
+}
+
+function renderSectionModalForm(sec) {
+  const body = document.getElementById('sectionModalBody');
+  const foot = document.getElementById('sectionModalFoot');
+
+  body.innerHTML = `
+    <div class="gen-field">
+      <label>Section Name *</label>
+      <input type="text" id="secFormName" placeholder="e.g. Section E, 11-STEM-Curie" value="${escHtml(sec.name || '')}">
+    </div>
+
+    <div class="gen-row">
+      <div class="gen-field">
+        <label>Grade Level</label>
+        <select id="secFormGrade" class="user-filter-select" style="width:100%;">
+          ${GRADE_LEVELS.map(g => `<option value="${g}" ${sec.gradeLevel === g ? 'selected' : ''}>${g}</option>`).join('')}
+        </select>
+      </div>
+      <div class="gen-field">
+        <label>Strand</label>
+        <select id="secFormStrand" class="user-filter-select" style="width:100%;">
+          ${STRANDS.map(st => `<option value="${st}" ${sec.strand === st ? 'selected' : ''}>${st}</option>`).join('')}
+          <option value="General" ${sec.strand === 'General' ? 'selected' : ''}>General</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="gen-row">
+      <div class="gen-field">
+        <label>Class Adviser</label>
+        <select id="secFormAdviser" class="user-filter-select" style="width:100%;">
+          <option value="">Select a Teacher as Adviser (Optional)</option>
+          ${registeredUsers.filter(u => u.role === 'teacher').map(t => `<option value="${escHtml(t.name)}" ${sec.adviser === t.name ? 'selected' : ''}>${escHtml(t.name)} (${escHtml(t.strand || t.subjects || 'General')})</option>`).join('')}
+        </select>
+        <div style="margin-top:5px;">
+          <input type="text" id="secFormAdviserCustom" placeholder="Or type unlisted adviser name…" value="${registeredUsers.some(u => u.role === 'teacher' && u.name === sec.adviser) ? '' : escHtml(sec.adviser || '')}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
+        </div>
+      </div>
+      <div class="gen-field">
+        <label>Room / Location (Optional)</label>
+        <input type="text" id="secFormRoom" placeholder="e.g. Room 304, Science Wing" value="${escHtml(sec.room || '')}">
+      </div>
+    </div>
+  `;
+
+  foot.innerHTML = `
+    <button class="foot-btn-secondary" onclick="closeSectionModal()">Cancel</button>
+    <button class="gen-btn" onclick="saveSectionForm()">${iconCheck()} Save Section</button>
+  `;
+}
+
+function saveSectionForm() {
+  const name = (document.getElementById('secFormName')?.value || '').trim();
+  const gradeLevel = document.getElementById('secFormGrade')?.value || 'Grade 11';
+  const strand = document.getElementById('secFormStrand')?.value || 'STEM';
+  const adviserSelect = document.getElementById('secFormAdviser')?.value || '';
+  const adviserCustom = (document.getElementById('secFormAdviserCustom')?.value || '').trim();
+  const adviser = adviserCustom || adviserSelect;
+  const room = (document.getElementById('secFormRoom')?.value || '').trim();
+
+  if (!name) {
+    showToast('Please enter a Section Name', 'error');
+    return;
+  }
+
+  // Check name uniqueness if new or renamed
+  const existingWithSameName = managedSections.find(s =>
+    s.name.toLowerCase() === name.toLowerCase() && s.id !== currentEditingSectionId
+  );
+  if (existingWithSameName) {
+    showToast(`A section named "${name}" already exists`, 'error');
+    return;
+  }
+
+  if (currentEditingSectionId) {
+    const idx = managedSections.findIndex(s => s.id === currentEditingSectionId);
+    if (idx !== -1) {
+      const oldName = managedSections[idx].name;
+      managedSections[idx] = {
+        ...managedSections[idx],
+        name, gradeLevel, strand, adviser, room
+      };
+      // If name changed, update students assigned to oldName
+      if (oldName !== name) {
+        registeredUsers.forEach(u => {
+          if ((u.section || '').trim().toLowerCase() === oldName.trim().toLowerCase()) {
+            u.section = name;
+          }
+        });
+      }
+    }
+  } else {
+    managedSections.push({
+      id: 'sec-' + Date.now(),
+      name,
+      gradeLevel,
+      strand,
+      adviser,
+      room,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  saveManagedSections();
+  closeSectionModal();
+  showToast(`Section "${name}" saved successfully!`, 'success');
+
+  refreshSectionAndUserViews();
+}
+
+function refreshSectionAndUserViews() {
+  const secWrap = document.getElementById('sectionManagementContentWrap');
+  if (secWrap) secWrap.innerHTML = renderSectionsTabContent();
+
+  const userWrap = document.getElementById('userManagementContentWrap');
+  if (userWrap) userWrap.innerHTML = renderUserManagementContent();
+}
+
+function deleteSectionPrompt(secId) {
+  const sec = managedSections.find(s => s.id === secId);
+  if (!sec) return;
+
+  const enrolled = registeredUsers.filter(u =>
+    u.role === 'student' &&
+    (u.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()
+  );
+
+  const confirmMsg = enrolled.length > 0
+    ? `Delete section "${sec.name}"? ${enrolled.length} enrolled student(s) will be unassigned.`
+    : `Delete section "${sec.name}"?`;
+
+  if (!confirm(confirmMsg)) return;
+
+  // Unassign students
+  enrolled.forEach(u => {
+    u.section = null;
+    if (u.dbId && typeof db !== 'undefined' && db?.from) {
+      db.from('users').update({ section: null }).eq('id', u.dbId).then(() => {});
+    }
+  });
+
+  managedSections = managedSections.filter(s => s.id !== secId);
+  saveManagedSections();
+  showToast(`Section "${sec.name}" deleted.`, 'info');
+
+  refreshSectionAndUserViews();
+}
+
+/* ── Section Roster Modal ── */
+function openManageSectionModal(secName) {
+  activeRosterSection = secName;
+  const sec = managedSections.find(s => s.name === secName) || { name: secName, gradeLevel: 'Grade 11', strand: 'General', adviser: '', room: '' };
+  const enrolled = registeredUsers.filter(u =>
+    u.role === 'student' &&
+    (u.section || '').trim().toLowerCase() === secName.trim().toLowerCase()
+  );
+
+  document.getElementById('sectionRosterTitle').textContent = `Manage Section — ${sec.name}`;
+  document.getElementById('sectionRosterSubtitle').textContent = `${sec.gradeLevel || 'Grade 11'} · ${sec.strand || 'General'}${sec.adviser ? ` · Adviser: ${sec.adviser}` : ' · No Adviser Assigned'}`;
+
+  const body = document.getElementById('sectionRosterBody');
+  const foot = document.getElementById('sectionRosterFoot');
+
+  body.innerHTML = `
+    <!-- SECTION DETAILS & ADVISER STRIP -->
+    <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <h4 style="font-size:15px;font-weight:700;color:var(--text-primary);margin:0;">${escHtml(sec.name)}</h4>
+          <span class="sec-badge grade">${escHtml(sec.gradeLevel || 'Grade 11')}</span>
+          <span class="sec-badge strand">${escHtml(sec.strand || 'General')}</span>
+        </div>
+        <div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px;">
+          <strong>Class Adviser:</strong> ${escHtml(sec.adviser || 'Not Assigned')} &nbsp;·&nbsp; <strong>Room:</strong> ${escHtml(sec.room || 'TBD')}
+        </div>
+      </div>
+      <button type="button" class="sec-edit-shortcut-btn" onclick="closeSectionRosterModal(); openEditSectionModal('${escHtml(sec.id)}')">
+        ${iconDoc()} Edit Details & Adviser
+      </button>
+    </div>
+
+    <!-- ENROLLED STUDENTS LIST -->
+    <div class="roster-header-bar">
+      <div class="roster-sec-info">
+        <h4>${enrolled.length} Enrolled Student${enrolled.length !== 1 ? 's' : ''}</h4>
+        <span>Students assigned to this section</span>
+      </div>
+      <button class="add-btn" style="margin:0;padding:6px 14px;font-size:12px;height:32px;" onclick="openMassAssignModal('${escHtml(sec.name)}')">
+        ${iconPlus()} Add Students to Section
+      </button>
+    </div>
+
+    <div class="roster-table-wrap">
+      <table class="roster-table">
+        <thead>
+          <tr>
+            <th>Student Name</th>
+            <th>Student ID</th>
+            <th>Grade Level</th>
+            <th>Strand</th>
+            <th style="text-align:right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${enrolled.length > 0 ? enrolled.map(u => `
+            <tr>
+              <td><strong>${escHtml(u.name)}</strong></td>
+              <td><code style="font-size:12px;background:#f0f6ff;padding:2px 6px;border-radius:4px;color:var(--blue);">${escHtml(u.id)}</code></td>
+              <td>${escHtml(u.gradeLevel || 'Grade 11')}</td>
+              <td><span class="role-tag student">${escHtml(u.strand || 'N/A')}</span></td>
+              <td style="text-align:right;">
+                <button class="action-link" style="color:#dc2626;background:none;border:none;cursor:pointer;font-family:inherit;" onclick="removeStudentFromSection('${u.dbId || u.id}', '${escHtml(secName)}')">
+                  Remove
+                </button>
+              </td>
+            </tr>
+          `).join('') : `
+            <tr>
+              <td colspan="5" style="text-align:center;padding:28px;color:var(--text-muted);font-size:13px;">
+                No students enrolled in this section yet.<br>
+                <button class="foot-btn-secondary" style="margin-top:10px;" onclick="openMassAssignModal('${escHtml(sec.name)}')">
+                  ${iconPlus()} Add Students to Section Now
+                </button>
+              </td>
+            </tr>
+          `}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  foot.innerHTML = `
+    <button class="foot-btn-secondary" onclick="closeSectionRosterModal()">Done</button>
+    <button class="gen-btn" onclick="openMassAssignModal('${escHtml(sec.name)}')">${iconPlus()} Add Students to Section</button>
+  `;
+
+  document.getElementById('sectionRosterModal').classList.add('active');
+}
+
+function openSectionRosterModal(secName) {
+  openManageSectionModal(secName);
+}
+
+function closeSectionRosterModal() {
+  document.getElementById('sectionRosterModal').classList.remove('active');
+}
+
+async function removeStudentFromSection(studentKey, secName) {
+  const student = registeredUsers.find(u => (u.dbId === studentKey || u.id === studentKey));
+  if (!student) return;
+
+  student.section = null;
+
+  if (student.dbId && typeof db !== 'undefined' && db?.from) {
+    await db.from('users').update({ section: null }).eq('id', student.dbId);
+  }
+
+  showToast(`${student.name} removed from ${secName} (now Unassigned)`, 'info');
+
+  openSectionRosterModal(secName);
+  refreshSectionAndUserViews();
+}
+
+/* ── Mass Assign Modal ── */
+function openMassAssignForSingleStudent(studentKey) {
+  const student = registeredUsers.find(u => (u.dbId === studentKey || u.id === studentKey));
+  massAssignSelectedIds.clear();
+  if (student) massAssignSelectedIds.add(student.dbId || student.id);
+  openMassAssignModal(managedSections[0]?.name || 'Section A');
+}
+
+function openMassAssignModal(targetSectionName) {
+  massAssignTargetSection = targetSectionName || (managedSections[0]?.name || 'Section A');
+  massAssignFilterMode = 'unassigned';
+  massAssignSearchQuery = '';
+  massAssignGradeFilter = '';
+  massAssignStrandFilter = '';
+
+  document.getElementById('massAssignTitle').textContent = `Mass Enroll Students`;
+  document.getElementById('massAssignSubtitle').textContent = `Select students from the roster to assign into a section`;
+
+  renderMassAssignContent();
+  document.getElementById('massAssignModal').classList.add('active');
+}
+
+function closeMassAssignModal() {
+  document.getElementById('massAssignModal').classList.remove('active');
+}
+
+function setMassAssignFilterMode(mode) {
+  massAssignFilterMode = mode;
+  renderMassAssignContent();
+}
+
+function filterMassAssignList() {
+  massAssignSearchQuery = document.getElementById('massSearchInput')?.value || '';
+  massAssignGradeFilter = document.getElementById('massGradeFilter')?.value || '';
+  massAssignStrandFilter = document.getElementById('massStrandFilter')?.value || '';
+  massAssignTargetSection = document.getElementById('massTargetSectionSelect')?.value || massAssignTargetSection;
+  renderMassAssignContent(true); // partial render
+}
+
+function getFilteredMassStudents() {
+  let list = registeredUsers.filter(u => u.role === 'student');
+
+  if (massAssignFilterMode === 'unassigned') {
+    list = list.filter(u => !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—');
+  } else {
+    // Show all students not currently in the target section
+    list = list.filter(u => (u.section || '').trim().toLowerCase() !== massAssignTargetSection.trim().toLowerCase());
+  }
+
+  const q = massAssignSearchQuery.toLowerCase().trim();
+  if (q) {
+    list = list.filter(u =>
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.id || '').toLowerCase().includes(q) ||
+      (u.strand || '').toLowerCase().includes(q)
+    );
+  }
+  if (massAssignGradeFilter) {
+    list = list.filter(u => u.gradeLevel === massAssignGradeFilter);
+  }
+  if (massAssignStrandFilter) {
+    list = list.filter(u => (u.strand || '').includes(massAssignStrandFilter));
+  }
+
+  return list;
+}
+
+function toggleStudentAssignSelection(studentKey) {
+  if (massAssignSelectedIds.has(studentKey)) {
+    massAssignSelectedIds.delete(studentKey);
+  } else {
+    massAssignSelectedIds.add(studentKey);
+  }
+  renderMassAssignContent(true);
+}
+
+function toggleSelectAllMassAssign(masterCb) {
+  const currentList = getFilteredMassStudents();
+  if (masterCb.checked) {
+    currentList.forEach(u => massAssignSelectedIds.add(u.dbId || u.id));
+  } else {
+    currentList.forEach(u => massAssignSelectedIds.delete(u.dbId || u.id));
+  }
+  renderMassAssignContent(true);
+}
+
+function renderMassAssignContent(isPartial = false) {
+  const body = document.getElementById('massAssignBody');
+  const foot = document.getElementById('massAssignFoot');
+  if (!body) return;
+
+  const currentList = getFilteredMassStudents();
+  const unassignedCount = registeredUsers.filter(u => u.role === 'student' && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—')).length;
+  const allEligibleCount = registeredUsers.filter(u => u.role === 'student' && (u.section || '').trim().toLowerCase() !== massAssignTargetSection.trim().toLowerCase()).length;
+
+  const allSelectedInView = currentList.length > 0 && currentList.every(u => massAssignSelectedIds.has(u.dbId || u.id));
+
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f8fbff;border:1.5px solid var(--blue-light);border-radius:12px;padding:12px 16px;margin-bottom:14px;">
+      <div style="flex:1;">
+        <label style="font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;display:block;margin-bottom:4px;">Target Destination Section</label>
+        <select id="massTargetSectionSelect" class="user-filter-select" style="width:100%;font-size:14px;font-weight:600;color:var(--blue);" onchange="massAssignTargetSection = this.value; renderMassAssignContent(true);">
+          ${managedSections.map(s => `<option value="${escHtml(s.name)}" ${massAssignTargetSection === s.name ? 'selected' : ''}>${escHtml(s.name)} (${escHtml(s.gradeLevel || 'Grade 11')} · ${escHtml(s.strand || 'General')})</option>`).join('')}
+        </select>
+      </div>
+      <div class="mass-selection-count">
+        ${iconCheck()} ${massAssignSelectedIds.size} Selected
+      </div>
+    </div>
+
+    <div class="um-tabs" style="margin-bottom:12px;">
+      <button class="um-tab ${massAssignFilterMode === 'unassigned' ? 'active' : ''}" style="font-size:13px;padding:8px 14px;" onclick="setMassAssignFilterMode('unassigned')">
+        Unassigned Pool <span class="um-badge">${unassignedCount}</span>
+      </button>
+      <button class="um-tab ${massAssignFilterMode === 'all' ? 'active' : ''}" style="font-size:13px;padding:8px 14px;" onclick="setMassAssignFilterMode('all')">
+        All / Transfer Other Sections <span class="um-badge">${allEligibleCount}</span>
+      </button>
+    </div>
+
+    <div class="mass-assign-controls">
+      <div class="user-search-wrap" style="flex:1;">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" id="massSearchInput" placeholder="Search students by name or ID…" value="${escHtml(massAssignSearchQuery)}" oninput="filterMassAssignList()">
+      </div>
+
+      <select class="user-filter-select" id="massGradeFilter" onchange="filterMassAssignList()">
+        <option value="" ${!massAssignGradeFilter ? 'selected' : ''}>All Grades</option>
+        <option value="Grade 11" ${massAssignGradeFilter === 'Grade 11' ? 'selected' : ''}>Grade 11</option>
+        <option value="Grade 12" ${massAssignGradeFilter === 'Grade 12' ? 'selected' : ''}>Grade 12</option>
+      </select>
+
+      <select class="user-filter-select" id="massStrandFilter" onchange="filterMassAssignList()">
+        <option value="" ${!massAssignStrandFilter ? 'selected' : ''}>All Strands</option>
+        <option value="STEM" ${massAssignStrandFilter === 'STEM' ? 'selected' : ''}>STEM</option>
+        <option value="HUMSS" ${massAssignStrandFilter === 'HUMSS' ? 'selected' : ''}>HUMSS</option>
+        <option value="ABM" ${massAssignStrandFilter === 'ABM' ? 'selected' : ''}>ABM</option>
+        <option value="TVL" ${massAssignStrandFilter === 'TVL' ? 'selected' : ''}>TVL</option>
+      </select>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8fbff;border:1px solid var(--blue-light);border-radius:8px 8px 0 0;font-size:12px;font-weight:700;color:var(--text-secondary);">
+      <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
+        <input type="checkbox" ${allSelectedInView ? 'checked' : ''} onchange="toggleSelectAllMassAssign(this)">
+        <span>Select All (${currentList.length} students)</span>
+      </label>
+      <span>Current Section</span>
+    </div>
+
+    <div style="max-height:240px;overflow-y:auto;border:1px solid var(--blue-light);border-top:none;border-radius:0 0 10px 10px;background:#fff;">
+      ${currentList.length > 0 ? currentList.map(u => {
+        const key = u.dbId || u.id;
+        const isChecked = massAssignSelectedIds.has(key);
+        const curSec = u.section || 'Unassigned';
+        return `
+          <div class="mass-student-item ${isChecked ? 'selected' : ''}" onclick="toggleStudentAssignSelection('${key}')">
+            <input type="checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleStudentAssignSelection('${key}')">
+            <div class="mass-student-info">
+              <h5>${escHtml(u.name)}</h5>
+              <span>${escHtml(u.id)} · ${escHtml(u.gradeLevel || 'Grade 11')} · ${escHtml(u.strand || 'General')}</span>
+            </div>
+            <div>
+              <span class="sec-badge ${curSec === 'Unassigned' ? 'strand' : 'grade'}" style="font-size:11px;">
+                ${escHtml(curSec)}
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('') : `
+        <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
+          No students found matching your filters.
+        </div>
+      `}
+    </div>
+  `;
+
+  foot.innerHTML = `
+    <button class="foot-btn-secondary" onclick="closeMassAssignModal()">Cancel</button>
+    <button class="gen-btn" ${massAssignSelectedIds.size === 0 ? 'disabled' : ''} onclick="executeMassAssignment()">
+      ${iconCheck()} Enroll ${massAssignSelectedIds.size} Student${massAssignSelectedIds.size !== 1 ? 's' : ''} to ${escHtml(massAssignTargetSection)}
+    </button>
+  `;
+}
+
+async function executeMassAssignment() {
+  if (massAssignSelectedIds.size === 0) return;
+
+  const targetSection = massAssignTargetSection || managedSections[0]?.name;
+  if (!targetSection) {
+    showToast('Please select a target section', 'error');
+    return;
+  }
+
+  const selectedKeys = Array.from(massAssignSelectedIds);
+  let updatedCount = 0;
+  const dbIdsToUpdate = [];
+
+  registeredUsers.forEach(u => {
+    if (selectedKeys.includes(u.dbId) || selectedKeys.includes(u.id)) {
+      u.section = targetSection;
+      updatedCount++;
+      if (u.dbId) dbIdsToUpdate.push(u.dbId);
+    }
+  });
+
+  if (dbIdsToUpdate.length > 0 && typeof db !== 'undefined' && db?.from) {
+    try {
+      await db.from('users').update({ section: targetSection }).in('id', dbIdsToUpdate);
+    } catch (e) {
+      console.warn('Could not sync mass section update to DB:', e);
+    }
+  }
+
+  showToast(`Successfully enrolled ${updatedCount} student${updatedCount !== 1 ? 's' : ''} into ${targetSection}!`, 'success');
+
+  massAssignSelectedIds.clear();
+  closeMassAssignModal();
+
+  // If roster modal was open, refresh it
+  if (activeRosterSection && document.getElementById('sectionRosterModal')?.classList.contains('active')) {
+    openSectionRosterModal(activeRosterSection);
+  }
+
+  // Refresh user management tab
+  refreshSectionAndUserViews();
+}
+
 
 const addUser = {
   step: 'type',
   userType: 'student',
   name: '', email: '', password: '',
-  grade: 'Grade 11', section: 'Section A',
+  grade: 'Grade 11', section: null,
   strands: new Set(['STEM']),
   bulkFile: null, bulkMapped: [],
   pendingUsers: []
@@ -245,7 +922,7 @@ function openAddUserModal() {
   Object.assign(addUser, {
     step: 'type', userType: 'student',
     name: '', email: '', password: '',
-    grade: 'Grade 11', section: 'Section A',
+    grade: 'Grade 11', section: null,
     strands: new Set(['STEM']),
     bulkFile: null, bulkMapped: [], pendingUsers: []
   });
@@ -258,12 +935,7 @@ function closeAddUserModal() {
 
 function auSelectType(t) {
   addUser.userType = t;
-  // For teacher, default section to null/None
-  if (t === 'teacher') {
-    addUser.section = null;
-  } else {
-    addUser.section = 'Section A';
-  }
+  addUser.section = null;
   if (addUser.bulkFile) { addUser.bulkFile = null; addUser.bulkMapped = []; }
   renderAddUserModal();
 }
@@ -328,17 +1000,19 @@ function resolveBulkRows() {
     if (!name) { errors.push(`Row ${rowNum}: missing name`); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.push(`Row ${rowNum} (${name || 'unnamed'}): invalid or missing email`); return; }
 
+    const targetSection = mapped.section || addUser.section || null;
+
     rows.push({
       name, email,
       role: addUser.userType,
       strand: mapped.strand || fallbackStrand,
       grade_level: isStudent ? (mapped.grade_level || addUser.grade) : null,
-      section: mapped.section || (!isStudent ? (addUser.section || null) : addUser.section),
+      section: targetSection,
       subjects: !isStudent ? (mapped.subjects || Array.from(addUser.strands).join(', ')) : null,
       detail: isStudent
-        ? `${mapped.strand || fallbackStrand} — ${mapped.grade_level || addUser.grade}`
-        : (mapped.section || addUser.section 
-            ? `${mapped.subjects || Array.from(addUser.strands).join(', ')} (${mapped.section || addUser.section})`
+        ? `${mapped.strand || fallbackStrand} — ${mapped.grade_level || addUser.grade}${targetSection ? ` (${targetSection})` : ' (Unassigned)'}`
+        : (targetSection 
+            ? `${mapped.subjects || Array.from(addUser.strands).join(', ')} (${targetSection})`
             : (mapped.subjects || Array.from(addUser.strands).join(', ')))
     });
   });
@@ -424,8 +1098,8 @@ function renderFormatExampleTable() {
 
   const sampleRows = isStudent
     ? [
-        ['Dela Cruz, Juan P.',   'juan.delacruz@sample.edu.ph', STRANDS[0], GRADE_LEVELS[1], SECTIONS[0]],
-        ['Reyes, Ana Marie T.',  'ana.reyes@sample.edu.ph', STRANDS[2], GRADE_LEVELS[0], SECTIONS[1]],
+        ['Dela Cruz, Juan P.',   'juan.delacruz@sample.edu.ph', STRANDS[0], GRADE_LEVELS[1], ''],
+        ['Reyes, Ana Marie T.',  'ana.reyes@sample.edu.ph', STRANDS[2], GRADE_LEVELS[0], ''],
         ['Santos, Pedro L.',     'pedro.santos@sample.edu.ph', '', '', '']
       ]
     : [
@@ -437,7 +1111,7 @@ function renderFormatExampleTable() {
   return `
     <div class="au-format-wrap">
       <div class="au-format-note">
-        Upload a spreadsheet with these column headers in row 1 (naming is flexible — "Grade", "Grade Level", and "grade_level" all work the same). Only <b>Name</b> and <b>Email</b> are required; blank cells for anything else fall back to whichever ${isStudent ? 'Strand/Grade/Section' : 'Strand/Section'} chips are selected above.
+        Upload a spreadsheet with these column headers in row 1. Only <b>Name</b> and <b>Email</b> are required; <b>Section is optional</b> and students can be mass-assigned to sections anytime in the <b>Sections & Rosters</b> tab.
       </div>
       <div class="au-format-table-scroll">
         <table class="au-format-table">
@@ -454,7 +1128,7 @@ function renderFormatExampleTable() {
       </div>
       <div class="au-format-legend">
         <span><i class="sw-req"></i> Required</span>
-        <span><i class="sw-opt"></i> Optional — falls back to the chips above</span>
+        <span><i class="sw-opt"></i> Optional — falls back to Unassigned or chips above</span>
       </div>
     </div>
   `;
@@ -464,17 +1138,18 @@ function auBuildSingleFromForm() {
   if (!addUser.name.trim()) return { error: 'Please enter a name' };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addUser.email.trim())) return { error: 'Please enter a valid email' };
   const isStudent = addUser.userType === 'student';
+  const targetSection = addUser.section || null;
   const user = {
     name: addUser.name.trim(),
     email: addUser.email.trim(),
     role: addUser.userType,
     grade_level: isStudent ? addUser.grade : null,
-    section: addUser.section || null,
+    section: targetSection,
     strand: Array.from(addUser.strands)[0] || null,
     subjects: !isStudent ? Array.from(addUser.strands).join(', ') : null,
     detail: isStudent
-      ? `${Array.from(addUser.strands)[0]} — ${addUser.grade}`
-      : (addUser.section ? `${Array.from(addUser.strands).join(', ')} (${addUser.section})` : Array.from(addUser.strands).join(', '))
+      ? `${Array.from(addUser.strands)[0]} — ${addUser.grade}${targetSection ? ` (${targetSection})` : ' (Unassigned)'}`
+      : (targetSection ? `${Array.from(addUser.strands).join(', ')} (${targetSection})` : Array.from(addUser.strands).join(', '))
   };
   return { user };
 }
@@ -584,7 +1259,7 @@ function renderAddUserModal() {
       <div class="au-type-card ${addUser.userType === 'student' ? 'active' : ''}" onclick="auSelectType('student')">
         <div class="tc-icon">${iconProfile()}</div>
         <h4>Student</h4>
-        <p>Enroll a new student, set their strand and grade level</p>
+        <p>Enroll a student, set their strand & grade level (section is optional)</p>
       </div>
       <div class="au-type-card teacher-type ${addUser.userType === 'teacher' ? 'active' : ''}" onclick="auSelectType('teacher')">
         <div class="tc-icon">${iconUsers()}</div>
@@ -610,13 +1285,14 @@ function renderAddUserModal() {
         </div>
       </div>` : ''}
       <div class="gen-field">
-        <label>Section ${!isStudent ? '<span style="text-transform:none;font-weight:500;color:var(--text-muted);">(optional)</span>' : ''}</label>
+        <label>Section <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${isStudent ? '(Optional — can assign later in Sections tab)' : '(Optional)'}</span></label>
         <div class="au-grade-pills">
-          ${(!isStudent ? ['None', ...SECTIONS] : SECTIONS).map(s => {
-            const isSelected = (!isStudent && s === 'None') ? (!addUser.section) : (addUser.section === s);
-            const label = s;
-            const clickVal = s === 'None' ? null : s;
-            return `<div class="au-grade-pill ${isSelected ? 'on' : ''}" onclick="auSetSection(${clickVal ? `'${clickVal}'` : 'null'})">${label}</div>`;
+          <div class="au-grade-pill ${!addUser.section ? 'on' : ''}" onclick="auSetSection(null)">
+            ${isStudent ? 'Unassigned (Default)' : 'None (All)'}
+          </div>
+          ${SECTIONS.map(s => {
+            const isSelected = addUser.section === s;
+            return `<div class="au-grade-pill ${isSelected ? 'on' : ''}" onclick="auSetSection('${s}')">${s}</div>`;
           }).join('')}
         </div>
       </div>
@@ -650,7 +1326,7 @@ function renderAddUserModal() {
     <label class="au-bulk-zone" for="auBulkInput">
       <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/></svg>
       <div class="dz-title">Import from Excel or CSV</div>
-      <div class="dz-sub">Columns: Name, Email, Strand, Grade Level (students) or Strands, Section (optional for teachers)</div>
+      <div class="dz-sub">Columns: Name, Email (Required) · Strand, Grade Level, Section (Optional)</div>
     </label>
     <input type="file" id="auBulkInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="auHandleBulkFile(this)">
     <button type="button" class="au-format-toggle" id="auFormatExampleBtn" onclick="auToggleFormatExample()">
@@ -682,9 +1358,9 @@ function renderAddUserModal() {
   const saveCount = queuedCount || (addUser.name.trim() ? 1 : 0);
   foot.innerHTML = `
     <button class="foot-btn-secondary" onclick="closeAddUserModal()">Cancel</button>
-    <div style="display:flex;gap:10px;">
-      <button class="foot-btn-secondary" onclick="auAddSingle()" style="border-color:var(--blue);color:var(--blue);">${iconPlus()} Add to List</button>
-      <button class="gen-btn" id="auSaveBtn" ${saveCount === 0 ? 'disabled' : ''} onclick="auSaveUsers()" style="background:${isStudent?'var(--blue)':'#d97706'}">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="foot-btn-secondary" onclick="auAddSingle()" style="border:1.5px solid var(--blue);color:var(--blue);padding:7px 14px;font-size:13px;height:36px;">${iconPlus()} Add to List</button>
+      <button class="gen-btn" id="auSaveBtn" ${saveCount === 0 ? 'disabled' : ''} onclick="auSaveUsers()" style="background:${isStudent?'var(--blue)':'#d97706'};padding:7px 16px;font-size:13px;height:36px;">
         ${iconUsers()} Save ${saveCount > 0 ? `(${saveCount} user${saveCount !== 1 ? 's' : ''})` : 'Users'}
       </button>
     </div>`;
