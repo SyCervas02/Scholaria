@@ -187,6 +187,62 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="sectionModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3 id="sectionModalTitle">Create Section</h3>
+          <span id="sectionModalSubtitle">Set up a new class section for student enrollment</span>
+        </div>
+        <button class="modal-x" onclick="closeSectionModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="sectionModalBody"></div>
+      <div class="modal-foot" id="sectionModalFoot"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="sectionRosterModal">
+    <div class="modal-card" style="max-width:720px;">
+      <div class="modal-head">
+        <div>
+          <h3 id="sectionRosterTitle">Manage Section</h3>
+          <span id="sectionRosterSubtitle">Manage section details, adviser, and enrolled students</span>
+        </div>
+        <button class="modal-x" onclick="closeSectionRosterModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="sectionRosterBody"></div>
+      <div class="modal-foot" id="sectionRosterFoot"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="massAssignModal">
+    <div class="modal-card" style="max-width:760px;">
+      <div class="modal-head">
+        <div>
+          <h3 id="massAssignTitle">Add Students to Section</h3>
+          <span id="massAssignSubtitle">Select students to add into this section</span>
+        </div>
+        <button class="modal-x" onclick="closeMassAssignModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="massAssignBody"></div>
+      <div class="modal-foot" id="massAssignFoot"></div>
+    </div>
+  </div>
+
+  <!-- ACADEMIC PRINTABLE REPORT PREVIEW MODAL -->
+  <div class="modal-overlay" id="academicReportModal">
+    <div class="modal-card report-modal-card" style="max-width:920px;width:95%;">
+      <div class="modal-head report-modal-head" id="academicReportModalHead"></div>
+      <div class="modal-body report-modal-body" id="academicReportModalBody" style="background:#f1f5f9;padding:24px;overflow-y:auto;max-height:80vh;"></div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="materialModal">
     <div class="modal-card">
       <div class="modal-head">
@@ -576,8 +632,12 @@
         <div id="sgpQuizzesList" style="display:flex;flex-direction:column;gap:10px;max-height:360px;overflow-y:auto;padding-right:4px;"></div>
       </div>
 
-      <div class="modal-foot" style="padding:14px 24px;display:flex;justify-content:flex-end;">
+      <div class="modal-foot" style="padding:14px 24px;display:flex;justify-content:space-between;align-items:center;">
         <button class="foot-btn-secondary" onclick="closeStudentGradePanel()">Close Panel</button>
+        <button class="gen-btn" style="background:#1e293b;color:#fff;display:inline-flex;align-items:center;gap:6px;" onclick="if (typeof selectedStudentForPanelKey !== 'undefined' && selectedStudentForPanelKey) openStudentReportModal(selectedStudentForPanelKey);">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print Official Grade Slip
+        </button>
       </div>
     </div>
   </div>
@@ -593,6 +653,7 @@
   <script src="js/modules/quizzes/quiz-generator.js"></script>
   <script src="js/modules/chat/chat.js"></script>
   <script src="js/modules/admin/user-management.js"></script>
+  <script src="js/modules/admin/report-generator.js"></script>
   <script src="js/modules/courses.js"></script>
   <script src="js/core/sidebar.js"></script>
   <script src="js/core/auth.js"></script>
