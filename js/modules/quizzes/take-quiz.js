@@ -1,6 +1,16 @@
 /* ── STUDENT QUIZ TAKING & SCORING ENGINE ── */
 
-const takeQuizState = { quiz: null, items: [], responses: {}, submitting: false, reviewMode: false, reviewAnswers: [] };
+const takeQuizState = { 
+  quiz: null, 
+  items: [], 
+  responses: {}, 
+  submitting: false, 
+  reviewMode: false, 
+  reviewAnswers: [],
+  timeLimitMinutes: 0,
+  secondsLeft: 0,
+  timerInterval: null
+};
 
 function buildQuizItems(quiz) {
   const items = [];
@@ -29,27 +39,90 @@ function gradeItem(item, given) {
   return String(given).trim().toLowerCase() === String(item.correct).trim().toLowerCase();
 }
 
+function startTakeQuizTimer() {
+  clearInterval(takeQuizState.timerInterval);
+  if (takeQuizState.timeLimitMinutes <= 0) return;
+  takeQuizState.secondsLeft = takeQuizState.timeLimitMinutes * 60;
+  updateTakeQuizTimerDisplay();
+
+  takeQuizState.timerInterval = setInterval(() => {
+    takeQuizState.secondsLeft--;
+    updateTakeQuizTimerDisplay();
+    if (takeQuizState.secondsLeft <= 0) {
+      clearInterval(takeQuizState.timerInterval);
+      handleTakeQuizTimeout();
+    }
+  }, 1000);
+}
+
+function updateTakeQuizTimerDisplay() {
+  const timerEl = document.getElementById('tqTimerDisplay');
+  if (!timerEl) return;
+  const mins = Math.floor(Math.max(0, takeQuizState.secondsLeft) / 60);
+  const secs = Math.max(0, takeQuizState.secondsLeft) % 60;
+  timerEl.textContent = `⏱️ ${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  if (takeQuizState.secondsLeft <= 60) {
+    timerEl.classList.add('urgent');
+  } else {
+    timerEl.classList.remove('urgent');
+  }
+}
+
+function handleTakeQuizTimeout() {
+  showToast('Time is up! Auto-submitting your quiz answers...', 'warning');
+  submitQuizAttempt(true);
+}
+
 function openTakeQuizModal(quizId) {
   const quiz = customQuizzes.find(q => q.id === quizId);
   if (!quiz) { showToast('Quiz not found', 'error'); return; }
   const items = buildQuizItems(quiz);
   if (!items.length) { showToast('This quiz has no gradable items yet', 'error'); return; }
-  Object.assign(takeQuizState, { quiz, items, responses: {}, submitting: false, reviewMode: false, reviewAnswers: [] });
+
+  const timeLimitMins = quiz.timeLimitMinutes || (quiz.questions?.[0]?._meta?.timeLimitMinutes) || (quiz.questions?.[0]?._timeLimitMinutes) || 0;
+
+  clearInterval(takeQuizState.timerInterval);
+  Object.assign(takeQuizState, { 
+    quiz, 
+    items, 
+    responses: {}, 
+    submitting: false, 
+    reviewMode: false, 
+    reviewAnswers: [],
+    timeLimitMinutes: timeLimitMins,
+    secondsLeft: timeLimitMins * 60
+  });
+
   document.getElementById('takeQuizModal').classList.add('active');
   renderTakeQuizModal();
+
+  if (timeLimitMins > 0) {
+    startTakeQuizTimer();
+  }
 }
 
 function openReviewAttempt(quizId) {
+  clearInterval(takeQuizState.timerInterval);
   const quiz = customQuizzes.find(q => q.id === quizId);
   const attempt = myQuizAttempts.find(a => a.quiz_id === quizId);
   if (!quiz || !attempt) { showToast('Attempt not found', 'error'); return; }
   const items = buildQuizItems(quiz);
-  Object.assign(takeQuizState, { quiz, items, responses: {}, submitting: false, reviewMode: true, reviewAnswers: attempt.answers || [] });
+  Object.assign(takeQuizState, { 
+    quiz, 
+    items, 
+    responses: {}, 
+    submitting: false, 
+    reviewMode: true, 
+    reviewAnswers: attempt.answers || [],
+    timeLimitMinutes: 0,
+    secondsLeft: 0
+  });
   document.getElementById('takeQuizModal').classList.add('active');
   renderTakeQuizModal();
 }
 
 function closeTakeQuizModal() {
+  clearInterval(takeQuizState.timerInterval);
   document.getElementById('takeQuizModal').classList.remove('active');
 }
 
@@ -66,9 +139,17 @@ function renderTakeQuizModal() {
   const { quiz, items, responses, submitting, reviewMode, reviewAnswers } = takeQuizState;
 
   titleEl.textContent = quiz ? quiz.title.replace(' (Demo)', '') : 'Quiz';
-  subEl.textContent = reviewMode
+
+  const timerHtml = (takeQuizState.timeLimitMinutes > 0 && !reviewMode)
+    ? `<span class="tq-timer-badge" id="tqTimerDisplay">⏱️ ${Math.floor(takeQuizState.secondsLeft / 60)}:${(takeQuizState.secondsLeft % 60) < 10 ? '0' : ''}${takeQuizState.secondsLeft % 60}</span>`
+    : '';
+
+  subEl.innerHTML = reviewMode
     ? 'Reviewing your submitted answers'
-    : `${items.length} item${items.length === 1 ? '' : 's'} — answer everything, then submit`;
+    : `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:2px;">
+        <span>${items.length} item${items.length === 1 ? '' : 's'} — answer everything, then submit</span>
+        ${timerHtml}
+      </div>`;
 
   body.innerHTML = items.map((it, idx) => {
     const reviewAns = reviewMode ? reviewAnswers.find(a => a.itemId === it.itemId) : null;
@@ -107,12 +188,16 @@ function renderTakeQuizModal() {
     : `<button class="add-btn" ${submitting ? 'disabled' : ''} onclick="submitQuizAttempt()">${submitting ? 'Submitting…' : 'Submit Quiz'}</button>`;
 }
 
-async function submitQuizAttempt() {
+async function submitQuizAttempt(isAutoSubmit = false) {
   const { quiz, items, responses, submitting } = takeQuizState;
   if (submitting) return;
-  const unanswered = items.some(it => responses[it.itemId] == null || responses[it.itemId] === '');
-  if (unanswered) { showToast('Please answer every item before submitting', 'error'); return; }
 
+  if (!isAutoSubmit) {
+    const unanswered = items.some(it => responses[it.itemId] == null || responses[it.itemId] === '');
+    if (unanswered) { showToast('Please answer every item before submitting', 'error'); return; }
+  }
+
+  clearInterval(takeQuizState.timerInterval);
   takeQuizState.submitting = true;
   renderTakeQuizModal();
 
