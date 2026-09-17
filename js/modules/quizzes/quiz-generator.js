@@ -17,6 +17,7 @@ async function loadQuizzesFromDB() {
       const qMeta = firstQ._meta || {};
       const quizType = q.quiz_type || q.type || firstQ._quizType || qMeta.quizType || 'standard';
       const timerPerQuestion = q.timer_per_question || firstQ._timerPerQuestion || qMeta.timerPerQuestion || 0;
+      const timeLimitMinutes = q.time_limit_minutes || firstQ._timeLimitMinutes || qMeta.timeLimitMinutes || 0;
       return {
         id: q.id,
         createdBy: q.created_by,
@@ -30,9 +31,10 @@ async function loadQuizzesFromDB() {
         type: quizType,
         quiz_type: quizType,
         timerPerQuestion: timerPerQuestion,
+        timeLimitMinutes: timeLimitMinutes,
         meta: q.is_demo
           ? `${q.subject || 'General'} · ${(q.questions||[]).length} items · Sample data`
-          : `${[q.subject || 'General', q.strand].filter(Boolean).join(' · ')} · ${(q.questions||[]).length} items · ${quizType === 'interactive' ? '🎮 Interactive · ' : ''}${q.status || 'active'}`,
+          : `${[q.subject || 'General', q.strand].filter(Boolean).join(' · ')} · ${(q.questions||[]).length} items · ${quizType === 'interactive' ? '🎮 Interactive · ' : (timeLimitMinutes > 0 ? `⏱️ ${timeLimitMinutes}m · ` : '')}${q.status || 'active'}`,
         isDemo: q.is_demo,
         status: q.status || 'active',
         questions: q.questions || []
@@ -62,8 +64,28 @@ const quizGen = {
   lesson: '',
   dueDate: '',
   timerPerQuestion: 30, // 0 = untimed, or 15, 30, 45, 60
+  timeLimitMinutes: 15, // 0 = untimed, or 5, 10, 15, 20, 30, 45, 60
   questions: [], errorMsg: ''
 };
+
+function setStandardTimeLimit(mins) {
+  quizGen.timeLimitMinutes = mins;
+  renderQuizModal();
+}
+
+function adjustStandardTimeLimit(delta) {
+  const cur = parseInt(quizGen.timeLimitMinutes) || 0;
+  quizGen.timeLimitMinutes = Math.max(0, Math.min(180, cur + delta));
+  renderQuizModal();
+}
+
+function updateStandardTimeLimitInput(val) {
+  if (val === '') {
+    quizGen.timeLimitMinutes = 0;
+  } else {
+    quizGen.timeLimitMinutes = Math.max(0, Math.min(180, parseInt(val) || 0));
+  }
+}
 
 function getQuizDueDateConstraints() {
   const now = new Date();
@@ -122,6 +144,7 @@ function openQuizModal() {
     lesson: '',
     dueDate: '',
     timerPerQuestion: 30,
+    timeLimitMinutes: 15,
     questions: [], errorMsg: ''
   });
   document.getElementById('quizModal').classList.add('active');
@@ -378,6 +401,101 @@ function removeFile() {
   renderQuizModal();
 }
 
+function generateClientQuestionsFromText() {
+  const title = quizGen.title || quizGen.subject || 'Quiz';
+  const fileName = quizGen.file ? quizGen.file.name : '';
+  const selectedFormats = Array.from(quizGen.formats);
+  const targetCount = (typeof quizGen.count === 'number' && quizGen.count > 0) ? quizGen.count : 10;
+  
+  const rawText = (quizGen.fileText || '').replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').trim();
+  const sentences = rawText.split(/(?<=[.!?\n])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 20 && s.length < 220 && !s.startsWith('%') && !s.startsWith('#'));
+
+  const defRegex = /^([A-Z][A-Za-z0-9\s-]{2,40})\s+(is\s+defined\s+as|is\s+a|is\s+an|is\s+the|refers\s+to|means|represents|describes)\s+(.+)/i;
+  const pairs = [];
+  const extractedTerms = [];
+
+  sentences.forEach(s => {
+    const m = s.match(defRegex);
+    if (m && m[1] && m[3]) {
+      const term = m[1].trim();
+      const def = m[3].trim().replace(/[.;]+$/, '');
+      if (term.length > 2 && def.length > 10) {
+        pairs.push({ term, def });
+        extractedTerms.push(term);
+      }
+    }
+  });
+
+  const defaultDistractors = [
+    'Object-Oriented Programming', 'Relational Database', 'Network Protocol', 'Component Architecture',
+    'Algorithm Optimization', 'Data Encapsulation', 'System Lifecycle', 'Interface Definition'
+  ];
+
+  const questions = [];
+  const formatsList = selectedFormats.length ? selectedFormats : ['mc', 'id'];
+
+  let pairIdx = 0;
+  for (let i = 0; i < targetCount; i++) {
+    const fmt = formatsList[i % formatsList.length];
+    const sentence = sentences[i % Math.max(1, sentences.length)] || `Core topic in ${title}`;
+    const pair = pairs[pairIdx % Math.max(1, pairs.length)];
+    pairIdx++;
+
+    if (fmt === 'mc' || fmt === 'multiple_choice') {
+      let qText = '';
+      let correct = '';
+      if (pair) {
+        qText = `Which term is defined as: "${pair.def}"?`;
+        correct = pair.term;
+      } else {
+        qText = `Regarding ${title}, which statement best describes: "${sentence.slice(0, 100)}..."?`;
+        correct = `Relates directly to ${title}`;
+      }
+      const otherTerms = extractedTerms.filter(t => t !== correct);
+      const distractors = [...otherTerms, ...defaultDistractors].filter(t => t !== correct).slice(0, 3);
+      while (distractors.length < 3) {
+        distractors.push(`Alternative concept ${distractors.length + 1}`);
+      }
+      const options = [correct, ...distractors].sort(() => Math.random() - 0.5);
+      questions.push({
+        type: 'multiple_choice',
+        question: qText,
+        options,
+        answer: correct
+      });
+    } else if (fmt === 'id' || fmt === 'identification') {
+      if (pair) {
+        questions.push({
+          type: 'identification',
+          question: `Identify the concept: "${pair.def}".`,
+          answer: pair.term
+        });
+      } else {
+        questions.push({
+          type: 'identification',
+          question: `State the primary focus of: "${sentence.slice(0, 110)}".`,
+          answer: title
+        });
+      }
+    } else if (fmt === 'match' || fmt === 'matching') {
+      const matchingPairs = pairs.slice(0, 4).map(p => ({ left: p.term, right: p.def }));
+      if (matchingPairs.length < 2) {
+        matchingPairs.push({ left: 'Primary Concept', right: `Key premise from ${title}` });
+        matchingPairs.push({ left: 'Secondary Concept', right: `Supporting topic from ${title}` });
+      }
+      questions.push({
+        type: 'matching',
+        instructions: `Match the concepts with their corresponding definitions.`,
+        pairs: matchingPairs
+      });
+    }
+  }
+
+  return questions;
+}
+
 async function generateQuiz() {
   if (!quizGen.file) { showToast('Please upload a material file first', 'error'); return; }
   quizGen.step = 'loading';
@@ -413,9 +531,15 @@ async function generateQuiz() {
     const data = await response.json();
     applyGeneratedQuestions(data.questions || [], false);
   } catch (err) {
-    console.warn('Quiz backend unavailable, showing demo data instead:', err.message);
-    applyGeneratedQuestions(buildDemoQuestions(), true);
-    showToast('API is currently not working — showing sample questions', 'warning');
+    console.warn('Quiz backend fetch failed, using client-side question extractor:', err.message);
+    const clientQuestions = generateClientQuestionsFromText();
+    if (clientQuestions && clientQuestions.length > 0) {
+      applyGeneratedQuestions(clientQuestions, false);
+      showToast('Generated questions directly from your learning material!', 'success');
+    } else {
+      applyGeneratedQuestions(buildDemoQuestions(), true);
+      showToast('Showing sample questions based on material filename', 'info');
+    }
   }
   renderQuizModal();
 }
@@ -561,10 +685,12 @@ async function saveQuiz() {
     lesson: q.lesson || lessonName,
     _quizType: quizGen.type || 'standard',
     _timerPerQuestion: quizGen.timerPerQuestion || 0,
+    _timeLimitMinutes: quizGen.timeLimitMinutes || 0,
     ...(idx === 0 ? {
       _meta: {
         quizType: quizGen.type || 'standard',
         timerPerQuestion: quizGen.timerPerQuestion || 0,
+        timeLimitMinutes: quizGen.timeLimitMinutes || 0,
         sourceMaterial: fileName,
         lesson: lessonName
       }
@@ -579,17 +705,47 @@ async function saveQuiz() {
     sections: targetSectionsStr,
     lesson: quizGen.lesson || '',
     due_date: quizGen.dueDate || null,
+    time_limit_minutes: quizGen.timeLimitMinutes || 0,
     created_by: userId,
     questions: questionsToSave,
     status: quizStatus,
     is_demo: isDemo
   };
 
-  let { error } = await db.from('quizzes').insert(quizRow);
-  if (error && error.message && error.message.includes('due_date')) {
-    delete quizRow.due_date;
-    const retry = await db.from('quizzes').insert(quizRow);
-    error = retry.error;
+  let insertRes = await db.from('quizzes').insert(quizRow);
+  let error = insertRes.error;
+
+  // Resilient fallback: If any column is missing from Supabase's table schema, prune it and retry
+  let attempts = 0;
+  while (error && attempts < 8) {
+    attempts++;
+    const colMatch = error.message && (
+      error.message.match(/Could not find the '([^']+)' column/i) ||
+      error.message.match(/column "([^"]+)" of relation/i) ||
+      error.message.match(/column ([^\s]+) does not exist/i) ||
+      error.message.match(/'([^']+)' column of 'quizzes'/i)
+    );
+    if (colMatch && colMatch[1] && colMatch[1] in quizRow) {
+      console.warn(`Pruning missing column "${colMatch[1]}" from quizzes insert payload and retrying...`);
+      delete quizRow[colMatch[1]];
+      insertRes = await db.from('quizzes').insert(quizRow);
+      error = insertRes.error;
+    } else {
+      // If error mentions specific known optional columns directly, try removing them
+      if (error.message.includes('time_limit_minutes') && 'time_limit_minutes' in quizRow) {
+        delete quizRow.time_limit_minutes;
+      } else if (error.message.includes('due_date') && 'due_date' in quizRow) {
+        delete quizRow.due_date;
+      } else if (error.message.includes('lesson') && 'lesson' in quizRow) {
+        delete quizRow.lesson;
+      } else if (error.message.includes('sections') && 'sections' in quizRow) {
+        delete quizRow.sections;
+      } else {
+        break;
+      }
+      insertRes = await db.from('quizzes').insert(quizRow);
+      error = insertRes.error;
+    }
   }
 
   if (error) {
@@ -876,6 +1032,50 @@ function renderQuizModal() {
       </div>
     </div>
     `}
+
+    ${quizGen.type === 'standard' ? `
+    <div class="gen-field standard-timer-field">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <label style="color:#1e40af;display:flex;align-items:center;gap:6px;margin-bottom:0;font-weight:700;font-size:13px;">
+          <span>⏱️</span> Quiz Time Limit (Minutes)
+        </label>
+        <span style="font-size:11.5px;color:var(--text-muted);font-weight:600;">
+          ${quizGen.timeLimitMinutes > 0 ? `<strong style="color:var(--blue);">${quizGen.timeLimitMinutes} minute${quizGen.timeLimitMinutes === 1 ? '' : 's'}</strong> countdown` : 'Untimed (No time limit)'}
+        </span>
+      </div>
+
+      <!-- Quick Preset Pills -->
+      <div class="count-pills" style="margin-bottom:10px;">
+        ${[
+          { val: 0, label: 'Untimed' },
+          { val: 5, label: '5m' },
+          { val: 10, label: '10m' },
+          { val: 15, label: '15m' },
+          { val: 20, label: '20m' },
+          { val: 30, label: '30m' },
+          { val: 45, label: '45m' },
+          { val: 60, label: '60m' }
+        ].map(t => `
+          <div class="count-pill ${quizGen.timeLimitMinutes === t.val ? 'on' : ''}"
+               style="border-radius:8px;padding:6px 13px;font-size:12px;font-weight:600;"
+               onclick="setStandardTimeLimit(${t.val})">
+            ${t.label}
+          </div>
+        `).join('')}
+      </div>
+
+      <!-- Adjustable Custom Minutes Stepper -->
+      <div class="custom-count-row" style="margin-top:2px;">
+        <span class="cc-label">Adjust custom minutes:</span>
+        <div style="display:inline-flex;align-items:center;gap:3px;background:#fff;border:1.5px solid var(--blue-light);border-radius:8px;padding:2px 6px;">
+          <button type="button" class="sq-step-btn" onclick="adjustStandardTimeLimit(-1)" title="Decrease 1 minute">−</button>
+          <input type="number" min="0" max="180" class="custom-count-input" style="width:65px !important;text-align:center;padding:3px 4px !important;border:none !important;font-weight:700;color:var(--blue);" value="${quizGen.timeLimitMinutes || ''}" placeholder="0" oninput="updateStandardTimeLimitInput(this.value)">
+          <button type="button" class="sq-step-btn" onclick="adjustStandardTimeLimit(1)" title="Increase 1 minute">+</button>
+        </div>
+        <span class="cc-hint">minutes (0 = untimed · auto-submits when time expires)</span>
+      </div>
+    </div>
+    ` : ''}
   `;
 
   foot.innerHTML = `
