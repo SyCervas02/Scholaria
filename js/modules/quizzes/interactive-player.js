@@ -14,7 +14,8 @@ const interactivePlayerState = {
   elapsedSeconds: 0,
   matchingSelections: {}, // pairIndex -> choiceKey
   selectedMatchingChoice: null, // For tap-to-pair fallback
-  isSubmitted: false
+  isSubmitted: false,
+  isWaitingFeedback: false
 };
 
 /**
@@ -22,21 +23,31 @@ const interactivePlayerState = {
  */
 function buildInteractiveQuestions(quiz) {
   const items = [];
+  const defaultSource = quiz.sourceMaterial || quiz.source_material || (quiz.questions?.[0]?._meta?.sourceMaterial) || (quiz.questions?.[0]?._sourceMaterial) || (quiz.subject ? `${quiz.subject} Handout` : 'Course Learning Material');
+  const defaultLesson = quiz.lesson || (quiz.questions?.[0]?._meta?.lesson) || '';
+
   (quiz?.questions || []).forEach((q, qi) => {
+    const qSource = q.sourceMaterial || q.source_material || defaultSource;
+    const qLesson = q.lesson || defaultLesson;
+
     if (q.type === 'multiple_choice') {
       items.push({
         id: `mc_${qi}`,
         type: 'multiple_choice',
         question: q.question,
         options: q.options || [],
-        answer: q.answer
+        answer: q.answer,
+        sourceMaterial: qSource,
+        lesson: qLesson
       });
     } else if (q.type === 'identification') {
       items.push({
         id: `id_${qi}`,
         type: 'identification',
         question: q.question,
-        answer: q.answer
+        answer: q.answer,
+        sourceMaterial: qSource,
+        lesson: qLesson
       });
     } else if (q.type === 'matching') {
       const pairs = (q.pairs || []).map((p, pi) => ({
@@ -57,7 +68,9 @@ function buildInteractiveQuestions(quiz) {
         type: 'matching',
         instructions: q.instructions || 'Match the correct answer to each question.',
         pairs: pairs,
-        choices: shuffledChoices
+        choices: shuffledChoices,
+        sourceMaterial: qSource,
+        lesson: qLesson
       });
     }
   });
@@ -195,6 +208,10 @@ function renderCurrentInteractiveQuestion() {
   const modal = document.getElementById('interactiveQuizModal');
   if (!modal) return;
 
+  interactivePlayerState.isWaitingFeedback = false;
+  const existingDrawer = document.getElementById('iqFeedbackDrawer');
+  if (existingDrawer) existingDrawer.remove();
+
   const { questions, currentIndex, isSubmitted } = interactivePlayerState;
   if (isSubmitted || currentIndex >= questions.length) {
     renderCompletedInteractiveScreen();
@@ -325,6 +342,9 @@ function renderIdentificationView(q) {
 }
 
 function submitIdentificationAnswer(val) {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  interactivePlayerState.isWaitingFeedback = true;
+
   clearInterval(interactivePlayerState.timerInterval);
   const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!q) return;
@@ -336,7 +356,19 @@ function submitIdentificationAnswer(val) {
   if (isCorrect) interactivePlayerState.score++;
   interactivePlayerState.userResponses[q.id] = { given, correct, isCorrect };
 
-  advanceToNextQuestion();
+  const inputBox = document.querySelector('.iq-id-input-box');
+  const inputField = document.getElementById('iqIdAnswerInput');
+  if (inputField) inputField.disabled = true;
+  if (inputBox) {
+    inputBox.classList.add(isCorrect ? 'correct' : 'incorrect');
+  }
+
+  showAnswerFeedback({
+    isCorrect,
+    correctAnswerText: correct,
+    sourceMaterialText: q.sourceMaterial,
+    lessonText: q.lesson
+  });
 }
 
 /**
@@ -482,11 +514,16 @@ function assignMatchingChoice(targetIdx, key) {
 }
 
 function submitMatchingAnswer() {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  interactivePlayerState.isWaitingFeedback = true;
+
   clearInterval(interactivePlayerState.timerInterval);
   const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!q) return;
 
   const selections = interactivePlayerState.matchingSelections;
+  let matchesCorrect = 0;
+  const pairDetails = [];
 
   (q.pairs || []).forEach((pair, pi) => {
     const assignedKey = selections[pi];
@@ -495,7 +532,12 @@ function submitMatchingAnswer() {
     const correctText = pair.right;
     const isCorrect = givenText.trim().toLowerCase() === correctText.trim().toLowerCase();
 
-    if (isCorrect) interactivePlayerState.score++;
+    if (isCorrect) {
+      interactivePlayerState.score++;
+      matchesCorrect++;
+    }
+    pairDetails.push(`${pair.left} ➔ ${pair.right}`);
+
     interactivePlayerState.userResponses[`${q.id}_${pi}`] = {
       label: pair.left,
       given: givenText,
@@ -504,9 +546,18 @@ function submitMatchingAnswer() {
     };
   });
 
+  const totalPairs = (q.pairs || []).length;
+  const isAllCorrect = matchesCorrect === totalPairs;
+
   interactivePlayerState.matchingSelections = {};
   interactivePlayerState.selectedMatchingChoice = null;
-  advanceToNextQuestion();
+
+  showAnswerFeedback({
+    isCorrect: isAllCorrect,
+    correctAnswerText: `${matchesCorrect}/${totalPairs} Pairs Matched. Key: ${pairDetails.slice(0, 3).join(' | ')}${pairDetails.length > 3 ? '...' : ''}`,
+    sourceMaterialText: q.sourceMaterial,
+    lessonText: q.lesson
+  });
 }
 
 /**
@@ -543,17 +594,18 @@ function renderMultipleChoiceView(q) {
 }
 
 function selectMultipleChoiceCard(cardIdx, optValue) {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  interactivePlayerState.isWaitingFeedback = true;
+
   const card = document.getElementById(`mc_card_${cardIdx}`);
   if (card) {
     card.classList.add('selected');
   }
 
-  setTimeout(() => {
-    submitMultipleChoiceAnswer(optValue);
-  }, 280);
+  submitMultipleChoiceAnswer(optValue, cardIdx);
 }
 
-function submitMultipleChoiceAnswer(val) {
+function submitMultipleChoiceAnswer(val, clickedCardIdx) {
   clearInterval(interactivePlayerState.timerInterval);
   const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!q) return;
@@ -565,6 +617,88 @@ function submitMultipleChoiceAnswer(val) {
   if (isCorrect) interactivePlayerState.score++;
   interactivePlayerState.userResponses[q.id] = { given, correct, isCorrect };
 
+  // Color-code the cards
+  const cards = document.querySelectorAll('.iq-mc-card');
+  cards.forEach(c => c.classList.add('disabled'));
+
+  const correctIdx = (q.options || []).findIndex(opt => opt.trim().toLowerCase() === correct.toLowerCase());
+
+  if (isCorrect) {
+    if (clickedCardIdx != null && cards[clickedCardIdx]) {
+      cards[clickedCardIdx].classList.add('mc-correct');
+    }
+  } else {
+    if (clickedCardIdx != null && cards[clickedCardIdx]) {
+      cards[clickedCardIdx].classList.add('mc-incorrect');
+    }
+    if (correctIdx !== -1 && cards[correctIdx]) {
+      cards[correctIdx].classList.add('mc-correct');
+    }
+  }
+
+  showAnswerFeedback({
+    isCorrect,
+    correctAnswerText: correct,
+    sourceMaterialText: q.sourceMaterial,
+    lessonText: q.lesson
+  });
+}
+
+function showAnswerFeedback({ isCorrect, correctAnswerText, sourceMaterialText, lessonText }) {
+  const modal = document.getElementById('interactiveQuizModal');
+  if (!modal) return;
+
+  const existingDrawer = document.getElementById('iqFeedbackDrawer');
+  if (existingDrawer) existingDrawer.remove();
+
+  const drawer = document.createElement('div');
+  drawer.id = 'iqFeedbackDrawer';
+  drawer.className = `iq-feedback-drawer ${isCorrect ? 'is-correct' : 'is-incorrect'}`;
+  drawer.innerHTML = `
+    <div class="iq-fb-content">
+      <div class="iq-fb-header">
+        <div class="iq-fb-badge ${isCorrect ? 'correct' : 'incorrect'}">
+          ${isCorrect ? '✔ Correct!' : '✖ Not quite!'}
+        </div>
+        ${!isCorrect ? `
+          <div class="iq-fb-answer-wrap">
+            <span class="iq-fb-label">Correct Answer:</span>
+            <strong class="iq-fb-val">${escHtml(correctAnswerText)}</strong>
+          </div>
+        ` : `
+          <div class="iq-fb-praise">Great job! You got this right. 🎉</div>
+        `}
+      </div>
+
+      <div class="iq-fb-source">
+        <span class="iq-fb-source-icon">📖</span>
+        <div class="iq-fb-source-info">
+          <span class="iq-fb-source-label">Source Handout:</span>
+          <span class="iq-fb-source-title">${escHtml(sourceMaterialText || 'Class Handout')}</span>
+          ${lessonText ? `<span class="iq-fb-lesson">(${escHtml(lessonText)})</span>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <button class="iq-continue-btn" onclick="handleFeedbackContinue()">
+      <span>Continue</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+        <polyline points="12 5 19 12 12 19"></polyline>
+      </svg>
+    </button>
+  `;
+
+  modal.appendChild(drawer);
+  setTimeout(() => drawer.classList.add('active'), 40);
+}
+
+function handleFeedbackContinue() {
+  const drawer = document.getElementById('iqFeedbackDrawer');
+  if (drawer) {
+    drawer.classList.remove('active');
+    setTimeout(() => drawer.remove(), 250);
+  }
   advanceToNextQuestion();
 }
 

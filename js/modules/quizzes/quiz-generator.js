@@ -421,8 +421,16 @@ async function generateQuiz() {
 }
 
 function applyGeneratedQuestions(list, isDemo) {
+  const fileName = quizGen.file ? quizGen.file.name : '';
+  const lesson = quizGen.lesson || '';
   quizGen.questions = (list || []).map((q, i) => {
-    const obj = Object.assign({ _id: 'q' + i, _demo: !!isDemo, _quiz_type: quizGen.type || 'standard' }, q);
+    const obj = Object.assign({
+      _id: 'q' + i,
+      _demo: !!isDemo, _quiz_type: quizGen.type || 'standard',
+      sourceMaterial: fileName,
+      source_material: fileName,
+      lesson: lesson
+    }, q);
     if (obj.type === 'multiple_choice') obj._answerIdx = Math.max(0, (obj.options || []).indexOf(obj.answer));
     return obj;
   });
@@ -542,15 +550,23 @@ async function saveQuiz() {
 
   const isInteractive = quizGen.type === 'interactive';
 
-  // Attach metadata to questions so interactive type and timer are preserved inside questions JSONB without needing extra DB columns
+  const fileName = quizGen.file ? quizGen.file.name : (quizGen.subject ? quizGen.subject + ' Handout' : '');
+  const lessonName = quizGen.lesson || '';
+
+  // Attach metadata to questions so interactive type, timer, and source material are preserved inside questions JSONB without needing extra DB columns
   const questionsToSave = (quizGen.questions || []).map((q, idx) => ({
     ...q,
+    sourceMaterial: q.sourceMaterial || fileName,
+    source_material: q.sourceMaterial || fileName,
+    lesson: q.lesson || lessonName,
     _quizType: quizGen.type || 'standard',
     _timerPerQuestion: quizGen.timerPerQuestion || 0,
     ...(idx === 0 ? {
       _meta: {
         quizType: quizGen.type || 'standard',
-        timerPerQuestion: quizGen.timerPerQuestion || 0
+        timerPerQuestion: quizGen.timerPerQuestion || 0,
+        sourceMaterial: fileName,
+        lesson: lessonName
       }
     } : {})
   }));
