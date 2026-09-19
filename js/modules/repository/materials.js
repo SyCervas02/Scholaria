@@ -276,8 +276,21 @@ async function loadMaterialsFromDB() {
       materialsData = data;
     }
   } catch (err) {
-    console.error('Failed to load materials:', err.message);
-    showToast('Could not reach the server for materials', 'error');
+    console.warn('Backend API server offline, querying Supabase directly:', err.message);
+    try {
+      let query = db.from('materials').select('*').order('created_at', { ascending: false });
+      if (ROLE === 'student' && CURRENT_PROFILE.strand) {
+        query = query.or(`strand.eq.${CURRENT_PROFILE.strand},strand.is.null`);
+      } else if (materialsStrandFilter) {
+        query = query.eq('strand', materialsStrandFilter);
+      }
+      const { data, error } = await query;
+      if (!error && data) {
+        materialsData = data;
+      }
+    } catch (e) {
+      console.error('Supabase direct query failed:', e.message);
+    }
     return;
   } finally {
     isFetchingMaterials = false;

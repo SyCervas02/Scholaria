@@ -26,6 +26,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+app.use(express.static(__dirname));
 
 // Basic rate limiting on the API routes (auth routes skipped so rate limits never block logins)
 const apiLimiter = rateLimit({

@@ -14,29 +14,299 @@ const interactivePlayerState = {
   elapsedSeconds: 0,
   matchingSelections: {}, // pairIndex -> choiceKey
   selectedMatchingChoice: null, // For tap-to-pair fallback
-  isSubmitted: false
+  isSubmitted: false,
+  isWaitingFeedback: false
 };
+
+let interactiveBGM = null;
+let interactiveMusicMuted = false;
+let sfxCorrect = null;
+let sfxWrong = null;
+
+function initInteractiveSFX() {
+  if (!sfxCorrect) {
+    sfxCorrect = new Audio('assets/audio/dragon-studio-correct.mp3');
+    sfxCorrect.volume = 0.5;
+  }
+  if (!sfxWrong) {
+    sfxWrong = new Audio('assets/audio/eritnhut-wrong.mp3');
+    sfxWrong.volume = 0.45;
+  }
+}
+
+function playInteractiveSFX(isCorrect) {
+  if (interactiveMusicMuted) return;
+  try {
+    initInteractiveSFX();
+    const sound = isCorrect ? sfxCorrect : sfxWrong;
+    if (sound) {
+      sound.currentTime = 0;
+      const p = sound.play();
+      if (p !== undefined) {
+        p.catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn('SFX playback error:', e);
+  }
+}
+
+function stopInteractiveSFX() {
+  if (sfxCorrect) {
+    sfxCorrect.pause();
+    sfxCorrect.currentTime = 0;
+  }
+  if (sfxWrong) {
+    sfxWrong.pause();
+    sfxWrong.currentTime = 0;
+  }
+}
+
+function initInteractiveBGM() {
+  if (!interactiveBGM) {
+    interactiveBGM = new Audio('assets/audio/loop3.mp3');
+    interactiveBGM.loop = true;
+    interactiveBGM.volume = 0.25;
+  }
+}
+
+function playInteractiveBGM() {
+  initInteractiveBGM();
+  if (interactiveMusicMuted) return;
+
+  interactiveBGM.currentTime = 0;
+  const p = interactiveBGM.play();
+  if (p !== undefined) {
+    p.catch(() => {
+      const resumeOnGesture = () => {
+        if (!interactiveMusicMuted && interactiveBGM) {
+          interactiveBGM.play().catch(() => {});
+        }
+        document.removeEventListener('click', resumeOnGesture);
+        document.removeEventListener('keydown', resumeOnGesture);
+      };
+      document.addEventListener('click', resumeOnGesture, { once: true });
+      document.addEventListener('keydown', resumeOnGesture, { once: true });
+    });
+  }
+}
+
+function stopInteractiveBGM() {
+  if (interactiveBGM) {
+    interactiveBGM.pause();
+    interactiveBGM.currentTime = 0;
+  }
+  stopInteractiveSFX();
+}
+
+function toggleInteractiveMusic() {
+  initInteractiveBGM();
+  interactiveMusicMuted = !interactiveMusicMuted;
+  if (interactiveMusicMuted) {
+    interactiveBGM.pause();
+    stopInteractiveSFX();
+  } else {
+    interactiveBGM.play().catch(() => {});
+  }
+  updateMusicButtonUI();
+}
+
+function updateMusicButtonUI() {
+  const btn = document.getElementById('iqMusicToggleBtn');
+  if (!btn) return;
+  btn.innerHTML = interactiveMusicMuted ? iconAudioMuted() : iconAudioPlaying();
+  btn.title = interactiveMusicMuted ? 'Unmute Background Music' : 'Mute Background Music';
+  if (interactiveMusicMuted) btn.classList.add('muted');
+  else btn.classList.remove('muted');
+}
+
+function iconAudioPlaying() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>`;
+}
+
+function iconAudioMuted() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`;
+}
+
+/* ── INTERACTIVE CANVAS CONFETTI ENGINE ── */
+let confettiCanvas = null;
+let confettiCtx = null;
+let confettiParticles = [];
+let confettiAnimId = null;
+
+function initConfettiCanvas() {
+  if (!confettiCanvas) {
+    confettiCanvas = document.createElement('canvas');
+    confettiCanvas.id = 'iqConfettiCanvas';
+    confettiCanvas.style.position = 'fixed';
+    confettiCanvas.style.inset = '0';
+    confettiCanvas.style.width = '100vw';
+    confettiCanvas.style.height = '100vh';
+    confettiCanvas.style.pointerEvents = 'none';
+    confettiCanvas.style.zIndex = '20000';
+    document.body.appendChild(confettiCanvas);
+
+    window.addEventListener('resize', () => {
+      if (confettiCanvas) resizeConfettiCanvas();
+    });
+  }
+  resizeConfettiCanvas();
+}
+
+function resizeConfettiCanvas() {
+  if (!confettiCanvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  confettiCanvas.width = Math.round(w * dpr);
+  confettiCanvas.height = Math.round(h * dpr);
+  confettiCtx = confettiCanvas.getContext('2d');
+  confettiCtx.scale(dpr, dpr);
+}
+
+function triggerConfettiBurst(particleCount = 80) {
+  initConfettiCanvas();
+  const colors = [
+    '#3b82f6', '#10b981', '#f59e0b', '#ec4899', 
+    '#8b5cf6', '#06b6d4', '#f43f5e', '#eab308', '#6366f1'
+  ];
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const half = Math.floor(particleCount / 2);
+
+  // Left cannon (fires up-right)
+  for (let i = 0; i < half; i++) {
+    const angle = (-Math.PI / 3) + (Math.random() - 0.5) * 0.7; // ~-60 deg
+    const speed = 13 + Math.random() * 15;
+    confettiParticles.push(createConfettiParticle(w * 0.15, h * 0.95, Math.cos(angle) * speed, Math.sin(angle) * speed, colors));
+  }
+
+  // Right cannon (fires up-left)
+  for (let i = 0; i < half; i++) {
+    const angle = (-2 * Math.PI / 3) + (Math.random() - 0.5) * 0.7; // ~-120 deg
+    const speed = 13 + Math.random() * 15;
+    confettiParticles.push(createConfettiParticle(w * 0.85, h * 0.95, Math.cos(angle) * speed, Math.sin(angle) * speed, colors));
+  }
+
+  if (!confettiAnimId) {
+    animateConfetti();
+  }
+}
+
+function createConfettiParticle(x, y, vx, vy, colors) {
+  const isRibbon = Math.random() > 0.6;
+  const size = isRibbon ? (8 + Math.random() * 8) : (6 + Math.random() * 6);
+  return {
+    x,
+    y,
+    vx,
+    vy,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    size,
+    aspect: isRibbon ? 0.45 : (Math.random() > 0.4 ? 1 : 0.7),
+    rotation: Math.random() * 360,
+    rotSpeed: (Math.random() - 0.5) * 14,
+    wobble: Math.random() * 10,
+    wobbleSpeed: 0.08 + Math.random() * 0.08,
+    shape: Math.random() > 0.25 ? 'rect' : 'circle',
+    opacity: 1,
+    gravity: 0.38 + Math.random() * 0.14,
+    friction: 0.965
+  };
+}
+
+function animateConfetti() {
+  if (!confettiCtx || !confettiCanvas) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  confettiCtx.clearRect(0, 0, w, h);
+
+  for (let i = confettiParticles.length - 1; i >= 0; i--) {
+    const p = confettiParticles[i];
+    p.vx *= p.friction;
+    p.vy *= p.friction;
+    p.vy += p.gravity;
+    p.x += p.vx;
+    p.y += p.vy;
+    p.rotation += p.rotSpeed;
+    p.wobble += p.wobbleSpeed;
+
+    if (p.y > h * 0.65) {
+      p.opacity -= 0.022;
+    }
+
+    if (p.opacity <= 0 || p.y > h + 30) {
+      confettiParticles.splice(i, 1);
+      continue;
+    }
+
+    confettiCtx.save();
+    confettiCtx.translate(p.x, p.y);
+    confettiCtx.rotate((p.rotation * Math.PI) / 180);
+    confettiCtx.scale(Math.cos(p.wobble), 1);
+    confettiCtx.globalAlpha = Math.max(0, p.opacity);
+    confettiCtx.fillStyle = p.color;
+
+    if (p.shape === 'circle') {
+      confettiCtx.beginPath();
+      confettiCtx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+      confettiCtx.fill();
+    } else {
+      confettiCtx.fillRect(-p.size / 2, (-p.size * p.aspect) / 2, p.size, p.size * p.aspect);
+    }
+    confettiCtx.restore();
+  }
+
+  if (confettiParticles.length > 0) {
+    confettiAnimId = requestAnimationFrame(animateConfetti);
+  } else {
+    confettiCtx.clearRect(0, 0, w, h);
+    confettiAnimId = null;
+  }
+}
+
+function stopConfetti() {
+  if (confettiAnimId) {
+    cancelAnimationFrame(confettiAnimId);
+    confettiAnimId = null;
+  }
+  confettiParticles = [];
+  if (confettiCtx && confettiCanvas) {
+    confettiCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  }
+}
 
 /**
  * Normalizes question list into interactive items
  */
 function buildInteractiveQuestions(quiz) {
   const items = [];
+  const defaultSource = quiz.sourceMaterial || quiz.source_material || (quiz.questions?.[0]?._meta?.sourceMaterial) || (quiz.questions?.[0]?._sourceMaterial) || (quiz.subject ? `${quiz.subject} Handout` : 'Course Learning Material');
+  const defaultLesson = quiz.lesson || (quiz.questions?.[0]?._meta?.lesson) || '';
+
   (quiz?.questions || []).forEach((q, qi) => {
+    const qSource = q.sourceMaterial || q.source_material || defaultSource;
+    const qLesson = q.lesson || defaultLesson;
+
     if (q.type === 'multiple_choice') {
       items.push({
         id: `mc_${qi}`,
         type: 'multiple_choice',
         question: q.question,
         options: q.options || [],
-        answer: q.answer
+        answer: q.answer,
+        sourceMaterial: qSource,
+        lesson: qLesson
       });
     } else if (q.type === 'identification') {
       items.push({
         id: `id_${qi}`,
         type: 'identification',
         question: q.question,
-        answer: q.answer
+        answer: q.answer,
+        sourceMaterial: qSource,
+        lesson: qLesson
       });
     } else if (q.type === 'matching') {
       const pairs = (q.pairs || []).map((p, pi) => ({
@@ -57,7 +327,9 @@ function buildInteractiveQuestions(quiz) {
         type: 'matching',
         instructions: q.instructions || 'Match the correct answer to each question.',
         pairs: pairs,
-        choices: shuffledChoices
+        choices: shuffledChoices,
+        sourceMaterial: qSource,
+        lesson: qLesson
       });
     }
   });
@@ -111,6 +383,7 @@ function openInteractiveQuiz(quizId) {
     document.body.style.overflow = 'hidden';
   }
 
+  playInteractiveBGM();
   renderCurrentInteractiveQuestion();
 }
 
@@ -123,6 +396,8 @@ function closeInteractiveQuiz(confirmFirst = true) {
     if (!ok) return;
   }
 
+  stopInteractiveBGM();
+  stopConfetti();
   clearInterval(interactivePlayerState.timerInterval);
   const modal = document.getElementById('interactiveQuizModal');
   if (modal) {
@@ -195,6 +470,10 @@ function renderCurrentInteractiveQuestion() {
   const modal = document.getElementById('interactiveQuizModal');
   if (!modal) return;
 
+  interactivePlayerState.isWaitingFeedback = false;
+  const existingDrawer = document.getElementById('iqFeedbackDrawer');
+  if (existingDrawer) existingDrawer.remove();
+
   const { questions, currentIndex, isSubmitted } = interactivePlayerState;
   if (isSubmitted || currentIndex >= questions.length) {
     renderCompletedInteractiveScreen();
@@ -240,6 +519,9 @@ function renderCurrentInteractiveQuestion() {
         <span>Scholaria</span>
       </div>
       <div class="iq-header-actions">
+        <button class="iq-btn-icon ${interactiveMusicMuted ? 'muted' : ''}" id="iqMusicToggleBtn" title="${interactiveMusicMuted ? 'Unmute Background Music' : 'Mute Background Music'}" onclick="toggleInteractiveMusic()">
+          ${interactiveMusicMuted ? iconAudioMuted() : iconAudioPlaying()}
+        </button>
         <button class="iq-btn-icon" title="Exit Quiz" onclick="closeInteractiveQuiz(true)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -325,6 +607,9 @@ function renderIdentificationView(q) {
 }
 
 function submitIdentificationAnswer(val) {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  interactivePlayerState.isWaitingFeedback = true;
+
   clearInterval(interactivePlayerState.timerInterval);
   const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!q) return;
@@ -336,7 +621,19 @@ function submitIdentificationAnswer(val) {
   if (isCorrect) interactivePlayerState.score++;
   interactivePlayerState.userResponses[q.id] = { given, correct, isCorrect };
 
-  advanceToNextQuestion();
+  const inputBox = document.querySelector('.iq-id-input-box');
+  const inputField = document.getElementById('iqIdAnswerInput');
+  if (inputField) inputField.disabled = true;
+  if (inputBox) {
+    inputBox.classList.add(isCorrect ? 'correct' : 'incorrect');
+  }
+
+  showAnswerFeedback({
+    isCorrect,
+    correctAnswerText: correct,
+    sourceMaterialText: q.sourceMaterial,
+    lessonText: q.lesson
+  });
 }
 
 /**
@@ -482,11 +779,16 @@ function assignMatchingChoice(targetIdx, key) {
 }
 
 function submitMatchingAnswer() {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  interactivePlayerState.isWaitingFeedback = true;
+
   clearInterval(interactivePlayerState.timerInterval);
   const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!q) return;
 
   const selections = interactivePlayerState.matchingSelections;
+  let matchesCorrect = 0;
+  const pairDetails = [];
 
   (q.pairs || []).forEach((pair, pi) => {
     const assignedKey = selections[pi];
@@ -495,7 +797,12 @@ function submitMatchingAnswer() {
     const correctText = pair.right;
     const isCorrect = givenText.trim().toLowerCase() === correctText.trim().toLowerCase();
 
-    if (isCorrect) interactivePlayerState.score++;
+    if (isCorrect) {
+      interactivePlayerState.score++;
+      matchesCorrect++;
+    }
+    pairDetails.push(`${pair.left} ➔ ${pair.right}`);
+
     interactivePlayerState.userResponses[`${q.id}_${pi}`] = {
       label: pair.left,
       given: givenText,
@@ -504,9 +811,18 @@ function submitMatchingAnswer() {
     };
   });
 
+  const totalPairs = (q.pairs || []).length;
+  const isAllCorrect = matchesCorrect === totalPairs;
+
   interactivePlayerState.matchingSelections = {};
   interactivePlayerState.selectedMatchingChoice = null;
-  advanceToNextQuestion();
+
+  showAnswerFeedback({
+    isCorrect: isAllCorrect,
+    correctAnswerText: `${matchesCorrect}/${totalPairs} Pairs Matched. Key: ${pairDetails.slice(0, 3).join(' | ')}${pairDetails.length > 3 ? '...' : ''}`,
+    sourceMaterialText: q.sourceMaterial,
+    lessonText: q.lesson
+  });
 }
 
 /**
@@ -543,17 +859,18 @@ function renderMultipleChoiceView(q) {
 }
 
 function selectMultipleChoiceCard(cardIdx, optValue) {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  interactivePlayerState.isWaitingFeedback = true;
+
   const card = document.getElementById(`mc_card_${cardIdx}`);
   if (card) {
     card.classList.add('selected');
   }
 
-  setTimeout(() => {
-    submitMultipleChoiceAnswer(optValue);
-  }, 280);
+  submitMultipleChoiceAnswer(optValue, cardIdx);
 }
 
-function submitMultipleChoiceAnswer(val) {
+function submitMultipleChoiceAnswer(val, clickedCardIdx) {
   clearInterval(interactivePlayerState.timerInterval);
   const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!q) return;
@@ -565,6 +882,93 @@ function submitMultipleChoiceAnswer(val) {
   if (isCorrect) interactivePlayerState.score++;
   interactivePlayerState.userResponses[q.id] = { given, correct, isCorrect };
 
+  // Color-code the cards
+  const cards = document.querySelectorAll('.iq-mc-card');
+  cards.forEach(c => c.classList.add('disabled'));
+
+  const correctIdx = (q.options || []).findIndex(opt => opt.trim().toLowerCase() === correct.toLowerCase());
+
+  if (isCorrect) {
+    if (clickedCardIdx != null && cards[clickedCardIdx]) {
+      cards[clickedCardIdx].classList.add('mc-correct');
+    }
+  } else {
+    if (clickedCardIdx != null && cards[clickedCardIdx]) {
+      cards[clickedCardIdx].classList.add('mc-incorrect');
+    }
+    if (correctIdx !== -1 && cards[correctIdx]) {
+      cards[correctIdx].classList.add('mc-correct');
+    }
+  }
+
+  showAnswerFeedback({
+    isCorrect,
+    correctAnswerText: correct,
+    sourceMaterialText: q.sourceMaterial,
+    lessonText: q.lesson
+  });
+}
+
+function showAnswerFeedback({ isCorrect, correctAnswerText, sourceMaterialText, lessonText }) {
+  playInteractiveSFX(isCorrect);
+  if (isCorrect) {
+    triggerConfettiBurst(70);
+  }
+
+  const modal = document.getElementById('interactiveQuizModal');
+  if (!modal) return;
+
+  const existingDrawer = document.getElementById('iqFeedbackDrawer');
+  if (existingDrawer) existingDrawer.remove();
+
+  const drawer = document.createElement('div');
+  drawer.id = 'iqFeedbackDrawer';
+  drawer.className = `iq-feedback-drawer ${isCorrect ? 'is-correct' : 'is-incorrect'}`;
+  drawer.innerHTML = `
+    <div class="iq-fb-content">
+      <div class="iq-fb-header">
+        <div class="iq-fb-badge ${isCorrect ? 'correct' : 'incorrect'}">
+          ${isCorrect ? '✔ Correct!' : '✖ Not quite!'}
+        </div>
+        ${!isCorrect ? `
+          <div class="iq-fb-answer-wrap">
+            <span class="iq-fb-label">Correct Answer:</span>
+            <strong class="iq-fb-val">${escHtml(correctAnswerText)}</strong>
+          </div>
+        ` : `
+          <div class="iq-fb-praise">Great job! You got this right. 🎉</div>
+        `}
+      </div>
+
+      <div class="iq-fb-source">
+        <span class="iq-fb-source-icon">📖</span>
+        <div class="iq-fb-source-info">
+          <span class="iq-fb-source-label">Source Handout:</span>
+          <span class="iq-fb-source-title">${escHtml(sourceMaterialText || 'Class Handout')}</span>
+          ${lessonText ? `<span class="iq-fb-lesson">(${escHtml(lessonText)})</span>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <button class="iq-continue-btn" onclick="handleFeedbackContinue()">
+      <span>Continue</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+        <polyline points="12 5 19 12 12 19"></polyline>
+      </svg>
+    </button>
+  `;
+
+  modal.appendChild(drawer);
+  setTimeout(() => drawer.classList.add('active'), 40);
+}
+
+function handleFeedbackContinue() {
+  const drawer = document.getElementById('iqFeedbackDrawer');
+  if (drawer) {
+    drawer.classList.remove('active');
+    setTimeout(() => drawer.remove(), 250);
+  }
   advanceToNextQuestion();
 }
 
@@ -585,6 +989,7 @@ function advanceToNextQuestion() {
  * Complete & persist results
  */
 async function finishInteractiveQuiz() {
+  stopInteractiveBGM();
   clearInterval(interactivePlayerState.timerInterval);
   const { quiz, score, totalItems, startTime } = interactivePlayerState;
 
@@ -694,6 +1099,12 @@ function renderCompletedInteractiveScreen() {
   } else if (pct < 60) {
     feedbackTitle = "Good Effort!";
     feedbackText = "You can always review the learning material and try again to improve.";
+  }
+
+  if (pct >= 50) {
+    setTimeout(() => {
+      triggerConfettiBurst(110);
+    }, 250);
   }
 
   modal.innerHTML = `

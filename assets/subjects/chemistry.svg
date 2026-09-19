@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="chemBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#042f2e"/>
+      <stop offset="50%" stop-color="#021a1a"/>
+      <stop offset="100%" stop-color="#010c0c"/>
+    </radialGradient>
+    <linearGradient id="flaskLiquid" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2dd4bf"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+    <linearGradient id="flaskLiquid2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#chemBg)"/>
+
+  <!-- TOP-LEFT: Molecular 3D Lattice & Benzene Rings -->
+  <g transform="translate(160, 140)">
+    <!-- Benzene Hexagon 1 -->
+    <polygon points="80,20 140,55 140,125 80,160 20,125 20,55" stroke="#14b8a6" stroke-width="4" fill="none"/>
+    <circle cx="80" cy="90" r="38" stroke="#14b8a6" stroke-width="3" fill="none"/>
+    <!-- Attached Hexagon 2 -->
+    <polygon points="140,55 200,20 260,55 260,125 200,160 140,125" stroke="#2dd4bf" stroke-width="4" fill="none"/>
+    <circle cx="200" cy="90" r="38" stroke="#2dd4bf" stroke-width="3" fill="none"/>
+    
+    <!-- Atoms at vertices -->
+    <circle cx="80" cy="20" r="8" fill="#f43f5e"/><circle cx="200" cy="20" r="8" fill="#38bdf8"/>
+    <circle cx="140" cy="125" r="8" fill="#fde047"/><circle cx="260" cy="125" r="8" fill="#22c55e"/>
+
+    <!-- Periodic Table Tiles -->
+    <g transform="translate(40, 240)">
+      <rect x="0" y="0" width="75" height="75" rx="8" fill="#0f766e" stroke="#2dd4bf" stroke-width="2"/>
+      <text x="12" y="24" fill="#a7f3d0" font-size="14" font-family="sans-serif">6</text>
+      <text x="25" y="55" fill="#ffffff" font-size="30" font-weight="bold" font-family="sans-serif">C</text>
+      
+      <rect x="90" y="0" width="75" height="75" rx="8" fill="#0f766e" stroke="#2dd4bf" stroke-width="2"/>
+      <text x="102" y="24" fill="#a7f3d0" font-size="14" font-family="sans-serif">8</text>
+      <text x="115" y="55" fill="#ffffff" font-size="30" font-weight="bold" font-family="sans-serif">O</text>
+
+      <rect x="180" y="0" width="75" height="75" rx="8" fill="#b45309" stroke="#f59e0b" stroke-width="2"/>
+      <text x="192" y="24" fill="#fef08a" font-size="14" font-family="sans-serif">79</text>
+      <text x="198" y="55" fill="#ffffff" font-size="28" font-weight="bold" font-family="sans-serif">Au</text>
+    </g>
+  </g>
+
+  <!-- HERO RIGHT: Glowing Erlenmeyer & Florence Flasks (Lab Beakers) -->
+  <g transform="translate(1520, 260)">
+    <!-- Rising Vapor Bubbles -->
+    <circle cx="80" cy="-60" r="14" fill="#2dd4bf" opacity="0.6"/>
+    <circle cx="120" cy="-110" r="18" fill="#2dd4bf" opacity="0.5"/>
+    <circle cx="70" cy="-170" r="22" fill="#2dd4bf" opacity="0.4"/>
+
+    <!-- Erlenmeyer Flask Outline -->
+    <path d="M 60,-20 L 60,80 L -60,280 L 220,280 L 100,80 L 100,-20 Z" fill="rgba(255,255,255,0.06)" stroke="#99f6e4" stroke-width="5"/>
+    <rect x="50" y="-30" width="60" height="12" rx="3" fill="#99f6e4"/>
+    <!-- Liquid in Flask -->
+    <path d="M -30,230 L 190,230 L 210,270 L -50,270 Z" fill="url(#flaskLiquid)" opacity="0.9"/>
+    <!-- Liquid Bubbles -->
+    <circle cx="40" cy="245" r="8" fill="#ffffff" opacity="0.8"/>
+    <circle cx="120" cy="250" r="10" fill="#ffffff" opacity="0.8"/>
+    <circle cx="160" cy="240" r="6" fill="#ffffff" opacity="0.8"/>
+
+    <!-- Round Bottom Florence Flask (Foreground) -->
+    <g transform="translate(-140, 110)">
+      <path d="M 40,-10 L 40,50 C 40,50 0,60 -30,100 C -60,140 -50,190 -10,220 C 30,250 80,240 110,200 C 140,160 130,110 90,70 L 90,-10 Z" fill="rgba(255,255,255,0.06)" stroke="#fcd34d" stroke-width="4"/>
+      <!-- Amber Liquid -->
+      <path d="M -20,160 C 20,155 60,155 100,160 C 125,190 100,230 60,235 C 10,240 -25,200 -20,160 Z" fill="url(#flaskLiquid2)" opacity="0.85"/>
+      <circle cx="40" cy="185" r="7" fill="#ffffff" opacity="0.8"/>
+    </g>
+  </g>
+
+  <!-- Bottom Molecule connectors -->
+  <g stroke="#0f766e" stroke-width="3" fill="none" opacity="0.5">
+    <line x1="0" y1="920" x2="300" y2="840"/>
+    <line x1="300" y1="840" x2="600" y2="920"/>
+    <line x1="600" y1="920" x2="900" y2="850"/>
+    <line x1="900" y1="850" x2="1200" y2="920"/>
+    <line x1="1200" y1="920" x2="1500" y2="860"/>
+    <line x1="1500" y1="860" x2="1920" y2="920"/>
+  </g>
+</svg>

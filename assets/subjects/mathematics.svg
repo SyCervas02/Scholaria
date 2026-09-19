@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="mathBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </radialGradient>
+    <pattern id="mathGrid" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#4338ca" stroke-width="1" opacity="0.25"/>
+    </pattern>
+    <linearGradient id="goldSpiral" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#mathBg)"/>
+  <rect width="1920" height="1080" fill="url(#mathGrid)"/>
+
+  <!-- TOP-LEFT: Cartesian Coordinate Graph with Sine & Cosine waves -->
+  <g transform="translate(100, 100)">
+    <!-- Axes -->
+    <line x1="40" y1="180" x2="480" y2="180" stroke="#818cf8" stroke-width="3"/>
+    <polygon points="485,180 475,174 475,186" fill="#818cf8"/>
+    <line x1="120" y1="20" x2="120" y2="340" stroke="#818cf8" stroke-width="3"/>
+    <polygon points="120,15 114,25 126,25" fill="#818cf8"/>
+    <text x="470" y="210" fill="#a5b4fc" font-size="18" font-family="sans-serif" font-weight="bold">X</text>
+    <text x="90" y="30" fill="#a5b4fc" font-size="18" font-family="sans-serif" font-weight="bold">Y</text>
+    
+    <!-- Sine Wave -->
+    <path d="M 120,180 Q 180,80 240,180 T 360,180 T 480,180" stroke="#06b6d4" stroke-width="4.5" fill="none"/>
+    <!-- Cosine Wave -->
+    <path d="M 120,80 Q 180,180 240,280 T 360,80 T 480,280" stroke="#ec4899" stroke-width="3" stroke-dasharray="8 6" fill="none"/>
+    <!-- Integral Area fill -->
+    <path d="M 120,180 Q 180,80 240,180 Z" fill="#06b6d4" opacity="0.2"/>
+  </g>
+
+  <!-- Prominent Formulas -->
+  <g font-family="serif" font-style="italic" fill="#c7d2fe" opacity="0.8">
+    <text x="240" y="380" font-size="28">e^{iπ} + 1 = 0</text>
+    <text x="120" y="450" font-size="32">∫ f(x) dx = F(x) + C</text>
+    <text x="180" y="530" font-size="30">∑ (1/n²) = π² / 6</text>
+    <text x="220" y="610" font-size="28">a² + b² = c²</text>
+  </g>
+
+  <!-- HERO RIGHT: Golden Fibonacci Spiral & 3D Polyhedron -->
+  <g transform="translate(1550, 360)">
+    <!-- Golden Spiral Curve -->
+    <path d="M 0,0 A 20,20 0 0,1 20,20 A 40,40 0 0,1 -20,60 A 80,80 0 0,1 -100,-20 A 140,140 0 0,1 40,-160 A 240,240 0 0,1 280,80 A 400,400 0 0,1 -120,480" stroke="url(#goldSpiral)" stroke-width="6" fill="none" stroke-linecap="round"/>
+    
+    <!-- Fibonacci Rectangles -->
+    <rect x="-100" y="-160" width="140" height="140" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity="0.3"/>
+    <rect x="-100" y="-20" width="80" height="80" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity="0.3"/>
+    <rect x="-20" y="20" width="40" height="40" stroke="#f59e0b" stroke-width="1.5" fill="none" opacity="0.3"/>
+
+    <!-- 3D Wireframe Icosahedron -->
+    <g transform="translate(-160, 220)" stroke="#38bdf8" stroke-width="2.5" fill="none">
+      <polygon points="0,-90 75,-40 75,50 0,90 -75,50 -75,-40" stroke="#818cf8"/>
+      <polygon points="0,-50 45,-20 45,30 0,50 -45,30 -45,-20" stroke="#38bdf8" stroke-dasharray="4 4"/>
+      <line x1="0" y1="-90" x2="0" y2="-50"/><line x1="75" y1="-40" x2="45" y2="-20"/><line x1="75" y1="50" x2="45" y2="30"/>
+      <line x1="0" y1="90" x2="0" y2="50"/><line x1="-75" y1="50" x2="-45" y2="30"/><line x1="-75" y1="-40" x2="-45" y2="-20"/>
+    </g>
+  </g>
+
+  <!-- Bottom Geometry compass & arcs -->
+  <g stroke="#6366f1" stroke-width="2" fill="none" opacity="0.4">
+    <circle cx="960" cy="1080" r="420"/>
+    <circle cx="960" cy="1080" r="540"/>
+    <line x1="500" y1="1080" x2="1420" y2="1080"/>
+  </g>
+</svg>

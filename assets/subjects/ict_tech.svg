@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="ictBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#082f49"/>
+      <stop offset="50%" stop-color="#021422"/>
+      <stop offset="100%" stop-color="#00070e"/>
+    </radialGradient>
+    <linearGradient id="chipGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7"/>
+      <stop offset="100%" stop-color="#0369a1"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#ictBg)"/>
+
+  <!-- TOP-LEFT: Holographic Code Terminal -->
+  <g transform="translate(120, 100)">
+    <rect x="0" y="0" width="440" height="280" rx="14" fill="rgba(15, 23, 42, 0.85)" stroke="#0ea5e9" stroke-width="2.5"/>
+    <!-- Terminal Header -->
+    <rect x="0" y="0" width="440" height="36" rx="14" fill="#1e293b"/>
+    <circle cx="20" cy="18" r="6" fill="#ef4444"/><circle cx="40" cy="18" r="6" fill="#f59e0b"/><circle cx="60" cy="18" r="6" fill="#22c55e"/>
+    <text x="170" y="24" fill="#94a3b8" font-size="13" font-family="monospace">terminal.sh</text>
+
+    <!-- Code text -->
+    <g font-family="monospace" font-size="15" fill="#f8fafc">
+      <text x="24" y="70"><tspan fill="#38bdf8">const</tspan> <tspan fill="#facc15">system</tspan> = <tspan fill="#38bdf8">new</tspan> <tspan fill="#4ade80">QuantumAI</tspan>();</text>
+      <text x="24" y="105"><tspan fill="#c084fc">async function</tspan> <tspan fill="#60a5fa">runChallenge</tspan>() {</text>
+      <text x="44" y="140"><tspan fill="#38bdf8">await</tspan> system.<tspan fill="#60a5fa">compileEngine</tspan>();</text>
+      <text x="44" y="175"><tspan fill="#c084fc">return</tspan> <tspan fill="#4ade80">&quot;READY TO CODE&quot;</tspan>;</text>
+      <text x="24" y="210">}</text>
+      <text x="24" y="245" fill="#38bdf8">&gt; system.status: <tspan fill="#4ade80">ONLINE [200 OK]</tspan>_</text>
+    </g>
+  </g>
+
+  <!-- Left: Binary Matrix rain -->
+  <g font-family="monospace" font-size="18" fill="#0ea5e9" opacity="0.45">
+    <text x="140" y="440">01001001 01000011</text>
+    <text x="140" y="480">01010100 00100000</text>
+    <text x="140" y="520">01010011 01011001</text>
+    <text x="140" y="560">01010011 01010100</text>
+  </g>
+
+  <!-- HERO RIGHT: High-Tech CPU Microchip & Circuit Traces (Prominent!) -->
+  <g transform="translate(1560, 360)">
+    <!-- Circuit Lines radiating -->
+    <g stroke="#0ea5e9" stroke-width="3" fill="none">
+      <path d="M 0,-160 L 0,-240 L -80,-280"/>
+      <circle cx="-80" cy="-280" r="6" fill="#38bdf8"/>
+      <path d="M 80,-160 L 160,-240 L 260,-240"/>
+      <circle cx="260" cy="-240" r="6" fill="#38bdf8"/>
+      <path d="M 160,0 L 260,0 L 320,-60"/>
+      <circle cx="320" cy="-60" r="6" fill="#38bdf8"/>
+      <path d="M 160,80 L 240,160 L 240,240"/>
+      <circle cx="240" cy="240" r="6" fill="#38bdf8"/>
+      <path d="M -160,0 L -240,0 L -280,60"/>
+      <circle cx="-280" cy="60" r="6" fill="#38bdf8"/>
+      <path d="M 0,160 L 0,240 L 60,280"/>
+      <circle cx="60" cy="280" r="6" fill="#38bdf8"/>
+    </g>
+
+    <!-- Golden Bus Pins -->
+    <g fill="#f59e0b">
+      <rect x="-140" y="-175" width="280" height="15" rx="3"/>
+      <rect x="-140" y="160" width="280" height="15" rx="3"/>
+      <rect x="-175" y="-140" width="15" height="280" rx="3"/>
+      <rect x="160" y="-140" width="15" height="280" rx="3"/>
+    </g>
+
+    <!-- Central Chip Package -->
+    <rect x="-140" y="-140" width="280" height="280" rx="18" fill="url(#chipGrad)" stroke="#38bdf8" stroke-width="4"/>
+    <rect x="-110" y="-110" width="220" height="220" rx="10" fill="#0f172a" stroke="#0ea5e9" stroke-width="2"/>
+    
+    <!-- Chip Logo -->
+    <text x="0" y="-10" fill="#38bdf8" font-size="34" font-weight="900" font-family="sans-serif" text-anchor="middle">&lt; / &gt;</text>
+    <text x="0" y="30" fill="#ffffff" font-size="22" font-weight="bold" font-family="monospace" text-anchor="middle">CORE-X</text>
+    <text x="0" y="60" fill="#f59e0b" font-size="14" font-family="monospace" text-anchor="middle">64-BIT PROCESSOR</text>
+  </g>
+
+  <!-- Bottom 3D Cyber Perspective Grid -->
+  <g stroke="#0284c7" stroke-width="1.5" opacity="0.5">
+    <line x1="0" y1="920" x2="1920" y2="920"/>
+    <line x1="0" y1="970" x2="1920" y2="970"/>
+    <line x1="0" y1="1030" x2="1920" y2="1030"/>
+    <line x1="960" y1="880" x2="0" y2="1080"/>
+    <line x1="960" y1="880" x2="380" y2="1080"/>
+    <line x1="960" y1="880" x2="760" y2="1080"/>
+    <line x1="960" y1="880" x2="1160" y2="1080"/>
+    <line x1="960" y1="880" x2="1540" y2="1080"/>
+    <line x1="960" y1="880" x2="1920" y2="1080"/>
+  </g>
+</svg>

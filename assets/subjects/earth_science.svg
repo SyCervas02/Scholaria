@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="spaceBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#071b30"/>
+      <stop offset="45%" stop-color="#030d1a"/>
+      <stop offset="100%" stop-color="#01050a"/>
+    </radialGradient>
+    <radialGradient id="earthGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="70%" stop-color="#38bdf8" stop-opacity="0.8"/>
+      <stop offset="85%" stop-color="#0284c7" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="earthSphere" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="30%" stop-color="#0284c7"/>
+      <stop offset="65%" stop-color="#034e7b"/>
+      <stop offset="100%" stop-color="#021f38"/>
+    </radialGradient>
+    <radialGradient id="sunCorona" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="20%" stop-color="#fef08a"/>
+      <stop offset="45%" stop-color="#f59e0b" stop-opacity="0.8"/>
+      <stop offset="75%" stop-color="#ea580c" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ea580c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="moonSphere" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="60%" stop-color="#cbd5e1"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </radialGradient>
+    <linearGradient id="crustGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" stop-opacity="0.2"/>
+      <stop offset="35%" stop-color="#047857"/>
+      <stop offset="65%" stop-color="#b45309"/>
+      <stop offset="85%" stop-color="#dc2626"/>
+      <stop offset="100%" stop-color="#7f1d1d"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#spaceBg)"/>
+
+  <g fill="#ffffff">
+    <circle cx="120" cy="80" r="1.5" opacity="0.9"/><circle cx="280" cy="140" r="2.5" opacity="0.7"/><circle cx="450" cy="70" r="1.2" opacity="0.8"/><circle cx="620" cy="110" r="2" opacity="0.6"/>
+    <circle cx="790" cy="50" r="2.8" opacity="0.85"/><circle cx="950" cy="130" r="1.5" opacity="0.5"/><circle cx="1120" cy="65" r="3" opacity="0.9"/><circle cx="1320" cy="140" r="1.8" opacity="0.7"/>
+    <circle cx="150" cy="420" r="2" opacity="0.7"/><circle cx="80" cy="600" r="2.5" opacity="0.8"/><circle cx="220" cy="720" r="1.5" opacity="0.5"/>
+    <circle cx="1780" cy="620" r="2.5" opacity="0.8"/><circle cx="1880" cy="450" r="2" opacity="0.7"/><circle cx="1820" cy="780" r="1.8" opacity="0.6"/>
+  </g>
+  <path d="M 120,80 L 280,140 L 450,70 L 620,110" stroke="#38bdf8" stroke-width="0.8" opacity="0.4" fill="none"/>
+  <path d="M 790,50 L 950,130 L 1120,65" stroke="#38bdf8" stroke-width="0.8" opacity="0.4" fill="none"/>
+
+  <!-- HERO TOP-LEFT: Sun Flare -->
+  <circle cx="180" cy="180" r="220" fill="url(#sunCorona)"/>
+  <circle cx="180" cy="180" r="48" fill="#ffffff"/>
+  <line x1="180" y1="40" x2="180" y2="320" stroke="#fde047" stroke-width="2" opacity="0.5"/>
+  <line x1="40" y1="180" x2="320" y2="180" stroke="#fde047" stroke-width="2" opacity="0.5"/>
+
+  <!-- Crescent Moon -->
+  <g transform="translate(360, 110)">
+    <circle cx="35" cy="35" r="32" fill="url(#moonSphere)"/>
+    <circle cx="25" cy="25" r="6" fill="#94a3b8" opacity="0.6"/>
+    <path d="M 35,3 A 32,32 0 0,0 35,67 A 26,32 0 0,1 35,3 Z" fill="#030d1a" opacity="0.75"/>
+  </g>
+
+  <!-- HERO TOP-RIGHT: GLORIOUS EARTH GLOBE -->
+  <g transform="translate(1560, 310)">
+    <circle cx="0" cy="0" r="260" fill="url(#earthGlow)"/>
+    <circle cx="0" cy="0" r="215" fill="url(#earthSphere)"/>
+    <path d="M -70,-130 Q -10,-150 40,-110 Q 90,-80 80,-20 Q 60,30 20,40 Q -30,50 -70,10 Q -90,-40 -70,-130 Z" fill="#22c55e" opacity="0.95"/>
+    <path d="M 40,-110 Q 110,-90 140,-30 Q 150,20 110,50 Q 80,40 50,0 Q 30,-50 40,-110 Z" fill="#15803d" opacity="0.95"/>
+    <path d="M -90,-20 Q -40,-10 -30,30 Q -20,90 -60,130 Q -110,110 -115,50 Q -110,10 -90,-20 Z" fill="#16a34a" opacity="0.95"/>
+    <ellipse cx="-15" cy="85" rx="8" ry="18" fill="#15803d" transform="rotate(20 -15 85)"/>
+    <path d="M 70,70 Q 130,60 140,110 Q 120,145 70,130 Q 55,100 70,70 Z" fill="#22c55e" opacity="0.9"/>
+    
+    <path d="M -180,-70 Q -100,-130 0,-70 T 170,-90" stroke="#ffffff" stroke-width="16" fill="none" opacity="0.75" stroke-linecap="round"/>
+    <path d="M -160,20 Q -60,-30 60,30 T 190,-10" stroke="#ffffff" stroke-width="20" fill="none" opacity="0.7" stroke-linecap="round"/>
+    <path d="M -140,90 Q -40,120 70,75 T 160,115" stroke="#ffffff" stroke-width="14" fill="none" opacity="0.65" stroke-linecap="round"/>
+
+    <!-- Orbital Satellite -->
+    <g transform="translate(-160, -140) rotate(-35)">
+      <rect x="-42" y="-10" width="28" height="20" rx="2" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>
+      <rect x="14" y="-10" width="28" height="20" rx="2" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>
+      <rect x="-12" y="-8" width="24" height="16" rx="3" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.5"/>
+      <circle cx="0" cy="0" r="3" fill="#e11d48"/>
+    </g>
+    <path d="M 0,-215 A 215,215 0 0,1 215,0 A 215,215 0 0,1 0,215 A 215,215 0 0,0 0,-215 Z" fill="#01050a" opacity="0.45"/>
+  </g>
+
+  <!-- Orbital Rings -->
+  <g stroke="#38bdf8" stroke-width="2" fill="none" opacity="0.45">
+    <ellipse cx="960" cy="650" rx="980" ry="320" stroke-dasharray="14 10"/>
+  </g>
+
+  <!-- BOTTOM: Geological Strata -->
+  <path d="M -100,820 Q 960,690 2020,820 L 2020,1080 L -100,1080 Z" fill="url(#crustGrad)"/>
+  <path d="M 0,890 L 180,820 L 380,880 L 620,790 L 890,870 L 1150,780 L 1420,860 L 1700,770 L 1920,840 L 1920,1080 L 0,1080 Z" fill="#064e3b" opacity="0.75"/>
+  <path d="M 0,940 L 240,880 L 520,930 L 820,850 L 1100,920 L 1380,860 L 1650,910 L 1920,870 L 1920,1080 L 0,1080 Z" fill="#022c22" opacity="0.9"/>
+  <path d="M 0,1040 Q 480,1000 960,1020 T 1920,1030 L 1920,1080 L 0,1080 Z" fill="#ea580c" opacity="0.85"/>
+  <path d="M 0,1055 Q 500,1030 1000,1045 T 1920,1050 L 1920,1080 L 0,1080 Z" fill="#fbbf24" opacity="0.95"/>
+</svg>

@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bioBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#064e3b"/>
+      <stop offset="50%" stop-color="#022c22"/>
+      <stop offset="100%" stop-color="#011611"/>
+    </radialGradient>
+    <radialGradient id="cellGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#059669" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#022c22" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="dnaGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="dnaGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a7f3d0"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#bioBg)"/>
+
+  <!-- TOP-LEFT: Giant Bioluminescent Cell -->
+  <g transform="translate(240, 240)">
+    <circle cx="0" cy="0" r="190" fill="url(#cellGlow)"/>
+    <!-- Outer Cell Membrane -->
+    <path d="M 0,-150 C 90,-160 160,-90 150,0 C 140,80 90,150 0,140 C -80,150 -150,80 -140,0 C -150,-80 -90,-140 0,-150 Z" fill="#047857" stroke="#34d399" stroke-width="4" opacity="0.6"/>
+    <!-- Nucleus -->
+    <circle cx="0" cy="0" r="65" fill="#065f46" stroke="#6ee7b7" stroke-width="3"/>
+    <circle cx="-10" cy="-10" r="28" fill="#10b981" opacity="0.8"/>
+    <!-- Mitochondria & Organelles -->
+    <ellipse cx="65" cy="-60" rx="30" ry="15" fill="#f59e0b" opacity="0.85" transform="rotate(30 65 -60)"/>
+    <ellipse cx="-70" cy="55" rx="32" ry="16" fill="#f59e0b" opacity="0.85" transform="rotate(-40 -70 55)"/>
+    <circle cx="70" cy="60" r="14" fill="#06b6d4" opacity="0.9"/>
+    <circle cx="-65" cy="-60" r="12" fill="#06b6d4" opacity="0.9"/>
+    <!-- Floating Ribosomes -->
+    <circle cx="20" cy="85" r="5" fill="#fde047"/><circle cx="-25" cy="95" r="4" fill="#fde047"/><circle cx="95" cy="15" r="5" fill="#fde047"/>
+  </g>
+
+  <!-- RIGHT: Glorious Vertical DNA Double Helix (Unmistakable!) -->
+  <g transform="translate(1600, 80)">
+    <!-- DNA rungs -->
+    <line x1="-70" y1="80" x2="70" y2="80" stroke="#f59e0b" stroke-width="6" stroke-linecap="round"/>
+    <line x1="-90" y1="160" x2="90" y2="160" stroke="#38bdf8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="-60" y1="240" x2="60" y2="240" stroke="#ec4899" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="320" x2="0" y2="320" stroke="#10b981" stroke-width="8" stroke-linecap="round"/>
+    <line x1="-60" y1="400" x2="60" y2="400" stroke="#f59e0b" stroke-width="6" stroke-linecap="round"/>
+    <line x1="-90" y1="480" x2="90" y2="480" stroke="#38bdf8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="-60" y1="560" x2="60" y2="560" stroke="#ec4899" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="640" x2="0" y2="640" stroke="#10b981" stroke-width="8" stroke-linecap="round"/>
+    <line x1="-60" y1="720" x2="60" y2="720" stroke="#f59e0b" stroke-width="6" stroke-linecap="round"/>
+    <line x1="-90" y1="800" x2="90" y2="800" stroke="#38bdf8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="-60" y1="880" x2="60" y2="880" stroke="#ec4899" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- Strands -->
+    <path d="M -90,0 Q 0,160 90,320 T -90,640 T 90,960" stroke="url(#dnaGrad1)" stroke-width="12" fill="none" stroke-linecap="round"/>
+    <path d="M 90,0 Q 0,160 -90,320 T 90,640 T -90,960" stroke="url(#dnaGrad2)" stroke-width="12" fill="none" stroke-linecap="round"/>
+
+    <!-- Nucleotide nodes -->
+    <circle cx="-90" cy="160" r="10" fill="#38bdf8"/><circle cx="90" cy="160" r="10" fill="#f59e0b"/>
+    <circle cx="-90" cy="480" r="10" fill="#38bdf8"/><circle cx="90" cy="480" r="10" fill="#f59e0b"/>
+    <circle cx="-90" cy="800" r="10" fill="#38bdf8"/><circle cx="90" cy="800" r="10" fill="#f59e0b"/>
+  </g>
+
+  <!-- Botanical foliage at bottom corners -->
+  <g fill="#047857" opacity="0.6">
+    <!-- Left Leaf -->
+    <path d="M 0,1080 Q 80,820 280,780 C 220,860 160,960 0,1080 Z"/>
+    <path d="M 0,1080 Q 180,880 380,920 C 300,980 220,1040 0,1080 Z"/>
+    <!-- Right Leaf -->
+    <path d="M 1920,1080 Q 1840,820 1640,780 C 1700,860 1760,960 1920,1080 Z"/>
+  </g>
+
+  <!-- Glowing organic particles -->
+  <g fill="#a7f3d0" opacity="0.75">
+    <circle cx="480" cy="180" r="6"/><circle cx="720" cy="120" r="4"/><circle cx="1180" cy="150" r="5"/><circle cx="1380" cy="220" r="4"/>
+    <circle cx="350" cy="560" r="5"/><circle cx="1450" cy="620" r="6"/><circle cx="850" cy="820" r="5"/>
+  </g>
+</svg>
