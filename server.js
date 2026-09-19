@@ -798,10 +798,12 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
     let attempts = 0;
     const maxAttempts = 3;
 
+    const modelsToTry = ['gemini-3.6-flash', 'gemini-flash-latest'];
     while (attempts < maxAttempts) {
+      const modelName = modelsToTry[Math.min(attempts, modelsToTry.length - 1)];
       attempts++;
       aiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -814,11 +816,11 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
 
       if (aiResponse.ok) break;
 
-      // If temporary demand spike (503/429), wait and retry
-      if (aiResponse.status === 503 || aiResponse.status === 429) {
+      // If temporary demand spike (503/429) or model fallback needed, wait and retry
+      if (aiResponse.status === 503 || aiResponse.status === 429 || aiResponse.status === 404) {
         if (attempts < maxAttempts) {
-          console.warn(`Gemini API busy (${aiResponse.status}), retrying attempt ${attempts + 1}...`);
-          await new Promise(r => setTimeout(r, 1200 * attempts));
+          console.warn(`Gemini API error (${aiResponse.status}) on ${modelName}, retrying attempt ${attempts + 1}...`);
+          await new Promise(r => setTimeout(r, 1000 * attempts));
           continue;
         }
       }

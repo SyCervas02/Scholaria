@@ -1,7 +1,7 @@
 /* ── SYSTEM QUIZ GENERATOR & MANAGEMENT MODULE ── */
 
 const QUIZ_API_ENDPOINT = typeof API_BASE !== 'undefined' ? `${API_BASE}/api/quiz/generate` : 'http://localhost:3001/api/quiz/generate';
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 let customQuizzes = [];
 let isFetchingQuizzes = false;
@@ -46,7 +46,7 @@ async function loadQuizzesFromDB() {
   } finally {
     isFetchingQuizzes = false;
   }
-  if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress')) {
+  if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress' || currentPage === 'quiz' || currentPage === 'analysis')) {
     const mainContent = document.getElementById('mainContent');
     if (mainContent && typeof getPageContent === 'function') {
       mainContent.innerHTML = getPageContent(ROLE, currentPage);
@@ -338,6 +338,46 @@ function quizModalClose() {
   closeQuizModal();
 }
 
+function closeQuizModal() {
+  const modal = document.getElementById('quizModal');
+  if (modal) modal.classList.remove('active');
+}
+
+if (typeof SUBJECTS_BY_STRAND === 'undefined') {
+  window.SUBJECTS_BY_STRAND = {
+    STEM: [
+      'Pre-Calculus', 'Basic Calculus', 'General Biology 1', 'General Biology 2',
+      'General Physics 1', 'General Physics 2', 'General Chemistry 1', 'General Chemistry 2',
+      'Empowerment Technologies (ICT)', 'Earth and Life Science', 'Oral Communication in Context',
+      'Media & Information Literacy', 'Practical Research 1', 'Practical Research 2',
+      'Reading and Writing', 'Statistics and Probability', 'Physical Science'
+    ],
+    HUMSS: [
+      'Creative Writing', 'Creative Nonfiction', 'Philippine Politics and Governance',
+      'Disciplines and Ideas in the Social Sciences', 'Disciplines and Ideas in the Applied Social Sciences',
+      'Introduction to World Religions and Belief Systems', 'Trends, Networks & Critical Thinking',
+      'Community Engagement, Solidarity & Citizenship', 'Oral Communication in Context',
+      'Reading and Writing', 'Practical Research 1', 'Practical Research 2',
+      'Media & Information Literacy', 'Empowerment Technologies (ICT)', 'Statistics and Probability'
+    ],
+    ABM: [
+      'Business Math', 'Organization and Management',
+      'Fundamentals of Accountancy, Business & Management 1', 'Fundamentals of Accountancy, Business & Management 2',
+      'Business Finance', 'Applied Economics', 'Principles of Marketing', 'Business Ethics and Social Responsibility',
+      'Oral Communication in Context', 'Reading and Writing', 'Practical Research 1', 'Practical Research 2',
+      'Media & Information Literacy', 'Empowerment Technologies (ICT)', 'Statistics and Probability'
+    ],
+    TVL: [
+      'Computer Programming', 'Web Systems', 'Computer Systems Servicing', 'Animation',
+      'Technical Drafting', 'Food and Beverage Services', 'Bread and Pastry Production',
+      'Electrical Installation & Maintenance', 'Shielded Metal Arc Welding',
+      'Oral Communication in Context', 'Reading and Writing', 'Practical Research 1', 'Practical Research 2',
+      'Media & Information Literacy', 'Empowerment Technologies (ICT)', 'Statistics and Probability'
+    ]
+  };
+}
+
+
 function selectQuizType(type) {
   quizGen.type = type;
   renderQuizModal();
@@ -450,34 +490,32 @@ function distributeCountToFormats(total) {
 
 function getAvailableSubjectsForQuizGen() {
   const selectedStrands = Array.from(quizGen.strands);
-  if (typeof getFilteredSubjects === 'function') {
-    if (selectedStrands.length === 1) {
-      return getFilteredSubjects(selectedStrands[0], quizGen.gradeLevel);
-    }
-    if (selectedStrands.length > 1) {
-      const combined = [];
-      selectedStrands.forEach(st => {
-        getFilteredSubjects(st, quizGen.gradeLevel).forEach(sub => {
-          if (!combined.includes(sub)) combined.push(sub);
-        });
-      });
-      return combined;
-    }
-    return getFilteredSubjects(null, quizGen.gradeLevel);
+  const subjectsSet = new Set();
+
+  // If teacher has assigned subjects in their profile, include them
+  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && CURRENT_PROFILE.subjects) {
+    CURRENT_PROFILE.subjects.split(',').map(s => s.trim()).filter(Boolean).forEach(sub => subjectsSet.add(sub));
   }
-  const subjectsMap = typeof SUBJECTS_BY_STRAND !== 'undefined' ? SUBJECTS_BY_STRAND : {};
-  if (selectedStrands.length === 0) {
-    const all = [];
-    Object.values(subjectsMap).forEach(list => {
-      list.forEach(sub => { if (!all.includes(sub)) all.push(sub); });
+
+  // If COURSES_DATABASE exists, pull from courses database
+  if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
+    COURSES_DATABASE.forEach(c => {
+      if (selectedStrands.length === 0 || selectedStrands.includes(c.strand) || c.track === 'Core' || c.track === 'Applied') {
+        if (c.title) subjectsSet.add(c.title);
+      }
     });
-    return all;
   }
-  const filtered = [];
-  selectedStrands.forEach(str => {
-    (subjectsMap[str] || []).forEach(sub => { if (!filtered.includes(sub)) filtered.push(sub); });
-  });
-  return filtered;
+
+  // Include mapped subjects by strand
+  if (selectedStrands.length === 0) {
+    Object.values(SUBJECTS_BY_STRAND).forEach(list => list.forEach(s => subjectsSet.add(s)));
+  } else {
+    selectedStrands.forEach(st => {
+      (SUBJECTS_BY_STRAND[st] || []).forEach(s => subjectsSet.add(s));
+    });
+  }
+
+  return Array.from(subjectsSet).sort();
 }
 
 function toggleQuizStrand(s) {
@@ -524,7 +562,7 @@ function handleFileInput(input) {
     return;
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    showToast('File is too large — please keep uploads under 10MB', 'error');
+    showToast('File is too large — maximum file size is 50MB only', 'error');
     return;
   }
   quizGen.file = file;
@@ -646,6 +684,9 @@ function applyGeneratedQuestions(list, isDemo) {
       source_material: fileName,
       lesson: lesson
     }, q);
+    if (obj.type === 'matching' && !obj.instructions) {
+      obj.instructions = obj.question || 'Match the items on the left with the correct matches on the right.';
+    }
     if (obj.type === 'multiple_choice') obj._answerIdx = Math.max(0, (obj.options || []).indexOf(obj.answer));
     return obj;
   });
@@ -1084,13 +1125,86 @@ async function approveQuiz(id) {
 
 async function rejectQuiz(id) {
   if (!confirm('Deny this quiz? It will be permanently deleted from the approval queue.')) return;
-  const { error } = await db.from('quizzes').delete().eq('id', id);
-  if (error) { showToast('Failed to deny quiz: ' + error.message, 'error'); return; }
-  showToast('Quiz denied and deleted', 'success');
-  await loadQuizzesFromDB();
-  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
-  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+  try {
+    if (typeof db !== 'undefined' && db) {
+      const { error } = await db.from('quizzes').delete().eq('id', id);
+      if (error) { showToast('Failed to deny quiz: ' + error.message, 'error'); return; }
+    }
+    customQuizzes = customQuizzes.filter(q => q.id !== id);
+    showToast('Quiz denied and deleted', 'success');
+    await loadQuizzesFromDB();
+    if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+    if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+  } catch (e) {
+    showToast('Failed to deny quiz: ' + e.message, 'error');
+  }
 }
+
+async function toggleQuizStatus(id, newStatus) {
+  const quiz = customQuizzes.find(q => q.id === id);
+  if (!quiz) return;
+  try {
+    if (typeof db !== 'undefined' && db) {
+      const { error } = await db.from('quizzes').update({ status: newStatus }).eq('id', id);
+      if (error) {
+        showToast('Failed to update quiz status: ' + error.message, 'error');
+        return;
+      }
+    }
+    quiz.status = newStatus;
+    showToast(`Quiz "${quiz.title}" is now ${newStatus.toUpperCase()}`, 'success');
+    await loadQuizzesFromDB();
+  } catch (err) {
+    showToast('Failed to update quiz: ' + err.message, 'error');
+  }
+}
+
+async function deleteQuiz(id) {
+  const quiz = customQuizzes.find(q => q.id === id);
+  const quizTitle = quiz ? quiz.title : 'this quiz';
+  if (!confirm(`Are you sure you want to permanently delete "${quizTitle}"? This will remove all associated questions.`)) return;
+
+  try {
+    if (typeof db !== 'undefined' && db) {
+      const { error } = await db.from('quizzes').delete().eq('id', id);
+      if (error) {
+        console.warn('DB delete warning:', error.message);
+      }
+    }
+    customQuizzes = customQuizzes.filter(q => q.id !== id);
+    showToast(`Quiz "${quizTitle}" deleted successfully`, 'success');
+    await loadQuizzesFromDB();
+    if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  } catch (err) {
+    showToast('Failed to delete quiz: ' + err.message, 'error');
+  }
+}
+
+let quizManagerFilterStrand = '';
+let quizManagerFilterStatus = '';
+let quizManagerFilterSubject = '';
+let quizManagerSearchQuery = '';
+
+function setQuizManagerFilterStrand(s) {
+  quizManagerFilterStrand = s;
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
+
+function setQuizManagerFilterStatus(st) {
+  quizManagerFilterStatus = st;
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
+
+function setQuizManagerFilterSubject(subj) {
+  quizManagerFilterSubject = subj;
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
+
+function setQuizManagerSearchQuery(q) {
+  quizManagerSearchQuery = (q || '').toLowerCase().trim();
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
+
 
 function renderQuizStepper() {
   const steps = [
@@ -1642,7 +1756,7 @@ function renderQuizModal() {
             <label class="dropzone" for="quizFileInput">
               ${iconUpload()}
               <div class="dz-title">Click to upload a handout, module, or notes</div>
-              <div class="dz-sub">PDF, DOCX, or TXT (Max 10MB)</div>
+              <div class="dz-sub">PDF, DOCX, or TXT (Max 50MB only)</div>
             </label>
             <input type="file" id="quizFileInput" accept=".pdf,.docx,.txt" style="display:none" onchange="handleFileInput(this)">
           `}
