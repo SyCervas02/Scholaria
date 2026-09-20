@@ -388,12 +388,40 @@ function openInteractiveQuiz(quizId) {
 }
 
 /**
+ * Requests exit confirmation for Interactive Arena
+ */
+function requestCloseInteractiveQuiz() {
+  if (interactivePlayerState.isSubmitted) {
+    closeInteractiveQuiz(false);
+    return;
+  }
+  const confirmEl = document.getElementById('iqExitConfirmModal');
+  if (confirmEl) {
+    confirmEl.style.display = 'flex';
+  } else {
+    closeInteractiveQuiz(false);
+  }
+}
+
+function cancelExitInteractiveQuiz() {
+  const confirmEl = document.getElementById('iqExitConfirmModal');
+  if (confirmEl) {
+    confirmEl.style.display = 'none';
+  }
+}
+
+function confirmExitInteractiveQuiz() {
+  cancelExitInteractiveQuiz();
+  closeInteractiveQuiz(false);
+}
+
+/**
  * Closes the Interactive Arena
  */
-function closeInteractiveQuiz(confirmFirst = true) {
+function closeInteractiveQuiz(confirmFirst = false) {
   if (confirmFirst && !interactivePlayerState.isSubmitted) {
-    const ok = confirm('Are you sure you want to exit? Your current progress will not be saved.');
-    if (!ok) return;
+    requestCloseInteractiveQuiz();
+    return;
   }
 
   stopInteractiveBGM();
@@ -522,7 +550,7 @@ function renderCurrentInteractiveQuestion() {
         <button class="iq-btn-icon ${interactiveMusicMuted ? 'muted' : ''}" id="iqMusicToggleBtn" title="${interactiveMusicMuted ? 'Unmute Background Music' : 'Mute Background Music'}" onclick="toggleInteractiveMusic()">
           ${interactiveMusicMuted ? iconAudioMuted() : iconAudioPlaying()}
         </button>
-        <button class="iq-btn-icon" title="Exit Quiz" onclick="closeInteractiveQuiz(true)">
+        <button class="iq-btn-icon" title="Exit Quiz" onclick="requestCloseInteractiveQuiz()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
         <button class="iq-btn-icon" title="Toggle Fullscreen" onclick="toggleInteractiveFullscreen()">
@@ -546,6 +574,25 @@ function renderCurrentInteractiveQuestion() {
     <div class="iq-student-badge">
       <div class="iq-student-avatar">${studentInitial}</div>
       <span>${escHtml(studentName)}</span>
+    </div>
+
+    <!-- Exit Confirmation Modal Dialog -->
+    <div id="iqExitConfirmModal" class="iq-confirm-overlay" style="display: none;">
+      <div class="iq-confirm-card">
+        <div class="iq-confirm-icon">
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <h3 class="iq-confirm-title">Exit Interactive Quiz?</h3>
+        <p class="iq-confirm-desc">Are you sure you want to exit? Your current progress and score in this interactive quiz will not be saved.</p>
+        <div class="iq-confirm-actions">
+          <button type="button" class="iq-confirm-btn-no" onclick="cancelExitInteractiveQuiz()">No, Continue</button>
+          <button type="button" class="iq-confirm-btn-yes" onclick="confirmExitInteractiveQuiz()">Yes, Exit</button>
+        </div>
+      </div>
     </div>
   `;
 
