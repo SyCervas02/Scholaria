@@ -381,7 +381,7 @@ body {
 .welcome-text-box h2 {
   font-size: 13px;
   font-weight: 600;
-  color: var(--gold);
+  color: #fcd34d;
   letter-spacing: 1px;
   opacity: 0.95;
 }
@@ -395,7 +395,7 @@ body {
 }
 .trail { position: absolute; height: 5px; border-radius: 4px; opacity: 0.5; }
 .blue-trail  { background: rgba(255,255,255,0.5); width: 120px; top: 35%; right: 24px; }
-.yellow-trail { background: var(--gold); width: 80px; top: 58%; right: 44px; }
+.yellow-trail { background: #fcd34d; width: 80px; top: 58%; right: 44px; }
 
 /* Characters / emoji row */
 .characters { display: flex; gap: 6px; font-size: 24px; flex-shrink: 0; }

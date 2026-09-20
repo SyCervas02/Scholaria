@@ -291,7 +291,6 @@ async function loadMaterialsFromDB() {
     } catch (e) {
       console.error('Supabase direct query failed:', e.message);
     }
-    return;
   } finally {
     isFetchingMaterials = false;
   }
@@ -946,6 +945,11 @@ function muUpdateSubject(value) {
 
 function muHandleFileInput(input) {
   const file = input.files[0] || null;
+  if (file && file.size > 50 * 1024 * 1024) {
+    showToast('File is too large — maximum file size is 50MB only', 'error');
+    input.value = '';
+    return;
+  }
   materialUploadState.file = file;
   if (file) {
     const rawName = file.name.replace(/\.[^.]+$/, '');
@@ -1053,7 +1057,7 @@ function renderMaterialModal() {
         <label class="dropzone" for="materialFileInput">
           ${iconUpload()}
           <div class="dz-title">Click to upload a handout, module, or slides</div>
-          <div class="dz-sub">PDF, DOCX, or PPTX — up to 25MB</div>
+          <div class="dz-sub">PDF, DOCX, or PPTX — maximum file size: 50MB only</div>
         </label>
         <input type="file" id="materialFileInput" accept=".pdf,.doc,.docx,.ppt,.pptx" style="display:none" onchange="muHandleFileInput(this)">
       `}

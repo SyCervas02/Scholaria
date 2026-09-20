@@ -1,4 +1,4 @@
-/* ── STUDENT QUIZ TAKING & SCORING ENGINE ── */
+              /* ── STUDENT QUIZ TAKING & SCORING ENGINE ── */
 
 const takeQuizState = { quiz: null, items: [], responses: {}, submitting: false, reviewMode: false, reviewAnswers: [] };
 
@@ -68,11 +68,41 @@ function openTakeQuizModal(quizId) {
   if (!quiz) { showToast('Quiz not found', 'error'); return; }
   const items = buildQuizItems(quiz);
   if (!items.length) { showToast('This quiz has no gradable items yet', 'error'); return; }
+<<<<<<<<< Temporary merge branch 1
+  
   Object.assign(takeQuizState, { quiz, items, responses: {}, submitting: false, reviewMode: false, reviewAnswers: [] });
+  
+  const isInteractive = quiz.type === 'interactive' || quiz.questions?.[0]?._quiz_type === 'interactive';
+  
+  if (isInteractive) {
+    initInteractiveQuiz();
+  } else {
+    interactiveState.active = false;
+  }
+  
+=========
+
+  const timeLimitMins = quiz.timeLimitMinutes || (quiz.questions?.[0]?._meta?.timeLimitMinutes) || (quiz.questions?.[0]?._timeLimitMinutes) || 0;
+
+  clearInterval(takeQuizState.timerInterval);
+  Object.assign(takeQuizState, { 
+    quiz, 
+    items, 
+    responses: {}, 
+    submitting: false, 
+    reviewMode: false, 
+    reviewAnswers: [],
+    timeLimitMinutes: timeLimitMins,
+    secondsLeft: timeLimitMins * 60
+  });
+
+>>>>>>>>> Temporary merge branch 2
   document.getElementById('takeQuizModal').classList.add('active');
   renderTakeQuizModal();
 
-  if (timeLimitMins > 0) {
+  // Interactive mode runs its own per-question countdown, so the global
+  // time limit only applies to the standard quiz view.
+  if (timeLimitMins > 0 && !isInteractive) {
     startTakeQuizTimer();
   }
 }
@@ -83,12 +113,36 @@ function openReviewAttempt(quizId) {
   const attempt = myQuizAttempts.find(a => a.quiz_id === quizId);
   if (!quiz || !attempt) { showToast('Attempt not found', 'error'); return; }
   const items = buildQuizItems(quiz);
+<<<<<<<<< Temporary merge branch 1
   Object.assign(takeQuizState, { quiz, items, responses: {}, submitting: false, reviewMode: true, reviewAnswers: attempt.answers || [] });
+  interactiveState.active = false;
+=========
+  Object.assign(takeQuizState, { 
+    quiz, 
+    items, 
+    responses: {}, 
+    submitting: false, 
+    reviewMode: true, 
+    reviewAnswers: attempt.answers || [],
+    timeLimitMinutes: 0,
+    secondsLeft: 0
+  });
+>>>>>>>>> Temporary merge branch 2
   document.getElementById('takeQuizModal').classList.add('active');
   renderTakeQuizModal();
 }
 
 function closeTakeQuizModal() {
+<<<<<<<<< Temporary merge branch 1
+  if (interactiveState.timerInterval) {
+    clearInterval(interactiveState.timerInterval);
+    interactiveState.timerInterval = null;
+  }
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  interactiveState.active = false;
+=========
+  clearInterval(takeQuizState.timerInterval);
+>>>>>>>>> Temporary merge branch 2
   document.getElementById('takeQuizModal').classList.remove('active');
 }
 
@@ -467,7 +521,14 @@ function renderTakeQuizModal() {
 
   subEl.innerHTML = reviewMode
     ? 'Reviewing your submitted answers'
-    : `${items.length} item${items.length === 1 ? '' : 's'} — answer everything, then submit`;
+<<<<<<<<< Temporary merge branch 1
+    : `${escHtml(quiz?.subject || subTheme.name)} · ${items.length} item${items.length === 1 ? '' : 's'} · Answer all questions and submit`;
+=========
+    : `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:2px;">
+        <span>${items.length} item${items.length === 1 ? '' : 's'} — answer everything, then submit</span>
+        ${timerHtml}
+      </div>`;
+>>>>>>>>> Temporary merge branch 2
 
   body.innerHTML = `<div class="sq-container" style="width:100%;max-width:860px;margin:0 auto;background:#fff;border:1.5px solid var(--blue-light);border-radius:16px;padding:24px 28px;box-shadow:0 4px 18px rgba(37,99,235,0.05);">${items.map((it, idx) => {
     const reviewAns = reviewMode ? reviewAnswers.find(a => a.itemId === it.itemId) : null;
@@ -510,8 +571,21 @@ function renderTakeQuizModal() {
 async function submitQuizAttempt(isAutoSubmit = false) {
   const { quiz, items, responses, submitting } = takeQuizState;
   if (submitting) return;
-  const unanswered = items.some(it => responses[it.itemId] == null || responses[it.itemId] === '');
+<<<<<<<<< Temporary merge branch 1
+  
+  const targetItems = (interactiveState.active && interactiveState.activeItems.length)
+    ? interactiveState.activeItems
+    : items;
+
+  const unanswered = targetItems.some(it => responses[it.itemId] == null || responses[it.itemId] === '');
   if (unanswered) { showToast('Please answer every item before submitting', 'error'); return; }
+=========
+>>>>>>>>> Temporary merge branch 2
+
+  if (!isAutoSubmit) {
+    const unanswered = items.some(it => responses[it.itemId] == null || responses[it.itemId] === '');
+    if (unanswered) { showToast('Please answer every item before submitting', 'error'); return; }
+  }
 
   clearInterval(takeQuizState.timerInterval);
   takeQuizState.submitting = true;

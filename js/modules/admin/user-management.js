@@ -1035,6 +1035,11 @@ function parseCsvText(text) {
 function auHandleBulkFile(input) {
   const file = input.files[0] || null;
   if (!file) return;
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('File is too large — maximum file size is 50MB only', 'error');
+    input.value = '';
+    return;
+  }
   const ext = file.name.split('.').pop().toLowerCase();
   if (!['xlsx', 'xls', 'csv'].includes(ext)) {
     showToast('Please upload an Excel (.xlsx/.xls) or CSV file', 'error'); return;
@@ -1326,7 +1331,7 @@ function renderAddUserModal() {
     <label class="au-bulk-zone" for="auBulkInput">
       <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/></svg>
       <div class="dz-title">Import from Excel or CSV</div>
-      <div class="dz-sub">Columns: Name, Email (Required) · Strand, Grade Level, Section (Optional)</div>
+      <div class="dz-sub">Columns: Name, Email (Required) · Strand, Grade Level, Section (Optional) — Max 50MB only</div>
     </label>
     <input type="file" id="auBulkInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="auHandleBulkFile(this)">
     <button type="button" class="au-format-toggle" id="auFormatExampleBtn" onclick="auToggleFormatExample()">

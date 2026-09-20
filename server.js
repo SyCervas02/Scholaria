@@ -910,6 +910,7 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
           }
         );
 
+ HEAD
         if (aiResponse.ok) {
           const data = await aiResponse.json();
           const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
@@ -918,6 +919,32 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
           if (questions.length > 0) {
             return res.json({ questions });
           }
+
+    const modelsToTry = ['gemini-3.6-flash', 'gemini-flash-latest'];
+    while (attempts < maxAttempts) {
+      const modelName = modelsToTry[Math.min(attempts, modelsToTry.length - 1)];
+      attempts++;
+      aiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: 'application/json' }
+          })
+        }
+      );
+
+      if (aiResponse.ok) break;
+
+      // If temporary demand spike (503/429) or model fallback needed, wait and retry
+      if (aiResponse.status === 503 || aiResponse.status === 429 || aiResponse.status === 404) {
+        if (attempts < maxAttempts) {
+          console.warn(`Gemini API error (${aiResponse.status}) on ${modelName}, retrying attempt ${attempts + 1}...`);
+          await new Promise(r => setTimeout(r, 1000 * attempts));
+          continue;
+
         }
       } catch (err) {
         console.warn(`Gemini model ${model} attempt error:`, err.message);
