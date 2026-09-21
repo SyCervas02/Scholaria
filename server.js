@@ -873,11 +873,14 @@ function extractQuestionsFromText(params) {
   let pairIdx = 0;
   for (let i = 0; i < targetCount; i++) {
     const fmt = formats[i % formats.length];
+    const isMc = fmt === 'mc' || fmt === 'multiple_choice';
+    const isId = fmt === 'id' || fmt === 'identification';
+    const isMatch = fmt === 'match' || fmt === 'matching';
     const sentence = sentences[i % Math.max(1, sentences.length)] || `Key concept in ${title}`;
     const pair = pairs[pairIdx % Math.max(1, pairs.length)];
     pairIdx++;
 
-    if (fmt === 'multiple_choice') {
+    if (isMc) {
       let qText = '';
       let correct = '';
       if (pair) {
@@ -900,7 +903,7 @@ function extractQuestionsFromText(params) {
         options: options,
         answer: correct
       });
-    } else if (fmt === 'identification') {
+    } else if (isId) {
       if (pair) {
         questions.push({
           type: 'identification',
@@ -914,7 +917,7 @@ function extractQuestionsFromText(params) {
           answer: title
         });
       }
-    } else if (fmt === 'matching') {
+    } else if (isMatch) {
       const matchingPairs = pairs.slice(0, 4).map(p => ({ left: p.term, right: p.def }));
       if (matchingPairs.length < 2) {
         matchingPairs.push({ left: 'Topic A', right: `Key premise of ${title}` });
@@ -941,7 +944,7 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
 
   // 1. Try Gemini AI if API key is provided
   if (GEMINI_API_KEY && GEMINI_API_KEY !== 'dummy_gemini_key') {
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const candidateModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
     for (const model of candidateModels) {
       try {
         const aiResponse = await fetch(
@@ -958,7 +961,11 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
 
         if (aiResponse.ok) {
           const data = await aiResponse.json();
-          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+          let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+          text = text.trim();
+          if (text.startsWith('```')) {
+            text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+          }
           const parsed = JSON.parse(text);
           const questions = sanitizeQuestions(parsed.questions);
           if (questions.length > 0) {

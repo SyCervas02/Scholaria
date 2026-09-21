@@ -340,7 +340,13 @@ function buildInteractiveQuestions(quiz) {
  * Opens and initializes the Interactive Quiz Arena
  */
 function openInteractiveQuiz(quizId) {
-  const quiz = (typeof customQuizzes !== 'undefined') ? customQuizzes.find(q => q.id === quizId) : null;
+  let quiz = null;
+  if (quizId && typeof quizId === 'object') {
+    quiz = quizId;
+  } else {
+    const quizList = (typeof customQuizzes !== 'undefined') ? customQuizzes : [];
+    quiz = quizList.find(q => String(q.id) === String(quizId));
+  }
   if (!quiz) {
     showToast('Quiz not found', 'error');
     return;

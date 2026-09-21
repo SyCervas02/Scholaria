@@ -1001,28 +1001,12 @@ async function saveQuiz() {
       created_by: userId,
       questions: questionsToSave,
       status: quizStatus,
-      is_demo: isDemo
-    };
-
-    const quizRow = {
-      ...baseQuizRow,
-      due_date: quizGen.dueDate || null,
-      time_limit_minutes: quizGen.timeLimitMinutes || 0,
+      is_demo: isDemo,
       sections: targetSectionsStr,
       lesson: lessonName
     };
 
-    let { error } = await db.from('quizzes').insert(quizRow);
-  if (error && error.message && error.message.includes('time_limit_minutes')) {
-    delete quizRow.time_limit_minutes;
-    const retry = await db.from('quizzes').insert(quizRow);
-    error = retry.error;
-  }
-  if (error && error.message && error.message.includes('due_date')) {
-    delete quizRow.due_date;
-    const retry = await db.from('quizzes').insert(quizRow);
-    error = retry.error;
-  }
+    const { error } = await db.from('quizzes').insert(baseQuizRow);
 
     if (error) {
       console.warn('Database insert failed, saving locally to custom quizzes list:', error.message);
@@ -1821,6 +1805,7 @@ function renderQuizModal() {
   // ── STEP 5: PREVIEW, EDIT & SAVE ──
   const hasQuestions = quizGen.questions && quizGen.questions.length > 0;
   const isDemo = hasQuestions && quizGen.questions.some(q => q._demo);
+  const isInter = quizGen.type === 'interactive';
 
   body.innerHTML = `
     ${stepperHtml}
@@ -1828,6 +1813,7 @@ function renderQuizModal() {
       <div class="qz-step-banner">
         <div class="qz-step-banner-title">
           <span>5. Preview, Edit &amp; Double Check</span>
+          ${isInter ? '<span style="margin-left:8px;padding:3px 10px;background:#e0f2fe;color:#0284c7;border-radius:50px;font-size:11px;font-weight:800;">🎮 Interactive Arena</span>' : '<span style="margin-left:8px;padding:3px 10px;background:#f1f5f9;color:#475569;border-radius:50px;font-size:11px;font-weight:600;">📝 Standard Quiz</span>'}
         </div>
         <span class="qz-step-banner-tag">Step 5 of 5</span>
       </div>
@@ -1836,15 +1822,21 @@ function renderQuizModal() {
       <div class="qz-questions-preview-section">
         <div class="qz-preview-header">
           <div class="qz-preview-title">
-            <span class="qz-preview-icon">📝</span>
+            <span class="qz-preview-icon">${isInter ? '🎮' : '📝'}</span>
             <div>
-              <h4>Question Items Preview (${quizGen.questions.length} items)</h4>
-              <span>Review and edit questions, options, and answers below before saving</span>
+              <h4>${isInter ? 'Interactive Game Items' : 'Question Items Preview'} (${quizGen.questions.length} items)</h4>
+              <span>${isInter ? `Interactive cards with animated countdown (${quizGen.timerPerQuestion > 0 ? `⏱️ ${quizGen.timerPerQuestion}s per item` : 'Untimed'})` : 'Review and edit questions, options, and answers below before saving'}</span>
             </div>
           </div>
-          <button type="button" class="foot-btn-secondary" onclick="addNewManualQuestion()" style="font-size:11.5px;padding:5px 12px;border-radius:8px;font-weight:700;">
-            + Add Question
-          </button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            ${isInter ? `
+            <button type="button" class="foot-btn-secondary" onclick="previewGeneratedInteractiveQuiz()" style="font-size:11.5px;padding:5px 12px;border-radius:8px;font-weight:700;background:#e0f2fe;border-color:#bae6fd;color:#0284c7;">
+              🎮 Test Game Arena
+            </button>` : ''}
+            <button type="button" class="foot-btn-secondary" onclick="addNewManualQuestion()" style="font-size:11.5px;padding:5px 12px;border-radius:8px;font-weight:700;">
+              + Add Question
+            </button>
+          </div>
         </div>
 
         ${isDemo ? `
@@ -1871,7 +1863,10 @@ function renderQuizModal() {
     <button class="foot-btn-secondary" onclick="prevQuizStep()">&larr; Back</button>
     <div class="qz-foot-actions">
       <button class="foot-btn-secondary" onclick="quizGen.wizardStep=4;generateQuiz();" title="Re-generate questions using system">🔄 Re-generate</button>
-      <button class="gen-btn" ${!hasQuestions ? 'disabled' : ''} onclick="saveQuiz()">${iconChip()} Save Quiz${hasQuestions ? ` (${quizGen.questions.length} items)` : ''}</button>
+      ${isInter ? `
+      <button class="foot-btn-secondary" onclick="previewGeneratedInteractiveQuiz()" style="background:#e0f2fe;border-color:#bae6fd;color:#0284c7;font-weight:700;">🎮 Test Arena</button>
+      ` : ''}
+      <button class="gen-btn" ${!hasQuestions ? 'disabled' : ''} style="${isInter ? 'background:linear-gradient(135deg,#0284c7,#8b5cf6);' : ''}" onclick="saveQuiz()">${iconChip()} Save ${isInter ? 'Interactive ' : ''}Quiz${hasQuestions ? ` (${quizGen.questions.length} items)` : ''}</button>
     </div>
   `;
 }
@@ -1935,12 +1930,16 @@ function previewGeneratedInteractiveQuiz() {
     title: quizGen.title || 'Interactive Quiz Preview',
     subject: quizGen.subject || 'General Academic',
     type: 'interactive',
+    quiz_type: 'interactive',
+    timerPerQuestion: quizGen.timerPerQuestion || 30,
     questions: quizGen.questions.map(q => Object.assign({}, q, { _quiz_type: 'interactive' })),
     is_demo: false,
     isPreview: true
   };
-  if (typeof openTakeQuizModal === 'function') {
-    openTakeQuizModal(null, previewQuiz, true);
+  if (typeof openInteractiveQuiz === 'function') {
+    openInteractiveQuiz(previewQuiz);
+  } else if (typeof openTakeQuizModal === 'function') {
+    openTakeQuizModal(previewQuiz);
   } else {
     showToast('Take quiz module is not loaded', 'error');
   }

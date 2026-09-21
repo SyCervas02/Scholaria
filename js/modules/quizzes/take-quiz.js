@@ -94,6 +94,13 @@ function openTakeQuizModal(quizId) {
     return; 
   }
 
+  if (quiz.type === 'interactive' || quiz.quiz_type === 'interactive') {
+    if (typeof openInteractiveQuiz === 'function') {
+      openInteractiveQuiz(quizId);
+      return;
+    }
+  }
+
   const items = buildQuizItems(quiz);
   if (!items.length) { 
     if (typeof showToast === 'function') showToast('This quiz has no gradable items yet', 'error'); 
