@@ -5,6 +5,7 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 let customQuizzes = [];
 let isFetchingQuizzes = false;
+let currentQuizGenToken = 0;
 
 async function loadQuizzesFromDB() {
   if (isFetchingQuizzes) return;
@@ -569,14 +570,18 @@ function handleFileInput(input) {
   }
   quizGen.file = file;
   quizGen.fileText = '';
+  quizGen.isExtracting = true;
   if (!quizGen.title) quizGen.title = file.name.replace(/\.[^.]+$/, '');
   const availSubs = getAvailableSubjectsForQuizGen();
   const matchedSub = availSubs.find(s => s.toLowerCase() === file.name.replace(/\.[^.]+$/, '').toLowerCase());
   if (!quizGen.subject && matchedSub) quizGen.subject = matchedSub;
   renderQuizModal();
   extractFileText(file, ext)
-    .then(text => { quizGen.fileText = text; renderQuizModal(); })
-    .catch(() => { showToast('Could not fully read this file — generation will rely on the filename instead', 'info'); });
+    .then(text => { quizGen.fileText = text; quizGen.isExtracting = false; renderQuizModal(); })
+    .catch(() => {
+      quizGen.isExtracting = false;
+      showToast('Could not fully read this file — generation will rely on the filename instead', 'info');
+    });
 }
 
 function extractFileText(file, ext) {
@@ -621,6 +626,7 @@ function extractFileText(file, ext) {
 function removeFile() {
   quizGen.file = null;
   quizGen.fileText = '';
+  quizGen.isExtracting = false;
   quizGen.questions = [];
   renderQuizModal();
 }
@@ -632,7 +638,7 @@ async function generateQuiz() {
   renderQuizModal();
 
   let waited = 0;
-  while (!quizGen.fileText && waited < 6000) {
+  while (quizGen.isExtracting && waited < 6000) {
     if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
     await new Promise(r => setTimeout(r, 300));
     waited += 300;
