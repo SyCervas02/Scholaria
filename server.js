@@ -668,6 +668,52 @@ app.delete('/api/materials/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// --- Quiz management & approval endpoints (Admin & Teachers) ---
+app.patch('/api/quizzes/:id/status', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+
+  const { status } = req.body;
+  if (!['approved', 'active', 'rejected', 'closed'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+
+  if (status === 'rejected') {
+    // Admin denied quiz: delete all associated quiz_attempts first, then delete the quiz
+    await supabaseAdmin.from('quiz_attempts').delete().eq('quiz_id', req.params.id);
+    const { error: delErr } = await supabaseAdmin.from('quizzes').delete().eq('id', req.params.id);
+    if (delErr) return res.status(500).json({ error: delErr.message });
+    return res.json({ success: true, deleted: true, id: req.params.id });
+  }
+
+  // 'approved' or 'active' or 'closed'
+  const newStatus = status === 'approved' ? 'active' : status;
+  const { data, error } = await supabaseAdmin
+    .from('quizzes').update({ status: newStatus }).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.delete('/api/quizzes/:id', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const { data: quiz } = await supabaseAdmin
+    .from('quizzes').select('*').eq('id', req.params.id).single();
+  if (!quiz) return res.status(404).json({ error: 'Quiz not found' });
+
+  const canDelete = profile.role === 'admin' || quiz.created_by === profile.id;
+  if (!canDelete) return res.status(403).json({ error: 'Not allowed to delete this quiz' });
+
+  // Delete all associated attempts first to satisfy foreign key constraints
+  await supabaseAdmin.from('quiz_attempts').delete().eq('quiz_id', req.params.id);
+  const { error } = await supabaseAdmin.from('quizzes').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ success: true, id: req.params.id });
+});
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ALLOWED_FORMATS = ['mc', 'id', 'match'];
 const MAX_TEXT_LENGTH = 20000;
@@ -851,6 +897,10 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Scholaria server running on port ${PORT}`);
-});
+module.exports = app;
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Scholaria server running on port ${PORT}`);
+  });
+}

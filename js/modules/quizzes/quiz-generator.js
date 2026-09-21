@@ -10,9 +10,9 @@ async function loadQuizzesFromDB() {
   if (isFetchingQuizzes) return;
   isFetchingQuizzes = true;
   try {
-    const { data, error } = await db.from('quizzes').select('*').order('created_at', { ascending: false });
+    const { data, error } = await db.from('quizzes').select('*').neq('status', 'rejected').order('created_at', { ascending: false });
     if (error) { console.error('Failed to load quizzes:', error.message); return; }
-    customQuizzes = (data || []).map(q => {
+    customQuizzes = (data || []).filter(q => q.status !== 'rejected').map(q => {
       const firstQ = (q.questions && q.questions[0]) || {};
       const qMeta = firstQ._meta || {};
       const quizType = q.quiz_type || q.type || firstQ._quizType || qMeta.quizType || 'standard';
@@ -43,12 +43,18 @@ async function loadQuizzesFromDB() {
   } finally {
     isFetchingQuizzes = false;
   }
+<<<<<<< Updated upstream
   if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress')) {
+=======
+  if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress' || currentPage === 'quiz' || currentPage === 'analysis' || currentPage === 'approval')) {
+>>>>>>> Stashed changes
     const mainContent = document.getElementById('mainContent');
     if (mainContent && typeof getPageContent === 'function') {
       mainContent.innerHTML = getPageContent(ROLE, currentPage);
     }
   }
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
 }
 
 const quizGen = {
@@ -561,6 +567,7 @@ function editPair(id, idx, side, value) {
 }
 
 async function saveQuiz() {
+<<<<<<< Updated upstream
   if (quizGen.questions.length === 0) { showToast('Nothing to save yet', 'error'); return; }
   const isDemo = quizGen.questions.some(q => q._demo);
   const title = quizGen.title || (quizGen.subject ? quizGen.subject + ' – AI Generated Quiz' : 'AI Generated Quiz');
@@ -570,6 +577,24 @@ async function saveQuiz() {
   const isAdmin = CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin';
   const quizStatus = isAdmin ? 'active' : 'pending';
   const targetSectionsStr = quizGen.sections.size ? Array.from(quizGen.sections).join(', ') : null;
+=======
+  if (isSavingQuiz) return;
+  const saveBtn = document.querySelector('#quizModalFoot .gen-btn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = `<span>⏳</span> Saving Quiz…`;
+  }
+  isSavingQuiz = true;
+
+  if (!validateAllQuizQuestionsBeforeSave()) {
+    isSavingQuiz = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `${iconChip()} Save Quiz (${quizGen.questions.length} items)`;
+    }
+    return;
+  }
+>>>>>>> Stashed changes
 
   const isInteractive = quizGen.type === 'interactive';
 
@@ -596,6 +621,7 @@ async function saveQuiz() {
     } : {})
   }));
 
+<<<<<<< Updated upstream
   const quizRow = {
     title: title,
     subject: quizGen.subject || null,
@@ -610,18 +636,54 @@ async function saveQuiz() {
     status: quizStatus,
     is_demo: isDemo
   };
+=======
+    // Attach metadata to questions so interactive type, timer, sections, and source material are preserved inside questions JSONB without needing extra DB columns
+    const questionsToSave = (quizGen.questions || []).map((q, idx) => ({
+      ...q,
+      sourceMaterial: q.sourceMaterial || fileName,
+      source_material: q.sourceMaterial || fileName,
+      lesson: q.lesson || lessonName,
+      sections: targetSectionsStr,
+      dueDate: quizGen.dueDate || null,
+      _quizType: quizGen.type || 'standard',
+      _timerPerQuestion: quizGen.timerPerQuestion || 0,
+      _timeLimitMinutes: quizGen.timeLimitMinutes || 0,
+      ...(idx === 0 ? {
+        _meta: {
+          quizType: quizGen.type || 'standard',
+          timerPerQuestion: quizGen.timerPerQuestion || 0,
+          timeLimitMinutes: quizGen.timeLimitMinutes || 0,
+          sourceMaterial: fileName,
+          lesson: lessonName,
+          sections: targetSectionsStr,
+          dueDate: quizGen.dueDate || null
+        }
+      } : {})
+    }));
 
-  let { error } = await db.from('quizzes').insert(quizRow);
-  if (error && error.message && error.message.includes('time_limit_minutes')) {
-    delete quizRow.time_limit_minutes;
-    const retry = await db.from('quizzes').insert(quizRow);
-    error = retry.error;
-  }
-  if (error && error.message && error.message.includes('due_date')) {
-    delete quizRow.due_date;
-    const retry = await db.from('quizzes').insert(quizRow);
-    error = retry.error;
-  }
+    const quizRow = {
+      title: title,
+      subject: quizGen.subject || null,
+      strand: quizGen.strands.size ? Array.from(quizGen.strands).join(', ') : null,
+      grade_level: quizGen.gradeLevel || null,
+      created_by: userId,
+      questions: questionsToSave,
+      status: quizStatus,
+      is_demo: isDemo
+    };
+>>>>>>> Stashed changes
+
+    let { error } = await db.from('quizzes').insert(quizRow);
+    if (error && error.message && error.message.includes('time_limit_minutes')) {
+      delete quizRow.time_limit_minutes;
+      const retry = await db.from('quizzes').insert(quizRow);
+      error = retry.error;
+    }
+    if (error && error.message && error.message.includes('due_date')) {
+      delete quizRow.due_date;
+      const retry = await db.from('quizzes').insert(quizRow);
+      error = retry.error;
+    }
 
   if (error) {
     showToast('Failed to save quiz: ' + error.message, 'error'); return;
@@ -656,8 +718,36 @@ async function saveQuiz() {
 
 async function approveQuiz(id) {
   const quiz = customQuizzes.find(q => q.id === id);
-  const { error } = await db.from('quizzes').update({ status: 'active' }).eq('id', id);
-  if (error) { showToast('Failed to approve quiz: ' + error.message, 'error'); return; }
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  let approvedSuccess = false;
+
+  if (session && typeof API_BASE !== 'undefined') {
+    try {
+      const res = await fetch(`${API_BASE}/api/quizzes/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ status: 'active' })
+      });
+      if (res.ok) {
+        approvedSuccess = true;
+      }
+    } catch (e) {
+      console.warn('Backend quiz approval failed, attempting client fallback:', e);
+    }
+  }
+
+  if (!approvedSuccess && typeof db !== 'undefined' && db) {
+    const { error } = await db.from('quizzes').update({ status: 'active' }).eq('id', id);
+    if (error) {
+      showToast('Failed to approve quiz: ' + error.message, 'error');
+      return;
+    }
+    approvedSuccess = true;
+  }
+
   showToast('Quiz approved', 'success');
   if (quiz && typeof addNotification === 'function') {
     addNotification({
@@ -681,12 +771,300 @@ async function approveQuiz(id) {
 
 async function rejectQuiz(id) {
   if (!confirm('Deny this quiz? It will be permanently deleted from the approval queue.')) return;
+<<<<<<< Updated upstream
   const { error } = await db.from('quizzes').delete().eq('id', id);
   if (error) { showToast('Failed to deny quiz: ' + error.message, 'error'); return; }
   showToast('Quiz denied and deleted', 'success');
   await loadQuizzesFromDB();
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+=======
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  let deletedSuccess = false;
+
+  // Immediately remove from local memory & update approval UI for instant response
+  customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id));
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+
+  if (session && typeof API_BASE !== 'undefined') {
+    try {
+      const res = await fetch(`${API_BASE}/api/quizzes/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ status: 'rejected' })
+      });
+      if (res.ok) {
+        deletedSuccess = true;
+      }
+    } catch (e) {
+      console.warn('Backend quiz rejection failed, attempting direct Supabase fallback:', e);
+    }
+  }
+
+  if (typeof db !== 'undefined' && db) {
+    // 1. Mark as rejected in Supabase - always succeeds under existing UPDATE RLS policy
+    await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(() => {});
+    // 2. Also attempt physical delete
+    await db.from('quiz_attempts').delete().eq('quiz_id', id).catch(() => {});
+    await db.from('quizzes').delete().eq('id', id).catch(() => {});
+  }
+
+  showToast('Quiz denied and removed', 'success');
+  await loadQuizzesFromDB();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+}
+
+async function toggleQuizStatus(id, newStatus) {
+  const quiz = customQuizzes.find(q => q.id === id);
+  if (!quiz) return;
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  let updatedSuccess = false;
+
+  if (session && typeof API_BASE !== 'undefined') {
+    try {
+      const res = await fetch(`${API_BASE}/api/quizzes/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (res.ok) updatedSuccess = true;
+    } catch (e) {
+      console.warn('Backend status toggle failed, attempting client fallback:', e);
+    }
+  }
+
+  if (!updatedSuccess && typeof db !== 'undefined' && db) {
+    const { error } = await db.from('quizzes').update({ status: newStatus }).eq('id', id);
+    if (error) {
+      showToast('Failed to update quiz status: ' + error.message, 'error');
+      return;
+    }
+  }
+
+  quiz.status = newStatus;
+  showToast(`Quiz "${quiz.title}" is now ${newStatus.toUpperCase()}`, 'success');
+  await loadQuizzesFromDB();
+}
+
+async function deleteQuiz(id) {
+  const quiz = customQuizzes.find(q => q.id === id);
+  const quizTitle = quiz ? quiz.title : 'this quiz';
+  if (!confirm(`Are you sure you want to permanently delete "${quizTitle}"? This will remove all associated questions.`)) return;
+
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  let deletedSuccess = false;
+
+  // Immediately remove from local memory & update UI
+  customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id));
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+
+  if (session && typeof API_BASE !== 'undefined') {
+    try {
+      const res = await fetch(`${API_BASE}/api/quizzes/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+      if (res.ok) {
+        deletedSuccess = true;
+      }
+    } catch (e) {
+      console.warn('Backend quiz delete failed, attempting direct Supabase fallback:', e);
+    }
+  }
+
+  if (typeof db !== 'undefined' && db) {
+    // 1. Mark as rejected in Supabase so it is permanently excluded
+    await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(() => {});
+    // 2. Also attempt physical delete
+    await db.from('quiz_attempts').delete().eq('quiz_id', id).catch(() => {});
+    await db.from('quizzes').delete().eq('id', id).catch(() => {});
+  }
+
+  showToast(`Quiz "${quizTitle}" deleted successfully`, 'success');
+  await loadQuizzesFromDB();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderPage === 'function' && typeof currentPage !== 'undefined') renderPage(currentPage);
+}
+
+let quizManagerFilterStrand = '';
+let quizManagerFilterStatus = '';
+let quizManagerFilterSubject = '';
+let quizManagerSearchQuery = '';
+
+function setQuizManagerFilterStrand(s) {
+  quizManagerFilterStrand = s;
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
+
+function setQuizManagerFilterStatus(st) {
+  quizManagerFilterStatus = st;
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
+
+function setQuizManagerFilterSubject(subj) {
+  quizManagerFilterSubject = subj;
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
+
+function setQuizManagerSearchQuery(q) {
+  quizManagerSearchQuery = (q || '').toLowerCase().trim();
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
+
+
+function renderQuizStepper() {
+  const steps = [
+    { num: 1, label: 'Type' },
+    { num: 2, label: 'Description' },
+    { num: 3, label: 'Distribution' },
+    { num: 4, label: 'Upload' },
+    { num: 5, label: 'Preview' }
+  ];
+
+  return `
+    <div class="qz-stepper-wrap">
+      <div class="qz-stepper">
+        ${steps.map((st, idx) => {
+          const isActive = quizGen.wizardStep === st.num;
+          const isDone = quizGen.wizardStep > st.num;
+          const statusClass = isActive ? 'active' : isDone ? 'completed' : 'upcoming';
+          const isClickable = isDone || isActive;
+          return `
+            <div class="qz-step-node ${statusClass} ${isClickable ? 'clickable' : ''}" onclick="goToQuizStep(${st.num})">
+              <div class="qz-step-circle">
+                ${isDone ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>` : st.num}
+              </div>
+              <div class="qz-step-meta">
+                <span class="qz-step-num">Step ${st.num}</span>
+                <span class="qz-step-title">${st.label}</span>
+              </div>
+            </div>
+            ${idx < steps.length - 1 ? `<div class="qz-step-line ${isDone ? 'done' : ''}"></div>` : ''}
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function getQuizConfigSummary() {
+  const formatNames = { mc: 'Multiple Choice', id: 'Identification', match: 'Matching Type' };
+  const selectedFmtList = Array.from(quizGen.formats).map(f => formatNames[f] || f).join(', ') || 'None';
+  const targetSections = quizGen.sections.size > 0 ? Array.from(quizGen.sections).join(', ') : 'All Sections';
+  
+  let itemCountText = '';
+  if (quizGen.distributionMode === 'custom') {
+    let sum = 0;
+    quizGen.formats.forEach(f => { sum += (quizGen.formatCounts[f] || 0); });
+    itemCountText = `${sum} Items (Custom Breakdown)`;
+  } else {
+    itemCountText = quizGen.count === 'auto' ? 'Auto Balanced by System' : `${quizGen.count} Items (Balanced)`;
+  }
+
+  const timerText = quizGen.type === 'interactive'
+    ? (quizGen.timerPerQuestion > 0 ? `${quizGen.timerPerQuestion}s per question` : 'Untimed per question')
+    : (quizGen.timeLimitMinutes > 0 ? `${quizGen.timeLimitMinutes} minutes overall` : 'Untimed');
+
+  const deadlineText = quizGen.dueDate ? new Date(quizGen.dueDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'No Expiration Set';
+
+  return `
+    <div class="qz-summary-box">
+      <div class="qz-summary-head">
+        <span class="qz-summary-icon">${iconChip()}</span>
+        <span>Quiz Configuration Summary</span>
+      </div>
+      <div class="qz-summary-grid">
+        <div class="qz-summary-item">
+          <span class="qz-summary-label">Format / Type</span>
+          <span class="qz-summary-val">${quizGen.type === 'interactive' ? '🎮 Interactive Game' : '📝 Standard Quiz'}</span>
+        </div>
+        <div class="qz-summary-item">
+          <span class="qz-summary-label">Title & Subject</span>
+          <span class="qz-summary-val">${escHtml(quizGen.title || 'Untitled')} · ${escHtml(quizGen.subject || 'General')}</span>
+        </div>
+        <div class="qz-summary-item">
+          <span class="qz-summary-label">Target Audience</span>
+          <span class="qz-summary-val">${escHtml(quizGen.gradeLevel)} · ${escHtml(targetSections)}</span>
+        </div>
+        <div class="qz-summary-item">
+          <span class="qz-summary-label">Items & Formats</span>
+          <span class="qz-summary-val">${escHtml(itemCountText)} (${escHtml(selectedFmtList)})</span>
+        </div>
+        <div class="qz-summary-item">
+          <span class="qz-summary-label">Timer Mode</span>
+          <span class="qz-summary-val">⏱️ ${escHtml(timerText)}</span>
+        </div>
+        <div class="qz-summary-item">
+          <span class="qz-summary-label">Deadline</span>
+          <span class="qz-summary-val">📅 ${escHtml(deadlineText)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getQuizConfirmDataCard() {
+  const formatNames = { mc: 'Multiple Choice', id: 'Identification', match: 'Matching Type' };
+  const selectedFmtList = Array.from(quizGen.formats).map(f => formatNames[f] || f).join(', ') || 'None';
+  const targetSections = quizGen.sections.size > 0 ? Array.from(quizGen.sections).join(', ') : 'All Sections';
+  const targetStrands = quizGen.strands.size > 0 ? Array.from(quizGen.strands).join(', ') : 'All Strands';
+
+  let itemCountText = '';
+  if (quizGen.distributionMode === 'custom') {
+    let sum = 0;
+    quizGen.formats.forEach(f => { sum += (quizGen.formatCounts[f] || 0); });
+    itemCountText = `${sum} Items (Custom: ${selectedFmtList})`;
+  } else {
+    itemCountText = quizGen.count === 'auto' ? 'Automatic (System Balanced)' : `${quizGen.count} Items (${selectedFmtList})`;
+  }
+
+  const timerText = quizGen.type === 'interactive'
+    ? (quizGen.timerPerQuestion > 0 ? `${quizGen.timerPerQuestion}s per item` : 'Untimed')
+    : (quizGen.timeLimitMinutes > 0 ? `${quizGen.timeLimitMinutes} minutes` : 'Untimed');
+
+  const deadlineText = quizGen.dueDate ? new Date(quizGen.dueDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'No Expiration (Anytime)';
+
+  return `
+    <div class="qz-confirm-data-box">
+      <div class="qz-confirm-data-header">
+        <div class="qz-cd-title">
+          <span class="qz-summary-icon">${iconChip()}</span>
+          <span>Confirm Quiz Data</span>
+        </div>
+        <span class="qz-cd-status-pill">✓ Confirmed & Verified</span>
+      </div>
+      <div class="qz-confirm-data-grid">
+        <div class="qz-cd-item">
+          <span class="qz-cd-label">Quiz Title & Subject</span>
+          <span class="qz-cd-val">${escHtml(quizGen.title || 'Untitled Quiz')} · <strong style="color:var(--blue);">${escHtml(quizGen.subject || 'General')}</strong></span>
+        </div>
+        <div class="qz-cd-item">
+          <span class="qz-cd-label">Target Audience</span>
+          <span class="qz-cd-val">${escHtml(quizGen.gradeLevel)} · ${escHtml(targetSections)} (${escHtml(targetStrands)})</span>
+        </div>
+        <div class="qz-cd-item">
+          <span class="qz-cd-label">Mode & Timer</span>
+          <span class="qz-cd-val">${quizGen.type === 'interactive' ? '🎮 Interactive' : '📝 Standard'} · ⏱️ ${escHtml(timerText)}</span>
+        </div>
+        <div class="qz-cd-item">
+          <span class="qz-cd-label">Items & Expiration</span>
+          <span class="qz-cd-val">${escHtml(itemCountText)} · 📅 ${escHtml(deadlineText)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+>>>>>>> Stashed changes
 }
 
 function renderQuizModal() {
