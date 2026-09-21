@@ -1470,16 +1470,7 @@ function teacherPage(page) {
     }
 
     case 'materials': return `
-      <div class="section-hdr"><h2>Materials Manager</h2>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <select class="user-filter-select" onchange="setMaterialsStrandFilter(this.value)">
-            <option value="">All Strands</option>
-            ${STRANDS.map(s => `<option value="${s}" ${materialsStrandFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
-          </select>
-          <button class="add-btn" onclick="openMaterialModal()">${iconPlus()} Upload Material</button>
-        </div>
-      </div>
-      <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
+      <div id="materialsListWrap">${renderMaterialsManagerPage('teacher')}</div>`;
 
     case 'quiz': {
       let filtered = customQuizzes.slice();
@@ -2104,22 +2095,7 @@ function adminPage(page) {
     }
 
     case 'materials': return `
-      <div class="section-hdr"><h2>Materials Manager</h2>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <select class="user-filter-select" onchange="setMaterialsStrandFilter(this.value)">
-            <option value="">All Strands</option>
-            ${STRANDS.map(s => `<option value="${s}" ${materialsStrandFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
-          </select>
-          <button class="add-btn" style="background:var(--blue-light);color:var(--blue);" onclick="loadMaterialsFromDB()">${iconRefresh()} Refresh</button>
-          <button class="add-btn" onclick="openMaterialModal()">${iconPlus()} Upload Material</button>
-        </div>
-      </div>
-      <div class="mm-tabs">
-        <button class="mm-tab ${materialsAdminTab === 'all' ? 'active' : ''}" onclick="setMaterialsAdminTab('all')">All${materialsData.length ? ` (${materialsData.length})` : ''}</button>
-        <button class="mm-tab ${materialsAdminTab === 'pending' ? 'active' : ''}" onclick="setMaterialsAdminTab('pending')">Pending${materialsData.filter(m=>m.status==='pending').length ? ` (${materialsData.filter(m=>m.status==='pending').length})` : ''}</button>
-        <button class="mm-tab ${materialsAdminTab === 'approved' ? 'active' : ''}" onclick="setMaterialsAdminTab('approved')">Approved${materialsData.filter(m=>m.status==='approved').length ? ` (${materialsData.filter(m=>m.status==='approved').length})` : ''}</button>
-      </div>
-      <div id="materialsListWrap">${renderMaterialsList('admin')}</div>`;
+      <div id="materialsListWrap">${renderMaterialsManagerPage('admin')}</div>`;
 
     case 'approval': return `
       <div class="section-hdr"><h2>Content Approval</h2>
