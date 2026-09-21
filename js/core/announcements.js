@@ -419,7 +419,7 @@ function buildAnnouncementsPage() {
                       </button>
                     ` : ''}
                     <button class="anc-preset-btn" style="padding:3px 8px;font-size:11px;" onclick="toggleArchiveAnnouncement('${anc.id}')">
-                      ${typeof iconArchive === 'function' ? iconArchive() : ''} ${anc.isArchived ? 'Restore' : 'Archive'}
+                      ${typeof iconArchive === 'function' ? iconArchive() : ''} ${anc.isArchived ? 'Unarchive' : 'Archive'}
                     </button>
                   ` : ''}
                   <span>Audience: ${(anc.audience || ['All']).join(', ')}</span>

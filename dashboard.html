@@ -144,7 +144,7 @@
           <h3>Create New Quiz</h3>
           <span>Generate questions straight from your teaching material</span>
         </div>
-        <button class="modal-x" onclick="closeQuizModal()">
+        <button class="modal-x" onclick="quizModalClose()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -155,14 +155,12 @@
 
   <div class="modal-overlay" id="takeQuizModal">
     <div class="modal-card">
+      <div id="takeQuizBackdrop" class="iq-subject-backdrop"></div>
       <div class="modal-head">
         <div>
           <h3 id="takeQuizModalTitle">Quiz</h3>
           <span id="takeQuizModalSubtitle"></span>
         </div>
-        <button class="modal-x" onclick="closeTakeQuizModal()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
       </div>
       <div class="modal-body" id="takeQuizModalBody"></div>
       <div class="modal-foot" id="takeQuizModalFoot"></div>
@@ -462,7 +460,7 @@
       </div>
 
       <div class="modal-body" style="display:flex;flex-direction:column;gap:10px;padding:20px;max-height:420px;overflow-y:auto;">
-        <a href="tel:0465151358" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-space-between;font-size:13px;">
+        <a href="tel:0465151358" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
           <span>🚨 <strong>City Disaster Risk Reduction (CDRRMO Imus)</strong></span>
           <span class="anc-hotline-num">(046) 515-1358</span>
         </a>
@@ -643,36 +641,19 @@
   </div>
 
   <!-- Modular Scripts -->
-<<<<<<< Updated upstream
-  <script src="js/core/ui-helpers.js"></script>
-  <script src="js/core/notifications.js"></script>
-  <script src="js/core/announcements.js"></script>
-  <script src="js/modules/repository/materials.js"></script>
-  <script src="js/modules/quizzes/take-quiz.js"></script>
-  <script src="js/modules/quizzes/interactive-player.js"></script>
-  <script src="js/modules/quizzes/item-analysis.js"></script>
-  <script src="js/modules/quizzes/quiz-generator.js"></script>
-  <script src="js/modules/chat/chat.js"></script>
-  <script src="js/modules/admin/user-management.js"></script>
-  <script src="js/modules/admin/report-generator.js"></script>
-  <script src="js/modules/courses.js"></script>
-  <script src="js/core/sidebar.js"></script>
-  <script src="js/core/auth.js"></script>
-=======
-  <script src="js/core/ui-helpers.js?v=20004"></script>
-  <script src="js/core/notifications.js?v=20004"></script>
-  <script src="js/core/announcements.js?v=20004"></script>
-  <script src="js/modules/repository/materials.js?v=20004"></script>
-  <script src="js/modules/quizzes/take-quiz.js?v=20004"></script>
-  <script src="js/modules/quizzes/interactive-player.js?v=20004"></script>
-  <script src="js/modules/quizzes/item-analysis.js?v=20004"></script>
-  <script src="js/modules/quizzes/quiz-generator.js?v=20004"></script>
-  <script src="js/modules/chat/chat.js?v=20004"></script>
-  <script src="js/modules/admin/user-management.js?v=20004"></script>
+  <script src="js/core/ui-helpers.js?v=20005"></script>
+  <script src="js/core/notifications.js?v=20005"></script>
+  <script src="js/core/announcements.js?v=20005"></script>
+  <script src="js/modules/repository/materials.js?v=20005"></script>
+  <script src="js/modules/quizzes/take-quiz.js?v=20005"></script>
+  <script src="js/modules/quizzes/interactive-player.js?v=20005"></script>
+  <script src="js/modules/quizzes/item-analysis.js?v=20005"></script>
+  <script src="js/modules/quizzes/quiz-generator.js?v=20005"></script>
+  <script src="js/modules/chat/chat.js?v=20005"></script>
+  <script src="js/modules/admin/user-management.js?v=20005"></script>
   <script src="js/modules/admin/report-generator.js?v=20005"></script>
-  <script src="js/modules/courses.js?v=20004"></script>
-  <script src="js/core/sidebar.js?v=20004"></script>
-  <script src="js/core/auth.js?v=20004"></script>
->>>>>>> Stashed changes
+  <script src="js/modules/courses.js?v=20005"></script>
+  <script src="js/core/sidebar.js?v=20005"></script>
+  <script src="js/core/auth.js?v=20005"></script>
 </body>
 </html>

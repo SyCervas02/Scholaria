@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1460 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <filter id="paper" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.74" numOctaves="3" seed="8" stitchTiles="stitch" result="grain"/>
+      <feColorMatrix in="grain" type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.105"/></feComponentTransfer>
+    </filter>
+    <pattern id="flecks" width="29" height="31" patternUnits="userSpaceOnUse">
+      <path d="M3 8l2-1m17 14l2 1M12 28l1-2" stroke="#8b9a9b" stroke-width=".65" opacity=".14"/>
+    </pattern>
+  </defs>
+  <rect width="1460" height="1080" fill="#fcfaf4"/>
+  <path d="M0 0h627c-20 46-57 63-101 72-50 10-91 17-143 9-85-13-136-48-214-35C92 60 64 145 0 185Z" fill="#b8dcf6"/>
+  <path d="M0 0h415c-45 34-74 36-117 27-63-14-101-17-157 8C87 59 54 105 0 133Z" fill="#91c5ee" opacity=".62"/>
+  <path d="M1141 0h319v184c-53-8-68-45-123-55-56-10-86-32-145-36-55-4-80-36-51-93Z" fill="#b7dace"/>
+  <path d="M1275 0h185v121c-57-15-103-21-140-50-21-16-38-40-45-71Z" fill="#94cabb" opacity=".54"/>
+  <path d="M0 670c61 17 70 64 75 111 7 66 39 78 108 76 64-2 105 34 172 79 62 41 95 74 153 74 50 0 77 12 113 37H0Z" fill="#d4eafa"/>
+  <path d="M0 857c62-3 104 10 145 46 48 42 98 40 160 39 73-2 120 35 182 67 58 30 86 47 128 71H0Z" fill="#a8d3f3"/>
+  <path d="M0 965c81-21 135-1 190 30 39 22 72 24 119 20 73-7 113 12 158 65H0Z" fill="#82bce9" opacity=".65"/>
+  <path d="M808 1080c62-64 112-65 169-60 62 6 116-13 170-37 49-22 111-13 166-48 51-33 102-66 147-66v211Z" fill="#c2e0d5"/>
+  <path d="M1020 1080c52-33 102-40 158-43 54-3 85-35 141-38 62-3 85-53 141-57v138Z" fill="#a6d1c2"/>
+  <path d="M1235 1080c55-39 117-28 163-57 28-18 43-39 62-48v105Z" fill="#a1cfe9" opacity=".7"/>
+  <rect width="1460" height="1080" fill="url(#flecks)"/>
+  <rect width="1460" height="1080" fill="#fff" filter="url(#paper)" opacity=".65"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 224c44-16 80-42 103-70" stroke="#278ec9" stroke-width="6" stroke-dasharray="19 18 36 20"/>
+    <path d="M404 70c39-13 58-44 82-68" stroke="#1268ad" stroke-width="4" stroke-dasharray="13 14 20 15"/>
+    <path d="M64 306c33-6 56 21 71 47" stroke="#146db6" stroke-width="7" stroke-dasharray="23 22"/>
+    <path d="M1365 256c-30 27-39 59-44 91" stroke="#146db6" stroke-width="7" stroke-dasharray="24 20"/>
+    <path d="M1398 124c20 9 40 14 62 12" stroke="#65a891" stroke-width="6" stroke-dasharray="29 19"/>
+    <path d="M0 757c63 9 99 55 114 100" stroke="#3299cf" stroke-width="6" stroke-dasharray="23 19"/>
+    <path d="M436 955c51 22 80 63 112 125" stroke="#278ec9" stroke-width="5" stroke-dasharray="22 23"/>
+    <path d="M943 1006c89-10 123-38 190-33 43 4 44 38 92 33 36-4 61-21 93-1" stroke="#2479b8" stroke-width="5" stroke-dasharray="53 24 92 16"/>
+    <path d="M180 887l18-8 18-1-12 17 10 14-18-5-19 7 7-18Z" stroke="#337db3" stroke-width="5"/>
+    <path d="M1298 169l4 16 15-5-10 14 9 12-15-5-5 17-4-17-15 4 11-13-9-11 15 5Z" stroke="#337db3" stroke-width="4"/>
+    <path d="M1222 866c2 21 9 29 27 32-18 3-25 11-27 35-3-23-9-31-26-35 17-4 23-12 26-32Z" stroke="#efc351" stroke-width="5"/>
+    <path d="M1419 986c-25-44-37-84-42-122m39 119c-1-36 4-57 16-83m-25 69c-25-32-50-53-79-65" stroke="#5a9b71" stroke-width="7"/>
+  </g>
+  <g fill="#77b58b" opacity=".75">
+    <ellipse cx="1342" cy="903" rx="16" ry="41" transform="rotate(-55 1342 903)"/>
+    <ellipse cx="1380" cy="881" rx="15" ry="35" transform="rotate(-18 1380 881)"/>
+    <ellipse cx="1368" cy="948" rx="14" ry="37" transform="rotate(-76 1368 948)"/>
+    <ellipse cx="1427" cy="922" rx="12" ry="30" transform="rotate(14 1427 922)"/>
+  </g>
+  <g fill="#8abde1" opacity=".5">
+    <circle cx="1398" cy="774" r="7"/><circle cx="1426" cy="768" r="7"/><circle cx="1452" cy="761" r="7"/>
+    <circle cx="1375" cy="799" r="7"/><circle cx="1403" cy="799" r="7"/><circle cx="1432" cy="796" r="7"/>
+    <circle cx="1363" cy="829" r="7"/><circle cx="1392" cy="827" r="7"/><circle cx="1421" cy="823" r="7"/>
+  </g>
+</svg>

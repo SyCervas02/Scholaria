@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="socBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </radialGradient>
+    <radialGradient id="compassGold" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="60%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#socBg)"/>
+
+  <!-- TOP-LEFT: Parthenon Greek Temple Columns -->
+  <g transform="translate(120, 100)" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2">
+    <!-- Pediment Roof Triangle -->
+    <polygon points="180,20 20,80 340,80"/>
+    <rect x="15" y="80" width="330" height="16"/>
+    <!-- Columns -->
+    <rect x="35" y="96" width="28" height="160" rx="3"/>
+    <rect x="95" y="96" width="28" height="160" rx="3"/>
+    <rect x="155" y="96" width="28" height="160" rx="3"/>
+    <rect x="215" y="96" width="28" height="160" rx="3"/>
+    <rect x="275" y="96" width="28" height="160" rx="3"/>
+    <!-- Base -->
+    <rect x="10" y="256" width="340" height="24"/>
+  </g>
+
+  <!-- HERO RIGHT: Nautical Compass Rose & World Map Meridian Rings -->
+  <g transform="translate(1560, 360)">
+    <!-- Meridian Globe Rings -->
+    <ellipse cx="0" cy="0" rx="240" ry="240" stroke="#f59e0b" stroke-width="2.5" fill="none" opacity="0.35"/>
+    <ellipse cx="0" cy="0" rx="240" ry="90" stroke="#f59e0b" stroke-width="2" fill="none" opacity="0.3"/>
+    <ellipse cx="0" cy="0" rx="90" ry="240" stroke="#f59e0b" stroke-width="2" fill="none" opacity="0.3"/>
+    <line x1="-250" y1="0" x2="250" y2="0" stroke="#f59e0b" stroke-width="1.5" opacity="0.4"/>
+    <line x1="0" y1="-250" x2="0" y2="250" stroke="#f59e0b" stroke-width="1.5" opacity="0.4"/>
+
+    <!-- 16-Point Ornate Compass Rose -->
+    <circle cx="0" cy="0" r="140" stroke="#fbbf24" stroke-width="3" fill="none"/>
+    <!-- North Point -->
+    <polygon points="0,0 -16,-20 0,-180" fill="#dc2626"/>
+    <polygon points="0,0 16,-20 0,-180" fill="#ef4444"/>
+    <!-- South Point -->
+    <polygon points="0,0 -16,20 0,180" fill="#1e293b"/>
+    <polygon points="0,0 16,20 0,180" fill="#475569"/>
+    <!-- East Point -->
+    <polygon points="0,0 20,-16 180,0" fill="#d97706"/>
+    <polygon points="0,0 20,16 180,0" fill="#f59e0b"/>
+    <!-- West Point -->
+    <polygon points="0,0 -20,-16 -180,0" fill="#b45309"/>
+    <polygon points="0,0 -20,16 -180,0" fill="#d97706"/>
+
+    <circle cx="0" cy="0" r="18" fill="url(#compassGold)" stroke="#ffffff" stroke-width="2"/>
+    <text x="0" y="-195" fill="#fde047" font-size="24" font-weight="bold" font-family="serif" text-anchor="middle">N</text>
+  </g>
+</svg>

@@ -1,7 +1,7 @@
-/* ── AI QUIZ GENERATOR & MANAGEMENT MODULE ── */
+/* ── SYSTEM QUIZ GENERATOR & MANAGEMENT MODULE ── */
 
 const QUIZ_API_ENDPOINT = typeof API_BASE !== 'undefined' ? `${API_BASE}/api/quiz/generate` : 'http://localhost:3001/api/quiz/generate';
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 let customQuizzes = [];
 let isFetchingQuizzes = false;
@@ -10,9 +10,9 @@ async function loadQuizzesFromDB() {
   if (isFetchingQuizzes) return;
   isFetchingQuizzes = true;
   try {
-    const { data, error } = await db.from('quizzes').select('*').neq('status', 'rejected').order('created_at', { ascending: false });
+    const { data, error } = await db.from('quizzes').select('*').order('created_at', { ascending: false });
     if (error) { console.error('Failed to load quizzes:', error.message); return; }
-    customQuizzes = (data || []).filter(q => q.status !== 'rejected').map(q => {
+    customQuizzes = (data || []).map(q => {
       const firstQ = (q.questions && q.questions[0]) || {};
       const qMeta = firstQ._meta || {};
       const quizType = q.quiz_type || q.type || firstQ._quizType || qMeta.quizType || 'standard';
@@ -23,7 +23,10 @@ async function loadQuizzesFromDB() {
         createdBy: q.created_by,
         subject: q.subject,
         strand: q.strand,
-        sections: q.sections,
+        sections: q.sections || qMeta.sections || null,
+        lesson: q.lesson || qMeta.lesson || '',
+        dueDate: q.due_date || qMeta.dueDate || null,
+        due_date: q.due_date || qMeta.dueDate || null,
         gradeLevel: q.grade_level,
         grade_level: q.grade_level,
         createdAt: q.created_at,
@@ -43,11 +46,7 @@ async function loadQuizzesFromDB() {
   } finally {
     isFetchingQuizzes = false;
   }
-<<<<<<< Updated upstream
-  if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress')) {
-=======
   if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress' || currentPage === 'quiz' || currentPage === 'analysis' || currentPage === 'approval')) {
->>>>>>> Stashed changes
     const mainContent = document.getElementById('mainContent');
     if (mainContent && typeof getPageContent === 'function') {
       mainContent.innerHTML = getPageContent(ROLE, currentPage);
@@ -58,6 +57,7 @@ async function loadQuizzesFromDB() {
 }
 
 const quizGen = {
+  wizardStep: 1,
   step: 'setup', type: 'standard', file: null, fileText: '',
   title: '', subject: '', formats: new Set(['mc', 'id']),
   count: 'auto',
@@ -73,6 +73,91 @@ const quizGen = {
   timeLimitMinutes: 15, // 0 = untimed, or 5, 10, 15, 20, 30, 45, 60
   questions: [], errorMsg: ''
 };
+
+function nextQuizStep() {
+  if (validateQuizStep(quizGen.wizardStep)) {
+    if (quizGen.wizardStep === 4 && (!quizGen.questions || quizGen.questions.length === 0)) {
+      generateQuiz();
+      return;
+    }
+    quizGen.wizardStep = Math.min(5, quizGen.wizardStep + 1);
+    renderQuizModal();
+  }
+}
+
+function prevQuizStep() {
+  quizGen.wizardStep = Math.max(1, quizGen.wizardStep - 1);
+  renderQuizModal();
+}
+
+function goToQuizStep(targetStep) {
+  if (targetStep === quizGen.wizardStep) return;
+  if (targetStep < quizGen.wizardStep) {
+    quizGen.wizardStep = targetStep;
+    renderQuizModal();
+    return;
+  }
+  for (let s = quizGen.wizardStep; s < targetStep; s++) {
+    if (!validateQuizStep(s)) {
+      quizGen.wizardStep = s;
+      renderQuizModal();
+      return;
+    }
+  }
+  quizGen.wizardStep = targetStep;
+  renderQuizModal();
+}
+
+function validateQuizStep(step) {
+  if (step === 1) {
+    if (!quizGen.type) {
+      quizGen.type = 'standard';
+    }
+    return true;
+  }
+  if (step === 2) {
+    if (!quizGen.title || !quizGen.title.trim()) {
+      showToast('Please enter a Quiz Title to proceed', 'warning');
+      const el = document.getElementById('quizGenTitleInput');
+      if (el) el.focus();
+      return false;
+    }
+    if (!quizGen.subject) {
+      showToast('Please select a Subject to proceed', 'warning');
+      const el = document.getElementById('quizGenSubjectSelect');
+      if (el) el.focus();
+      return false;
+    }
+    return true;
+  }
+  if (step === 3) {
+    if (!quizGen.formats || quizGen.formats.size === 0) {
+      showToast('Please select at least one question format', 'warning');
+      return false;
+    }
+    if (quizGen.distributionMode === 'custom') {
+      let sum = 0;
+      quizGen.formats.forEach(f => { sum += (quizGen.formatCounts[f] || 0); });
+      if (sum <= 0) {
+        showToast('Please set at least 1 question item count for your custom distribution', 'warning');
+        return false;
+      }
+    }
+    return true;
+  }
+  if (step === 4) {
+    if (!quizGen.file) {
+      showToast('Please upload a material file first', 'error');
+      return false;
+    }
+    if (!quizGen.questions || quizGen.questions.length === 0) {
+      showToast('Please click Generate Questions first to preview questions', 'warning');
+      return false;
+    }
+    return true;
+  }
+  return true;
+}
 
 function setStandardTimeLimit(mins) {
   quizGen.timeLimitMinutes = mins;
@@ -93,20 +178,106 @@ function updateStandardTimeLimitInput(val) {
   }
 }
 
-function getQuizDueDateConstraints() {
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+function getQuizDueDateParts() {
   const now = new Date();
   const currentYear = now.getFullYear();
+  let selectedYear = currentYear;
+  let selectedMonth = now.getMonth(); // 0-11
+  let selectedDay = now.getDate();
+  let selectedTime = '23:59';
 
-  const tzOffset = now.getTimezoneOffset() * 60000;
-  const localISOTime = new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
-  const maxISOTime = `${currentYear}-12-31T23:59`;
+  if (quizGen.dueDate) {
+    const d = new Date(quizGen.dueDate);
+    if (!isNaN(d.getTime())) {
+      selectedYear = d.getFullYear();
+      selectedMonth = d.getMonth();
+      selectedDay = d.getDate();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      selectedTime = `${hh}:${mm}`;
+    }
+  }
 
-  return { minISO: localISOTime, maxISO: maxISOTime, currentYear };
+  const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+  if (selectedDay > daysInMonth) selectedDay = daysInMonth;
+
+  return { currentYear, selectedYear, selectedMonth, selectedDay, selectedTime, daysInMonth };
+}
+
+function setDeadlinePreset(type) {
+  if (type === 'none') {
+    quizGen.dueDate = '';
+    renderQuizModal();
+    return;
+  }
+  const now = new Date();
+  let target = new Date();
+  if (type === 'today') {
+    target.setHours(23, 59, 0, 0);
+  } else if (type === 'tomorrow') {
+    target.setDate(target.getDate() + 1);
+    target.setHours(23, 59, 0, 0);
+  } else if (type === '3days') {
+    target.setDate(target.getDate() + 3);
+    target.setHours(23, 59, 0, 0);
+  } else if (type === '1week') {
+    target.setDate(target.getDate() + 7);
+    target.setHours(23, 59, 0, 0);
+  }
+
+  const currentYear = now.getFullYear();
+  if (target.getFullYear() > currentYear) {
+    target = new Date(currentYear, 11, 31, 23, 59, 0);
+  }
+
+  const tzOffset = target.getTimezoneOffset() * 60000;
+  quizGen.dueDate = new Date(target.getTime() - tzOffset).toISOString().slice(0, 16);
+  renderQuizModal();
+}
+
+function updateQuizMonthPart(mIdx) {
+  const m = parseInt(mIdx, 10);
+  const { selectedYear, selectedDay, selectedTime } = getQuizDueDateParts();
+  const daysInMonth = new Date(selectedYear, m + 1, 0).getDate();
+  const safeDay = Math.min(selectedDay, daysInMonth);
+  const mm = String(m + 1).padStart(2, '0');
+  const dd = String(safeDay).padStart(2, '0');
+  updateQuizDueDate(`${selectedYear}-${mm}-${dd}T${selectedTime}`);
+}
+
+function updateQuizDayPart(dNum) {
+  const d = parseInt(dNum, 10);
+  const { selectedYear, selectedMonth, selectedTime } = getQuizDueDateParts();
+  const mm = String(selectedMonth + 1).padStart(2, '0');
+  const dd = String(d).padStart(2, '0');
+  updateQuizDueDate(`${selectedYear}-${mm}-${dd}T${selectedTime}`);
+}
+
+function updateQuizYearPart(yNum) {
+  const y = parseInt(yNum, 10);
+  const { selectedMonth, selectedDay, selectedTime } = getQuizDueDateParts();
+  const mm = String(selectedMonth + 1).padStart(2, '0');
+  const dd = String(selectedDay).padStart(2, '0');
+  updateQuizDueDate(`${y}-${mm}-${dd}T${selectedTime}`);
+}
+
+function updateQuizTimePart(timeVal) {
+  if (!timeVal) timeVal = '23:59';
+  const { selectedYear, selectedMonth, selectedDay } = getQuizDueDateParts();
+  const mm = String(selectedMonth + 1).padStart(2, '0');
+  const dd = String(selectedDay).padStart(2, '0');
+  updateQuizDueDate(`${selectedYear}-${mm}-${dd}T${timeVal}`);
 }
 
 function updateQuizDueDate(val) {
   if (!val) {
     quizGen.dueDate = '';
+    renderQuizModal();
     return;
   }
   const selectedDate = new Date(val);
@@ -126,6 +297,7 @@ function updateQuizDueDate(val) {
     return;
   }
   quizGen.dueDate = val;
+  renderQuizModal();
 }
 
 function openQuizModal() {
@@ -138,6 +310,7 @@ function openQuizModal() {
     : new Set();
 
   Object.assign(quizGen, {
+    wizardStep: 1,
     step: 'setup', type: 'standard', file: null, fileText: '',
     title: '', subject: '', formats: new Set(['mc', 'id']),
     count: 'auto',
@@ -157,9 +330,55 @@ function openQuizModal() {
   renderQuizModal();
 }
 
-function closeQuizModal() {
-  document.getElementById('quizModal').classList.remove('active');
+function quizModalClose() {
+  if (quizGen.step === 'loading') {
+    quizGen.step = 'setup';
+    quizGen.wizardStep = 4;
+    renderQuizModal();
+    return;
+  }
+  closeQuizModal();
 }
+
+function closeQuizModal() {
+  const modal = document.getElementById('quizModal');
+  if (modal) modal.classList.remove('active');
+}
+
+if (typeof SUBJECTS_BY_STRAND === 'undefined') {
+  window.SUBJECTS_BY_STRAND = {
+    STEM: [
+      'Pre-Calculus', 'Basic Calculus', 'General Biology 1', 'General Biology 2',
+      'General Physics 1', 'General Physics 2', 'General Chemistry 1', 'General Chemistry 2',
+      'Empowerment Technologies (ICT)', 'Earth and Life Science', 'Oral Communication in Context',
+      'Media & Information Literacy', 'Practical Research 1', 'Practical Research 2',
+      'Reading and Writing', 'Statistics and Probability', 'Physical Science'
+    ],
+    HUMSS: [
+      'Creative Writing', 'Creative Nonfiction', 'Philippine Politics and Governance',
+      'Disciplines and Ideas in the Social Sciences', 'Disciplines and Ideas in the Applied Social Sciences',
+      'Introduction to World Religions and Belief Systems', 'Trends, Networks & Critical Thinking',
+      'Community Engagement, Solidarity & Citizenship', 'Oral Communication in Context',
+      'Reading and Writing', 'Practical Research 1', 'Practical Research 2',
+      'Media & Information Literacy', 'Empowerment Technologies (ICT)', 'Statistics and Probability'
+    ],
+    ABM: [
+      'Business Math', 'Organization and Management',
+      'Fundamentals of Accountancy, Business & Management 1', 'Fundamentals of Accountancy, Business & Management 2',
+      'Business Finance', 'Applied Economics', 'Principles of Marketing', 'Business Ethics and Social Responsibility',
+      'Oral Communication in Context', 'Reading and Writing', 'Practical Research 1', 'Practical Research 2',
+      'Media & Information Literacy', 'Empowerment Technologies (ICT)', 'Statistics and Probability'
+    ],
+    TVL: [
+      'Computer Programming', 'Web Systems', 'Computer Systems Servicing', 'Animation',
+      'Technical Drafting', 'Food and Beverage Services', 'Bread and Pastry Production',
+      'Electrical Installation & Maintenance', 'Shielded Metal Arc Welding',
+      'Oral Communication in Context', 'Reading and Writing', 'Practical Research 1', 'Practical Research 2',
+      'Media & Information Literacy', 'Empowerment Technologies (ICT)', 'Statistics and Probability'
+    ]
+  };
+}
+
 
 function selectQuizType(type) {
   quizGen.type = type;
@@ -273,34 +492,32 @@ function distributeCountToFormats(total) {
 
 function getAvailableSubjectsForQuizGen() {
   const selectedStrands = Array.from(quizGen.strands);
-  if (typeof getFilteredSubjects === 'function') {
-    if (selectedStrands.length === 1) {
-      return getFilteredSubjects(selectedStrands[0], quizGen.gradeLevel);
-    }
-    if (selectedStrands.length > 1) {
-      const combined = [];
-      selectedStrands.forEach(st => {
-        getFilteredSubjects(st, quizGen.gradeLevel).forEach(sub => {
-          if (!combined.includes(sub)) combined.push(sub);
-        });
-      });
-      return combined;
-    }
-    return getFilteredSubjects(null, quizGen.gradeLevel);
+  const subjectsSet = new Set();
+
+  // If teacher has assigned subjects in their profile, include them
+  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && CURRENT_PROFILE.subjects) {
+    CURRENT_PROFILE.subjects.split(',').map(s => s.trim()).filter(Boolean).forEach(sub => subjectsSet.add(sub));
   }
-  const subjectsMap = typeof SUBJECTS_BY_STRAND !== 'undefined' ? SUBJECTS_BY_STRAND : {};
-  if (selectedStrands.length === 0) {
-    const all = [];
-    Object.values(subjectsMap).forEach(list => {
-      list.forEach(sub => { if (!all.includes(sub)) all.push(sub); });
+
+  // If COURSES_DATABASE exists, pull from courses database
+  if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
+    COURSES_DATABASE.forEach(c => {
+      if (selectedStrands.length === 0 || selectedStrands.includes(c.strand) || c.track === 'Core' || c.track === 'Applied') {
+        if (c.title) subjectsSet.add(c.title);
+      }
     });
-    return all;
   }
-  const filtered = [];
-  selectedStrands.forEach(str => {
-    (subjectsMap[str] || []).forEach(sub => { if (!filtered.includes(sub)) filtered.push(sub); });
-  });
-  return filtered;
+
+  // Include mapped subjects by strand
+  if (selectedStrands.length === 0) {
+    Object.values(SUBJECTS_BY_STRAND).forEach(list => list.forEach(s => subjectsSet.add(s)));
+  } else {
+    selectedStrands.forEach(st => {
+      (SUBJECTS_BY_STRAND[st] || []).forEach(s => subjectsSet.add(s));
+    });
+  }
+
+  return Array.from(subjectsSet).sort();
 }
 
 function toggleQuizStrand(s) {
@@ -347,7 +564,7 @@ function handleFileInput(input) {
     return;
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    showToast('File is too large — please keep uploads under 10MB', 'error');
+    showToast('File is too large — maximum file size is 50MB only', 'error');
     return;
   }
   quizGen.file = file;
@@ -358,7 +575,7 @@ function handleFileInput(input) {
   if (!quizGen.subject && matchedSub) quizGen.subject = matchedSub;
   renderQuizModal();
   extractFileText(file, ext)
-    .then(text => { quizGen.fileText = text; })
+    .then(text => { quizGen.fileText = text; renderQuizModal(); })
     .catch(() => { showToast('Could not fully read this file — generation will rely on the filename instead', 'info'); });
 }
 
@@ -404,19 +621,23 @@ function extractFileText(file, ext) {
 function removeFile() {
   quizGen.file = null;
   quizGen.fileText = '';
+  quizGen.questions = [];
   renderQuizModal();
 }
 
 async function generateQuiz() {
   if (!quizGen.file) { showToast('Please upload a material file first', 'error'); return; }
   quizGen.step = 'loading';
+  const genToken = ++currentQuizGenToken;
   renderQuizModal();
 
   let waited = 0;
   while (!quizGen.fileText && waited < 6000) {
+    if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
     await new Promise(r => setTimeout(r, 300));
     waited += 300;
   }
+  if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
 
   const payload = {
     title: quizGen.title || quizGen.subject || 'Untitled Quiz',
@@ -435,11 +656,13 @@ async function generateQuiz() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+    if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
       throw new Error(errData.error || ('Backend returned ' + response.status));
     }
     const data = await response.json();
+    if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
     applyGeneratedQuestions(data.questions || [], false);
   } catch (err) {
     console.warn('Quiz backend unavailable, showing demo data instead:', err.message);
@@ -455,11 +678,14 @@ function applyGeneratedQuestions(list, isDemo) {
   quizGen.questions = (list || []).map((q, i) => {
     const obj = Object.assign({
       _id: 'q' + i,
-      _demo: !!isDemo,
+      _demo: !!isDemo, _quiz_type: quizGen.type || 'standard',
       sourceMaterial: fileName,
       source_material: fileName,
       lesson: lesson
     }, q);
+    if (obj.type === 'matching' && !obj.instructions) {
+      obj.instructions = obj.question || 'Match the items on the left with the correct matches on the right.';
+    }
     if (obj.type === 'multiple_choice') obj._answerIdx = Math.max(0, (obj.options || []).indexOf(obj.answer));
     return obj;
   });
@@ -467,8 +693,43 @@ function applyGeneratedQuestions(list, isDemo) {
     quizGen.step = 'error';
     quizGen.errorMsg = 'No questions were returned. Please try again.';
   } else {
-    quizGen.step = 'results';
+    quizGen.step = 'setup';
+    quizGen.wizardStep = 5;
   }
+}
+
+function addNewManualQuestion() {
+  const newId = 'q_' + Date.now();
+  const format = quizGen.formats.has('mc') ? 'multiple_choice' : quizGen.formats.has('id') ? 'identification' : 'matching';
+  if (format === 'multiple_choice') {
+    quizGen.questions.push({
+      _id: newId,
+      type: 'multiple_choice',
+      question: `Question ${quizGen.questions.length + 1} (Multiple Choice)`,
+      options: ['Option A', 'Option B', 'Option C', 'Option D'],
+      answer: 'Option A',
+      _answerIdx: 0
+    });
+  } else if (format === 'identification') {
+    quizGen.questions.push({
+      _id: newId,
+      type: 'identification',
+      question: `Question ${quizGen.questions.length + 1} (Identification)`,
+      answer: 'Correct Answer'
+    });
+  } else {
+    quizGen.questions.push({
+      _id: newId,
+      type: 'matching',
+      instructions: 'Match the prompts on the left with the correct answers on the right.',
+      pairs: [
+        { left: 'Prompt 1', right: 'Match A' },
+        { left: 'Prompt 2', right: 'Match B' }
+      ]
+    });
+  }
+  renderQuizModal();
+  showToast('New question item added to preview', 'success');
 }
 
 function buildDemoQuestions() {
@@ -566,77 +827,142 @@ function editPair(id, idx, side, value) {
   if (q) q.pairs[idx][side] = value;
 }
 
-async function saveQuiz() {
-<<<<<<< Updated upstream
-  if (quizGen.questions.length === 0) { showToast('Nothing to save yet', 'error'); return; }
-  const isDemo = quizGen.questions.some(q => q._demo);
-  const title = quizGen.title || (quizGen.subject ? quizGen.subject + ' – AI Generated Quiz' : 'AI Generated Quiz');
-  const { data: { session } } = await db.auth.getSession();
-  const userId = session?.user?.id || CURRENT_PROFILE?.id;
+function validateAllQuizQuestionsBeforeSave() {
+  if (!quizGen.title || !quizGen.title.trim()) {
+    showToast('Quiz Title is required before saving', 'warning');
+    quizGen.wizardStep = 2;
+    renderQuizModal();
+    const el = document.getElementById('quizGenTitleInput');
+    if (el) el.focus();
+    return false;
+  }
+  if (!quizGen.subject) {
+    showToast('Subject is required before saving', 'warning');
+    quizGen.wizardStep = 2;
+    renderQuizModal();
+    const el = document.getElementById('quizGenSubjectSelect');
+    if (el) el.focus();
+    return false;
+  }
 
-  const isAdmin = CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin';
-  const quizStatus = isAdmin ? 'active' : 'pending';
-  const targetSectionsStr = quizGen.sections.size ? Array.from(quizGen.sections).join(', ') : null;
-=======
+  if (!quizGen.questions || quizGen.questions.length === 0) {
+    showToast('No questions found in this quiz to save', 'error');
+    return false;
+  }
+
+  for (let i = 0; i < quizGen.questions.length; i++) {
+    const q = quizGen.questions[i];
+    const qNum = i + 1;
+
+    if (q.type === 'multiple_choice') {
+      if (!q.question || !q.question.trim()) {
+        showToast(`Question #${qNum} (Multiple Choice) is missing the question prompt`, 'warning');
+        highlightInvalidQuestionCard(q._id, 'question');
+        return false;
+      }
+      if (!q.options || q.options.length < 2) {
+        showToast(`Question #${qNum} (Multiple Choice) needs at least 2 choices`, 'warning');
+        highlightInvalidQuestionCard(q._id, 'options');
+        return false;
+      }
+      for (let oIdx = 0; oIdx < q.options.length; oIdx++) {
+        if (!q.options[oIdx] || !q.options[oIdx].trim()) {
+          const optLetter = String.fromCharCode(65 + oIdx);
+          showToast(`Question #${qNum} (Multiple Choice) Choice ${optLetter} is empty`, 'warning');
+          highlightInvalidQuestionCard(q._id, `opt-${oIdx}`);
+          return false;
+        }
+      }
+      if (!q.answer) {
+        q._answerIdx = 0;
+        q.answer = q.options[0];
+      }
+    } else if (q.type === 'identification') {
+      if (!q.question || !q.question.trim()) {
+        showToast(`Question #${qNum} (Identification) is missing the question prompt`, 'warning');
+        highlightInvalidQuestionCard(q._id, 'question');
+        return false;
+      }
+      if (!q.answer || !q.answer.trim()) {
+        showToast(`Question #${qNum} (Identification) is missing the correct answer`, 'warning');
+        highlightInvalidQuestionCard(q._id, 'answer');
+        return false;
+      }
+    } else if (q.type === 'matching') {
+      if (!q.instructions || !q.instructions.trim()) {
+        showToast(`Question #${qNum} (Matching Type) is missing instructions`, 'warning');
+        highlightInvalidQuestionCard(q._id, 'instructions');
+        return false;
+      }
+      if (!q.pairs || q.pairs.length === 0) {
+        showToast(`Question #${qNum} (Matching Type) has no pairs defined`, 'warning');
+        highlightInvalidQuestionCard(q._id, 'pairs');
+        return false;
+      }
+      for (let pIdx = 0; pIdx < q.pairs.length; pIdx++) {
+        const pair = q.pairs[pIdx];
+        if (!pair.left || !pair.left.trim() || !pair.right || !pair.right.trim()) {
+          showToast(`Question #${qNum} (Matching Type) Item ${pIdx + 1} has an empty prompt or match`, 'warning');
+          highlightInvalidQuestionCard(q._id, `pair-${pIdx}`);
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+function highlightInvalidQuestionCard(qId, fieldKey) {
+  if (quizGen.wizardStep !== 5) {
+    quizGen.wizardStep = 5;
+    renderQuizModal();
+  }
+  setTimeout(() => {
+    const card = document.getElementById(`qcard-${qId}`);
+    if (card) {
+      card.classList.add('input-missing');
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => {
+        card.classList.remove('input-missing');
+      }, 3000);
+
+      const input = card.querySelector(`[data-field="${fieldKey}"]`) || card.querySelector('textarea, input[type="text"]');
+      if (input) {
+        input.focus();
+        input.style.borderColor = '#ef4444';
+        setTimeout(() => { input.style.borderColor = ''; }, 3000);
+      }
+    }
+  }, 100);
+}
+
+let isSavingQuiz = false;
+
+async function saveQuiz() {
   if (isSavingQuiz) return;
+  if (!validateAllQuizQuestionsBeforeSave()) return;
+
+  isSavingQuiz = true;
   const saveBtn = document.querySelector('#quizModalFoot .gen-btn');
   if (saveBtn) {
     saveBtn.disabled = true;
     saveBtn.innerHTML = `<span>⏳</span> Saving Quiz…`;
   }
-  isSavingQuiz = true;
 
-  if (!validateAllQuizQuestionsBeforeSave()) {
-    isSavingQuiz = false;
-    if (saveBtn) {
-      saveBtn.disabled = false;
-      saveBtn.innerHTML = `${iconChip()} Save Quiz (${quizGen.questions.length} items)`;
-    }
-    return;
-  }
->>>>>>> Stashed changes
+  try {
+    const isDemo = quizGen.questions.some(q => q._demo);
+    const title = quizGen.title || (quizGen.subject ? quizGen.subject + ' – System Generated Quiz' : 'System Generated Quiz');
+    const { data: sessionData } = await db.auth.getSession().catch(() => ({ data: {} }));
+    const userId = sessionData?.session?.user?.id || (typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : null);
 
-  const isInteractive = quizGen.type === 'interactive';
+    const isAdmin = typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin';
+    const quizStatus = isAdmin ? 'active' : 'pending';
+    const targetSectionsStr = quizGen.sections.size ? Array.from(quizGen.sections).join(', ') : null;
 
-  const fileName = quizGen.file ? quizGen.file.name : (quizGen.subject ? quizGen.subject + ' Handout' : '');
-  const lessonName = quizGen.lesson || '';
+    const fileName = quizGen.file ? quizGen.file.name : (quizGen.subject ? quizGen.subject + ' Handout' : '');
+    const lessonName = quizGen.lesson || '';
 
-  // Attach metadata to questions so interactive type, timer, and source material are preserved inside questions JSONB without needing extra DB columns
-  const questionsToSave = (quizGen.questions || []).map((q, idx) => ({
-    ...q,
-    sourceMaterial: q.sourceMaterial || fileName,
-    source_material: q.sourceMaterial || fileName,
-    lesson: q.lesson || lessonName,
-    _quizType: quizGen.type || 'standard',
-    _timerPerQuestion: quizGen.timerPerQuestion || 0,
-    _timeLimitMinutes: quizGen.timeLimitMinutes || 0,
-    ...(idx === 0 ? {
-      _meta: {
-        quizType: quizGen.type || 'standard',
-        timerPerQuestion: quizGen.timerPerQuestion || 0,
-        timeLimitMinutes: quizGen.timeLimitMinutes || 0,
-        sourceMaterial: fileName,
-        lesson: lessonName
-      }
-    } : {})
-  }));
-
-<<<<<<< Updated upstream
-  const quizRow = {
-    title: title,
-    subject: quizGen.subject || null,
-    strand: quizGen.strands.size ? Array.from(quizGen.strands).join(', ') : null,
-    grade_level: quizGen.gradeLevel || null,
-    sections: targetSectionsStr,
-    lesson: quizGen.lesson || '',
-    due_date: quizGen.dueDate || null,
-    time_limit_minutes: quizGen.timeLimitMinutes || 0,
-    created_by: userId,
-    questions: questionsToSave,
-    status: quizStatus,
-    is_demo: isDemo
-  };
-=======
     // Attach metadata to questions so interactive type, timer, sections, and source material are preserved inside questions JSONB without needing extra DB columns
     const questionsToSave = (quizGen.questions || []).map((q, idx) => ({
       ...q,
@@ -661,7 +987,7 @@ async function saveQuiz() {
       } : {})
     }));
 
-    const quizRow = {
+    const baseQuizRow = {
       title: title,
       subject: quizGen.subject || null,
       strand: quizGen.strands.size ? Array.from(quizGen.strands).join(', ') : null,
@@ -671,83 +997,103 @@ async function saveQuiz() {
       status: quizStatus,
       is_demo: isDemo
     };
->>>>>>> Stashed changes
+
+    const quizRow = {
+      ...baseQuizRow,
+      due_date: quizGen.dueDate || null,
+      time_limit_minutes: quizGen.timeLimitMinutes || 0,
+      sections: targetSectionsStr,
+      lesson: lessonName
+    };
 
     let { error } = await db.from('quizzes').insert(quizRow);
-    if (error && error.message && error.message.includes('time_limit_minutes')) {
-      delete quizRow.time_limit_minutes;
-      const retry = await db.from('quizzes').insert(quizRow);
-      error = retry.error;
-    }
-    if (error && error.message && error.message.includes('due_date')) {
-      delete quizRow.due_date;
-      const retry = await db.from('quizzes').insert(quizRow);
-      error = retry.error;
-    }
-
-  if (error) {
-    showToast('Failed to save quiz: ' + error.message, 'error'); return;
+  if (error && error.message && error.message.includes('time_limit_minutes')) {
+    delete quizRow.time_limit_minutes;
+    const retry = await db.from('quizzes').insert(quizRow);
+    error = retry.error;
+  }
+  if (error && error.message && error.message.includes('due_date')) {
+    delete quizRow.due_date;
+    const retry = await db.from('quizzes').insert(quizRow);
+    error = retry.error;
   }
 
-  if (isAdmin) {
-    if (typeof addNotification === 'function') {
-      addNotification({
-        targetRole: 'student',
-        title: 'New Quiz Available',
-        message: `New quiz "${title}" (${quizGen.subject || 'General'}) is now available under Quizzes.`,
-        type: 'quiz'
+    if (error) {
+      console.warn('Database insert failed, saving locally to custom quizzes list:', error.message);
+      // Local fallback so user is never blocked
+      customQuizzes.unshift({
+        id: 'quiz_' + Date.now(),
+        createdBy: userId,
+        subject: quizGen.subject,
+        strand: Array.from(quizGen.strands).join(', '),
+        sections: targetSectionsStr,
+        lesson: lessonName,
+        dueDate: quizGen.dueDate || null,
+        due_date: quizGen.dueDate || null,
+        gradeLevel: quizGen.gradeLevel,
+        grade_level: quizGen.gradeLevel,
+        createdAt: new Date().toISOString(),
+        title: title + (isDemo ? ' (Demo)' : ''),
+        type: quizGen.type || 'standard',
+        quiz_type: quizGen.type || 'standard',
+        timerPerQuestion: quizGen.timerPerQuestion || 0,
+        timeLimitMinutes: quizGen.timeLimitMinutes || 0,
+        meta: `${quizGen.subject || 'General'} · ${questionsToSave.length} items · ${quizStatus}`,
+        isDemo: isDemo,
+        status: quizStatus,
+        questions: questionsToSave
       });
     }
-    showToast('Quiz published and assigned to students successfully!', 'success');
-  } else {
-    if (typeof addNotification === 'function') {
-      addNotification({
-        targetRole: 'admin',
-        title: 'Quiz Awaiting Approval',
-        message: `Teacher ${CURRENT_PROFILE?.full_name || 'Faculty'} submitted quiz "${title}" (${quizGen.subject || 'General'}) for content approval.`,
-        type: 'quiz'
-      });
-    }
-    showToast('Quiz submitted for Admin content approval!', 'success');
-  }
 
-  closeQuizModal();
-  await loadQuizzesFromDB();
-  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+    // Automatically close the modal immediately upon saving
+    closeQuizModal();
+    await loadQuizzesFromDB();
+    if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+
+    if (isAdmin) {
+      if (typeof addNotification === 'function') {
+        addNotification({
+          targetRole: 'student',
+          title: 'New Quiz Available',
+          message: `New quiz "${title}" (${quizGen.subject || 'General'}) is now available under Quizzes.`,
+          type: 'quiz'
+        });
+      }
+      showToast('Quiz published and assigned to students successfully!', 'success');
+    } else {
+      if (typeof addNotification === 'function') {
+        addNotification({
+          targetRole: 'admin',
+          title: 'Quiz Awaiting Approval',
+          message: `Teacher ${CURRENT_PROFILE?.full_name || 'Faculty'} submitted quiz "${title}" (${quizGen.subject || 'General'}) for content approval.`,
+          type: 'quiz'
+        });
+        addNotification({
+          targetUserId: userId,
+          targetRole: 'teacher',
+          title: 'Quiz Submitted',
+          message: `Your quiz "${title}" (${quizGen.subject || 'General'}) was submitted and is waiting for Admin approval.`,
+          type: 'quiz'
+        });
+      }
+      showToast('Quiz submitted for Admin approval! Waiting for content review.', 'success');
+    }
+  } catch (err) {
+    console.error('Quiz save unexpected error:', err);
+    showToast('Failed to save quiz: ' + err.message, 'error');
+  } finally {
+    isSavingQuiz = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `${iconChip()} Save Quiz (${quizGen.questions.length} items)`;
+    }
+  }
 }
 
 async function approveQuiz(id) {
   const quiz = customQuizzes.find(q => q.id === id);
-  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-  let approvedSuccess = false;
-
-  if (session && typeof API_BASE !== 'undefined') {
-    try {
-      const res = await fetch(`${API_BASE}/api/quizzes/${id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ status: 'active' })
-      });
-      if (res.ok) {
-        approvedSuccess = true;
-      }
-    } catch (e) {
-      console.warn('Backend quiz approval failed, attempting client fallback:', e);
-    }
-  }
-
-  if (!approvedSuccess && typeof db !== 'undefined' && db) {
-    const { error } = await db.from('quizzes').update({ status: 'active' }).eq('id', id);
-    if (error) {
-      showToast('Failed to approve quiz: ' + error.message, 'error');
-      return;
-    }
-    approvedSuccess = true;
-  }
-
+  const { error } = await db.from('quizzes').update({ status: 'active' }).eq('id', id);
+  if (error) { showToast('Failed to approve quiz: ' + error.message, 'error'); return; }
   showToast('Quiz approved', 'success');
   if (quiz && typeof addNotification === 'function') {
     addNotification({
@@ -771,18 +1117,9 @@ async function approveQuiz(id) {
 
 async function rejectQuiz(id) {
   if (!confirm('Deny this quiz? It will be permanently deleted from the approval queue.')) return;
-<<<<<<< Updated upstream
-  const { error } = await db.from('quizzes').delete().eq('id', id);
-  if (error) { showToast('Failed to deny quiz: ' + error.message, 'error'); return; }
-  showToast('Quiz denied and deleted', 'success');
-  await loadQuizzesFromDB();
-  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
-  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
-=======
   const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
   let deletedSuccess = false;
 
-  // Immediately remove from local memory & update approval UI for instant response
   customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id));
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
@@ -797,18 +1134,14 @@ async function rejectQuiz(id) {
         },
         body: JSON.stringify({ status: 'rejected' })
       });
-      if (res.ok) {
-        deletedSuccess = true;
-      }
+      if (res.ok) deletedSuccess = true;
     } catch (e) {
-      console.warn('Backend quiz rejection failed, attempting direct Supabase fallback:', e);
+      console.warn('Backend quiz rejection failed, falling back to direct Supabase:', e);
     }
   }
 
   if (typeof db !== 'undefined' && db) {
-    // 1. Mark as rejected in Supabase - always succeeds under existing UPDATE RLS policy
     await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(() => {});
-    // 2. Also attempt physical delete
     await db.from('quiz_attempts').delete().eq('quiz_id', id).catch(() => {});
     await db.from('quizzes').delete().eq('id', id).catch(() => {});
   }
@@ -822,36 +1155,20 @@ async function rejectQuiz(id) {
 async function toggleQuizStatus(id, newStatus) {
   const quiz = customQuizzes.find(q => q.id === id);
   if (!quiz) return;
-  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-  let updatedSuccess = false;
-
-  if (session && typeof API_BASE !== 'undefined') {
-    try {
-      const res = await fetch(`${API_BASE}/api/quizzes/${id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-      if (res.ok) updatedSuccess = true;
-    } catch (e) {
-      console.warn('Backend status toggle failed, attempting client fallback:', e);
+  try {
+    if (typeof db !== 'undefined' && db) {
+      const { error } = await db.from('quizzes').update({ status: newStatus }).eq('id', id);
+      if (error) {
+        showToast('Failed to update quiz status: ' + error.message, 'error');
+        return;
+      }
     }
+    quiz.status = newStatus;
+    showToast(`Quiz "${quiz.title}" is now ${newStatus.toUpperCase()}`, 'success');
+    await loadQuizzesFromDB();
+  } catch (err) {
+    showToast('Failed to update quiz: ' + err.message, 'error');
   }
-
-  if (!updatedSuccess && typeof db !== 'undefined' && db) {
-    const { error } = await db.from('quizzes').update({ status: newStatus }).eq('id', id);
-    if (error) {
-      showToast('Failed to update quiz status: ' + error.message, 'error');
-      return;
-    }
-  }
-
-  quiz.status = newStatus;
-  showToast(`Quiz "${quiz.title}" is now ${newStatus.toUpperCase()}`, 'success');
-  await loadQuizzesFromDB();
 }
 
 async function deleteQuiz(id) {
@@ -862,7 +1179,6 @@ async function deleteQuiz(id) {
   const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
   let deletedSuccess = false;
 
-  // Immediately remove from local memory & update UI
   customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id));
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
@@ -875,18 +1191,14 @@ async function deleteQuiz(id) {
           'Authorization': `Bearer ${session.access_token}`
         }
       });
-      if (res.ok) {
-        deletedSuccess = true;
-      }
+      if (res.ok) deletedSuccess = true;
     } catch (e) {
-      console.warn('Backend quiz delete failed, attempting direct Supabase fallback:', e);
+      console.warn('Backend quiz delete failed, falling back to direct Supabase:', e);
     }
   }
 
   if (typeof db !== 'undefined' && db) {
-    // 1. Mark as rejected in Supabase so it is permanently excluded
     await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(() => {});
-    // 2. Also attempt physical delete
     await db.from('quiz_attempts').delete().eq('quiz_id', id).catch(() => {});
     await db.from('quizzes').delete().eq('id', id).catch(() => {});
   }
@@ -1064,12 +1376,12 @@ function getQuizConfirmDataCard() {
       </div>
     </div>
   `;
->>>>>>> Stashed changes
 }
 
 function renderQuizModal() {
   const body = document.getElementById('quizModalBody');
   const foot = document.getElementById('quizModalFoot');
+  if (body) body.scrollTop = 0;
 
   if (quizGen.step === 'loading') {
     body.innerHTML = `<div class="gen-loading"><div class="gl-ring"></div><p>Reading your material and drafting questions…</p><span class="gl-sub">This usually takes a few seconds</span></div>`;
@@ -1084,9 +1396,9 @@ function renderQuizModal() {
   if (quizGen.step === 'results') {
     const isDemo = quizGen.questions.some(q => q._demo);
     body.innerHTML = `
-      ${isDemo ? `<div class="demo-banner">${iconChip()} <div><strong>Preview Mode</strong> — The AI API is currently not working or temporarily busy. Showing sample generated questions. You may try generating again shortly.</div></div>` : ''}
-      <div class="qresult-list">${quizGen.questions.map(renderQuestionCard).join('')}</div>`;
-    foot.innerHTML = `<button class="foot-btn-secondary" onclick="quizGen.step='setup';renderQuizModal();">Back</button><button class="gen-btn" onclick="saveQuiz()">${iconChip()} Save Quiz (${quizGen.questions.length} items)</button>`;
+      ${isDemo ? `<div class="demo-banner">${iconChip()} <div><strong>Preview Mode</strong> — The system API is currently not working or temporarily busy. Showing sample generated questions. You may try generating again shortly.</div></div>` : ''}
+      <div class="qresult-list">${quizGen.questions.map((q, idx) => renderQuestionCard(q, idx)).join('')}</div>`;
+    foot.innerHTML = `<button class="foot-btn-secondary" onclick="quizGen.step='setup';quizGen.wizardStep=4;renderQuizModal();">Back</button><button class="gen-btn" onclick="saveQuiz()">${iconChip()} Save Quiz (${quizGen.questions.length} items)</button>`;
     return;
   }
 
@@ -1100,278 +1412,530 @@ function renderQuizModal() {
   const selectedFmtList = Array.from(quizGen.formats);
   const isMultiFormat = selectedFmtList.length > 1;
 
-  const { minISO, maxISO, currentYear } = getQuizDueDateConstraints();
+  const { currentYear, selectedYear, selectedMonth, selectedDay, selectedTime, daysInMonth } = getQuizDueDateParts();
 
   // Calculate live breakdown percentages
   let totalCalculatedCount = 0;
   selectedFmtList.forEach(f => { totalCalculatedCount += (quizGen.formatCounts[f] || 0); });
   const isCustomMode = quizGen.distributionMode === 'custom';
 
-  body.innerHTML = `
-    <div class="type-select">
-      <div class="type-card ${quizGen.type === 'standard' ? 'active' : ''}" onclick="selectQuizType('standard')">
-        <div class="tc-icon">${iconQuiz()}</div>
-        <h4>Standard Quiz</h4>
-        <p>AI-generated identification, multiple choice, and matching questions</p>
-      </div>
-      <div class="type-card ${quizGen.type === 'interactive' ? 'active' : ''}" onclick="selectQuizType('interactive')">
-        <span class="soon-tag" style="background:#e0f2fe;color:#0284c7;">🎮 Game</span>
-        <div class="tc-icon" style="${quizGen.type === 'interactive' ? 'background:linear-gradient(135deg, #0284c7, #8b5cf6);' : ''}">${iconGamepad()}</div>
-        <h4>Interactive</h4>
-        <p>Animated gamified cards, drag & drop matching, and question timer</p>
-      </div>
-    </div>
-    ${quizGen.type === 'interactive' ? `
-    <div class="gen-field" style="background:#f0f7ff;border:1.5px solid #bae6fd;border-radius:14px;padding:14px;margin-top:6px;">
-      <label style="color:#0284c7;display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-        <span>⏱️</span> Question Timer (Per Item)
-      </label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${[
-          { val: 0, label: 'Untimed' },
-          { val: 15, label: '15s' },
-          { val: 30, label: '30s' },
-          { val: 45, label: '45s' },
-          { val: 60, label: '60s' }
-        ].map(t => `
-          <div class="format-chip ${quizGen.timerPerQuestion === t.val ? 'on' : ''}" 
-               style="border-radius:10px;padding:6px 14px;font-size:12px;"
-               onclick="quizGen.timerPerQuestion = ${t.val}; renderQuizModal();">
-            ${t.label}
+  const stepperHtml = renderQuizStepper();
+
+  if (quizGen.wizardStep === 1) {
+    // ── STEP 1: TYPE OF QUIZ ──
+    body.innerHTML = `
+      ${stepperHtml}
+      <div class="qz-step-pane">
+        <div class="qz-step-banner">
+          <div class="qz-step-banner-title">
+            <span>1. Select Quiz Type</span>
           </div>
-        `).join('')}
+          <span class="qz-step-banner-tag">Step 1 of 5</span>
+        </div>
+        <div class="type-select">
+          <div class="type-card ${quizGen.type === 'standard' ? 'active' : ''} standard-quiz-card" onclick="selectQuizType('standard')">
+            <div class="tc-icon">${iconQuiz()}</div>
+            <h4>Standard Quiz</h4>
+            <p>System-generated identification, multiple choice, and matching questions</p>
+          </div>
+          <div class="type-card ${quizGen.type === 'interactive' ? 'active' : ''}" onclick="selectQuizType('interactive')">
+            <span class="soon-tag" style="background:#e0f2fe;color:#0284c7;">🎮 Game</span>
+            <div class="tc-icon" style="${quizGen.type === 'interactive' ? 'background:linear-gradient(135deg, #0284c7, #8b5cf6);' : ''}">${iconGamepad()}</div>
+            <h4>Interactive Game</h4>
+            <p>Animated gamified cards, drag & drop matching, and question timer</p>
+          </div>
+        </div>
+        ${quizGen.type === 'interactive' ? `
+        <div class="gen-field" style="background:#f0f7ff;border:1.5px solid #bae6fd;border-radius:14px;padding:14px;margin-top:4px;">
+          <label style="color:#0284c7;display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+            <span>⏱️</span> Question Timer (Per Item)
+          </label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${[
+              { val: 0, label: 'Untimed' },
+              { val: 15, label: '15s' },
+              { val: 30, label: '30s' },
+              { val: 45, label: '45s' },
+              { val: 60, label: '60s' }
+            ].map(t => `
+              <div class="format-chip ${quizGen.timerPerQuestion === t.val ? 'on' : ''}" 
+                   style="border-radius:10px;padding:6px 14px;font-size:12px;"
+                   onclick="quizGen.timerPerQuestion = ${t.val}; renderQuizModal();">
+                ${t.label}
+              </div>
+            `).join('')}
+          </div>
+          <span style="font-size:11.5px;color:#64748b;margin-top:6px;display:block;">
+            Students will see an animated timer countdown on each question in the arena.
+          </span>
+        </div>
+        ` : `
+        <div class="gen-field" style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:12px 14px;margin-top:4px;">
+          <span style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px;">
+            <span>ℹ️</span> <strong>Standard assessment mode</strong> — Questions are answered sequentially with optional overall time limit.
+          </span>
+        </div>
+        `}
       </div>
-      <span style="font-size:11.5px;color:#64748b;margin-top:6px;display:block;">
-        Students will see an animated timer countdown on each question in the arena.
-      </span>
-    </div>
-    ` : ''}
-    <div class="gen-field">
-      <label>Target Strands <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select strand to filter subject list)</span></label>
-      <div class="format-grid">
-        ${STRANDS.map(s => {
-          const isSelected = quizGen.strands.has(s);
-          const isAllowed = !isTeacher || teacherStrands.includes(s);
-          const isLocked = isTeacher && teacherStrands.length === 1 && teacherStrands[0] === s;
-          const disabledStyle = (!isAllowed || isLocked) ? 'style="opacity: 0.45; cursor: not-allowed;"' : '';
-          return `<div class="format-chip ${isSelected ? 'on' : ''}" ${disabledStyle} onclick="toggleQuizStrand('${s}')">${s}</div>`;
-        }).join('')}
+    `;
+
+    foot.innerHTML = `
+      <button class="foot-btn-secondary" onclick="closeQuizModal()">Cancel</button>
+      <button class="gen-btn" onclick="nextQuizStep()">Next: Quiz Description &rarr;</button>
+    `;
+    return;
+  }
+
+  if (quizGen.wizardStep === 2) {
+    // ── STEP 2: DESCRIPTION OF QUIZ (QUIZ TITLE, SECTION, ETC.) ──
+    body.innerHTML = `
+      ${stepperHtml}
+      <div class="qz-step-pane">
+        <div class="qz-step-banner">
+          <div class="qz-step-banner-title">
+            <span>2. Quiz Description & Target Audience</span>
+          </div>
+          <span class="qz-step-banner-tag">Step 2 of 5</span>
+        </div>
+
+        <div class="gen-field">
+          <label>Target Strands <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select strand to filter subject list)</span></label>
+          <div class="format-grid">
+            ${STRANDS.map(s => {
+              const isSelected = quizGen.strands.has(s);
+              const isAllowed = !isTeacher || teacherStrands.includes(s);
+              const isLocked = isTeacher && teacherStrands.length === 1 && teacherStrands[0] === s;
+              const disabledStyle = (!isAllowed || isLocked) ? 'style="opacity: 0.45; cursor: not-allowed;"' : '';
+              return `<div class="format-chip ${isSelected ? 'on' : ''}" ${disabledStyle} onclick="toggleQuizStrand('${s}')">${s}</div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="gen-row">
+          <div class="gen-field">
+            <label>Quiz Title <span style="color:#ef4444;">*</span></label>
+            <input type="text" id="quizGenTitleInput" placeholder="e.g. Cybersecurity – Quiz 4" value="${escHtml(quizGen.title)}" oninput="updateTitle(this.value)">
+          </div>
+          <div class="gen-field">
+            <label>Subject <span style="color:#ef4444;">*</span></label>
+            <select id="quizGenSubjectSelect" onchange="updateSubject(this.value)">
+              <option value="" disabled ${!quizGen.subject ? 'selected' : ''}>${quizGen.strands.size > 0 ? 'Select subject' : 'Select subject (All Strands)'}</option>
+              ${getAvailableSubjectsForQuizGen().map(sub => `<option value="${escHtml(sub)}" ${quizGen.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
+              ${(quizGen.subject && !getAvailableSubjectsForQuizGen().includes(quizGen.subject)) ? `<option value="${escHtml(quizGen.subject)}" selected>${escHtml(quizGen.subject)}</option>` : ''}
+            </select>
+          </div>
+        </div>
+
+        <div class="gen-row">
+          <div class="gen-field"><label>Grade Level</label>
+            <select onchange="quizGen.gradeLevel = this.value; renderQuizModal();">
+              ${GRADE_LEVELS.map(g => `<option value="${g}" ${quizGen.gradeLevel === g ? 'selected' : ''}>${g}</option>`).join('')}
+            </select>
+          </div>
+          <div class="gen-field"><label>Lesson</label><input type="text" placeholder="e.g. Lesson 3" value="${escHtml(quizGen.lesson)}" oninput="quizGen.lesson = this.value;"></div>
+        </div>
+
+        <div class="gen-field">
+          <label>Target Sections <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select multiple or leave blank for all)</span></label>
+          <div class="format-grid">
+            ${SECTIONS.map(s => {
+              const isSelected = quizGen.sections.has(s);
+              return `<div class="format-chip ${isSelected ? 'on' : ''}" onclick="toggleQuizSection('${s}')">${s}</div>`;
+            }).join('')}
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="gen-row">
-      <div class="gen-field"><label>Quiz Title</label><input type="text" placeholder="e.g. Cybersecurity – Quiz 4" value="${escHtml(quizGen.title)}" oninput="updateTitle(this.value)"></div>
-      <div class="gen-field"><label>Subject</label>
-        <select onchange="updateSubject(this.value)">
-          <option value="" disabled ${!quizGen.subject ? 'selected' : ''}>${quizGen.strands.size > 0 ? 'Select subject' : 'Select subject (All Strands)'}</option>
-          ${getAvailableSubjectsForQuizGen().map(sub => `<option value="${escHtml(sub)}" ${quizGen.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
-          ${(quizGen.subject && !getAvailableSubjectsForQuizGen().includes(quizGen.subject)) ? `<option value="${escHtml(quizGen.subject)}" selected>${escHtml(quizGen.subject)}</option>` : ''}
-        </select>
+    `;
+
+    foot.innerHTML = `
+      <button class="foot-btn-secondary" onclick="prevQuizStep()">&larr; Back</button>
+      <button class="gen-btn" onclick="nextQuizStep()">Next: Deadline & Distribution &rarr;</button>
+    `;
+    return;
+  }
+
+  if (quizGen.wizardStep === 3) {
+    // ── STEP 3: DEADLINE, TYPE OF QUIZ / TIME LIMIT, DISTRIBUTION (NUMBER OF EXAM) ──
+    const formattedDeadline = quizGen.dueDate 
+      ? new Date(quizGen.dueDate).toLocaleString([], { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : '';
+
+    // Build day options for selected month/year
+    const dayOptions = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+      .map(d => `<option value="${d}" ${selectedDay === d ? 'selected' : ''}>${d}</option>`)
+      .join('');
+
+    body.innerHTML = `
+      ${stepperHtml}
+      <div class="qz-step-pane">
+        <div class="qz-step-banner">
+          <div class="qz-step-banner-title">
+            <span>3. Deadline, Timer &amp; Question Distribution</span>
+          </div>
+          <span class="qz-step-banner-tag">Step 3 of 5</span>
+        </div>
+
+        <!-- ── DEADLINE & EXPIRATION CARD ── -->
+        <div class="gen-field qz-card-field">
+          <div class="qz-card-header">
+            <label><span>📅</span> Quiz Expiration / Due Date &amp; Time</label>
+            <span class="qz-card-sublabel">${quizGen.dueDate ? 'Deadline Active' : 'Optional · No Expiration'}</span>
+          </div>
+
+          <!-- Quick Presets -->
+          <div class="count-pills" style="margin-bottom:6px;">
+            <div class="count-pill ${!quizGen.dueDate ? 'on' : ''}" onclick="setDeadlinePreset('none')">No Deadline</div>
+            <div class="count-pill" onclick="setDeadlinePreset('today')">Today 11:59 PM</div>
+            <div class="count-pill" onclick="setDeadlinePreset('tomorrow')">Tomorrow 11:59 PM</div>
+            <div class="count-pill" onclick="setDeadlinePreset('3days')">In 3 Days</div>
+            <div class="count-pill" onclick="setDeadlinePreset('1week')">In 1 Week</div>
+          </div>
+
+          <!-- Month / Day / Year + Time Selectors -->
+          <div class="qz-datetime-grid-4">
+            <div class="qz-dt-item">
+              <span class="qz-dt-label">Month</span>
+              <select class="qz-dt-select" onchange="updateQuizMonthPart(this.value)">
+                ${MONTH_NAMES.map((mn, idx) => `<option value="${idx}" ${selectedMonth === idx ? 'selected' : ''}>${mn}</option>`).join('')}
+              </select>
+            </div>
+            <div class="qz-dt-item">
+              <span class="qz-dt-label">Day</span>
+              <select class="qz-dt-select" onchange="updateQuizDayPart(this.value)">
+                ${dayOptions}
+              </select>
+            </div>
+            <div class="qz-dt-item">
+              <span class="qz-dt-label">Year</span>
+              <select class="qz-dt-select" onchange="updateQuizYearPart(this.value)">
+                <option value="${currentYear}" ${selectedYear === currentYear ? 'selected' : ''}>${currentYear}</option>
+              </select>
+            </div>
+            <div class="qz-dt-item">
+              <span class="qz-dt-label">Time</span>
+              <input type="time" class="qz-dt-select" value="${selectedTime}" onchange="updateQuizTimePart(this.value)">
+            </div>
+          </div>
+
+          ${quizGen.dueDate ? `
+          <div class="qz-deadline-active-badge">
+            <div class="qz-dab-text">
+              <span>⏰</span>
+              <span><strong>Deadline Set:</strong> ${formattedDeadline}</span>
+            </div>
+            <button type="button" class="qz-dab-clear" onclick="setDeadlinePreset('none')" title="Remove deadline">&times; Clear</button>
+          </div>
+          ` : `
+          <span style="font-size:11.5px;color:var(--text-muted);margin-top:2px;display:block;">
+            🕒 Select month by name · Hour &amp; minute selectable · Restricted up to <strong>${currentYear}</strong> only · Past dates blocked.
+          </span>
+          `}
+        </div>
+
+        <!-- ── TIMER SETTINGS CARD ── -->
+        ${quizGen.type === 'standard' ? `
+        <div class="gen-field standard-timer-field">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+            <label style="color:#1e40af;display:flex;align-items:center;gap:6px;margin-bottom:0;font-weight:700;font-size:13px;">
+              <span>⏱️</span> Quiz Time Limit (Minutes)
+            </label>
+            <span style="font-size:11.5px;color:var(--text-muted);font-weight:600;">
+              ${quizGen.timeLimitMinutes > 0 ? `<strong style="color:var(--blue);">${quizGen.timeLimitMinutes} minute${quizGen.timeLimitMinutes === 1 ? '' : 's'}</strong> countdown` : 'Untimed (No time limit)'}
+            </span>
+          </div>
+
+          <!-- Quick Preset Pills -->
+          <div class="count-pills" style="margin-bottom:10px;">
+            ${[
+              { val: 0, label: 'Untimed' },
+              { val: 5, label: '5m' },
+              { val: 10, label: '10m' },
+              { val: 15, label: '15m' },
+              { val: 20, label: '20m' },
+              { val: 30, label: '30m' },
+              { val: 45, label: '45m' },
+              { val: 60, label: '60m' }
+            ].map(t => `
+              <div class="count-pill ${quizGen.timeLimitMinutes === t.val ? 'on' : ''}"
+                   style="border-radius:8px;padding:6px 13px;font-size:12px;font-weight:600;"
+                   onclick="setStandardTimeLimit(${t.val})">
+                ${t.label}
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Adjustable Custom Minutes Stepper -->
+          <div class="custom-count-row" style="margin-top:2px;">
+            <span class="cc-label">Adjust custom minutes:</span>
+            <div style="display:inline-flex;align-items:center;gap:3px;background:#fff;border:1.5px solid var(--blue-light);border-radius:8px;padding:2px 6px;">
+              <button type="button" class="sq-step-btn" onclick="adjustStandardTimeLimit(-1)" title="Decrease 1 minute">−</button>
+              <input type="number" min="0" max="180" class="custom-count-input" style="width:65px !important;text-align:center;padding:3px 4px !important;border:none !important;font-weight:700;color:var(--blue);" value="${quizGen.timeLimitMinutes || ''}" placeholder="0" oninput="updateStandardTimeLimitInput(this.value)">
+              <button type="button" class="sq-step-btn" onclick="adjustStandardTimeLimit(1)" title="Increase 1 minute">+</button>
+            </div>
+            <span class="cc-hint">minutes (0 = untimed · auto-submits when time expires)</span>
+          </div>
+        </div>
+        ` : ''}
+
+        <div class="gen-field">
+          <label>Question Formats</label>
+          <div class="format-grid">
+            <div class="format-chip ${quizGen.formats.has('mc') ? 'on' : ''}" onclick="toggleFormat('mc')">Multiple Choice</div>
+            <div class="format-chip ${quizGen.formats.has('id') ? 'on' : ''}" onclick="toggleFormat('id')">Identification</div>
+            <div class="format-chip ${quizGen.formats.has('match') ? 'on' : ''}" onclick="toggleFormat('match')">Matching Type</div>
+            <div class="format-chip ${quizGen.formats.size === 3 ? 'on' : ''}" onclick="setAllFormats()">All Formats</div>
+          </div>
+        </div>
+
+        ${isMultiFormat ? `
+        <div class="gen-field">
+          <label>Question Distribution Style</label>
+          <div class="dist-mode-pills">
+            <div class="dist-mode-pill ${quizGen.distributionMode === 'balanced' ? 'on' : ''}" onclick="setDistributionMode('balanced')">
+              <div class="dmp-title">⚖️ Balanced Distribution</div>
+              <div class="dmp-desc">Evenly balances amounts across selected styles (${selectedFmtList.map(f => formatNames[f]).join(' & ')})</div>
+            </div>
+            <div class="dist-mode-pill ${quizGen.distributionMode === 'custom' ? 'on' : ''}" onclick="setDistributionMode('custom')">
+              <div class="dmp-title">🎯 Custom Amount per Type</div>
+              <div class="dmp-desc">Set specific numbers for each question style (e.g. 7 Multiple Choice + 3 Identification)</div>
+            </div>
+          </div>
+        </div>
+        ` : ''}
+
+        ${isCustomMode ? `
+        <div class="gen-field custom-dist-section">
+          <label>Set Question Count for Each Format</label>
+          <div class="dist-inputs-grid">
+            ${selectedFmtList.map(fmt => {
+              const val = quizGen.formatCounts[fmt] || 0;
+              const pct = totalCalculatedCount > 0 ? Math.round((val / totalCalculatedCount) * 100) : 0;
+              return `
+              <div class="dist-item-card">
+                <div class="dic-label">${formatNames[fmt]}</div>
+                <div class="dic-input-wrap">
+                  <input type="number" min="0" max="60" value="${val}" onchange="updateFormatCount('${fmt}', this.value)">
+                  <span class="dic-unit">items (${pct}%)</span>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+          <div class="dist-summary-banner">
+            <span>Total Quiz Items: <strong>${totalCalculatedCount}</strong></span>
+            <div class="dist-pct-chips">
+              ${selectedFmtList.map(fmt => {
+                const val = quizGen.formatCounts[fmt] || 0;
+                const pct = totalCalculatedCount > 0 ? Math.round((val / totalCalculatedCount) * 100) : 0;
+                return `<span class="dist-pct-chip">${formatNames[fmt]}: <strong>${val}</strong> (${pct}%)</span>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+        ` : `
+        <div class="gen-field">
+          <label>Total Number of Questions</label>
+          <div class="count-pills">
+            <div class="count-pill ${quizGen.count === 'auto' ? 'on' : ''}" onclick="selectCount('auto')">Automatic</div>
+            <div class="count-pill ${quizGen.count === 5 ? 'on' : ''}" onclick="selectCount(5)">5</div>
+            <div class="count-pill ${quizGen.count === 10 ? 'on' : ''}" onclick="selectCount(10)">10</div>
+            <div class="count-pill ${quizGen.count === 15 ? 'on' : ''}" onclick="selectCount(15)">15</div>
+            <div class="count-pill ${quizGen.count === 20 ? 'on' : ''}" onclick="selectCount(20)">20</div>
+            <div class="count-pill ${quizGen.count === 25 ? 'on' : ''}" onclick="selectCount(25)">25</div>
+          </div>
+          <div class="custom-count-row">
+            <span class="cc-label">Or type custom amount:</span>
+            <input type="number" min="1" max="60" placeholder="e.g. 7 or 9" class="custom-count-input" value="${quizGen.customCount}" oninput="updateCustomCountInput(this.value)">
+            <span class="cc-hint">${typeof quizGen.count === 'number' ? `(${quizGen.count} questions total${isMultiFormat ? ' · evenly balanced' : ''})` : '(System will choose optimal balanced count)'}</span>
+          </div>
+        </div>
+        `}
+
+        <!-- ── CONFIRM DATA REVIEW BOX ── -->
+        ${getQuizConfirmDataCard()}
       </div>
-    </div>
-    <div class="gen-row">
-      <div class="gen-field"><label>Grade Level</label>
-        <select onchange="quizGen.gradeLevel = this.value; renderQuizModal();">
-          ${GRADE_LEVELS.map(g => `<option value="${g}" ${quizGen.gradeLevel === g ? 'selected' : ''}>${g}</option>`).join('')}
-        </select>
+    `;
+
+    foot.innerHTML = `
+      <button class="foot-btn-secondary" onclick="prevQuizStep()">&larr; Back</button>
+      <button class="gen-btn" onclick="nextQuizStep()">Confirm Data & Upload &rarr;</button>
+    `;
+    return;
+  }
+
+  // ── STEP 4: UPLOAD & GENERATE ──
+  if (quizGen.wizardStep === 4) {
+    body.innerHTML = `
+      ${stepperHtml}
+      <div class="qz-step-pane">
+        <div class="qz-step-banner">
+          <div class="qz-step-banner-title">
+            <span>4. Upload Material &amp; Generate Questions</span>
+          </div>
+          <span class="qz-step-banner-tag">Step 4 of 5</span>
+        </div>
+
+        <div class="gen-field">
+          <label>Source Material <span style="color:#ef4444;">*</span></label>
+          ${quizGen.file ? `
+            <div class="file-chip">
+              <div class="fc-icon">${iconDoc().replace('<svg viewBox="0 0 24 24">','<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">')}</div>
+              <div class="fc-info"><h5>${escHtml(quizGen.file.name)}</h5><span>${quizGen.fileText ? 'Text extracted · ready to generate' : 'Reading file…'}</span></div>
+              <button class="fc-remove" onclick="removeFile()">${iconClose()}</button>
+            </div>` : `
+            <label class="dropzone" for="quizFileInput">
+              ${iconUpload()}
+              <div class="dz-title">Click to upload a handout, module, or notes</div>
+              <div class="dz-sub">PDF, DOCX, or TXT (Max 50MB only)</div>
+            </label>
+            <input type="file" id="quizFileInput" accept=".pdf,.docx,.txt" style="display:none" onchange="handleFileInput(this)">
+          `}
+        </div>
+
+        ${getQuizConfigSummary()}
+
+        ${quizGen.file ? `
+        <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;">
+          <span style="font-size:22px;">✨</span>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:2px;">Ready to Generate!</div>
+            <div style="font-size:11.5px;color:#64748b;">Click the button below to let the system read your material and draft quiz questions. You will review them in the next step.</div>
+          </div>
+        </div>
+        ` : ''}
       </div>
-      <div class="gen-field"><label>Lesson</label><input type="text" placeholder="e.g. Lesson 3" value="${escHtml(quizGen.lesson)}" oninput="quizGen.lesson = this.value;"></div>
-    </div>
-    <div class="gen-field">
-      <label>Quiz Expiration / Due Date & Time <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(optional deadline for student submission)</span></label>
-      <input type="datetime-local" 
-             min="${minISO}" 
-             max="${maxISO}" 
-             value="${quizGen.dueDate || ''}" 
-             onchange="updateQuizDueDate(this.value)"
-             style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid #cbd5e1;font-family:inherit;font-size:13px;color:#0f172a;background:#ffffff;">
-      <span style="font-size:11.5px;color:var(--text-muted);margin-top:4px;display:block;">
-        🕒 Hour & minute selectable · Restricted up to <strong>${currentYear}</strong> only · Past hours blocked.
-      </span>
-    </div>
-    <div class="gen-field">
-      <label>Target Sections <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select multiple or leave blank for all)</span></label>
-      <div class="format-grid">
-        ${SECTIONS.map(s => {
-          const isSelected = quizGen.sections.has(s);
-          return `<div class="format-chip ${isSelected ? 'on' : ''}" onclick="toggleQuizSection('${s}')">${s}</div>`;
-        }).join('')}
+    `;
+
+    foot.innerHTML = `
+      <button class="foot-btn-secondary" onclick="prevQuizStep()">&larr; Back</button>
+      <button class="gen-btn" ${!quizGen.file ? 'disabled' : ''} onclick="generateQuiz()">${iconChip()} Generate Questions &rarr;</button>
+    `;
+    return;
+  }
+
+  // ── STEP 5: PREVIEW, EDIT & SAVE ──
+  const hasQuestions = quizGen.questions && quizGen.questions.length > 0;
+  const isDemo = hasQuestions && quizGen.questions.some(q => q._demo);
+
+  body.innerHTML = `
+    ${stepperHtml}
+    <div class="qz-step-pane">
+      <div class="qz-step-banner">
+        <div class="qz-step-banner-title">
+          <span>5. Preview, Edit &amp; Double Check</span>
+        </div>
+        <span class="qz-step-banner-tag">Step 5 of 5</span>
       </div>
-    </div>
-    <div class="gen-field">
-      <label>Source Material</label>
-      ${quizGen.file ? `
-        <div class="file-chip">
-          <div class="fc-icon">${iconDoc().replace('<svg viewBox="0 0 24 24">','<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">')}</div>
-          <div class="fc-info"><h5>${escHtml(quizGen.file.name)}</h5><span>${quizGen.fileText ? 'Text extracted · ready to generate' : 'Reading file…'}</span></div>
-          <button class="fc-remove" onclick="removeFile()">${iconClose()}</button>
-        </div>` : `
-        <label class="dropzone" for="quizFileInput">
-          ${iconUpload()}
-          <div class="dz-title">Click to upload a handout, module, or notes</div>
-          <div class="dz-sub">PDF, DOCX, or TXT</div>
-        </label>
-        <input type="file" id="quizFileInput" accept=".pdf,.docx,.txt" style="display:none" onchange="handleFileInput(this)">
+
+      ${hasQuestions ? `
+      <div class="qz-questions-preview-section">
+        <div class="qz-preview-header">
+          <div class="qz-preview-title">
+            <span class="qz-preview-icon">📝</span>
+            <div>
+              <h4>Question Items Preview (${quizGen.questions.length} items)</h4>
+              <span>Review and edit questions, options, and answers below before saving</span>
+            </div>
+          </div>
+          <button type="button" class="foot-btn-secondary" onclick="addNewManualQuestion()" style="font-size:11.5px;padding:5px 12px;border-radius:8px;font-weight:700;">
+            + Add Question
+          </button>
+        </div>
+
+        ${isDemo ? `
+        <div class="demo-banner">
+          <span class="qz-summary-icon" style="display:inline-flex;">${iconChip()}</span>
+          <div><strong>Preview Mode</strong> — Sample generated questions. You may edit them below before saving.</div>
+        </div>` : ''}
+
+        <div class="qresult-list">
+          ${quizGen.questions.map((q, idx) => renderQuestionCard(q, idx)).join('')}
+        </div>
+      </div>
+      ` : `
+      <div style="background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:16px;text-align:center;color:#92400e;">
+        <div style="font-size:20px;margin-bottom:6px;">⚠️</div>
+        <strong>No questions yet.</strong><br>
+        <span style="font-size:12px;">Go back to Step 4 and generate questions first.</span>
+      </div>
       `}
     </div>
-    <div class="gen-field">
-      <label>Question Formats</label>
-      <div class="format-grid">
-        <div class="format-chip ${quizGen.formats.has('mc') ? 'on' : ''}" onclick="toggleFormat('mc')">Multiple Choice</div>
-        <div class="format-chip ${quizGen.formats.has('id') ? 'on' : ''}" onclick="toggleFormat('id')">Identification</div>
-        <div class="format-chip ${quizGen.formats.has('match') ? 'on' : ''}" onclick="toggleFormat('match')">Matching Type</div>
-        <div class="format-chip ${quizGen.formats.size === 3 ? 'on' : ''}" onclick="setAllFormats()">All Formats</div>
-      </div>
-    </div>
-
-    ${isMultiFormat ? `
-    <div class="gen-field">
-      <label>Question Distribution Style</label>
-      <div class="dist-mode-pills">
-        <div class="dist-mode-pill ${quizGen.distributionMode === 'balanced' ? 'on' : ''}" onclick="setDistributionMode('balanced')">
-          <div class="dmp-title">⚖️ Balanced Distribution</div>
-          <div class="dmp-desc">Evenly balances amounts across selected styles (${selectedFmtList.map(f => formatNames[f]).join(' & ')})</div>
-        </div>
-        <div class="dist-mode-pill ${quizGen.distributionMode === 'custom' ? 'on' : ''}" onclick="setDistributionMode('custom')">
-          <div class="dmp-title">🎯 Custom Amount per Type</div>
-          <div class="dmp-desc">Set specific numbers for each question style (e.g. 7 Multiple Choice + 3 Identification)</div>
-        </div>
-      </div>
-    </div>
-    ` : ''}
-
-    ${isCustomMode ? `
-    <div class="gen-field custom-dist-section">
-      <label>Set Question Count for Each Format</label>
-      <div class="dist-inputs-grid">
-        ${selectedFmtList.map(fmt => {
-          const val = quizGen.formatCounts[fmt] || 0;
-          const pct = totalCalculatedCount > 0 ? Math.round((val / totalCalculatedCount) * 100) : 0;
-          return `
-          <div class="dist-item-card">
-            <div class="dic-label">${formatNames[fmt]}</div>
-            <div class="dic-input-wrap">
-              <input type="number" min="0" max="60" value="${val}" onchange="updateFormatCount('${fmt}', this.value)">
-              <span class="dic-unit">items (${pct}%)</span>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-      <div class="dist-summary-banner">
-        <span>Total Quiz Items: <strong>${totalCalculatedCount}</strong></span>
-        <div class="dist-pct-chips">
-          ${selectedFmtList.map(fmt => {
-            const val = quizGen.formatCounts[fmt] || 0;
-            const pct = totalCalculatedCount > 0 ? Math.round((val / totalCalculatedCount) * 100) : 0;
-            return `<span class="dist-pct-chip">${formatNames[fmt]}: <strong>${val}</strong> (${pct}%)</span>`;
-          }).join('')}
-        </div>
-      </div>
-    </div>
-    ` : `
-    <div class="gen-field">
-      <label>Total Number of Questions</label>
-      <div class="count-pills">
-        <div class="count-pill ${quizGen.count === 'auto' ? 'on' : ''}" onclick="selectCount('auto')">Automatic</div>
-        <div class="count-pill ${quizGen.count === 5 ? 'on' : ''}" onclick="selectCount(5)">5</div>
-        <div class="count-pill ${quizGen.count === 10 ? 'on' : ''}" onclick="selectCount(10)">10</div>
-        <div class="count-pill ${quizGen.count === 15 ? 'on' : ''}" onclick="selectCount(15)">15</div>
-        <div class="count-pill ${quizGen.count === 20 ? 'on' : ''}" onclick="selectCount(20)">20</div>
-        <div class="count-pill ${quizGen.count === 25 ? 'on' : ''}" onclick="selectCount(25)">25</div>
-      </div>
-      <div class="custom-count-row">
-        <span class="cc-label">Or type custom amount:</span>
-        <input type="number" min="1" max="60" placeholder="e.g. 7 or 9" class="custom-count-input" value="${quizGen.customCount}" oninput="updateCustomCountInput(this.value)">
-        <span class="cc-hint">${typeof quizGen.count === 'number' ? `(${quizGen.count} questions total${isMultiFormat ? ' · evenly balanced' : ''})` : '(AI will choose optimal balanced count)'}</span>
-      </div>
-    </div>
-    `}
-
-    ${quizGen.type === 'standard' ? `
-    <div class="gen-field standard-timer-field">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-        <label style="color:#1e40af;display:flex;align-items:center;gap:6px;margin-bottom:0;font-weight:700;font-size:13px;">
-          <span>⏱️</span> Quiz Time Limit (Minutes)
-        </label>
-        <span style="font-size:11.5px;color:var(--text-muted);font-weight:600;">
-          ${quizGen.timeLimitMinutes > 0 ? `<strong style="color:var(--blue);">${quizGen.timeLimitMinutes} minute${quizGen.timeLimitMinutes === 1 ? '' : 's'}</strong> countdown` : 'Untimed (No time limit)'}
-        </span>
-      </div>
-
-      <!-- Quick Preset Pills -->
-      <div class="count-pills" style="margin-bottom:10px;">
-        ${[
-          { val: 0, label: 'Untimed' },
-          { val: 5, label: '5m' },
-          { val: 10, label: '10m' },
-          { val: 15, label: '15m' },
-          { val: 20, label: '20m' },
-          { val: 30, label: '30m' },
-          { val: 45, label: '45m' },
-          { val: 60, label: '60m' }
-        ].map(t => `
-          <div class="count-pill ${quizGen.timeLimitMinutes === t.val ? 'on' : ''}"
-               style="border-radius:8px;padding:6px 13px;font-size:12px;font-weight:600;"
-               onclick="setStandardTimeLimit(${t.val})">
-            ${t.label}
-          </div>
-        `).join('')}
-      </div>
-
-      <!-- Adjustable Custom Minutes Stepper -->
-      <div class="custom-count-row" style="margin-top:2px;">
-        <span class="cc-label">Adjust custom minutes:</span>
-        <div style="display:inline-flex;align-items:center;gap:3px;background:#fff;border:1.5px solid var(--blue-light);border-radius:8px;padding:2px 6px;">
-          <button type="button" class="sq-step-btn" onclick="adjustStandardTimeLimit(-1)" title="Decrease 1 minute">−</button>
-          <input type="number" min="0" max="180" class="custom-count-input" style="width:65px !important;text-align:center;padding:3px 4px !important;border:none !important;font-weight:700;color:var(--blue);" value="${quizGen.timeLimitMinutes || ''}" placeholder="0" oninput="updateStandardTimeLimitInput(this.value)">
-          <button type="button" class="sq-step-btn" onclick="adjustStandardTimeLimit(1)" title="Increase 1 minute">+</button>
-        </div>
-        <span class="cc-hint">minutes (0 = untimed · auto-submits when time expires)</span>
-      </div>
-    </div>
-    ` : ''}
   `;
 
   foot.innerHTML = `
-    <button class="foot-btn-secondary" onclick="closeQuizModal()">Cancel</button>
-    <button class="gen-btn" ${!quizGen.file ? 'disabled' : ''} onclick="generateQuiz()">${iconChip()} Generate Quiz</button>`;
+    <button class="foot-btn-secondary" onclick="prevQuizStep()">&larr; Back</button>
+    <div class="qz-foot-actions">
+      <button class="foot-btn-secondary" onclick="quizGen.wizardStep=4;generateQuiz();" title="Re-generate questions using system">🔄 Re-generate</button>
+      <button class="gen-btn" ${!hasQuestions ? 'disabled' : ''} onclick="saveQuiz()">${iconChip()} Save Quiz${hasQuestions ? ` (${quizGen.questions.length} items)` : ''}</button>
+    </div>
+  `;
 }
 
-function renderQuestionCard(q) {
+
+function renderQuestionCard(q, idx) {
+  const qNum = typeof idx === 'number' ? (idx + 1) : '';
   const tagClass = q.type === 'multiple_choice' ? 'mc' : q.type === 'identification' ? 'id' : 'match';
   const tagLabel = q.type === 'multiple_choice' ? 'Multiple Choice' : q.type === 'identification' ? 'Identification' : 'Matching Type';
   const cardLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   const cardColors = ['#22c55e', '#8b5cf6', '#f97316', '#06b6d4', '#ec4899', '#3b82f6', '#14b8a6', '#6366f1'];
   let body = '';
   if (q.type === 'multiple_choice') {
-    body = `<textarea rows="2" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question)}</textarea>
+    body = `<textarea rows="2" data-field="question" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question)}</textarea>
       <div class="qr-options">${(q.options || []).map((opt, i) => `
         <div class="qr-opt-row">
           <input type="radio" name="ans-${q._id}" ${i === q._answerIdx ? 'checked' : ''} onchange="setAnswerIndex('${q._id}', ${i})" title="Mark as correct answer">
           <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${cardColors[i] || '#64748b'};color:#fff;font-size:11px;font-weight:800;flex-shrink:0;">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
-          <input type="text" value="${escHtml(opt)}" oninput="editOption('${q._id}', ${i}, this.value)">
+          <input type="text" data-field="opt-${i}" value="${escHtml(opt)}" oninput="editOption('${q._id}', ${i}, this.value)">
           ${(q.options || []).length > 2 ? `<button class="qr-opt-del-btn" title="Remove this choice" onclick="removeOption('${q._id}', ${i})">&times;</button>` : ''}
         </div>`).join('')}</div>
       <div style="margin-top:8px;">
         <button class="qr-add-opt-btn" onclick="addOption('${q._id}')">+ Add Choice</button>
       </div>`;
   } else if (q.type === 'identification') {
-    body = `<textarea rows="2" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question)}</textarea>
+    body = `<textarea rows="2" data-field="question" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question)}</textarea>
       <div class="qr-label">Correct Answer</div>
-      <input type="text" value="${escHtml(q.answer)}" oninput="editQuestion('${q._id}','answer',this.value)">`;
+      <input type="text" data-field="answer" value="${escHtml(q.answer)}" oninput="editQuestion('${q._id}','answer',this.value)">`;
   } else {
     body = `<div class="qr-label">Instructions</div>
-      <input type="text" value="${escHtml(q.instructions || '')}" oninput="editQuestion('${q._id}','instructions',this.value)">
+      <input type="text" data-field="instructions" value="${escHtml(q.instructions || '')}" oninput="editQuestion('${q._id}','instructions',this.value)">
       <div class="qr-pairs">${(q.pairs || []).map((p, i) => `
         <div class="qr-pair-row">
           <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#0284c7;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;">${i + 1}</span>
-          <input type="text" value="${escHtml(p.left)}" oninput="editPair('${q._id}', ${i}, 'left', this.value)" placeholder="Prompt ${i + 1}">
+          <input type="text" data-field="pair-${i}" value="${escHtml(p.left)}" oninput="editPair('${q._id}', ${i}, 'left', this.value)" placeholder="Prompt ${i + 1}">
           <span>&harr;</span>
           <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#8b5cf6;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
           <input type="text" value="${escHtml(p.right)}" oninput="editPair('${q._id}', ${i}, 'right', this.value)" placeholder="Match ${cardLetters[i] || String.fromCharCode(65 + i)}">
         </div>`).join('')}</div>`;
   }
-  return `<div class="qresult-card">
-    <div class="qr-top"><span class="qr-type-tag ${tagClass}">${tagLabel}</span><button class="qr-remove" onclick="removeQuestion('${q._id}')">${iconTrash()}</button></div>
+  return `<div class="qresult-card" id="qcard-${q._id}">
+    <div class="qr-top">
+      <div style="display:flex;align-items:center;gap:8px;">
+        ${qNum ? `<span style="font-size:12px;font-weight:800;color:var(--text-primary);">#${qNum}</span>` : ''}
+        <span class="qr-type-tag ${tagClass}">${tagLabel}</span>
+      </div>
+      <button class="qr-remove" onclick="removeQuestion('${q._id}')" title="Delete this question">${iconTrash()}</button>
+    </div>
     ${body}
   </div>`;
+}
+
+
+function previewGeneratedInteractiveQuiz() {
+  if (!quizGen.questions || !quizGen.questions.length) {
+    showToast('No questions to preview yet', 'error');
+    return;
+  }
+  const previewQuiz = {
+    id: 'preview-' + Date.now(),
+    title: quizGen.title || 'Interactive Quiz Preview',
+    subject: quizGen.subject || 'General Academic',
+    type: 'interactive',
+    questions: quizGen.questions.map(q => Object.assign({}, q, { _quiz_type: 'interactive' })),
+    is_demo: false,
+    isPreview: true
+  };
+  if (typeof openTakeQuizModal === 'function') {
+    openTakeQuizModal(null, previewQuiz, true);
+  } else {
+    showToast('Take quiz module is not loaded', 'error');
+  }
 }

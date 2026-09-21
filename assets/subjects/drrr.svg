@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <radialGradient id="drrrBg" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#2d120a"/>
+      <stop offset="45%" stop-color="#1c0b05"/>
+      <stop offset="100%" stop-color="#0a0301"/>
+    </radialGradient>
+    <radialGradient id="magmaGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="25%" stop-color="#f97316"/>
+      <stop offset="60%" stop-color="#dc2626" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#7f1d1d" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="shieldGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#ea580c" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#ea580c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lavaStream" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="30%" stop-color="#f97316"/>
+      <stop offset="80%" stop-color="#dc2626"/>
+      <stop offset="100%" stop-color="#7f1d1d"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#drrrBg)"/>
+
+  <!-- TOP-LEFT: Emergency Disaster Preparedness Shield & Seismograph Waveform -->
+  <g transform="translate(120, 90)">
+    <circle cx="140" cy="140" r="160" fill="url(#shieldGlow)"/>
+    <!-- Safety Preparedness Shield -->
+    <path d="M 140,20 L 220,50 L 220,150 C 220,220 140,260 140,260 C 140,260 60,220 60,150 L 60,50 Z" fill="#991b1b" stroke="#f59e0b" stroke-width="4.5"/>
+    <path d="M 140,35 L 205,60 L 205,145 C 205,205 140,240 140,240 C 140,240 75,205 75,145 L 75,60 Z" fill="#b91c1c"/>
+    <!-- Emergency Hazard Warning Symbol -->
+    <polygon points="140,75 180,145 100,145" fill="#fef08a"/>
+    <polygon points="140,85 170,140 110,140" fill="#f59e0b"/>
+    <rect x="137" y="100" width="6" height="22" rx="3" fill="#0f172a"/>
+    <circle cx="140" cy="130" r="3.5" fill="#0f172a"/>
+
+    <!-- Earthquake Seismograph Richter Waveform -->
+    <g transform="translate(240, 60)">
+      <rect x="0" y="0" width="340" height="120" rx="10" fill="rgba(15, 23, 42, 0.75)" stroke="#ea580c" stroke-width="2"/>
+      <text x="14" y="24" fill="#fdba74" font-size="12" font-family="monospace" font-weight="bold">SEISMOGRAPH • RICHTER SCALE</text>
+      <!-- Grid lines -->
+      <line x1="0" y1="70" x2="340" y2="70" stroke="#7c2d12" stroke-width="1" stroke-dasharray="4 4"/>
+      <!-- Dynamic Seismic Tremor Spike Wave -->
+      <path d="M 10,70 L 50,70 L 65,55 L 75,85 L 90,65 L 105,75 L 125,70 L 140,30 L 155,105 L 170,20 L 185,110 L 200,45 L 215,85 L 235,60 L 255,75 L 275,70 L 330,70" stroke="#f97316" stroke-width="3" fill="none"/>
+      <!-- Magnitude readout -->
+      <text x="240" y="30" fill="#f87171" font-size="15" font-family="monospace" font-weight="bold">MAG: 7.2</text>
+    </g>
+  </g>
+
+  <!-- HERO TOP-RIGHT: Active Volcano Eruption & Lightning Ash Cloud -->
+  <g transform="translate(1550, 290)">
+    <circle cx="0" cy="-50" r="260" fill="url(#magmaGlow)"/>
+
+    <!-- Pyroclastic Ash Cloud Plumes -->
+    <circle cx="-50" cy="-140" r="70" fill="#44403c" opacity="0.85"/>
+    <circle cx="50" cy="-160" r="85" fill="#292524" opacity="0.9"/>
+    <circle cx="0" cy="-220" r="80" fill="#1c1917" opacity="0.95"/>
+    <circle cx="-90" cy="-210" r="60" fill="#292524" opacity="0.8"/>
+    <circle cx="80" cy="-220" r="65" fill="#44403c" opacity="0.85"/>
+
+    <!-- Volcanic Lightning Bolts inside Ash Plume -->
+    <path d="M -30,-220 L 0,-160 L -15,-155 L 20,-100" stroke="#fef08a" stroke-width="3.5" fill="none"/>
+    <path d="M 40,-240 L 65,-180 L 50,-175 L 80,-120" stroke="#fef08a" stroke-width="2.5" fill="none"/>
+
+    <!-- Volcanic Cone Peak -->
+    <polygon points="-240,240 -60,-80 60,-80 240,240" fill="#1c1917" stroke="#451a03" stroke-width="3"/>
+    
+    <!-- Glowing Crater Vent -->
+    <ellipse cx="0" cy="-80" rx="60" ry="18" fill="#fef08a" stroke="#ea580c" stroke-width="4"/>
+    <ellipse cx="0" cy="-80" rx="40" ry="10" fill="#ffffff"/>
+
+    <!-- Molten Lava Streams down Volcano slope -->
+    <path d="M -20,-75 Q -40,40 -90,140 T -140,240" stroke="url(#lavaStream)" stroke-width="12" fill="none" stroke-linecap="round"/>
+    <path d="M 20,-75 Q 45,30 80,120 T 130,240" stroke="url(#lavaStream)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M 0,-70 Q 10,50 -20,150 T -10,240" stroke="url(#lavaStream)" stroke-width="8" fill="none" stroke-linecap="round"/>
+
+    <!-- Volcanic Bombs / Glowing Ejecta flying -->
+    <circle cx="-120" cy="-100" r="7" fill="#fef08a"/>
+    <circle cx="110" cy="-90" r="8" fill="#f97316"/>
+    <circle cx="-60" cy="-40" r="6" fill="#f97316"/>
+    <circle cx="140" cy="-140" r="5" fill="#fef08a"/>
+  </g>
+
+  <!-- Weather Radar Storm / Cyclone Vortex sweeping across the center -->
+  <g stroke="#ea580c" stroke-width="1.8" fill="none" opacity="0.35" stroke-dasharray="10 8">
+    <ellipse cx="960" cy="580" rx="850" ry="260"/>
+    <ellipse cx="960" cy="590" rx="1050" ry="320"/>
+  </g>
+
+  <!-- BOTTOM: Tectonic Fault Line Rupture & Tsunami Wave Crest -->
+  <!-- Ocean Tsunami Wave (Left) -->
+  <path d="M 0,920 Q 250,750 480,880 Q 720,1020 960,940 L 960,1080 L 0,1080 Z" fill="#0e7490" opacity="0.75"/>
+  <path d="M 0,960 Q 200,820 400,920 Q 600,1040 850,970 L 850,1080 L 0,1080 Z" fill="#155e75" opacity="0.9"/>
+  <!-- Foam Crest -->
+  <path d="M 120,840 Q 240,780 340,820 T 460,890" stroke="#ffffff" stroke-width="6" fill="none" opacity="0.8"/>
+
+  <!-- Tectonic Ground Rupture / Fault Fissure (Right) -->
+  <polygon points="850,960 1100,920 1350,970 1600,910 1920,950 1920,1080 850,1080" fill="#292524"/>
+  <polygon points="900,990 1200,950 1500,1000 1800,940 1920,970 1920,1080 900,1080" fill="#1c1917"/>
+  <!-- Glowing Magma Fault Line at very base -->
+  <path d="M 0,1040 L 300,1020 L 600,1050 L 900,1015 L 1200,1040 L 1500,1010 L 1920,1035 L 1920,1080 L 0,1080 Z" fill="#dc2626" opacity="0.9"/>
+  <path d="M 0,1060 L 350,1045 L 750,1065 L 1150,1040 L 1550,1060 L 1920,1050 L 1920,1080 L 0,1080 Z" fill="#fbbf24" opacity="0.95"/>
+</svg>

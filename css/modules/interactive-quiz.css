@@ -4,7 +4,7 @@
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: #f0f7fd;
+  background: #fcfaf4 url('../../assets/interactive-quiz-background.svg') center center / cover no-repeat;
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   display: none;
   flex-direction: column;
@@ -1092,4 +1092,116 @@
 
 .iq-mc-card.disabled {
   pointer-events: none;
+}
+
+/* ─ Interactive Exit Confirmation Dialog ─ */
+.iq-confirm-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 20000 !important;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  animation: iqFadeIn 0.2s ease;
+}
+
+@keyframes iqFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.iq-confirm-card {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 30px 28px 24px;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.3), 0 0 0 1px rgba(226, 232, 240, 0.8);
+  text-align: center;
+  animation: iqPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+@keyframes iqPopIn {
+  0% { opacity: 0; transform: scale(0.92) translateY(8px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.iq-confirm-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: #fef2f2;
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  border: 2px solid #fee2e2;
+}
+
+.iq-confirm-title {
+  font-size: 19px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.01em;
+  font-family: inherit;
+}
+
+.iq-confirm-desc {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.55;
+  margin: 0 0 24px 0;
+}
+
+.iq-confirm-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.iq-confirm-btn-no {
+  flex: 1;
+  padding: 12px 18px;
+  background: #f1f5f9;
+  border: 1.5px solid #e2e8f0;
+  color: #334155;
+  font-size: 14.5px;
+  font-weight: 700;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.iq-confirm-btn-no:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.iq-confirm-btn-yes {
+  flex: 1;
+  padding: 12px 18px;
+  background: #ef4444;
+  border: none;
+  color: #ffffff;
+  font-size: 14.5px;
+  font-weight: 700;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.28);
+}
+
+.iq-confirm-btn-yes:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
 }
