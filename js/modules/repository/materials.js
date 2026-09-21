@@ -235,7 +235,13 @@ let isFetchingMaterials = false;
 
 function renderMaterialsContainer() {
   const container = document.getElementById('materialsListWrap');
-  if (container) container.innerHTML = renderMaterialsList(ROLE);
+  if (container) {
+    if (ROLE === 'admin') {
+      container.innerHTML = renderMaterialsManagerPage('admin');
+    } else {
+      container.innerHTML = renderMaterialsList(ROLE);
+    }
+  }
   const approvalContainer = document.getElementById('approvalListWrap');
   if (approvalContainer) approvalContainer.innerHTML = renderApprovalMaterialRows();
 }
@@ -546,45 +552,14 @@ function renderMaterialsList(role) {
     }
   }
 
+  if (role === 'admin') {
+    return renderMaterialsManagerPage('admin');
+  }
+
   // ── ALL SUBJECTS OVERVIEW / FILTER TABS ──
   let list = materialsData;
   if (role === 'teacher') {
     list = materialsData.filter(m => m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE.id);
-  } else if (role === 'admin') {
-    list = materialsAdminTab === 'all' ? materialsData.slice() : materialsData.filter(m => m.status === materialsAdminTab);
-  }
-
-  const renderRow = (m) => {
-    const metaParts = [m.subject].filter(Boolean);
-    const uploader = m.uploaded_by_name ? escHtml(m.uploaded_by_name) : '';
-    const subText = [escHtml(metaParts.join(' · ') || 'General'), uploader].filter(Boolean).join(' · ');
-    const isOwner = m.uploaded_by === CURRENT_PROFILE.id;
-    const statusPill = role === 'student' ? '' : `<span class="status-pill ${m.status === 'approved' ? 'done' : m.status === 'rejected' ? 'low' : 'pending'}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>`;
-    const canDelete = role === 'admin' || (role === 'teacher' && isOwner);
-    return `<div class="file-row">
-      <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
-      <div class="file-info">
-        <h4>${escHtml(m.title)}</h4>
-        <span>${subText}</span>
-      </div>
-      ${statusPill}
-      <button class="dl-btn" onclick="downloadMaterial('${m.id}')">Download</button>
-      ${canDelete ? `<button class="dl-btn" style="background:#fef2f2;color:#b91c1c;" onclick="deleteMaterial('${m.id}')">Delete</button>` : ''}
-    </div>`;
-  };
-
-  if (role === 'admin') {
-    const groups = {};
-    list.forEach(m => {
-      const key = m.strand || 'General';
-      (groups[key] = groups[key] || []).push(m);
-    });
-    const strandOrder = [...STRANDS, 'General'];
-    const orderedKeys = Object.keys(groups).sort((a, b) => strandOrder.indexOf(a) - strandOrder.indexOf(b));
-    return orderedKeys.map(key => `
-      <div class="mm-strand-heading">${escHtml(key)} <span>(${groups[key].length})</span></div>
-      <div class="file-list">${groups[key].map(renderRow).join('')}</div>
-    `).join('');
   }
 
   // Student / Teacher View: Show Subject Cards with individual PDF folders
