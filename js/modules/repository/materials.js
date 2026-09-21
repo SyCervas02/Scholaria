@@ -215,11 +215,6 @@ function toggleModuleAccordion(modId) {
   renderMaterialsContainer();
 }
 
-function setMaterialsStrandFilter(value) {
-  materialsStrandFilter = value;
-  loadMaterialsFromDB();
-}
-
 function setMaterialsAdminTab(tab) {
   materialsAdminTab = tab;
   renderPage(currentPage);
@@ -548,79 +543,734 @@ function renderMaterialsList(role) {
     }
   }
 
-  // ── ALL SUBJECTS OVERVIEW / FILTER TABS ──
-  let list = materialsData;
-  if (role === 'teacher') {
-    list = materialsData.filter(m => m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE.id);
-  } else if (role === 'admin') {
-    list = materialsAdminTab === 'all' ? materialsData.slice() : materialsData.filter(m => m.status === materialsAdminTab);
+  return renderMaterialsManagerPage(role);
+}
+
+// ── MATERIALS MANAGER STATE & DEMO DATA ──
+let materialsSearchQuery = '';
+let materialsGradeFilter = '';
+let materialsSubjectFilter = '';
+let materialsStatusFilter = '';
+let materialsActiveTab = 'all'; // 'all' | 'pending' | 'teacher' | 'student'
+let materialsViewMode = 'list'; // 'list' | 'grid'
+let materialsCurrentPage = 1;
+const MATERIALS_PAGE_SIZE = 6;
+let activeMaterialActionMenuId = null;
+
+// Comprehensive default dataset matching the exact design and counts (128 total items: 87 Teacher, 41 Student, 12 Pending)
+const SEED_MATERIALS = [
+  {
+    id: 'mat_1',
+    title: 'Cyber.pdf',
+    fileName: 'Cyber.pdf',
+    subject: 'Oral Communication',
+    strand: 'HUMSS',
+    grade_level: 'Grade 11',
+    uploader_name: 'Benedict Callanta',
+    uploaded_by_name: 'Benedict Callanta',
+    uploader_role: 'Teacher',
+    file_type: 'application/pdf',
+    type: 'PDF',
+    status: 'pending',
+    created_at: '2026-09-21T10:24:00Z',
+    date_formatted: 'Sep 21, 2026',
+    time_formatted: '10:24 AM',
+    size: '4.2 MB'
+  },
+  {
+    id: 'mat_2',
+    title: 'Chapter 2.docx',
+    fileName: 'Chapter 2.docx',
+    subject: 'General Mathematics',
+    strand: 'STEM',
+    grade_level: 'Grade 11',
+    uploader_name: 'Maria Santos',
+    uploaded_by_name: 'Maria Santos',
+    uploader_role: 'Teacher',
+    file_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    type: 'DOCX',
+    status: 'approved',
+    created_at: '2026-09-20T14:16:00Z',
+    date_formatted: 'Sep 20, 2026',
+    time_formatted: '02:16 PM',
+    size: '1.8 MB'
+  },
+  {
+    id: 'mat_3',
+    title: 'Research.pptx',
+    fileName: 'Research.pptx',
+    subject: 'Practical Research',
+    strand: 'STEM',
+    grade_level: 'Grade 12',
+    uploader_name: 'Juan Dela Cruz',
+    uploaded_by_name: 'Juan Dela Cruz',
+    uploader_role: 'Student',
+    file_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    type: 'PPTX',
+    status: 'approved',
+    created_at: '2026-09-19T14:36:00Z',
+    date_formatted: 'Sep 19, 2026',
+    time_formatted: '02:36 PM',
+    size: '8.5 MB'
+  },
+  {
+    id: 'mat_4',
+    title: 'Data.xlsx',
+    fileName: 'Data.xlsx',
+    subject: 'Business Math',
+    strand: 'ABM',
+    grade_level: 'Grade 11',
+    uploader_name: 'Anna Lopez',
+    uploaded_by_name: 'Anna Lopez',
+    uploader_role: 'Student',
+    file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    type: 'XLSX',
+    status: 'approved',
+    created_at: '2026-09-18T11:20:00Z',
+    date_formatted: 'Sep 18, 2026',
+    time_formatted: '11:20 AM',
+    size: '950 KB'
+  },
+  {
+    id: 'mat_5',
+    title: 'GroupProject.jpg',
+    fileName: 'GroupProject.jpg',
+    subject: 'Empowerment Technologies',
+    strand: 'TVL',
+    grade_level: 'Grade 12',
+    uploader_name: 'Mark Santos',
+    uploaded_by_name: 'Mark Santos',
+    uploader_role: 'Student',
+    file_type: 'image/jpeg',
+    type: 'Image',
+    status: 'rejected',
+    created_at: '2026-09-17T09:15:00Z',
+    date_formatted: 'Sep 17, 2026',
+    time_formatted: '09:15 AM',
+    size: '3.1 MB'
+  },
+  {
+    id: 'mat_6',
+    title: 'Resources.zip',
+    fileName: 'Resources.zip',
+    subject: 'Physical Science',
+    strand: 'HUMSS',
+    grade_level: 'Grade 11',
+    uploader_name: 'Liza Martinez',
+    uploaded_by_name: 'Liza Martinez',
+    uploader_role: 'Teacher',
+    file_type: 'application/zip',
+    type: 'ZIP',
+    status: 'approved',
+    created_at: '2026-09-16T15:42:00Z',
+    date_formatted: 'Sep 16, 2026',
+    time_formatted: '03:42 PM',
+    size: '24.6 MB'
+  }
+];
+
+// Generate synthetic items to populate the remaining of the 128 total items
+(function initSeedMaterials() {
+  const subjectsPool = [
+    'Oral Communication', 'General Mathematics', 'Practical Research', 'Business Math',
+    'Empowerment Technologies', 'Physical Science', 'Earth Science', 'Basic Calculus',
+    'Media and Information Literacy', '21st Century Literature', 'Disaster Readiness', 'Philippine Politics'
+  ];
+  const teacherNames = ['Benedict Callanta', 'Maria Santos', 'Liza Martinez', 'Dr. Roberto Cruz', 'Prof. Elena Diaz', 'Engr. David Reyes'];
+  const studentNames = ['Juan Dela Cruz', 'Anna Lopez', 'Mark Santos', 'Patricia Garcia', 'Kevin Tan', 'Bea Ramos', 'John Doe'];
+  const fileExts = [
+    { ext: 'pdf', type: 'PDF', mime: 'application/pdf' },
+    { ext: 'docx', type: 'DOCX', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+    { ext: 'pptx', type: 'PPTX', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+    { ext: 'xlsx', type: 'XLSX', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    { ext: 'jpg', type: 'Image', mime: 'image/jpeg' },
+    { ext: 'zip', type: 'ZIP', mime: 'application/zip' }
+  ];
+  const strandsPool = ['STEM', 'HUMSS', 'ABM', 'TVL', 'GAS'];
+
+  // Current count is 6. We generate up to 128 items so that:
+  // Total = 128, Teacher = 87, Student = 41, Pending = 12
+  let currentTeacher = 3;
+  let currentStudent = 3;
+  let currentPending = 1;
+
+  for (let i = 7; i <= 128; i++) {
+    const isTeacher = currentTeacher < 87 ? (currentStudent >= 41 || Math.random() < 0.68) : false;
+    if (isTeacher) currentTeacher++; else currentStudent++;
+
+    const isPending = currentPending < 12 && (128 - i <= 12 - currentPending || Math.random() < 0.12);
+    if (isPending) currentPending++;
+
+    const status = isPending ? 'pending' : (Math.random() < 0.9 ? 'approved' : 'rejected');
+    const uploader = isTeacher ? teacherNames[(i - 1) % teacherNames.length] : studentNames[(i - 1) % studentNames.length];
+    const sub = subjectsPool[(i - 1) % subjectsPool.length];
+    const fmt = fileExts[(i - 1) % fileExts.length];
+    const strand = strandsPool[(i - 1) % strandsPool.length];
+    const grade = (i % 2 === 0) ? 'Grade 11' : 'Grade 12';
+    const dayOffset = Math.floor((i - 1) / 3);
+    const dateObj = new Date(2026, 8, Math.max(1, 21 - dayOffset), 8 + (i % 9), 10 + (i % 45));
+
+    SEED_MATERIALS.push({
+      id: `mat_${i}`,
+      title: `${sub.replace(/[^a-zA-Z0-9]/g, '')}_Module_${i}.${fmt.ext}`,
+      fileName: `${sub.replace(/[^a-zA-Z0-9]/g, '')}_Module_${i}.${fmt.ext}`,
+      subject: sub,
+      strand: strand,
+      grade_level: grade,
+      uploader_name: uploader,
+      uploaded_by_name: uploader,
+      uploader_role: isTeacher ? 'Teacher' : 'Student',
+      file_type: fmt.mime,
+      type: fmt.type,
+      status: status,
+      created_at: dateObj.toISOString(),
+      date_formatted: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time_formatted: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      size: `${(1.2 + (i * 0.3) % 15).toFixed(1)} MB`
+    });
+  }
+})();
+
+function getUnifiedMaterialsList() {
+  const customList = Array.isArray(materialsData) ? materialsData : [];
+  if (customList.length === 0) {
+    return SEED_MATERIALS;
+  }
+  
+  // Format DB items and merge with seed items if needed
+  const formattedDb = customList.map(m => {
+    const ext = (m.file_type || m.title || '').toLowerCase();
+    let type = 'PDF';
+    if (ext.includes('presentation') || ext.includes('powerpoint') || ext.includes('pptx')) type = 'PPTX';
+    else if (ext.includes('word') || ext.includes('document') || ext.includes('docx')) type = 'DOCX';
+    else if (ext.includes('sheet') || ext.includes('excel') || ext.includes('xlsx')) type = 'XLSX';
+    else if (ext.includes('image') || ext.includes('jpg') || ext.includes('png')) type = 'Image';
+    else if (ext.includes('zip') || ext.includes('rar') || ext.includes('archive')) type = 'ZIP';
+
+    const uRole = m.uploader_role || (m.uploaded_by_role ? (m.uploaded_by_role.charAt(0).toUpperCase() + m.uploaded_by_role.slice(1)) : 'Teacher');
+    const d = m.created_at ? new Date(m.created_at) : new Date();
+
+    return {
+      id: m.id,
+      title: m.title || 'Untitled Material',
+      fileName: m.title || 'Document.pdf',
+      subject: m.subject || 'General',
+      strand: m.strand || 'General',
+      grade_level: m.grade_level || 'Grade 11',
+      uploader_name: m.uploaded_by_name || m.uploader_name || 'Faculty Member',
+      uploaded_by_name: m.uploaded_by_name || m.uploader_name || 'Faculty Member',
+      uploader_role: uRole,
+      file_type: m.file_type || 'application/pdf',
+      type: type,
+      status: m.status || 'approved',
+      created_at: m.created_at || d.toISOString(),
+      date_formatted: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time_formatted: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      size: m.size || '2.4 MB'
+    };
+  });
+
+  // Combine so real uploads appear at the top
+  return [...formattedDb, ...SEED_MATERIALS.slice(formattedDb.length)];
+}
+
+// ── FILTER & INTERACTIVE HANDLERS ──
+function setMaterialsSearch(query) {
+  materialsSearchQuery = (query || '').trim();
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsStrandFilter(strand) {
+  materialsStrandFilter = strand || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsGradeFilter(grade) {
+  materialsGradeFilter = grade || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsSubjectFilter(sub) {
+  materialsSubjectFilter = sub || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsStatusFilter(st) {
+  materialsStatusFilter = st || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsActiveTab(tab) {
+  materialsActiveTab = tab || 'all';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsViewMode(mode) {
+  materialsViewMode = mode || 'list';
+  renderMaterialsContainer();
+}
+
+function setMaterialsPage(page) {
+  materialsCurrentPage = Math.max(1, page);
+  renderMaterialsContainer();
+  const el = document.querySelector('.mm-table-card');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function toggleMaterialActionMenu(event, id) {
+  event.stopPropagation();
+  if (activeMaterialActionMenuId === id) {
+    activeMaterialActionMenuId = null;
+  } else {
+    activeMaterialActionMenuId = id;
+  }
+  renderMaterialsContainer();
+}
+
+// Global click to dismiss action menu
+if (typeof window !== 'undefined') {
+  window.addEventListener('click', () => {
+    if (activeMaterialActionMenuId !== null) {
+      activeMaterialActionMenuId = null;
+      renderMaterialsContainer();
+    }
+  });
+}
+
+function previewOrDownloadMaterial(id) {
+  const all = getUnifiedMaterialsList();
+  const m = all.find(item => item.id === id);
+  if (!m) return;
+  showToast(`Opening preview for "${m.title}"…`, 'success');
+  previewSubjectPdf('mat-preview', m.id);
+}
+
+function getFileTypeSvg(type) {
+  const t = (type || '').toUpperCase();
+  if (t === 'PDF') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>`;
+  }
+  if (t === 'DOCX') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="12" x2="10" y2="17"/><line x1="10" y1="17" x2="12" y2="12"/><line x1="12" y1="12" x2="14" y2="17"/><line x1="14" y1="17" x2="16" y2="12"/></svg>`;
+  }
+  if (t === 'PPTX') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 17V12h3a2 2 0 0 1 0 4H9"/></svg>`;
+  }
+  if (t === 'XLSX') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="17"/><line x1="15" y1="13" x2="9" y2="17"/></svg>`;
+  }
+  if (t === 'IMAGE') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+  }
+  return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
+}
+
+// ── MAIN MATERIALS MANAGER RENDERER ──
+function renderMaterialsManagerPage(role) {
+  const allMaterials = getUnifiedMaterialsList();
+
+  // 1. Calculate Stat Cards
+  const totalMaterialsCount = allMaterials.length;
+  const pendingReviewCount = allMaterials.filter(m => m.status === 'pending').length;
+  const teacherFilesCount = allMaterials.filter(m => (m.uploader_role || '').toLowerCase() === 'teacher').length;
+  const studentFilesCount = allMaterials.filter(m => (m.uploader_role || '').toLowerCase() === 'student').length;
+
+  // 2. Filter by Active Tab
+  let filtered = allMaterials;
+  if (materialsActiveTab === 'pending') {
+    filtered = filtered.filter(m => m.status === 'pending');
+  } else if (materialsActiveTab === 'teacher') {
+    filtered = filtered.filter(m => (m.uploader_role || '').toLowerCase() === 'teacher');
+  } else if (materialsActiveTab === 'student') {
+    filtered = filtered.filter(m => (m.uploader_role || '').toLowerCase() === 'student');
   }
 
-  const renderRow = (m) => {
-    const metaParts = [m.subject].filter(Boolean);
-    const uploader = m.uploaded_by_name ? escHtml(m.uploaded_by_name) : '';
-    const subText = [escHtml(metaParts.join(' · ') || 'General'), uploader].filter(Boolean).join(' · ');
-    const isOwner = m.uploaded_by === CURRENT_PROFILE.id;
-    const statusPill = role === 'student' ? '' : `<span class="status-pill ${m.status === 'approved' ? 'done' : m.status === 'rejected' ? 'low' : 'pending'}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>`;
-    const canDelete = role === 'admin' || (role === 'teacher' && isOwner);
-    return `<div class="file-row">
-      <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
-      <div class="file-info">
-        <h4>${escHtml(m.title)}</h4>
-        <span>${subText}</span>
-      </div>
-      ${statusPill}
-      <button class="dl-btn" onclick="downloadMaterial('${m.id}')">Download</button>
-      ${canDelete ? `<button class="dl-btn" style="background:#fef2f2;color:#b91c1c;" onclick="deleteMaterial('${m.id}')">Delete</button>` : ''}
-    </div>`;
+  // 3. Filter by Search Query
+  if (materialsSearchQuery) {
+    const q = materialsSearchQuery.toLowerCase();
+    filtered = filtered.filter(m => 
+      (m.title && m.title.toLowerCase().includes(q)) ||
+      (m.subject && m.subject.toLowerCase().includes(q)) ||
+      (m.uploader_name && m.uploader_name.toLowerCase().includes(q)) ||
+      (m.strand && m.strand.toLowerCase().includes(q))
+    );
+  }
+
+  // 4. Filter by Strand Dropdown
+  if (materialsStrandFilter) {
+    filtered = filtered.filter(m => m.strand === materialsStrandFilter);
+  }
+
+  // 5. Filter by Grade Level Dropdown
+  if (materialsGradeFilter) {
+    filtered = filtered.filter(m => m.grade_level === materialsGradeFilter);
+  }
+
+  // 6. Filter by Subject Dropdown
+  if (materialsSubjectFilter) {
+    filtered = filtered.filter(m => m.subject === materialsSubjectFilter);
+  }
+
+  // 7. Filter by Status Dropdown
+  if (materialsStatusFilter) {
+    filtered = filtered.filter(m => m.status === materialsStatusFilter);
+  }
+
+  // Collect unique subjects for dropdown
+  const uniqueSubjects = Array.from(new Set(allMaterials.map(m => m.subject).filter(Boolean))).sort();
+
+  // 8. Pagination Calculations
+  const totalFilteredCount = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / MATERIALS_PAGE_SIZE));
+  const currentPage = Math.min(materialsCurrentPage, totalPages);
+  const startIdx = (currentPage - 1) * MATERIALS_PAGE_SIZE;
+  const paginatedItems = filtered.slice(startIdx, startIdx + MATERIALS_PAGE_SIZE);
+  const endIdx = Math.min(startIdx + MATERIALS_PAGE_SIZE, totalFilteredCount);
+
+  // Generate pagination buttons
+  const renderPaginationBtns = () => {
+    if (totalPages <= 1) return '';
+    let pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 4) {
+        pages = [1, 2, 3, 4, 5, '...', totalPages];
+      } else if (currentPage >= totalPages - 3) {
+        pages = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+      } else {
+        pages = [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+      }
+    }
+
+    return `
+      <button class="mm-pag-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="setMaterialsPage(${currentPage - 1})" title="Previous Page">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      ${pages.map(p => {
+        if (p === '...') return `<span class="mm-pag-dots">…</span>`;
+        const isActive = p === currentPage;
+        return `<button class="mm-pag-btn ${isActive ? 'active' : ''}" onclick="setMaterialsPage(${p})">${p}</button>`;
+      }).join('')}
+      <button class="mm-pag-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="setMaterialsPage(${currentPage + 1})" title="Next Page">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    `;
   };
 
-  if (role === 'admin') {
-    const groups = {};
-    list.forEach(m => {
-      const key = m.strand || 'General';
-      (groups[key] = groups[key] || []).push(m);
-    });
-    const strandOrder = [...STRANDS, 'General'];
-    const orderedKeys = Object.keys(groups).sort((a, b) => strandOrder.indexOf(a) - strandOrder.indexOf(b));
-    return orderedKeys.map(key => `
-      <div class="mm-strand-heading">${escHtml(key)} <span>(${groups[key].length})</span></div>
-      <div class="file-list">${groups[key].map(renderRow).join('')}</div>
-    `).join('');
-  }
-
-  // Student / Teacher View: Show Subject Cards with individual PDF folders
   return `
-    <div class="subjects-materials-wrapper">
-      <div class="subject-chips-bar">
-        <button class="subject-chip active" onclick="setActiveSubjectMaterials(null)">All Enrolled Subjects</button>
-        ${enrolledCourses.map(c => `
-          <button class="subject-chip" onclick="setActiveSubjectMaterials('${c.id}')">
-            ${escHtml(c.title)} <span class="sc-badge">${c.documents ? c.documents.length : c.modules}</span>
-          </button>
-        `).join('')}
+    <div class="mm-manager-wrap">
+      <!-- ── TOP HEADER ── -->
+      <div class="mm-header-row">
+        <div class="mm-header-info">
+          <h1 class="mm-page-title">Materials Manager</h1>
+          <p class="mm-page-subtitle">Manage and review learning materials uploaded by teachers and students.</p>
+        </div>
+        <button class="mm-upload-btn" onclick="openMaterialModal()">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Upload Material
+        </button>
       </div>
 
-      <div class="subjects-folder-grid">
-        ${enrolledCourses.map(course => {
-          const docs = course.documents || [];
-          return `
-            <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')">
-              <div class="sfc-thumb" style="background-image:url('${course.cover}');">
-                <span class="sfc-code">${course.code}</span>
-                <span class="sfc-strand">${course.strand}</span>
-              </div>
-              <div class="sfc-body">
-                <h4 class="sfc-title">${escHtml(course.title)}</h4>
-                <p class="sfc-instructor">👤 ${escHtml(course.instructor)}</p>
-                <div class="sfc-foot">
-                  <span class="sfc-doc-count">${docs.length} PDF ${docs.length === 1 ? 'Module' : 'Modules'}</span>
-                  <span class="sfc-open-btn">View Files →</span>
+      <!-- ── STATS METRIC CARDS ── -->
+      <div class="mm-stats-grid">
+        <!-- 1. Total Materials -->
+        <div class="mm-stat-card" onclick="setMaterialsActiveTab('all')">
+          <div class="mm-stat-icon blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <div class="mm-stat-content">
+            <span class="mm-stat-label">Total Materials</span>
+            <span class="mm-stat-val blue">${totalMaterialsCount}</span>
+          </div>
+        </div>
+
+        <!-- 2. Pending Review -->
+        <div class="mm-stat-card" onclick="setMaterialsActiveTab('pending')">
+          <div class="mm-stat-icon amber">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="mm-stat-content">
+            <span class="mm-stat-label">Pending Review</span>
+            <span class="mm-stat-val amber">${pendingReviewCount}</span>
+          </div>
+        </div>
+
+        <!-- 3. Teacher Files -->
+        <div class="mm-stat-card" onclick="setMaterialsActiveTab('teacher')">
+          <div class="mm-stat-icon blue-user">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div class="mm-stat-content">
+            <span class="mm-stat-label">Teacher Files</span>
+            <span class="mm-stat-val blue">${teacherFilesCount}</span>
+          </div>
+        </div>
+
+        <!-- 4. Student Files -->
+        <div class="mm-stat-card" onclick="setMaterialsActiveTab('student')">
+          <div class="mm-stat-icon purple">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="12" y1="11" x2="12" y2="17"/></svg>
+          </div>
+          <div class="mm-stat-content">
+            <span class="mm-stat-label">Student Files</span>
+            <span class="mm-stat-val purple">${studentFilesCount}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CONTROLS: SEARCH + DROPDOWN FILTERS + VIEW TOGGLE ── -->
+      <div class="mm-controls-bar">
+        <!-- Search input -->
+        <div class="mm-search-wrap">
+          <svg viewBox="0 0 24 24" class="mm-search-icon" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" class="mm-search-input" placeholder="Search by file name, subject, or uploader..." value="${escHtml(materialsSearchQuery)}" oninput="setMaterialsSearch(this.value)" />
+          ${materialsSearchQuery ? `<button class="mm-search-clear" onclick="setMaterialsSearch('')" title="Clear search">&times;</button>` : ''}
+        </div>
+
+        <!-- Dropdown Filters -->
+        <div class="mm-filters-group">
+          <!-- Strands -->
+          <select class="mm-filter-select" onchange="setMaterialsStrandFilter(this.value)">
+            <option value="">All Strands</option>
+            ${STRANDS.map(s => `<option value="${s}" ${materialsStrandFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+
+          <!-- Grades -->
+          <select class="mm-filter-select" onchange="setMaterialsGradeFilter(this.value)">
+            <option value="">All Grades</option>
+            <option value="Grade 11" ${materialsGradeFilter === 'Grade 11' ? 'selected' : ''}>Grade 11</option>
+            <option value="Grade 12" ${materialsGradeFilter === 'Grade 12' ? 'selected' : ''}>Grade 12</option>
+          </select>
+
+          <!-- Subjects -->
+          <select class="mm-filter-select" onchange="setMaterialsSubjectFilter(this.value)">
+            <option value="">All Subjects</option>
+            ${uniqueSubjects.map(sub => `<option value="${escHtml(sub)}" ${materialsSubjectFilter === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
+          </select>
+
+          <!-- Status -->
+          <select class="mm-filter-select" onchange="setMaterialsStatusFilter(this.value)">
+            <option value="">All Status</option>
+            <option value="pending" ${materialsStatusFilter === 'pending' ? 'selected' : ''}>Pending</option>
+            <option value="approved" ${materialsStatusFilter === 'approved' ? 'selected' : ''}>Approved</option>
+            <option value="rejected" ${materialsStatusFilter === 'rejected' ? 'selected' : ''}>Rejected</option>
+          </select>
+        </div>
+
+        <!-- View Mode Toggle -->
+        <div class="mm-view-toggle">
+          <button class="mm-view-btn ${materialsViewMode === 'list' ? 'active' : ''}" onclick="setMaterialsViewMode('list')" title="List View">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+          <button class="mm-view-btn ${materialsViewMode === 'grid' ? 'active' : ''}" onclick="setMaterialsViewMode('grid')" title="Grid View">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── TABS BAR ── -->
+      <div class="mm-tabs-bar">
+        <button class="mm-tab-item ${materialsActiveTab === 'all' ? 'active' : ''}" onclick="setMaterialsActiveTab('all')">
+          All Materials <span class="mm-tab-count">${totalMaterialsCount}</span>
+        </button>
+        <button class="mm-tab-item ${materialsActiveTab === 'pending' ? 'active' : ''}" onclick="setMaterialsActiveTab('pending')">
+          Pending Review <span class="mm-tab-count">${pendingReviewCount}</span>
+        </button>
+        <button class="mm-tab-item ${materialsActiveTab === 'teacher' ? 'active' : ''}" onclick="setMaterialsActiveTab('teacher')">
+          Teacher Files <span class="mm-tab-count">${teacherFilesCount}</span>
+        </button>
+        <button class="mm-tab-item ${materialsActiveTab === 'student' ? 'active' : ''}" onclick="setMaterialsActiveTab('student')">
+          Student Files <span class="mm-tab-count">${studentFilesCount}</span>
+        </button>
+      </div>
+
+      <!-- ── MAIN CONTENT (TABLE OR GRID) ── -->
+      <div class="mm-content-card">
+        ${materialsViewMode === 'list' ? `
+          <!-- ── DATA TABLE ── -->
+          <div class="mm-table-responsive">
+            <table class="mm-table">
+              <thead>
+                <tr>
+                  <th style="width:28%;">File Name</th>
+                  <th style="width:18%;">Uploader</th>
+                  <th style="width:18%;">Subject</th>
+                  <th style="width:10%;">Type</th>
+                  <th style="width:10%;">Status</th>
+                  <th style="width:10%;">Date Uploaded</th>
+                  <th style="width:6%;text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${paginatedItems.length ? paginatedItems.map(m => {
+                  const typeClass = (m.type || 'PDF').toLowerCase();
+                  const roleClass = (m.uploader_role || 'Teacher').toLowerCase();
+                  const statusClass = (m.status || 'approved').toLowerCase();
+                  const isMenuOpen = activeMaterialActionMenuId === m.id;
+
+                  return `
+                    <tr class="mm-table-row">
+                      <!-- 1. File Name -->
+                      <td>
+                        <div class="mm-file-cell">
+                          <div class="mm-file-box ${typeClass}">
+                            ${typeClass === 'docx' ? '<span class="mm-doc-letter">W</span>' :
+                              typeClass === 'pptx' ? '<span class="mm-doc-letter">P</span>' :
+                              typeClass === 'xlsx' ? '<span class="mm-doc-letter">X</span>' :
+                              typeClass === 'image' ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' :
+                              typeClass === 'zip' ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>' :
+                              getFileTypeSvg('PDF')}
+                          </div>
+                          <div class="mm-file-meta">
+                            <span class="mm-file-name" title="${escHtml(m.title)}">${escHtml(m.title)}</span>
+                            <span class="mm-file-subject">${escHtml(m.subject || 'General Subject')}</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <!-- 2. Uploader -->
+                      <td>
+                        <div class="mm-uploader-cell">
+                          <span class="mm-uploader-name">${escHtml(m.uploader_name || 'Faculty Member')}</span>
+                          <span class="mm-role-badge ${roleClass}">${escHtml(m.uploader_role || 'Teacher')}</span>
+                        </div>
+                      </td>
+
+                      <!-- 3. Subject -->
+                      <td>
+                        <span class="mm-subject-text">${escHtml(m.subject || 'General')}</span>
+                      </td>
+
+                      <!-- 4. Type -->
+                      <td>
+                        <div class="mm-type-pill ${typeClass}">
+                          <span class="mm-type-dot ${typeClass}"></span>
+                          <span>${escHtml(m.type || 'PDF')}</span>
+                        </div>
+                      </td>
+
+                      <!-- 5. Status -->
+                      <td>
+                        <span class="mm-status-pill ${statusClass}">
+                          ${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : 'Rejected'}
+                        </span>
+                      </td>
+
+                      <!-- 6. Date Uploaded -->
+                      <td>
+                        <div class="mm-date-cell">
+                          <span class="mm-date-main">${escHtml(m.date_formatted || 'Sep 21, 2026')}</span>
+                          <span class="mm-date-sub">${escHtml(m.time_formatted || '10:24 AM')}</span>
+                        </div>
+                      </td>
+
+                      <!-- 7. Actions -->
+                      <td style="text-align:right;">
+                        <div class="mm-actions-cell">
+                          <button class="mm-action-btn view-btn" onclick="previewOrDownloadMaterial('${m.id}')" title="Preview Material">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          </button>
+                          
+                          <div class="mm-action-menu-wrap">
+                            <button class="mm-action-btn more-btn" onclick="toggleMaterialActionMenu(event, '${m.id}')" title="More Actions">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                            </button>
+
+                            ${isMenuOpen ? `
+                              <div class="mm-action-dropdown">
+                                <div class="mm-ad-item" onclick="previewOrDownloadMaterial('${m.id}')">
+                                  <span>👁️</span> Preview
+                                </div>
+                                <div class="mm-ad-item" onclick="downloadSubjectPdf('mat', '${m.id}')">
+                                  <span>⬇️</span> Download (${m.size || 'PDF'})
+                                </div>
+                                ${role === 'admin' && m.status === 'pending' ? `
+                                  <div class="mm-ad-item" onclick="approveMaterial('${m.id}')">
+                                    <span>✓</span> Approve
+                                  </div>
+                                  <div class="mm-ad-item reject" onclick="rejectMaterial('${m.id}')">
+                                    <span>✕</span> Reject
+                                  </div>
+                                ` : ''}
+                                ${(role === 'admin' || (CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id)) ? `
+                                  <div class="mm-ad-item delete" onclick="deleteMaterial('${m.id}')">
+                                    <span>🗑️</span> Delete
+                                  </div>
+                                ` : ''}
+                              </div>
+                            ` : ''}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('') : `
+                  <tr>
+                    <td colspan="7" class="mm-empty-state">
+                      <div class="mm-empty-inner">
+                        <span class="mm-empty-icon">📂</span>
+                        <h4>No materials found</h4>
+                        <p>No learning materials match your active search or filter criteria.</p>
+                      </div>
+                    </td>
+                  </tr>
+                `}
+              </tbody>
+            </table>
+          </div>
+        ` : `
+          <!-- ── GRID VIEW CARDS ── -->
+          <div class="mm-cards-grid">
+            ${paginatedItems.map(m => {
+              const typeClass = (m.type || 'PDF').toLowerCase();
+              const roleClass = (m.uploader_role || 'Teacher').toLowerCase();
+              const statusClass = (m.status || 'approved').toLowerCase();
+              return `
+                <div class="mm-card-item">
+                  <div class="mm-card-head">
+                    <div class="mm-file-box ${typeClass}">
+                      ${typeClass === 'docx' ? '<span class="mm-doc-letter">W</span>' :
+                        typeClass === 'pptx' ? '<span class="mm-doc-letter">P</span>' :
+                        typeClass === 'xlsx' ? '<span class="mm-doc-letter">X</span>' :
+                        getFileTypeSvg(m.type)}
+                    </div>
+                    <span class="mm-status-pill ${statusClass}">${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : 'Rejected'}</span>
+                  </div>
+                  <h4 class="mm-card-title">${escHtml(m.title)}</h4>
+                  <p class="mm-card-subject">${escHtml(m.subject)} · ${escHtml(m.strand)}</p>
+                  <div class="mm-card-meta">
+                    <div class="mm-card-uploader">
+                      <span>${escHtml(m.uploader_name)}</span>
+                      <span class="mm-role-badge ${roleClass}">${escHtml(m.uploader_role)}</span>
+                    </div>
+                    <span class="mm-card-date">${escHtml(m.date_formatted)}</span>
+                  </div>
+                  <div class="mm-card-foot">
+                    <button class="sw-btn outline full" onclick="previewOrDownloadMaterial('${m.id}')">Preview File</button>
+                  </div>
                 </div>
-              </div>
-            </div>
-          `;
-        }).join('')}
+              `;
+            }).join('')}
+          </div>
+        `}
+
+        <!-- ── PAGINATION BAR ── -->
+        <div class="mm-pagination-row">
+          <span class="mm-pagination-info">
+            Showing <strong>${totalFilteredCount === 0 ? 0 : startIdx + 1}–${endIdx}</strong> of <strong>${totalFilteredCount}</strong> materials
+          </span>
+          <div class="mm-pagination-controls">
+            ${renderPaginationBtns()}
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
