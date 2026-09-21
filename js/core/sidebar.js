@@ -1470,7 +1470,16 @@ function teacherPage(page) {
     }
 
     case 'materials': return `
-      <div id="materialsListWrap">${renderMaterialsManagerPage('teacher')}</div>`;
+      <div class="section-hdr"><h2>Materials Manager</h2>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <select class="user-filter-select" onchange="setMaterialsStrandFilter(this.value)">
+            <option value="">All Strands</option>
+            ${STRANDS.map(s => `<option value="${s}" ${materialsStrandFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+          <button class="add-btn" onclick="openMaterialModal()">${iconPlus()} Upload Material</button>
+        </div>
+      </div>
+      <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
 
     case 'quiz': {
       let filtered = customQuizzes.slice();

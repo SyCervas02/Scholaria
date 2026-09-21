@@ -322,9 +322,13 @@ function updateApprovalBadge() {
 
 function renderMaterialsList(role) {
   const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
-  const enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
-    ? COURSES_DATABASE.filter(c => typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true)
+  let enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
+    ? (role === 'teacher' ? COURSES_DATABASE.slice() : COURSES_DATABASE.filter(c => typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true))
     : [];
+
+  if (role === 'teacher' && typeof materialsStrandFilter !== 'undefined' && materialsStrandFilter) {
+    enrolledCourses = enrolledCourses.filter(c => c.strand === materialsStrandFilter);
+  }
 
   // ── INDIVIDUAL SUBJECT WORKSPACE VIEW (STUDENT & TEACHER PORTAL) ──
   if (activeSubjectFilter) {
@@ -542,7 +546,82 @@ function renderMaterialsList(role) {
     }
   }
 
-  return renderMaterialsManagerPage(role);
+  // ── ALL SUBJECTS OVERVIEW / FILTER TABS ──
+  let list = materialsData;
+  if (role === 'teacher') {
+    list = materialsData.filter(m => m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE.id);
+  } else if (role === 'admin') {
+    list = materialsAdminTab === 'all' ? materialsData.slice() : materialsData.filter(m => m.status === materialsAdminTab);
+  }
+
+  const renderRow = (m) => {
+    const metaParts = [m.subject].filter(Boolean);
+    const uploader = m.uploaded_by_name ? escHtml(m.uploaded_by_name) : '';
+    const subText = [escHtml(metaParts.join(' · ') || 'General'), uploader].filter(Boolean).join(' · ');
+    const isOwner = m.uploaded_by === CURRENT_PROFILE.id;
+    const statusPill = role === 'student' ? '' : `<span class="status-pill ${m.status === 'approved' ? 'done' : m.status === 'rejected' ? 'low' : 'pending'}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>`;
+    const canDelete = role === 'admin' || (role === 'teacher' && isOwner);
+    return `<div class="file-row">
+      <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
+      <div class="file-info">
+        <h4>${escHtml(m.title)}</h4>
+        <span>${subText}</span>
+      </div>
+      ${statusPill}
+      <button class="dl-btn" onclick="downloadMaterial('${m.id}')">Download</button>
+      ${canDelete ? `<button class="dl-btn" style="background:#fef2f2;color:#b91c1c;" onclick="deleteMaterial('${m.id}')">Delete</button>` : ''}
+    </div>`;
+  };
+
+  if (role === 'admin') {
+    const groups = {};
+    list.forEach(m => {
+      const key = m.strand || 'General';
+      (groups[key] = groups[key] || []).push(m);
+    });
+    const strandOrder = [...STRANDS, 'General'];
+    const orderedKeys = Object.keys(groups).sort((a, b) => strandOrder.indexOf(a) - strandOrder.indexOf(b));
+    return orderedKeys.map(key => `
+      <div class="mm-strand-heading">${escHtml(key)} <span>(${groups[key].length})</span></div>
+      <div class="file-list">${groups[key].map(renderRow).join('')}</div>
+    `).join('');
+  }
+
+  // Student / Teacher View: Show Subject Cards with individual PDF folders
+  return `
+    <div class="subjects-materials-wrapper">
+      <div class="subject-chips-bar">
+        <button class="subject-chip ${!activeSubjectFilter ? 'active' : ''}" onclick="setActiveSubjectMaterials(null)">All ${role === 'teacher' ? 'Handled' : 'Enrolled'} Subjects</button>
+        ${enrolledCourses.map(c => `
+          <button class="subject-chip" onclick="setActiveSubjectMaterials('${c.id}')">
+            ${escHtml(c.title)} <span class="sc-badge">${c.documents ? c.documents.length : (c.modules || 0)}</span>
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="subjects-folder-grid">
+        ${enrolledCourses.map(course => {
+          const docs = course.documents || [];
+          return `
+            <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')">
+              <div class="sfc-thumb" style="background-image:url('${course.cover}');">
+                <span class="sfc-code">${escHtml(course.code)}</span>
+                <span class="sfc-strand">${escHtml(course.strand)}</span>
+              </div>
+              <div class="sfc-body">
+                <h4 class="sfc-title">${escHtml(course.title)}</h4>
+                <p class="sfc-instructor">👤 ${escHtml(course.instructor)}</p>
+                <div class="sfc-foot">
+                  <span class="sfc-doc-count">${docs.length} PDF ${docs.length === 1 ? 'Module' : 'Modules'}</span>
+                  <span class="sfc-open-btn">View Files →</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
 }
 
 // ── MATERIALS MANAGER STATE & DEMO DATA ──
