@@ -900,12 +900,29 @@ function previewOrDownloadMaterial(id) {
   const all = getUnifiedMaterialsList();
   const m = all.find(item => item.id === id);
   if (!m) return;
+  if (m.contentType === 'quiz') {
+    showToast(`Launching quiz "${m.title}"…`, 'info');
+    if (m.quiz_type === 'interactive' && typeof openInteractiveQuiz === 'function') {
+      openInteractiveQuiz(m.id);
+    } else if (typeof openTakeQuizModal === 'function') {
+      openTakeQuizModal(m.id);
+    } else {
+      showToast('Quiz launcher ready', 'success');
+    }
+    return;
+  }
   showToast(`Opening preview for "${m.title}"…`, 'success');
   previewSubjectPdf('mat-preview', m.id);
 }
 
 function getFileTypeSvg(type) {
   const t = (type || '').toUpperCase();
+  if (t === 'QUIZ') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 12l2 2 4-4"/></svg>`;
+  }
+  if (t === 'INTERACTIVE') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="6"/><circle cx="8" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/><line x1="8" y1="9.5" x2="8" y2="14.5"/><line x1="5.5" y1="12" x2="10.5" y2="12"/></svg>`;
+  }
   if (t === 'PDF') {
     return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>`;
   }
@@ -942,6 +959,13 @@ function renderMaterialsManagerPage(role) {
     filtered = filtered.filter(m => (m.uploader_role || '').toLowerCase() === 'teacher');
   } else if (materialsActiveTab === 'student') {
     filtered = filtered.filter(m => (m.uploader_role || '').toLowerCase() === 'student');
+  }
+
+  // Content Type Filter (All content types, Quiz, Material)
+  if (materialsContentTypeFilter === 'quiz') {
+    filtered = filtered.filter(m => m.contentType === 'quiz');
+  } else if (materialsContentTypeFilter === 'material') {
+    filtered = filtered.filter(m => m.contentType === 'material');
   }
 
   // 3. Filter by Search Query
@@ -1089,6 +1113,13 @@ function renderMaterialsManagerPage(role) {
 
         <!-- Dropdown Filters -->
         <div class="mm-filters-group">
+          <!-- Content Type (All content types, Quiz, Material) -->
+          <select class="mm-filter-select" onchange="setMaterialsContentTypeFilter(this.value)">
+            <option value="" ${!materialsContentTypeFilter ? 'selected' : ''}>All content types</option>
+            <option value="quiz" ${materialsContentTypeFilter === 'quiz' ? 'selected' : ''}>Quiz</option>
+            <option value="material" ${materialsContentTypeFilter === 'material' ? 'selected' : ''}>Material</option>
+          </select>
+
           <!-- Strands -->
           <select class="mm-filter-select" onchange="setMaterialsStrandFilter(this.value)">
             <option value="">All Strands</option>
@@ -1177,6 +1208,8 @@ function renderMaterialsManagerPage(role) {
                             ${typeClass === 'docx' ? '<span class="mm-doc-letter">W</span>' :
                               typeClass === 'pptx' ? '<span class="mm-doc-letter">P</span>' :
                               typeClass === 'xlsx' ? '<span class="mm-doc-letter">X</span>' :
+                              typeClass === 'quiz' ? getFileTypeSvg('QUIZ') :
+                              typeClass === 'interactive' ? getFileTypeSvg('INTERACTIVE') :
                               typeClass === 'image' ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' :
                               typeClass === 'zip' ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>' :
                               getFileTypeSvg('PDF')}
@@ -1239,11 +1272,13 @@ function renderMaterialsManagerPage(role) {
                             ${isMenuOpen ? `
                               <div class="mm-action-dropdown">
                                 <div class="mm-ad-item" onclick="previewOrDownloadMaterial('${m.id}')">
-                                  <span>👁️</span> Preview
+                                  <span>👁️</span> ${m.contentType === 'quiz' ? 'Take Quiz' : 'Preview'}
                                 </div>
-                                <div class="mm-ad-item" onclick="downloadSubjectPdf('mat', '${m.id}')">
-                                  <span>⬇️</span> Download (${m.size || 'PDF'})
-                                </div>
+                                ${m.contentType !== 'quiz' ? `
+                                  <div class="mm-ad-item" onclick="downloadSubjectPdf('mat', '${m.id}')">
+                                    <span>⬇️</span> Download (${m.size || 'PDF'})
+                                  </div>
+                                ` : ''}
                                 ${role === 'admin' && m.status === 'pending' ? `
                                   <div class="mm-ad-item" onclick="approveMaterial('${m.id}')">
                                     <span>✓</span> Approve
@@ -1306,7 +1341,7 @@ function renderMaterialsManagerPage(role) {
                     <span class="mm-card-date">${escHtml(m.date_formatted)}</span>
                   </div>
                   <div class="mm-card-foot">
-                    <button class="sw-btn outline full" onclick="previewOrDownloadMaterial('${m.id}')">Preview File</button>
+                    <button class="sw-btn outline full" onclick="previewOrDownloadMaterial('${m.id}')">${m.contentType === 'quiz' ? 'Take Quiz' : 'Preview File'}</button>
                   </div>
                 </div>
               `;

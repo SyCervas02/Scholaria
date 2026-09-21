@@ -1083,12 +1083,14 @@
   font-size: 14px;
 }
 
-.mm-file-box.pdf   { background: #ef4444; }
-.mm-file-box.docx  { background: #2563eb; }
-.mm-file-box.pptx  { background: #ea580c; }
-.mm-file-box.xlsx  { background: #16a34a; }
-.mm-file-box.image { background: #9333ea; }
-.mm-file-box.zip   { background: #475569; }
+.mm-file-box.pdf         { background: #ef4444; }
+.mm-file-box.docx        { background: #2563eb; }
+.mm-file-box.pptx        { background: #ea580c; }
+.mm-file-box.xlsx        { background: #16a34a; }
+.mm-file-box.image       { background: #9333ea; }
+.mm-file-box.zip         { background: #475569; }
+.mm-file-box.quiz        { background: #0284c7; }
+.mm-file-box.interactive { background: linear-gradient(135deg, #0284c7, #8b5cf6); }
 
 .mm-doc-letter {
   font-family: sans-serif;
@@ -1180,12 +1182,14 @@
   height: 7px;
   border-radius: 50%;
 }
-.mm-type-dot.pdf   { background: #ef4444; }
-.mm-type-dot.docx  { background: #2563eb; }
-.mm-type-dot.pptx  { background: #ea580c; }
-.mm-type-dot.xlsx  { background: #16a34a; }
-.mm-type-dot.image { background: #9333ea; }
-.mm-type-dot.zip   { background: #475569; }
+.mm-type-dot.pdf         { background: #ef4444; }
+.mm-type-dot.docx        { background: #2563eb; }
+.mm-type-dot.pptx        { background: #ea580c; }
+.mm-type-dot.xlsx        { background: #16a34a; }
+.mm-type-dot.image       { background: #9333ea; }
+.mm-type-dot.zip         { background: #475569; }
+.mm-type-dot.quiz        { background: #0284c7; }
+.mm-type-dot.interactive { background: #8b5cf6; }
 
 /* Status Pill */
 .mm-status-pill {
