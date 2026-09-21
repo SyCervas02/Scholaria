@@ -1348,8 +1348,7 @@ function downloadSubjectPdf(courseId, docId) {
   showToast(`Downloading "${doc.fileName}"…`, 'success');
 
   const textContent = `%PDF-1.4\n% HAVEN OF WISDOM ACADEMY\n% Course: ${course.title} (${course.code})\n% Module: ${doc.title}\n% File: ${doc.fileName}\n% Instructor: ${course.instructor}\n% Topics: ${doc.topics}\n% Pages: ${doc.pages}\n\n==============================================\nHAVEN OF WISDOM ACADEMY - SENIOR HIGH SCHOOL\n${course.title.toUpperCase()} (${course.code})\n${doc.title}\nInstructor: ${course.instructor}\n==============================================\n\nOVERVIEW & TOPICS:\n${doc.topics}\n\nThis is the official curriculum learning material for Haven of Wisdom Academy students.\n`;
-  
-  const blob = new Blob([textContent], { type: 'application/pdf' });
+    const blob = new Blob([textContent], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -1360,33 +1359,217 @@ function downloadSubjectPdf(courseId, docId) {
   URL.revokeObjectURL(url);
 }
 
-function renderApprovalMaterialRows() {
-  const pendingMaterials = materialsData.filter(m => m.status === 'pending');
-  const pendingQuizzes = typeof customQuizzes !== 'undefined' ? customQuizzes.filter(q => q.status === 'pending') : [];
+// Content Approval presentation state; approval and denial use the existing handlers.
+const approvalView = { tab: 'pending', search: '', type: '', subject: '', page: 1 };
+const APPROVAL_ARCHIVE_KEY = 'scholaria_archived_approvals';
+const APPROVAL_UNARCHIVE_KEY = 'scholaria_unarchived_approvals';
 
-  if (!pendingMaterials.length && !pendingQuizzes.length) {
-    return `<div class="approval-row" style="justify-content:center;color:var(--text-muted);font-size:13px;padding:24px;">Nothing waiting on approval right now.</div>`;
+function getArchivedApprovalIds() {
+  try {
+    return JSON.parse(localStorage.getItem(APPROVAL_ARCHIVE_KEY) || '[]');
+  } catch (e) {
+    return [];
   }
+}
 
-  const matRows = pendingMaterials.map(m => {
-    const metaParts = [m.subject, m.strand].filter(Boolean);
-    return `<div class="approval-row">
-      <div class="file-icon ${fileIconClass(m.file_type)}" style="width:40px;height:40px;border-radius:10px;background:#dc2626;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-      <div class="ap-info"><h4>${escHtml(m.title)}</h4><span>Material · Teacher: ${escHtml(m.uploaded_by_name || 'Unknown')} · ${escHtml(metaParts.join(' ') || 'General')} · Submitted ${new Date(m.created_at).toLocaleDateString()}</span></div>
-      <div class="ap-actions"><button class="ap-approve" onclick="approveMaterial('${m.id}')">Approve</button><button class="ap-reject" onclick="rejectMaterial('${m.id}')">Deny</button></div>
-    </div>`;
+function getUnarchivedApprovalIds() {
+  try {
+    return JSON.parse(localStorage.getItem(APPROVAL_UNARCHIVE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function isEntryArchived(kind, id, dbStatus) {
+  const key = `${kind}:${id}`;
+  const unarchived = getUnarchivedApprovalIds();
+  if (unarchived.includes(key)) return false;
+  const archived = getArchivedApprovalIds();
+  if (archived.includes(key)) return true;
+  return dbStatus === 'archived';
+}
+
+function toggleArchiveApprovalEntry(kind, id) {
+  const key = `${kind}:${id}`;
+  let archived = getArchivedApprovalIds();
+  let unarchived = getUnarchivedApprovalIds();
+  
+  const strId = String(id);
+  const isCurrentlyArchived = approvalView.tab === 'archived' || isEntryArchived(kind, id);
+  
+  if (isCurrentlyArchived) {
+    archived = archived.filter(k => k !== key && k !== strId && !k.endsWith(`:${strId}`));
+    if (!unarchived.includes(key)) unarchived.push(key);
+    if (!unarchived.includes(strId)) unarchived.push(strId);
+    localStorage.setItem(APPROVAL_ARCHIVE_KEY, JSON.stringify(archived));
+    localStorage.setItem(APPROVAL_UNARCHIVE_KEY, JSON.stringify(unarchived));
+    showToast('Item unarchived', 'success');
+  } else {
+    unarchived = unarchived.filter(k => k !== key && k !== strId && !k.endsWith(`:${strId}`));
+    if (!archived.includes(key)) archived.push(key);
+    localStorage.setItem(APPROVAL_ARCHIVE_KEY, JSON.stringify(archived));
+    localStorage.setItem(APPROVAL_UNARCHIVE_KEY, JSON.stringify(unarchived));
+    showToast('Item moved to Archive', 'success');
+  }
+  
+  document.querySelectorAll('.ca-more-menu.show').forEach(m => m.classList.remove('show'));
+
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+}
+
+function toggleApprovalMenu(event) {
+  event.stopPropagation();
+  const btn = event.currentTarget || (event.target && event.target.closest('.ca-more-btn'));
+  const wrap = btn ? btn.closest('.ca-more-wrap') : null;
+  const menu = wrap ? wrap.querySelector('.ca-more-menu') : null;
+  const isOpen = menu?.classList.contains('show');
+  document.querySelectorAll('.ca-more-menu.show').forEach(m => m.classList.remove('show'));
+  if (menu && !isOpen) {
+    menu.classList.add('show');
+  }
+}
+
+if (typeof window !== 'undefined' && !window._caMenuListenerAdded) {
+  window._caMenuListenerAdded = true;
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.ca-more-menu.show').forEach(m => m.classList.remove('show'));
   });
+}
 
-  const qzRows = pendingQuizzes.map(q => {
-    const metaParts = [q.subject, q.strand].filter(Boolean);
-    return `<div class="approval-row">
-      <div class="file-icon mc" style="width:40px;height:40px;border-radius:10px;background:#059669;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
-      <div class="ap-info"><h4>${escHtml(q.title)}</h4><span>Quiz · Teacher: ${escHtml(registeredUsers.find(u => u.dbId === q.createdBy)?.name || 'Unknown')} · ${escHtml(metaParts.join(' ') || 'General')} · Submitted ${new Date(q.createdAt).toLocaleDateString()}</span></div>
-      <div class="ap-actions"><button class="ap-approve" onclick="approveQuiz('${q.id}')">Approve</button><button class="ap-reject" onclick="rejectQuiz('${q.id}')">Deny</button></div>
-    </div>`;
-  });
+function approvalIcon(name) {
+  const paths = {
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 6v6l5 3"/>',
+    check: '<path d="m5 12 4 4L19 6"/>',
+    close: '<path d="m6 6 12 12M18 6 6 18"/>',
+    file: '<path d="M14 2H5v20h14V7z"/><path d="M14 2v6h5M8 12h8M8 16h8M8 19h5"/>',
+    eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    search: '<circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/>',
+    dots: '<circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/>',
+    archive: '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>'
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.file}</svg>`;
+}
 
-  return [...matRows, ...qzRows].join('');
+function approvalEntries() {
+  const quizzes = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+  const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
+  return [
+    ...materialsData.map(m => {
+      const isArchived = isEntryArchived('material', m.id, m.status);
+      let status = isArchived ? 'archived' : m.status;
+      if (!isArchived && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
+      return { id: m.id, kind: 'material', title: m.title, type: m.content_type || 'Material', subject: m.subject || 'General', name: m.uploaded_by_name || 'Unknown', date: m.created_at, status, isArchived };
+    }),
+    ...quizzes.map(q => {
+      const isArchived = isEntryArchived('quiz', q.id, q.status);
+      let status = isArchived ? 'archived' : (q.status === 'active' ? 'approved' : q.status);
+      if (!isArchived && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
+      return { id: q.id, kind: 'quiz', title: q.title, type: 'Quiz', subject: q.subject || 'General', name: users.find(u => u.dbId === q.createdBy)?.name || 'Unknown', date: q.createdAt, status, isArchived };
+    })
+  ];
+}
+
+function setApprovalView(key, value) {
+  approvalView[key] = value;
+  if (key !== 'page') approvalView.page = 1;
+  const wrap = document.getElementById('approvalListWrap');
+  if (!wrap) return;
+  const position = key === 'search' ? document.getElementById('caSearch')?.selectionStart : null;
+  wrap.innerHTML = renderApprovalMaterialRows();
+  if (key === 'search') {
+    const input = document.getElementById('caSearch');
+    input.focus();
+    if (position != null) input.setSelectionRange(position, position);
+  }
+}
+
+async function refreshApprovalView() {
+  await Promise.all([loadMaterialsFromDB(), typeof loadQuizzesFromDB === 'function' ? loadQuizzesFromDB() : Promise.resolve()]);
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+  updateApprovalBadge();
+}
+
+function renderApprovalMaterialRows() {
+  const entries = approvalEntries();
+  const counts = status => entries.filter(e => e.status === status).length;
+  const query = approvalView.search.trim().toLowerCase();
+  const filtered = entries.filter(e => e.status === approvalView.tab && (!approvalView.type || e.type === approvalView.type) && (!approvalView.subject || e.subject === approvalView.subject) && (!query || `${e.title} ${e.name} ${e.subject}`.toLowerCase().includes(query)));
+  const pages = Math.max(1, Math.ceil(filtered.length / 5));
+  approvalView.page = Math.min(pages, Math.max(1, approvalView.page));
+  const offset = (approvalView.page - 1) * 5;
+  const options = key => [...new Set(entries.map(e => e[key]))].filter(value => value && (key !== 'subject' || (!value.toLowerCase().includes('handout') && !value.toLowerCase().startsWith('01_')))).sort().map(value => `<option value="${escHtml(value)}" ${approvalView[key] === value ? 'selected' : ''}>${escHtml(value)}</option>`).join('');
+  const rows = filtered.slice(offset, offset + 5).map(e => {
+    const args = escHtml(JSON.stringify(e.kind) + ',' + JSON.stringify(String(e.id)));
+    const date = new Date(e.date);
+    const isItemArchived = e.status === 'archived' || e.isArchived || approvalView.tab === 'archived';
+    const archiveLabel = isItemArchived ? 'Unarchive' : 'Archive';
+    return `<tr>
+      <td><div class="ca-content"><span class="ca-file ${e.kind}">${approvalIcon('file')}</span><div><strong>${escHtml(e.title)}</strong><small>${escHtml(e.type)} &middot; ${escHtml(e.subject)}</small></div></div></td>
+      <td><div class="ca-person"><span class="ca-avatar">${escHtml(initialsFor(e.name))}</span><div>${escHtml(e.name)}<small>Teacher</small></div></div></td>
+      <td class="ca-date">${Number.isNaN(date.getTime()) ? '?' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+      <td>
+        <div class="ca-actions">
+          <button class="ca-review" onclick="reviewApprovalEntry(${args})">${approvalIcon('eye')} Review</button>
+          ${e.status === 'pending' ? `<button class="ca-approve" title="Approve" aria-label="Approve ${escHtml(e.title)}" onclick="runApprovalAction(${args},true)">${approvalIcon('check')}</button><button class="ca-reject" title="Deny" aria-label="Deny ${escHtml(e.title)}" onclick="runApprovalAction(${args},false)">${approvalIcon('close')}</button>` : ''}
+          ${(e.status === 'archived' || approvalView.tab === 'archived') ? `<button class="ca-unarchive-btn" title="Unarchive" aria-label="Unarchive ${escHtml(e.title)}" onclick="toggleArchiveApprovalEntry('${e.kind}', '${escHtml(String(e.id))}')">${approvalIcon('archive')} Unarchive</button>` : ''}
+          <div class="ca-more-wrap">
+            <button class="ca-more-btn" title="More options" aria-label="More options" onclick="toggleApprovalMenu(event)">${approvalIcon('dots')}</button>
+            <div class="ca-more-menu">
+              <button class="ca-menu-item" onclick="toggleArchiveApprovalEntry('${e.kind}', '${escHtml(String(e.id))}')">${approvalIcon('archive')} ${archiveLabel}</button>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  return `<div class="ca-heading"><h2>Content Approval</h2><div class="ca-heading-actions"><button class="ca-button ca-primary" onclick="refreshApprovalView()">${iconRefresh()} Refresh</button></div></div>
+    <div class="ca-banner"><h3>Approval Queue</h3><p>All materials and quizzes submitted by teachers require your approval before they become visible to students.</p></div>
+    <div class="ca-stats">${[['pending','Pending review','clock'],['approved','Approved','check'],['revision','Needs revision','file']].map(([status,label,icon]) => `<div class="ca-stat ${status}"><div class="ca-stat-icon">${approvalIcon(icon)}</div><div><span>${label}</span><strong>${counts(status)}</strong></div></div>`).join('')}</div>
+    <div class="ca-panel"><div class="ca-tabs" aria-label="Submission status">${[['pending',`Pending (${counts('pending')})`],['approved','Approved'],['revision','Needs revision'],['archived',`Archive (${counts('archived')})`]].map(([status,label]) => `<button aria-pressed="${approvalView.tab === status}" class="${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')">${label}</button>`).join('')}</div>
+    <div class="ca-filters"><label class="ca-search">${approvalIcon('search')}<input id="caSearch" aria-label="Search submissions" placeholder="Search submissions..." value="${escHtml(approvalView.search)}" oninput="setApprovalView('search',this.value)"></label><select aria-label="Content type" onchange="setApprovalView('type',this.value)"><option value="">All content types</option>${options('type')}</select><select aria-label="Subject" onchange="setApprovalView('subject',this.value)"><option value="">All subjects</option>${options('subject')}</select></div>
+    <div class="ca-table-wrap"><table class="ca-table"><thead><tr><th scope="col">Content</th><th scope="col">Submitted by</th><th scope="col">Date submitted</th><th scope="col">Actions</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="ca-empty">No submissions found.</td></tr>'}</tbody></table></div>
+    <div class="ca-footer"><span>Showing ${Math.min(5, filtered.length - offset)} of ${filtered.length} submissions</span><nav class="ca-pagination" aria-label="Submission pages">${approvalView.page > 1 ? `<button aria-label="Previous page" onclick="setApprovalView('page',${approvalView.page - 1})">&#8249;</button>` : ''}${Array.from({ length: Math.min(3, pages) }, (_, i) => Math.max(1, Math.min(approvalView.page - 1, pages - 2)) + i).map(page => `<button aria-label="Page ${page}" ${page === approvalView.page ? 'aria-current="page"' : ''} class="${page === approvalView.page ? 'active' : ''}" onclick="setApprovalView('page',${page})">${page}</button>`).join('')}<button aria-label="Next page" ${approvalView.page === pages ? 'disabled' : ''} onclick="setApprovalView('page',${approvalView.page + 1})">&#8250;</button></nav></div></div>`;
+}
+
+function runApprovalAction(kind, id, approve) {
+  return kind === 'quiz' ? (approve ? approveQuiz(id) : rejectQuiz(id)) : (approve ? approveMaterial(id) : rejectMaterial(id));
+}
+
+async function reviewApprovalEntry(kind, id) {
+  if (kind === 'material') {
+    const material = materialsData.find(m => String(m.id) === id);
+    if (!material) return;
+    const dialog = document.createElement('dialog');
+    dialog.className = 'ca-review-dialog';
+    dialog.setAttribute('aria-labelledby', 'caReviewTitle');
+    dialog.innerHTML = `<form method="dialog"><button class="ca-dialog-close" aria-label="Close review">&times;</button></form><h2 id="caReviewTitle">${escHtml(material.title)}</h2><p>${escHtml(material.subject || 'General')}</p><p class="ca-file-preview" aria-live="polite">Loading file...</p>`;
+    dialog.addEventListener('close', () => dialog.remove());
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    const preview = dialog.querySelector('.ca-file-preview');
+    try {
+      const { data: { session } } = await db.auth.getSession();
+      if (!session) throw new Error('Please sign in to review this file.');
+      const response = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to open material.');
+      const url = new URL(data.url);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid file URL.');
+      preview.innerHTML = `<a href="${escHtml(url.href)}" target="_blank" rel="noopener noreferrer">Open submitted file</a>`;
+    } catch (error) { preview.textContent = error.message; }
+    return;
+  }
+  const quiz = customQuizzes.find(q => String(q.id) === id);
+  if (!quiz) return;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'ca-review-dialog';
+  dialog.setAttribute('aria-labelledby', 'caReviewTitle');
+  dialog.innerHTML = `<form method="dialog"><button class="ca-dialog-close" aria-label="Close review">&times;</button></form><h2 id="caReviewTitle">${escHtml(quiz.title)}</h2><p>${escHtml(quiz.subject || 'General')}</p>${(quiz.questions || []).map((q, i) => `<section><h3>${i + 1}. ${escHtml(q.question || q.text || q.prompt || 'Question')}</h3>${Array.isArray(q.options) ? `<ul>${q.options.map(option => `<li>${escHtml(typeof option === 'object' && option ? option.text || option.label : option)}</li>`).join('')}</ul>` : ''}<p>Answer: ${escHtml(q.answer ?? q.correctAnswer ?? q.correct_answer ?? 'Not provided')}</p></section>`).join('') || '<p>No questions available.</p>'}`;
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.appendChild(dialog);
+  dialog.showModal();
 }
 
 async function approveMaterial(id) {

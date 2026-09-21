@@ -2097,17 +2097,7 @@ function adminPage(page) {
     case 'materials': return `
       <div id="materialsListWrap">${renderMaterialsManagerPage('admin')}</div>`;
 
-    case 'approval': return `
-      <div class="section-hdr"><h2>Content Approval</h2>
-        <button class="add-btn" onclick="loadMaterialsFromDB()">${iconRefresh()} Refresh</button>
-      </div>
-      <div class="announcement-card" style="margin-bottom:4px;">
-        <h3>Approval Queue</h3>
-        <p>All materials and quizzes submitted by teachers require your approval before they become visible to students.</p>
-      </div>
-      <div id="approvalListWrap">
-        ${renderApprovalMaterialRows()}
-      </div>`;
+    case 'approval': return `<div class="ca-page" id="approvalListWrap">${renderApprovalMaterialRows()}</div>`;
 
     case 'users': return `
       <div class="section-hdr"><h2>User Management</h2>
