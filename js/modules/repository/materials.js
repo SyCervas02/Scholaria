@@ -601,6 +601,7 @@ function renderMaterialsList(role) {
 
 // ── MATERIALS MANAGER STATE & DEMO DATA ──
 let materialsSearchQuery = '';
+let materialsContentTypeFilter = ''; // '' | 'quiz' | 'material'
 let materialsGradeFilter = '';
 let materialsSubjectFilter = '';
 let materialsStatusFilter = '';
@@ -786,11 +787,36 @@ const SEED_MATERIALS = [
 
 function getUnifiedMaterialsList() {
   const customList = Array.isArray(materialsData) ? materialsData : [];
-  if (customList.length === 0) {
-    return SEED_MATERIALS;
-  }
-  
-  // Format DB items and merge with seed items if needed
+  const quizzesList = Array.isArray(customQuizzes) ? customQuizzes : [];
+
+  // Format quizzes so they integrate seamlessly into Materials Manager
+  const formattedQuizzes = quizzesList.map(q => {
+    const d = q.createdAt ? new Date(q.createdAt) : new Date();
+    const isInteractive = q.quiz_type === 'interactive' || q.type === 'interactive';
+    const qCount = Array.isArray(q.questions) ? q.questions.length : (q.question_count || 10);
+    return {
+      id: q.id,
+      title: q.title || 'Untitled Quiz',
+      fileName: `${q.title || 'Quiz'}.quiz`,
+      subject: q.subject || 'General',
+      strand: q.strand || 'General',
+      grade_level: q.grade_level || 'Grade 11',
+      uploader_name: q.createdByName || q.author || 'Teacher',
+      uploaded_by_name: q.createdByName || q.author || 'Teacher',
+      uploader_role: 'Teacher',
+      file_type: isInteractive ? 'application/quiz-interactive' : 'application/quiz',
+      type: isInteractive ? 'INTERACTIVE' : 'QUIZ',
+      status: q.status || 'approved',
+      created_at: q.createdAt || d.toISOString(),
+      date_formatted: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time_formatted: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      size: `${qCount} Questions`,
+      contentType: 'quiz',
+      quiz_type: isInteractive ? 'interactive' : 'standard'
+    };
+  });
+
+  // Format real materials
   const formattedDb = customList.map(m => {
     const ext = (m.file_type || m.title || '').toLowerCase();
     let type = 'PDF';
@@ -819,15 +845,31 @@ function getUnifiedMaterialsList() {
       created_at: m.created_at || d.toISOString(),
       date_formatted: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       time_formatted: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      size: m.size || '2.4 MB'
+      size: m.size || '2.4 MB',
+      contentType: 'material'
     };
   });
 
-  // Combine so real uploads appear at the top
-  return [...formattedDb, ...SEED_MATERIALS.slice(formattedDb.length)];
+  const formattedSeeds = SEED_MATERIALS.map(s => ({
+    ...s,
+    contentType: s.contentType || 'material'
+  }));
+
+  // Combine real uploads & quizzes at top, followed by seed demo materials
+  const combinedReal = [...formattedQuizzes, ...formattedDb];
+  if (combinedReal.length === 0) {
+    return formattedSeeds;
+  }
+  return [...combinedReal, ...formattedSeeds.slice(combinedReal.length)];
 }
 
 // ── FILTER & INTERACTIVE HANDLERS ──
+function setMaterialsContentTypeFilter(type) {
+  materialsContentTypeFilter = type || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
 function setMaterialsSearch(query) {
   materialsSearchQuery = (query || '').trim();
   materialsCurrentPage = 1;
@@ -965,7 +1007,7 @@ function renderMaterialsManagerPage(role) {
   if (materialsContentTypeFilter === 'quiz') {
     filtered = filtered.filter(m => m.contentType === 'quiz');
   } else if (materialsContentTypeFilter === 'material') {
-    filtered = filtered.filter(m => m.contentType === 'material');
+    filtered = filtered.filter(m => m.contentType !== 'quiz');
   }
 
   // 3. Filter by Search Query
