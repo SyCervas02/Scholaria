@@ -297,6 +297,20 @@ function buildInteractiveQuestions(quiz) {
         options: q.options || [],
         answer: q.answer,
         sourceMaterial: qSource,
+        sourceFile: q.source_file || qSource,
+        sourcePage: q.source_page || null,
+        lesson: qLesson
+      });
+    } else if (q.type === 'true_false' || q.type === 'tf') {
+      items.push({
+        id: `tf_${qi}`,
+        type: 'true_false',
+        question: q.question,
+        options: ['True', 'False'],
+        answer: q.answer || 'True',
+        sourceMaterial: qSource,
+        sourceFile: q.source_file || qSource,
+        sourcePage: q.source_page || null,
         lesson: qLesson
       });
     } else if (q.type === 'identification') {
@@ -306,6 +320,8 @@ function buildInteractiveQuestions(quiz) {
         question: q.question,
         answer: q.answer,
         sourceMaterial: qSource,
+        sourceFile: q.source_file || qSource,
+        sourcePage: q.source_page || null,
         lesson: qLesson
       });
     } else if (q.type === 'matching') {
@@ -329,6 +345,8 @@ function buildInteractiveQuestions(quiz) {
         pairs: pairs,
         choices: shuffledChoices,
         sourceMaterial: qSource,
+        sourceFile: q.source_file || qSource,
+        sourcePage: q.source_page || null,
         lesson: qLesson
       });
     }
@@ -359,7 +377,9 @@ function openInteractiveQuiz(quizId) {
     else totalItemsCount += 1;
   });
 
-  const timerVal = quiz.timerPerQuestion || (quiz.questions?.[0]?._meta?.timerPerQuestion) || 0;
+  const timerVal = typeof quiz.timerPerQuestion === 'number' 
+    ? quiz.timerPerQuestion 
+    : (typeof quiz.questions?.[0]?._meta?.timerPerQuestion === 'number' ? quiz.questions[0]._meta.timerPerQuestion : 0);
 
   Object.assign(interactivePlayerState, {
     quiz,
@@ -517,7 +537,7 @@ function renderCurrentInteractiveQuestion() {
   const studentInitial = studentName.charAt(0).toUpperCase();
 
   let questionBodyHTML = '';
-  if (q.type === 'multiple_choice') {
+  if (q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'tf') {
     questionBodyHTML = renderMultipleChoiceView(q);
   } else if (q.type === 'identification') {
     questionBodyHTML = renderIdentificationView(q);
@@ -873,11 +893,13 @@ function submitMatchingAnswer() {
 }
 
 /**
- * View 3: Multiple Choice (Cards A, B, C, D)
+ * View 3: Multiple Choice & True/False (Cards A, B, C, D, E, F)
  */
 function renderMultipleChoiceView(q) {
-  const cardLetters = ['A', 'B', 'C', 'D'];
-  const cardClasses = ['card-a', 'card-b', 'card-c', 'card-d'];
+  const cardLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  const cardClasses = ['card-a', 'card-b', 'card-c', 'card-d', 'card-a', 'card-b'];
+
+  const isTf = q.type === 'true_false' || q.type === 'tf';
 
   return `
     <div class="iq-mc-container">
@@ -885,10 +907,10 @@ function renderMultipleChoiceView(q) {
         ${escHtml(q.question)}
       </div>
 
-      <div class="iq-mc-options-grid">
-        ${(q.options || []).slice(0, 4).map((opt, i) => {
+      <div class="iq-mc-options-grid" style="${isTf || (q.options || []).length <= 2 ? 'grid-template-columns: 1fr 1fr;' : ''}">
+        ${(q.options || []).map((opt, i) => {
           const letter = cardLetters[i] || String.fromCharCode(65 + i);
-          const cardClass = cardClasses[i] || 'card-a';
+          const cardClass = cardClasses[i % cardClasses.length];
           return `
             <div class="iq-mc-card ${cardClass}" id="mc_card_${i}" onclick="selectMultipleChoiceCard(${i}, '${escHtml(opt).replace(/'/g, "\\'")}')">
               <div class="iq-mc-card-head">
@@ -951,12 +973,13 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
   showAnswerFeedback({
     isCorrect,
     correctAnswerText: correct,
-    sourceMaterialText: q.sourceMaterial,
+    sourceMaterialText: q.sourceFile || q.sourceMaterial,
+    sourcePageText: q.sourcePage || null,
     lessonText: q.lesson
   });
 }
 
-function showAnswerFeedback({ isCorrect, correctAnswerText, sourceMaterialText, lessonText }) {
+function showAnswerFeedback({ isCorrect, correctAnswerText, sourceMaterialText, sourcePageText, lessonText }) {
   playInteractiveSFX(isCorrect);
   if (isCorrect) {
     triggerConfettiBurst(70);
@@ -967,6 +990,9 @@ function showAnswerFeedback({ isCorrect, correctAnswerText, sourceMaterialText, 
 
   const existingDrawer = document.getElementById('iqFeedbackDrawer');
   if (existingDrawer) existingDrawer.remove();
+
+  const cleanPageText = sourcePageText ? String(sourcePageText).replace(/^(page\s*)+/i, '').trim() : '';
+  const pageBadge = cleanPageText ? ` · Page ${escHtml(cleanPageText)}` : '';
 
   const drawer = document.createElement('div');
   drawer.id = 'iqFeedbackDrawer';
@@ -991,7 +1017,7 @@ function showAnswerFeedback({ isCorrect, correctAnswerText, sourceMaterialText, 
         <span class="iq-fb-source-icon">📖</span>
         <div class="iq-fb-source-info">
           <span class="iq-fb-source-label">Source Handout:</span>
-          <span class="iq-fb-source-title">${escHtml(sourceMaterialText || 'Class Handout')}</span>
+          <span class="iq-fb-source-title">${escHtml(sourceMaterialText || 'Class Handout')}${pageBadge}</span>
           ${lessonText ? `<span class="iq-fb-lesson">(${escHtml(lessonText)})</span>` : ''}
         </div>
       </div>
