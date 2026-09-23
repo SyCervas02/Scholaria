@@ -15,20 +15,37 @@ const takeQuizState = {
 function buildQuizItems(quiz) {
   const items = [];
   (quiz?.questions || []).forEach((q, qi) => {
+    const srcFile = q.source_file || q.sourceMaterial || q.source_material || '';
+    const srcPage = q.source_page || null;
+
     if (q.type === 'multiple_choice') {
       items.push({ 
         itemId: `q${qi}`, 
         label: q.question || `Question ${qi + 1}`, 
         type: 'multiple_choice', 
         options: Array.isArray(q.options) ? q.options : [], 
-        correct: q.answer 
+        correct: q.answer,
+        sourceFile: srcFile,
+        sourcePage: srcPage
+      });
+    } else if (q.type === 'true_false' || q.type === 'tf') {
+      items.push({ 
+        itemId: `q${qi}`, 
+        label: q.question || `Question ${qi + 1}`, 
+        type: 'true_false', 
+        options: ['True', 'False'], 
+        correct: q.answer || 'True',
+        sourceFile: srcFile,
+        sourcePage: srcPage
       });
     } else if (q.type === 'identification') {
       items.push({ 
         itemId: `q${qi}`, 
         label: q.question || `Question ${qi + 1}`, 
         type: 'identification', 
-        correct: q.answer 
+        correct: q.answer,
+        sourceFile: srcFile,
+        sourcePage: srcPage
       });
     } else if (q.type === 'matching') {
       (q.pairs || []).forEach((p, pi) => {
@@ -37,7 +54,9 @@ function buildQuizItems(quiz) {
           label: `${q.instructions || 'Matching'} — ${p.left || 'Item'}`,
           type: 'matching',
           options: (q.pairs || []).map(x => x.right).filter(Boolean),
-          correct: p.right
+          correct: p.right,
+          sourceFile: srcFile,
+          sourcePage: srcPage
         });
       });
     }
@@ -265,7 +284,7 @@ function renderTakeQuizModal() {
 
     let inputHtml = '';
 
-    if (item.type === 'multiple_choice') {
+    if (item.type === 'multiple_choice' || item.type === 'true_false') {
       const currentVal = reviewMode ? (reviewAns ? reviewAns.given : null) : responses[item.itemId];
       const optionsList = (item.options || []).map((opt, optIdx) => {
         const isSelected = String(currentVal) === String(opt);
@@ -313,12 +332,21 @@ function renderTakeQuizModal() {
       </select>${feedbackHtml}`;
     }
 
+    const cleanPage = item.sourcePage ? String(item.sourcePage).replace(/^(page\s*)+/i, '').trim() : '';
+    const citationHtml = (reviewMode && item.sourceFile)
+      ? `<div class="qz-source-badge" style="margin-top:12px;display:inline-flex;">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span>Handout:</span> <strong>${safeEsc(item.sourceFile)}</strong> ${cleanPage ? `· <span>Page ${safeEsc(cleanPage)}</span>` : ''}
+        </div>`
+      : '';
+
     return `<div class="sq-question-card" id="sq-card-${safeEsc(item.itemId)}">
       <div class="sq-qcard-header">
         <span class="sq-qnum">${idx + 1}.</span>
         <span class="sq-qlabel">${safeEsc(item.label)}</span>
       </div>
       ${inputHtml}
+      ${citationHtml}
     </div>`;
   }
 

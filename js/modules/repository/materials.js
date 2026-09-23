@@ -542,9 +542,6 @@ function renderMaterialsList(role) {
                   <span>Academic Faculty</span>
                 </div>
               </div>
-              <button class="sw-btn outline full" style="margin-top:12px;width:100%;justify-content:center;" onclick="goToChat()">
-                💬 Chat Instructor
-              </button>
             </div>
           </div>
         </div>

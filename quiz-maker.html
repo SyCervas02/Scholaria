@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Scholaria • Quiz Maker & Question Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css"/>
+  <link rel="stylesheet" href="css/modules/quiz.css"/>
+  <link rel="stylesheet" href="css/modules/interactive-quiz.css"/>
+
+  <!-- CDN Dependencies -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      background: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .qm-header {
+      background: #ffffff;
+      border-bottom: 1.5px solid #e2e8f0;
+      padding: 12px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    }
+    .qm-header-left {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .qm-back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #f8fafc;
+      border: 1.5px solid #cbd5e1;
+      color: #334155;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+    .qm-back-btn:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+      border-color: #94a3b8;
+    }
+    .qm-back-btn svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      stroke-width: 2.5;
+    }
+    .qm-container {
+      flex: 1;
+      max-width: 920px;
+      width: 95%;
+      margin: 28px auto 40px;
+      background: #ffffff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(15,23,42,0.05);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .qm-head {
+      padding: 24px 30px;
+      border-bottom: 1.5px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .qm-head-title h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 4px 0;
+      letter-spacing: -0.01em;
+    }
+    .qm-head-title p {
+      font-size: 12.5px;
+      color: #64748b;
+      margin: 0;
+    }
+    .qm-body {
+      padding: 26px 30px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-height: 480px;
+    }
+    .qm-foot {
+      padding: 18px 30px;
+      border-top: 1.5px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #ffffff;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP APP BAR -->
+  <header class="qm-header">
+    <div class="qm-header-left">
+      <a href="dashboard.html" class="logo" style="text-decoration:none;">
+        <svg class="logo-svg" id="brandLogoSvg" viewBox="0 0 216 52" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-label="Scholaria E-Learning">
+          <image href="assets/logo.png" xlink:href="assets/logo.png" x="0" y="4" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
+          <text x="52" y="30" font-family="'Syne',sans-serif" font-weight="800" font-size="22" letter-spacing="0"><tspan id="wm-schol" fill="#2563eb">schol</tspan><tspan id="wm-aria" fill="#f59e0b">aria</tspan></text>
+          <rect id="ul-schol" x="52" y="34" width="0" height="2.5" rx="1.2" fill="#2563eb"/>
+          <rect id="ul-aria" x="52" y="34" width="0" height="2.5" rx="1.2" fill="#f59e0b"/>
+          <text x="52" y="47" font-family="'Plus Jakarta Sans',sans-serif" font-weight="700" font-size="9" fill="#94a3b8" letter-spacing="2">QUIZ MAKER</text>
+        </svg>
+      </a>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px;">
+      <a href="dashboard.html" class="qm-back-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Back to Dashboard
+      </a>
+      <div class="profile" style="display:flex;align-items:center;gap:8px;">
+        <div class="avatar" id="userAvatar">JA</div>
+        <span class="nav-username" id="userName">User</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN QUIZ GENERATOR WIZARD CARD -->
+  <main class="qm-container" id="quizMakerContainer">
+    <div class="qm-head">
+      <div class="qm-head-title">
+        <h2>AI Quiz Maker & Assessment Builder</h2>
+        <p>Create high-impact quizzes, interactive arenas, and custom assessments from your learning handouts.</p>
+      </div>
+    </div>
+    <div class="qm-body" id="quizModalBody"></div>
+    <div class="qm-foot" id="quizModalFoot"></div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Modular Scripts -->
+  <script src="js/core/ui-helpers.js?v=20005"></script>
+  <script src="js/core/notifications.js?v=20005"></script>
+  <script src="js/core/announcements.js?v=20005"></script>
+  <script src="js/modules/quizzes/quiz-generator.js?v=20005"></script>
+
+  <script>
+    function initDashboardShell() {
+      if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) {
+        const nameEl = document.getElementById('userName');
+        if (nameEl) nameEl.textContent = CURRENT_PROFILE.full_name || 'User';
+        const avatarEl = document.getElementById('userAvatar');
+        if (avatarEl) {
+          if (CURRENT_PROFILE.avatar_url) {
+            avatarEl.innerHTML = `<img src="${escHtml(CURRENT_PROFILE.avatar_url)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" alt="Avatar" onerror="this.outerHTML='${typeof initialsFor === 'function' ? initialsFor(CURRENT_PROFILE.full_name || 'User') : 'US'}'"/>`;
+          } else {
+            avatarEl.textContent = typeof initialsFor === 'function' ? initialsFor(CURRENT_PROFILE.full_name || 'User') : 'US';
+          }
+        }
+      }
+      if (typeof openQuizModal === 'function') {
+        openQuizModal();
+      }
+    }
+  </script>
+  <script src="js/core/auth.js?v=20002"></script>
+</body>
+</html>
