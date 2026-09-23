@@ -106,8 +106,13 @@ function handleTakeQuizTimeout() {
 }
 
 function openTakeQuizModal(quizId) {
-  const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
-  const quiz = quizList.find(q => String(q.id) === String(quizId));
+  let quiz = null;
+  if (quizId && typeof quizId === 'object') {
+    quiz = quizId;
+  } else {
+    const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+    quiz = quizList.find(q => String(q.id) === String(quizId));
+  }
   if (!quiz) { 
     if (typeof showToast === 'function') showToast('Quiz not found', 'error'); 
     return; 
@@ -494,61 +499,63 @@ async function submitQuizAttempt(isAutoSubmit = false) {
     submitted_at: new Date().toISOString()
   };
 
-  try {
-    const raw = localStorage.getItem('scholaria_all_attempts_v1');
-    const list = raw ? JSON.parse(raw) : [];
-    list.unshift(attemptObj);
-    localStorage.setItem('scholaria_all_attempts_v1', JSON.stringify(list));
-  } catch(e) {}
-
-  try {
-    const rawCR = localStorage.getItem('scholaria_class_records_v2');
-    const listCR = rawCR ? JSON.parse(rawCR) : [];
-    listCR.unshift(attemptObj);
-    localStorage.setItem('scholaria_class_records_v2', JSON.stringify(listCR));
-  } catch(e) {}
-
-  // Dual insert into quiz_attempts AND dedicated class_records table if db is available
-  if (typeof db !== 'undefined' && db && db.from) {
+  if (!quiz?.is_preview) {
     try {
-      await db.from('class_records').insert({
-        student_id: String(studentId),
-        student_name: studentName,
-        section: section,
-        subject: subject,
-        strand: strand,
-        quiz_id: String(quiz?.id || ''),
-        quiz_title: quiz?.title || 'Quiz',
-        score,
-        total_items: total,
-        score_percentage: total ? Math.round((score / total) * 100) : 0
-      });
-    } catch(crErr) {
-      console.warn('Class Records table sync notice:', crErr);
-    }
+      const raw = localStorage.getItem('scholaria_all_attempts_v1');
+      const list = raw ? JSON.parse(raw) : [];
+      list.unshift(attemptObj);
+      localStorage.setItem('scholaria_all_attempts_v1', JSON.stringify(list));
+    } catch(e) {}
 
     try {
-      let { error } = await db.from('quiz_attempts').insert({
-        quiz_id: quiz?.id || '',
-        quiz_title: quiz?.title || 'Quiz',
-        student_id: prof.id || studentId,
-        student_name: studentName,
-        score,
-        total_items: total,
-        answers: gradedAnswers
-      });
+      const rawCR = localStorage.getItem('scholaria_class_records_v2');
+      const listCR = rawCR ? JSON.parse(rawCR) : [];
+      listCR.unshift(attemptObj);
+      localStorage.setItem('scholaria_class_records_v2', JSON.stringify(listCR));
+    } catch(e) {}
 
-      if (error) {
-        await db.from('quiz_attempts').insert({
+    // Dual insert into quiz_attempts AND dedicated class_records table if db is available
+    if (typeof db !== 'undefined' && db && db.from) {
+      try {
+        await db.from('class_records').insert({
+          student_id: String(studentId),
+          student_name: studentName,
+          section: section,
+          subject: subject,
+          strand: strand,
+          quiz_id: String(quiz?.id || ''),
+          quiz_title: quiz?.title || 'Quiz',
+          score,
+          total_items: total,
+          score_percentage: total ? Math.round((score / total) * 100) : 0
+        });
+      } catch(crErr) {
+        console.warn('Class Records table sync notice:', crErr);
+      }
+
+      try {
+        let { error } = await db.from('quiz_attempts').insert({
           quiz_id: quiz?.id || '',
+          quiz_title: quiz?.title || 'Quiz',
           student_id: prof.id || studentId,
+          student_name: studentName,
           score,
           total_items: total,
           answers: gradedAnswers
         });
+
+        if (error) {
+          await db.from('quiz_attempts').insert({
+            quiz_id: quiz?.id || '',
+            student_id: prof.id || studentId,
+            score,
+            total_items: total,
+            answers: gradedAnswers
+          });
+        }
+      } catch(dbErr) {
+        console.warn('Supabase insert notice:', dbErr);
       }
-    } catch(dbErr) {
-      console.warn('Supabase insert notice:', dbErr);
     }
   }
 

@@ -1118,58 +1118,60 @@ async function finishInteractiveQuiz() {
     };
   });
 
-  // Save attempt to localStorage
-  try {
-    const attemptObj = {
-      id: 'att_' + Date.now(),
-      quiz_id: quiz.id,
-      quiz_title: quiz.title || 'Interactive Quiz',
-      student_id: CURRENT_PROFILE.id,
-      student_name: CURRENT_PROFILE.full_name,
-      score: score,
-      total_items: totalItems,
-      submitted_at: new Date().toISOString(),
-      answers: gradedAnswers
-    };
-    const rawAtt = localStorage.getItem('scholaria_all_attempts_v1');
-    const listAtt = rawAtt ? JSON.parse(rawAtt) : [];
-    listAtt.unshift(attemptObj);
-    localStorage.setItem('scholaria_all_attempts_v1', JSON.stringify(listAtt));
-
-    const rawCR = localStorage.getItem('scholaria_class_records_v2');
-    const listCR = rawCR ? JSON.parse(rawCR) : [];
-    listCR.unshift(attemptObj);
-    localStorage.setItem('scholaria_class_records_v2', JSON.stringify(listCR));
-  } catch (e) {}
-
-  // Sync with Supabase (class_records + quiz_attempts)
-  try {
-    if (typeof db !== 'undefined' && db) {
-      await db.from('class_records').insert({
-        student_id: String(CURRENT_PROFILE.id || CURRENT_PROFILE.school_id || 'seed_stud_1'),
-        student_name: CURRENT_PROFILE.full_name || 'Student',
-        section: CURRENT_PROFILE.section || 'Section A',
-        subject: quiz.subject || CURRENT_PROFILE.strand || 'General',
-        strand: CURRENT_PROFILE.strand || 'STEM',
-        quiz_id: String(quiz.id),
-        quiz_title: quiz.title || 'Interactive Quiz',
-        score,
-        total_items: totalItems,
-        score_percentage: totalItems ? Math.round((score / totalItems) * 100) : 0
-      });
-
-      await db.from('quiz_attempts').insert({
+  // Save attempt to localStorage and Supabase (only if not preview)
+  if (!quiz.is_preview) {
+    try {
+      const attemptObj = {
+        id: 'att_' + Date.now(),
         quiz_id: quiz.id,
         quiz_title: quiz.title || 'Interactive Quiz',
-        student_id: CURRENT_PROFILE.id,
-        student_name: CURRENT_PROFILE.full_name,
-        score,
+        student_id: CURRENT_PROFILE?.id || 'demo_user',
+        student_name: CURRENT_PROFILE?.full_name || 'Teacher / Tester',
+        score: score,
         total_items: totalItems,
+        submitted_at: new Date().toISOString(),
         answers: gradedAnswers
-      });
+      };
+      const rawAtt = localStorage.getItem('scholaria_all_attempts_v1');
+      const listAtt = rawAtt ? JSON.parse(rawAtt) : [];
+      listAtt.unshift(attemptObj);
+      localStorage.setItem('scholaria_all_attempts_v1', JSON.stringify(listAtt));
+
+      const rawCR = localStorage.getItem('scholaria_class_records_v2');
+      const listCR = rawCR ? JSON.parse(rawCR) : [];
+      listCR.unshift(attemptObj);
+      localStorage.setItem('scholaria_class_records_v2', JSON.stringify(listCR));
+    } catch (e) {}
+
+    // Sync with Supabase (class_records + quiz_attempts)
+    try {
+      if (typeof db !== 'undefined' && db && CURRENT_PROFILE) {
+        await db.from('class_records').insert({
+          student_id: String(CURRENT_PROFILE.id || CURRENT_PROFILE.school_id || 'seed_stud_1'),
+          student_name: CURRENT_PROFILE.full_name || 'Student',
+          section: CURRENT_PROFILE.section || 'Section A',
+          subject: quiz.subject || CURRENT_PROFILE.strand || 'General',
+          strand: CURRENT_PROFILE.strand || 'STEM',
+          quiz_id: String(quiz.id),
+          quiz_title: quiz.title || 'Interactive Quiz',
+          score,
+          total_items: totalItems,
+          score_percentage: totalItems ? Math.round((score / totalItems) * 100) : 0
+        });
+
+        await db.from('quiz_attempts').insert({
+          quiz_id: quiz.id,
+          quiz_title: quiz.title || 'Interactive Quiz',
+          student_id: CURRENT_PROFILE.id,
+          student_name: CURRENT_PROFILE.full_name,
+          score,
+          total_items: totalItems,
+          answers: gradedAnswers
+        });
+      }
+    } catch (err) {
+      console.warn('Interactive quiz attempt sync notice:', err);
     }
-  } catch (err) {
-    console.warn('Interactive quiz attempt sync notice:', err);
   }
 
   renderCompletedInteractiveScreen();

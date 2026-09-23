@@ -156,12 +156,32 @@
     <div class="qm-foot" id="quizModalFoot"></div>
   </main>
 
+  <!-- TAKE QUIZ MODAL (STANDARD) -->
+  <div class="modal-overlay" id="takeQuizModal">
+    <div class="modal-card">
+      <div id="takeQuizBackdrop" class="iq-subject-backdrop"></div>
+      <div class="modal-head">
+        <div>
+          <h3 id="takeQuizModalTitle">Quiz</h3>
+          <span id="takeQuizModalSubtitle"></span>
+        </div>
+      </div>
+      <div class="modal-body" id="takeQuizModalBody"></div>
+      <div class="modal-foot" id="takeQuizModalFoot"></div>
+    </div>
+  </div>
+
+  <!-- INTERACTIVE QUIZ ARENA OVERLAY -->
+  <div class="interactive-quiz-overlay" id="interactiveQuizModal"></div>
+
   <div class="toast" id="toast"></div>
 
   <!-- Modular Scripts -->
   <script src="js/core/ui-helpers.js?v=20005"></script>
   <script src="js/core/notifications.js?v=20005"></script>
   <script src="js/core/announcements.js?v=20005"></script>
+  <script src="js/modules/quizzes/take-quiz.js?v=20005"></script>
+  <script src="js/modules/quizzes/interactive-player.js?v=20005"></script>
   <script src="js/modules/quizzes/quiz-generator.js?v=20005"></script>
 
   <script>
