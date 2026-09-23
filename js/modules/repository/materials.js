@@ -532,9 +532,6 @@ function renderMaterialsList(role) {
                   <span>Academic Faculty</span>
                 </div>
               </div>
-              <button class="sw-btn outline full" style="margin-top:12px;width:100%;justify-content:center;" onclick="goToChat()">
-                💬 Chat Instructor
-              </button>
             </div>
           </div>
         </div>
@@ -1348,7 +1345,8 @@ function downloadSubjectPdf(courseId, docId) {
   showToast(`Downloading "${doc.fileName}"…`, 'success');
 
   const textContent = `%PDF-1.4\n% HAVEN OF WISDOM ACADEMY\n% Course: ${course.title} (${course.code})\n% Module: ${doc.title}\n% File: ${doc.fileName}\n% Instructor: ${course.instructor}\n% Topics: ${doc.topics}\n% Pages: ${doc.pages}\n\n==============================================\nHAVEN OF WISDOM ACADEMY - SENIOR HIGH SCHOOL\n${course.title.toUpperCase()} (${course.code})\n${doc.title}\nInstructor: ${course.instructor}\n==============================================\n\nOVERVIEW & TOPICS:\n${doc.topics}\n\nThis is the official curriculum learning material for Haven of Wisdom Academy students.\n`;
-    const blob = new Blob([textContent], { type: 'application/pdf' });
+  
+  const blob = new Blob([textContent], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
