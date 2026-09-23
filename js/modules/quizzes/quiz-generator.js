@@ -5,7 +5,11 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 let customQuizzes = [];
 let isFetchingQuizzes = false;
+<<<<<<< Updated upstream
 let currentQuizGenToken = 0;
+=======
+let isSavingQuiz = false;
+>>>>>>> Stashed changes
 
 async function loadQuizzesFromDB() {
   if (isFetchingQuizzes) return;
@@ -993,6 +997,7 @@ function editPair(id, idx, side, value) {
 }
 
 function validateAllQuizQuestionsBeforeSave() {
+<<<<<<< Updated upstream
   if (!quizGen.title || !quizGen.title.trim()) {
     showToast('Quiz Title is required before saving', 'warning');
     quizGen.wizardStep = 2;
@@ -1109,12 +1114,56 @@ async function saveQuiz() {
   if (!validateAllQuizQuestionsBeforeSave()) return;
 
   isSavingQuiz = true;
+=======
+  if (!quizGen.questions || quizGen.questions.length === 0) {
+    showToast('Please add at least one question to the quiz', 'error');
+    return false;
+  }
+  for (let i = 0; i < quizGen.questions.length; i++) {
+    const q = quizGen.questions[i];
+    if (q.type === 'multiple_choice') {
+      if (!q.question || !q.question.trim()) {
+        showToast(`Question ${i + 1} has an empty question prompt`, 'error');
+        return false;
+      }
+      if (!q.answer) {
+        showToast(`Question ${i + 1} has no correct answer selected`, 'error');
+        return false;
+      }
+    } else if (q.type === 'identification') {
+      if (!q.question || !q.question.trim()) {
+        showToast(`Question ${i + 1} has an empty question prompt`, 'error');
+        return false;
+      }
+      if (!q.answer || !q.answer.trim()) {
+        showToast(`Question ${i + 1} requires an answer`, 'error');
+        return false;
+      }
+    } else if (q.type === 'matching') {
+      if (!q.pairs || q.pairs.length === 0) {
+        showToast(`Question ${i + 1} has no matching pairs`, 'error');
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+async function saveQuiz() {
+  if (isSavingQuiz) return;
+  if (!quizGen.questions || quizGen.questions.length === 0) {
+    showToast('Nothing to save yet', 'error');
+    return;
+  }
+
+>>>>>>> Stashed changes
   const saveBtn = document.querySelector('#quizModalFoot .gen-btn');
   if (saveBtn) {
     saveBtn.disabled = true;
     saveBtn.innerHTML = `<span>⏳</span> Saving Quiz…`;
   }
 
+<<<<<<< Updated upstream
   try {
     const isDemo = quizGen.questions.some(q => q._demo);
     const title = quizGen.title || (quizGen.subject ? quizGen.subject + ' – System Generated Quiz' : 'System Generated Quiz');
@@ -1191,6 +1240,108 @@ async function saveQuiz() {
         isDemo: isDemo,
         status: quizStatus,
         questions: questionsToSave
+=======
+  if (!validateAllQuizQuestionsBeforeSave()) {
+    isSavingQuiz = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `${iconChip()} Save Quiz (${quizGen.questions.length} items)`;
+    }
+    return;
+  }
+
+  const isDemo = quizGen.questions.some(q => q._demo);
+  const title = quizGen.title || (quizGen.subject ? quizGen.subject + ' – AI Generated Quiz' : 'AI Generated Quiz');
+  const { data: { session } } = await db.auth.getSession();
+  const userId = session?.user?.id || CURRENT_PROFILE?.id;
+
+  const isAdmin = CURRENT_PROFILE && CURRENT_PROFILE.role === 'admin';
+  const quizStatus = isAdmin ? 'active' : 'pending';
+  const targetSectionsStr = quizGen.sections.size ? Array.from(quizGen.sections).join(', ') : null;
+
+  const isInteractive = quizGen.type === 'interactive';
+  const fileName = quizGen.file ? quizGen.file.name : (quizGen.subject ? quizGen.subject + ' Handout' : '');
+  const lessonName = quizGen.lesson || '';
+
+  // Attach metadata to questions so interactive type, timer, sections, and source material are preserved inside questions JSONB without needing extra DB columns
+  const questionsToSave = (quizGen.questions || []).map((q, idx) => ({
+    ...q,
+    sourceMaterial: q.sourceMaterial || fileName,
+    source_material: q.sourceMaterial || fileName,
+    lesson: q.lesson || lessonName,
+    sections: targetSectionsStr,
+    dueDate: quizGen.dueDate || null,
+    _quizType: quizGen.type || 'standard',
+    _timerPerQuestion: quizGen.timerPerQuestion || 0,
+    _timeLimitMinutes: quizGen.timeLimitMinutes || 0,
+    ...(idx === 0 ? {
+      _meta: {
+        quizType: quizGen.type || 'standard',
+        timerPerQuestion: quizGen.timerPerQuestion || 0,
+        timeLimitMinutes: quizGen.timeLimitMinutes || 0,
+        sourceMaterial: fileName,
+        lesson: lessonName,
+        sections: targetSectionsStr,
+        dueDate: quizGen.dueDate || null
+      }
+    } : {})
+  }));
+
+  const quizRow = {
+    title: title,
+    subject: quizGen.subject || null,
+    strand: quizGen.strands.size ? Array.from(quizGen.strands).join(', ') : null,
+    grade_level: quizGen.gradeLevel || null,
+    sections: targetSectionsStr,
+    lesson: quizGen.lesson || '',
+    due_date: quizGen.dueDate || null,
+    time_limit_minutes: quizGen.timeLimitMinutes || 0,
+    created_by: userId,
+    questions: questionsToSave,
+    status: quizStatus,
+    is_demo: isDemo
+  };
+
+  let { error } = await db.from('quizzes').insert(quizRow);
+  if (error && error.message && error.message.includes('time_limit_minutes')) {
+    delete quizRow.time_limit_minutes;
+    const retry = await db.from('quizzes').insert(quizRow);
+    error = retry.error;
+  }
+  if (error && error.message && error.message.includes('due_date')) {
+    delete quizRow.due_date;
+    const retry = await db.from('quizzes').insert(quizRow);
+    error = retry.error;
+  }
+  if (error && error.message && error.message.includes('sections')) {
+    delete quizRow.sections;
+    const retry = await db.from('quizzes').insert(quizRow);
+    error = retry.error;
+  }
+  if (error && error.message && error.message.includes('lesson')) {
+    delete quizRow.lesson;
+    const retry = await db.from('quizzes').insert(quizRow);
+    error = retry.error;
+  }
+
+  isSavingQuiz = false;
+  if (error) {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `${iconChip()} Save Quiz (${quizGen.questions.length} items)`;
+    }
+    showToast('Failed to save quiz: ' + error.message, 'error');
+    return;
+  }
+
+  if (isAdmin) {
+    if (typeof addNotification === 'function') {
+      addNotification({
+        targetRole: 'student',
+        title: 'New Quiz Available',
+        message: `New quiz "${title}" (${quizGen.subject || 'General'}) is now available under Quizzes.`,
+        type: 'quiz'
+>>>>>>> Stashed changes
       });
     }
 
