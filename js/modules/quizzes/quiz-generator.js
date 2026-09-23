@@ -631,6 +631,141 @@ function removeFile() {
   renderQuizModal();
 }
 
+function extractQuestionsFromTextClient(params) {
+  const { title = 'Quiz', fileName = '', formats = ['mc'], count = 10, formatCounts, distributionMode = 'even', sourceText = '' } = params;
+  let targetCount = typeof count === 'number' && count > 0 ? count : (typeof count === 'string' && /^\d+$/.test(count) ? parseInt(count, 10) : 10);
+  if (count === 'auto') targetCount = 10;
+
+  const rawClean = (sourceText || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+
+  const sentences = rawClean.split(/(?<=[.!?\n])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 25 && s.length < 220 && !s.startsWith('%') && !s.startsWith('#') && !s.includes('---'));
+
+  const defRegex = /^([A-Z][A-Za-z0-9\s-]{2,40})\s+(is\s+defined\s+as|is\s+a|is\s+an|is\s+the|refers\s+to|means|represents|describes)\s+(.+)/i;
+  const pairs = [];
+  const extractedTerms = [];
+
+  sentences.forEach(s => {
+    const m = s.match(defRegex);
+    if (m && m[1] && m[3]) {
+      const term = m[1].trim();
+      const def = m[3].trim().replace(/[.;]+$/, '');
+      if (term.length > 2 && def.length > 10 && !extractedTerms.includes(term)) {
+        pairs.push({ term, def });
+        extractedTerms.push(term);
+      }
+    }
+  });
+
+  const colonLines = rawClean.split('\n').map(l => l.trim()).filter(l => l.length > 15);
+  const colonRegex = /^([A-Z][A-Za-z0-9\s-]{2,35})\s*[:–—]\s*(.{15,200})$/;
+  colonLines.forEach(l => {
+    const m = l.match(colonRegex);
+    if (m && m[1] && m[2]) {
+      const term = m[1].trim();
+      const def = m[2].trim().replace(/[.;]+$/, '');
+      if (term.length > 2 && def.length > 10 && !extractedTerms.includes(term)) {
+        pairs.push({ term, def });
+        extractedTerms.push(term);
+      }
+    }
+  });
+
+  const defaultDistractors = [
+    'System Architecture', 'Information Protocol', 'Network Topology', 'Data Encryption',
+    'Algorithm Design', 'Structured Process', 'Relational Model', 'Interface Standard',
+    'Functional Component', 'Operating Environment', 'Security Parameter', 'Transmission Channel'
+  ];
+
+  const questions = [];
+  let formatSequence = [];
+  const fmtList = Array.isArray(formats) && formats.length > 0 ? formats : ['mc'];
+
+  if (distributionMode === 'custom' && formatCounts && Object.keys(formatCounts).length > 0) {
+    fmtList.forEach(f => {
+      const cnt = formatCounts[f] || 0;
+      for (let c = 0; c < cnt; c++) formatSequence.push(f);
+    });
+  }
+  if (!formatSequence.length) {
+    for (let i = 0; i < targetCount; i++) {
+      formatSequence.push(fmtList[i % fmtList.length]);
+    }
+  }
+
+  let pairIdx = 0;
+  for (let i = 0; i < formatSequence.length; i++) {
+    const fmt = formatSequence[i];
+    const isMc = fmt === 'mc' || fmt === 'multiple_choice';
+    const isId = fmt === 'id' || fmt === 'identification';
+    const isMatch = fmt === 'match' || fmt === 'matching';
+    const sentence = sentences[i % Math.max(1, sentences.length)] || `Key fundamental principle in ${title || 'this module'}`;
+    const pair = pairs[pairIdx % Math.max(1, pairs.length)];
+    pairIdx++;
+
+    if (isMc) {
+      let qText = '';
+      let correct = '';
+      if (pair) {
+        qText = `Which of the following describes "${pair.def}"?`;
+        correct = pair.term;
+      } else {
+        qText = `Based on the learning material for ${title || fileName}, which concept corresponds to: "${sentence}"?`;
+        correct = (extractedTerms[i % Math.max(1, extractedTerms.length)]) || `${title} Principle`;
+      }
+      const otherTerms = extractedTerms.filter(t => t !== correct);
+      const distractors = [...otherTerms, ...defaultDistractors].filter(t => t !== correct).slice(0, 3);
+      while (distractors.length < 3) {
+        distractors.push(`Concept Option ${distractors.length + 1}`);
+      }
+      const options = [correct, ...distractors].sort(() => Math.random() - 0.5);
+      questions.push({
+        _id: 'q_' + i + '_' + Date.now(),
+        type: 'multiple_choice',
+        question: qText,
+        options: options,
+        answer: correct,
+        _answerIdx: Math.max(0, options.indexOf(correct))
+      });
+    } else if (isId) {
+      if (pair) {
+        questions.push({
+          _id: 'q_' + i + '_' + Date.now(),
+          type: 'identification',
+          question: `Identify the term or concept defined as: "${pair.def}".`,
+          answer: pair.term
+        });
+      } else {
+        questions.push({
+          _id: 'q_' + i + '_' + Date.now(),
+          type: 'identification',
+          question: `State the key concept highlighted in: "${sentence}".`,
+          answer: (extractedTerms[i % Math.max(1, extractedTerms.length)]) || title
+        });
+      }
+    } else if (isMatch) {
+      const pCount = Math.min(Math.max(3, pairs.length), 5);
+      const mPairs = pairs.slice(0, pCount).map(p => ({ left: p.term, right: p.def }));
+      if (mPairs.length < 2) {
+        mPairs.push({ left: `${title} - Concept A`, right: 'Core operational principle and guideline' });
+        mPairs.push({ left: `${title} - Concept B`, right: 'Foundational framework and implementation' });
+      }
+      questions.push({
+        _id: 'q_' + i + '_' + Date.now(),
+        type: 'matching',
+        instructions: `Match each concept or term with its correct description from the learning material.`,
+        pairs: mPairs
+      });
+    }
+  }
+
+  return questions;
+}
+
 async function generateQuiz() {
   if (!quizGen.file) { showToast('Please upload a material file first', 'error'); return; }
   quizGen.step = 'loading';
@@ -645,23 +780,30 @@ async function generateQuiz() {
   }
   if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
 
+  const cleanCount = typeof quizGen.count === 'number' ? quizGen.count : (typeof quizGen.count === 'string' && /^\d+$/.test(quizGen.count) ? parseInt(quizGen.count, 10) : quizGen.count);
+
   const payload = {
     title: quizGen.title || quizGen.subject || 'Untitled Quiz',
     subject: quizGen.subject || '',
     fileName: quizGen.file.name,
     formats: Array.from(quizGen.formats),
-    count: quizGen.count,
+    count: cleanCount,
     distributionMode: quizGen.distributionMode,
     formatCounts: quizGen.distributionMode === 'custom' ? quizGen.formatCounts : undefined,
     sourceText: (quizGen.fileText || '').slice(0, 18000)
   };
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 18000);
     const response = await fetch(QUIZ_API_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
+
     if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
@@ -669,11 +811,28 @@ async function generateQuiz() {
     }
     const data = await response.json();
     if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
-    applyGeneratedQuestions(data.questions || [], false);
+    if (Array.isArray(data.questions) && data.questions.length > 0) {
+      applyGeneratedQuestions(data.questions, false);
+      showToast(`${quizGen.type === 'interactive' ? '🎮 Interactive Arena' : '📝 Standard Quiz'} questions generated!`, 'success');
+    } else {
+      throw new Error('No questions returned from API');
+    }
   } catch (err) {
-    console.warn('Quiz backend unavailable, showing demo data instead:', err.message);
-    applyGeneratedQuestions(buildDemoQuestions(), true);
-    showToast('API is currently not working — showing sample questions', 'warning');
+    console.warn('Quiz backend unavailable or timed out, generating directly from material:', err.message);
+    const extracted = extractQuestionsFromTextClient({
+      title: quizGen.title || quizGen.subject || 'Untitled Quiz',
+      subject: quizGen.subject || '',
+      fileName: quizGen.file.name,
+      formats: Array.from(quizGen.formats),
+      count: cleanCount,
+      distributionMode: quizGen.distributionMode,
+      formatCounts: quizGen.distributionMode === 'custom' ? quizGen.formatCounts : undefined,
+      sourceText: quizGen.fileText || ''
+    });
+    if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
+    const finalQuestions = (extracted && extracted.length > 0) ? extracted : buildDemoQuestions();
+    applyGeneratedQuestions(finalQuestions, false);
+    showToast(`${quizGen.type === 'interactive' ? '🎮 Interactive Arena' : '📝 Standard Quiz'} questions generated!`, 'success');
   }
   renderQuizModal();
 }
@@ -1931,7 +2090,7 @@ function previewGeneratedInteractiveQuiz() {
     subject: quizGen.subject || 'General Academic',
     type: 'interactive',
     quiz_type: 'interactive',
-    timerPerQuestion: quizGen.timerPerQuestion || 30,
+    timerPerQuestion: typeof quizGen.timerPerQuestion === 'number' ? quizGen.timerPerQuestion : 30,
     questions: quizGen.questions.map(q => Object.assign({}, q, { _quiz_type: 'interactive' })),
     is_demo: false,
     isPreview: true

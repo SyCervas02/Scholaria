@@ -728,13 +728,18 @@ function validateQuizRequest(body) {
     errors.push('formats must be a non-empty array containing only "mc", "id", and/or "match".');
   }
   
+  if (typeof body.count === 'string' && /^\d+$/.test(body.count)) {
+    body.count = parseInt(body.count, 10);
+  }
   const isValidCount = body.count === 'auto' || (typeof body.count === 'number' && Number.isInteger(body.count) && body.count >= 1 && body.count <= 60);
   if (!isValidCount) {
     errors.push('count must be "auto" or an integer between 1 and 60.');
   }
 
   if (body.formatCounts && typeof body.formatCounts === 'object') {
-    for (const [fmt, num] of Object.entries(body.formatCounts)) {
+    for (const [fmt, rawNum] of Object.entries(body.formatCounts)) {
+      const num = (typeof rawNum === 'string' && /^\d+$/.test(rawNum)) ? parseInt(rawNum, 10) : rawNum;
+      body.formatCounts[fmt] = num;
       if (!ALLOWED_FORMATS.includes(fmt) || typeof num !== 'number' || !Number.isInteger(num) || num < 0 || num > 60) {
         errors.push(`Invalid format count for ${fmt}: must be an integer between 0 and 60.`);
       }
@@ -814,11 +819,27 @@ Only include "type" values matching the requested formats. For multiple choice i
 
 function sanitizeQuestions(raw) {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(q => {
-    if (!q || typeof q.question !== 'string' && q.type !== 'matching') return false;
-    if (q.type === 'multiple_choice') return Array.isArray(q.options) && typeof q.answer === 'string';
-    if (q.type === 'identification') return typeof q.answer === 'string';
-    if (q.type === 'matching') return Array.isArray(q.pairs) && q.pairs.every(p => p && typeof p.left === 'string' && typeof p.right === 'string');
+  return raw.map(q => {
+    if (!q) return null;
+    let type = q.type;
+    if (type === 'mc') type = 'multiple_choice';
+    if (type === 'id') type = 'identification';
+    if (type === 'match') type = 'matching';
+    return { ...q, type };
+  }).filter(q => {
+    if (!q) return false;
+    if (typeof q.question !== 'string' && q.type !== 'matching') return false;
+    if (q.type === 'multiple_choice') {
+      if (!Array.isArray(q.options) || q.options.length < 2) return false;
+      if (!q.options.includes(q.answer)) {
+        const match = q.options.find(o => String(o).trim().toLowerCase() === String(q.answer || '').trim().toLowerCase());
+        if (match) q.answer = match;
+        else q.answer = q.options[0];
+      }
+      return true;
+    }
+    if (q.type === 'identification') return typeof q.answer === 'string' && q.answer.trim().length > 0;
+    if (q.type === 'matching') return Array.isArray(q.pairs) && q.pairs.length >= 2 && q.pairs.every(p => p && typeof p.left === 'string' && typeof p.right === 'string');
     return false;
   }).slice(0, 40);
 }
