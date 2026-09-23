@@ -635,11 +635,18 @@ function renderCurrentInteractiveQuestion() {
  * View 1: Identification
  */
 function renderIdentificationView(q) {
+  const docRef = q.sourceFile || q.sourceMaterial || '';
   return `
     <div class="iq-id-card">
-      <div class="iq-id-tag">
-        <span class="iq-id-tag-icon">★</span>
-        <span>Identification</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+        <div class="iq-id-tag">
+          <span class="iq-id-tag-icon">★</span>
+          <span>Identification</span>
+        </div>
+        ${docRef ? `
+        <div class="iq-q-source-pill" title="Handout Reference">
+          <span>📄 Handout:</span> <strong>${escHtml(docRef)}</strong>
+        </div>` : ''}
       </div>
 
       <div class="iq-id-question-wrap">
@@ -704,7 +711,8 @@ function submitIdentificationAnswer(val) {
   showAnswerFeedback({
     isCorrect,
     correctAnswerText: correct,
-    sourceMaterialText: q.sourceMaterial,
+    sourceMaterialText: q.sourceFile || q.sourceMaterial,
+    sourcePageText: q.sourcePage || null,
     lessonText: q.lesson
   });
 }
@@ -720,8 +728,16 @@ function renderMatchingView(q) {
   const numClasses = ['num-1', 'num-2', 'num-3', 'num-4', 'num-5'];
   const borderClasses = ['border-1', 'border-2', 'border-3', 'border-4', 'border-5'];
 
+  const docRef = q.sourceFile || q.sourceMaterial || '';
+
   return `
     <div class="iq-match-container">
+      ${docRef ? `
+      <div style="text-align:center;width:100%;margin-bottom:12px;">
+        <div class="iq-q-source-pill" title="Handout Reference">
+          <span>📄 Handout:</span> <strong>${escHtml(docRef)}</strong>
+        </div>
+      </div>` : ''}
       <!-- Left Column: Choices -->
       <div class="iq-match-left">
         <div class="iq-match-left-head">
@@ -893,7 +909,8 @@ function submitMatchingAnswer() {
   showAnswerFeedback({
     isCorrect: isAllCorrect,
     correctAnswerText: `${matchesCorrect}/${totalPairs} Pairs Matched. Key: ${pairDetails.slice(0, 3).join(' | ')}${pairDetails.length > 3 ? '...' : ''}`,
-    sourceMaterialText: q.sourceMaterial,
+    sourceMaterialText: q.sourceFile || q.sourceMaterial,
+    sourcePageText: q.sourcePage || null,
     lessonText: q.lesson
   });
 }
@@ -906,9 +923,16 @@ function renderMultipleChoiceView(q) {
   const cardClasses = ['card-a', 'card-b', 'card-c', 'card-d', 'card-a', 'card-b'];
 
   const isTf = q.type === 'true_false' || q.type === 'tf';
+  const docRef = q.sourceFile || q.sourceMaterial || '';
 
   return `
     <div class="iq-mc-container">
+      ${docRef ? `
+      <div style="text-align:center;margin-bottom:12px;">
+        <div class="iq-q-source-pill" title="Handout Reference">
+          <span>📄 Handout:</span> <strong>${escHtml(docRef)}</strong>
+        </div>
+      </div>` : ''}
       <div class="iq-mc-question-banner">
         ${escHtml(q.question)}
       </div>
@@ -1020,11 +1044,17 @@ function showAnswerFeedback({ isCorrect, correctAnswerText, sourceMaterialText, 
       </div>
 
       <div class="iq-fb-source">
-        <span class="iq-fb-source-icon">📖</span>
-        <div class="iq-fb-source-info">
-          <span class="iq-fb-source-label">Source Handout:</span>
-          <span class="iq-fb-source-title">${escHtml(sourceMaterialText || 'Class Handout')}${pageBadge}</span>
+        <div class="iq-fb-source-hdr">
+          <span class="iq-fb-source-icon">📍</span>
+          <span class="iq-fb-source-label">Where to find this in your handouts:</span>
+        </div>
+        <div class="iq-fb-source-details">
+          <span class="iq-fb-source-file">📄 <strong>${escHtml(sourceMaterialText || 'Class Handout')}</strong></span>
+          ${cleanPageText ? `<span class="iq-fb-source-page">📑 Page <strong>${escHtml(cleanPageText)}</strong></span>` : ''}
           ${lessonText ? `<span class="iq-fb-lesson">(${escHtml(lessonText)})</span>` : ''}
+        </div>
+        <div class="iq-fb-source-hint">
+          Open <strong>${escHtml(sourceMaterialText || 'your handout')}</strong>${cleanPageText ? ` to <strong>Page ${escHtml(cleanPageText)}</strong>` : ''} to navigate and review this topic.
         </div>
       </div>
     </div>
@@ -1269,6 +1299,40 @@ function renderCompletedInteractiveScreen() {
           <div class="iq-feedback-text">
             <h4>${feedbackTitle}</h4>
             <p>${feedbackText}</p>
+          </div>
+        </div>
+
+        <!-- Question Review & Handout Navigation Guide -->
+        <div class="iq-study-guide-wrap">
+          <div class="iq-study-guide-head">
+            <h3>📖 Question Review & Handout Navigation</h3>
+            <p>Review every question and navigate to the exact handout and page to study:</p>
+          </div>
+          <div class="iq-study-guide-list">
+            ${interactivePlayerState.questions.map((q, qIdx) => {
+              const resp = interactivePlayerState.userResponses[q.id] || {};
+              const isRight = resp.isCorrect;
+              const docName = q.sourceFile || q.sourceMaterial || 'Handout Material';
+              const cleanP = q.sourcePage ? String(q.sourcePage).replace(/^(page\s*)+/i, '').trim() : '';
+              return `
+                <div class="iq-study-card ${isRight ? 'is-correct' : 'is-incorrect'}">
+                  <div class="iq-study-card-top">
+                    <span class="iq-study-num">Question ${qIdx + 1}</span>
+                    <span class="iq-study-badge ${isRight ? 'correct' : 'incorrect'}">${isRight ? '✔ Correct' : '✖ Review Needed'}</span>
+                    <div class="iq-study-citation">
+                      <span class="iq-study-file">📄 ${escHtml(docName)}</span>
+                      ${cleanP ? `<span class="iq-study-page">📑 Page ${escHtml(cleanP)}</span>` : ''}
+                    </div>
+                  </div>
+                  <div class="iq-study-qtext">${escHtml(q.question || q.label || 'Question Item')}</div>
+                  <div class="iq-study-answer-row">
+                    <span class="iq-study-ans-label">Correct Answer:</span>
+                    <strong class="iq-study-ans-val">${escHtml(String(q.answer || resp.correct || ''))}</strong>
+                    ${!isRight && resp.given ? `<span class="iq-study-given">(Your answer: ${escHtml(String(resp.given))})</span>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
           </div>
         </div>
 
