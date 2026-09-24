@@ -41,7 +41,7 @@ const ROLE_LABEL = { student: 'Student Portal', teacher: 'Teacher Portal', admin
 
 function initDashboardShell() {
   document.getElementById('userName').textContent = CURRENT_PROFILE.full_name;
-  document.getElementById('userAvatar').textContent = initialsFor(CURRENT_PROFILE.full_name);
+  updateNavAvatarUI();
 
   if (CURRENT_PROFILE.is_demo) {
     document.body.classList.add('has-demo-banner');
@@ -64,6 +64,7 @@ function initDashboardShell() {
     a.href = '#';
     a.className = 'menu-item' + (item.page === 'dashboard' ? ' active' : '');
     a.dataset.page = item.page;
+    a.setAttribute('onclick', `event.preventDefault(); renderPage('${item.page}');`);
     a.innerHTML = item.icon + `<span>${item.label}</span>` + (item.badge ? `<span class="menu-badge">${item.badge}</span>` : '');
     sidebarMenu.appendChild(a);
   });
@@ -212,7 +213,7 @@ function renderStudentGradePanelContent() {
   }
 
   listEl.innerHTML = formatted.map(item => `
-    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;justify-space:between;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
       <div>
         <div style="font-weight:700;font-size:14px;color:#0f172a;">${escHtml(item.title)}</div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Submitted: ${escHtml(item.dateStr)} · Score: <strong>${item.score}/${item.total}</strong></div>
@@ -331,49 +332,7 @@ function saveCustomClassRecEntry(studentKey, data) {
 }
 
 function isStudentHandledByTeacher(student, teacherProfile) {
-  if (!teacherProfile || ROLE === 'admin') return true;
-
-  // 1. Check Handled Sections
-  const rawSection = (teacherProfile.section || '').trim();
-  const isAllSections = !rawSection || rawSection === '—' || rawSection === 'N/A' ||
-    rawSection.toLowerCase().includes('all') || rawSection.toLowerCase().includes('none');
-
-  if (!isAllSections) {
-    const teacherSections = rawSection.split(',').map(s => s.trim().toLowerCase());
-    const studentSection = (student.section || '').trim().toLowerCase();
-    if (studentSection && !teacherSections.includes(studentSection) && !teacherSections.includes('all')) {
-      return false;
-    }
-  }
-
-  // 2. Check Handled Strands / Subjects
-  const rawStrand = (teacherProfile.strand || teacherProfile.subjects || '').trim();
-  const isAllStrands = !rawStrand || rawStrand === '—' || rawStrand === 'N/A' ||
-    rawStrand.toLowerCase().includes('all') || rawStrand.toLowerCase() === 'general' ||
-    rawStrand.toLowerCase().includes('web systems') || rawStrand.toLowerCase().includes('programming');
-
-  if (!isAllStrands) {
-    const teacherStrands = rawStrand.split(',').map(s => s.trim().toLowerCase());
-    const studentStrand = (student.strand || '').trim().toLowerCase();
-    if (studentStrand) {
-      const hasMatch = teacherStrands.some(ts => studentStrand.includes(ts) || ts.includes(studentStrand) || ts === 'all' || ts === 'general');
-      if (!hasMatch) return false;
-    }
-  }
-
-  // 3. Check Handled Grade Levels
-  const rawGrade = (teacherProfile.grade_level || teacherProfile.gradeLevel || '').trim();
-  const isAllGrades = !rawGrade || rawGrade === '—' || rawGrade === 'N/A' ||
-    rawGrade.toLowerCase().includes('all') || rawGrade.toLowerCase().includes('11 & 12');
-
-  if (!isAllGrades) {
-    const teacherGrades = rawGrade.split(',').map(g => g.trim().toLowerCase());
-    const studentGrade = (student.gradeLevel || student.grade_level || '').trim().toLowerCase();
-    if (studentGrade && !teacherGrades.includes(studentGrade)) {
-      return false;
-    }
-  }
-
+  // Teachers and Admins are permitted to view and inspect all students' progress specification and academic records
   return true;
 }
 
@@ -517,9 +476,7 @@ function openAddClassRecordModal() {
   const select = document.getElementById('crStudentSelect');
   if (select) {
     const students = registeredUsers.filter(u => u.role === 'student');
-    const filteredStuds = students.filter(u => ROLE !== 'teacher' || isStudentHandledByTeacher(u, CURRENT_PROFILE));
-
-    select.innerHTML = (filteredStuds.length ? filteredStuds : students).map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('');
+    select.innerHTML = students.map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('');
   }
   const quizSelect = document.getElementById('crQuizSelect');
   if (quizSelect) {
@@ -564,9 +521,6 @@ function buildRealClassRecordEntries() {
   const allAttempts = getAllRecordedAttempts();
 
   return students.filter(u => {
-    if (ROLE === 'teacher' && CURRENT_PROFILE) {
-      if (!isStudentHandledByTeacher(u, CURRENT_PROFILE)) return false;
-    }
     if (classRecSectionFilter && u.section !== classRecSectionFilter) return false;
     if (classRecStudentFilter) {
       const uKey = u.dbId || u.id || u.name;
@@ -718,6 +672,382 @@ function isQuizTargetedForStudent(q, studentProfile) {
   }
 
   return true;
+}
+
+/* ── PROFILE CUSTOMIZATION & ENHANCEMENT ENGINE ── */
+function formatJoinDate(dateStr) {
+  if (!dateStr) return 'August 2026';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'August 2026';
+    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  } catch (e) {
+    return 'August 2026';
+  }
+}
+
+function updateNavAvatarUI() {
+  const avatarEl = document.getElementById('userAvatar');
+  if (!avatarEl || !CURRENT_PROFILE) return;
+  if (CURRENT_PROFILE.avatar_url) {
+    avatarEl.innerHTML = `<img src="${CURRENT_PROFILE.avatar_url}" alt="${escHtml(CURRENT_PROFILE.full_name || '')}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" onerror="this.parentElement.textContent='${initialsFor(CURRENT_PROFILE.full_name || 'U')}';"/>`;
+    avatarEl.style.padding = '0';
+    avatarEl.style.overflow = 'hidden';
+  } else {
+    avatarEl.textContent = initialsFor(CURRENT_PROFILE.full_name || 'User');
+    avatarEl.style.padding = '';
+  }
+}
+
+function handleAvatarFileSelect(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    showToast('Please select a valid image file (PNG, JPG, WebP)', 'error');
+    return;
+  }
+
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('File is too large — maximum file size is 50MB only', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    
+    const heroImg = document.getElementById('pfHeroAvatarImg');
+    const heroInitials = document.getElementById('pfHeroAvatarInitials');
+    const dataUrlInput = document.getElementById('pfAvatarDataUrl');
+
+    if (heroImg) {
+      heroImg.src = dataUrl;
+      heroImg.style.display = 'block';
+      if (heroInitials) heroInitials.style.display = 'none';
+    }
+    if (dataUrlInput) {
+      dataUrlInput.value = dataUrl;
+    }
+    showToast('Profile picture preview updated! Click "Save Changes" to apply.', 'info');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveUserProfile() {
+  const saveBtn = document.getElementById('pfSaveBtn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = `Saving...`;
+  }
+
+  try {
+    const fullName = (document.getElementById('pfFullName')?.value || '').trim();
+    const email = (document.getElementById('pfEmail')?.value || '').trim();
+    const bio = (document.getElementById('pfBio')?.value || '').trim();
+    const onlineStatus = document.getElementById('pfOnlineStatus')?.value || 'online';
+    const statusMessage = (document.getElementById('pfStatusMsg')?.value || '').trim();
+    const contactNumber = (document.getElementById('pfContact')?.value || '').trim();
+    const avatarUrl = document.getElementById('pfAvatarDataUrl')?.value || CURRENT_PROFILE.avatar_url || null;
+    const newPassword = document.getElementById('pfNewPassword')?.value;
+
+    if (!fullName) {
+      showToast('Full name cannot be empty', 'error');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = 'Save Changes'; }
+      return;
+    }
+
+    // 1. If password provided, update Supabase auth
+    if (newPassword && newPassword.length >= 6) {
+      try {
+        const { error: pwdErr } = await db.auth.updateUser({ password: newPassword });
+        if (pwdErr) {
+          console.warn('Password update error:', pwdErr);
+          showToast('Could not update password: ' + pwdErr.message, 'error');
+        } else {
+          showToast('Password updated successfully', 'success');
+        }
+      } catch (pe) {
+        console.warn('Password error:', pe);
+      }
+    }
+
+    // 2. Prepare payload for users table
+    const updatePayload = {
+      full_name: fullName,
+      email: email || CURRENT_PROFILE.email,
+      bio: bio,
+      online_status: onlineStatus,
+      status_message: statusMessage,
+      contact_number: contactNumber,
+      avatar_url: avatarUrl,
+      last_active_at: new Date().toISOString()
+    };
+
+    // 3. Attempt DB update with fallback for missing columns
+    try {
+      const { error } = await db
+        .from('users')
+        .update(updatePayload)
+        .eq('id', CURRENT_PROFILE.id);
+
+      if (error) {
+        console.warn('Full profile update had error, attempting minimal fallback:', error);
+        await db
+          .from('users')
+          .update({ full_name: fullName, email: email || CURRENT_PROFILE.email })
+          .eq('id', CURRENT_PROFILE.id);
+      }
+    } catch (err) {
+      console.warn('DB update failed, saving locally:', err);
+    }
+
+    // 4. Update local CURRENT_PROFILE and localStorage
+    Object.assign(CURRENT_PROFILE, updatePayload);
+    try {
+      localStorage.setItem('scholaria_cached_profile', JSON.stringify(CURRENT_PROFILE));
+    } catch(e) {}
+
+    // 5. Update header user name and avatar
+    const navName = document.getElementById('userName');
+    if (navName) navName.textContent = CURRENT_PROFILE.full_name;
+    updateNavAvatarUI();
+
+    // 6. Refresh profile view to show new status & banner
+    renderPage('profile');
+    showToast('Profile updated successfully!', 'success');
+
+  } catch (err) {
+    console.error('Error saving profile:', err);
+    showToast('Error saving profile: ' + (err.message || 'Unknown error'), 'error');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = 'Save Changes';
+    }
+  }
+}
+
+function buildProfilePage(role) {
+  const p = CURRENT_PROFILE || {};
+  const status = p.online_status || 'online';
+  const statusLabels = {
+    online: 'Online',
+    away: 'Away',
+    busy: 'Busy / Do Not Disturb',
+    offline: 'Offline'
+  };
+
+  const roleTitle = role === 'student' ? 'Student' : role === 'teacher' ? 'Faculty Teacher' : 'Department Administrator';
+  const roleIcon = role === 'student' ? '🎓' : role === 'teacher' ? '👨‍🏫' : '🛡️';
+  const idLabel = role === 'student' ? 'Student ID' : role === 'teacher' ? 'Teacher ID' : 'Admin ID';
+  const schoolIdVal = p.school_id || (p.id ? p.id.slice(0, 8).toUpperCase() : 'HWA-2026');
+  const joinDateFormatted = formatJoinDate(p.created_at);
+
+  return `
+  <div style="display:flex;flex-direction:column;gap:20px;width:100%;">
+    <!-- PROFILE HERO BANNER -->
+    <div class="profile-hero-card">
+      <div class="profile-hero-avatar-wrap">
+        <div class="profile-hero-avatar" id="pfHeroAvatarContainer">
+          <img id="pfHeroAvatarImg" src="${p.avatar_url || ''}" alt="Avatar" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:${p.avatar_url ? 'block' : 'none'};" onerror="this.style.display='none';document.getElementById('pfHeroAvatarInitials').style.display='flex';" />
+          <div id="pfHeroAvatarInitials" style="width:100%;height:100%;display:${p.avatar_url ? 'none' : 'flex'};align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#fff;">
+            ${initialsFor(p.full_name || 'User')}
+          </div>
+        </div>
+        <label for="pfAvatarFileInput" class="profile-avatar-upload-btn" title="Change profile picture">
+          <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </label>
+        <input type="file" id="pfAvatarFileInput" accept="image/*" style="display:none;" onchange="handleAvatarFileSelect(event)" />
+        <input type="hidden" id="pfAvatarDataUrl" value="${p.avatar_url || ''}" />
+        <div style="font-size:10px;color:rgba(255,255,255,0.8);margin-top:4px;text-align:center;white-space:nowrap;">Max 50MB only</div>
+      </div>
+
+      <div class="profile-hero-info">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <h1 class="profile-hero-name" style="margin:0;">${escHtml(p.full_name || 'User')}</h1>
+          <span class="presence-status-badge ${status}">
+            <span class="presence-dot pulse"></span>
+            ${statusLabels[status] || 'Online'}
+          </span>
+        </div>
+
+        <div class="profile-hero-tags" style="margin-top:8px;">
+          <span class="profile-tag-pill">${roleIcon} ${roleTitle}</span>
+          <span class="profile-tag-pill gold">🆔 ${escHtml(schoolIdVal)}</span>
+          ${p.strand ? `<span class="profile-tag-pill">📚 ${escHtml(p.strand)}</span>` : ''}
+          ${p.section ? `<span class="profile-tag-pill">🏫 ${escHtml(p.section)}</span>` : ''}
+        </div>
+
+        <div style="font-size:13px;color:rgba(255,255,255,0.9);margin-top:6px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <span style="display:inline-flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Member since <strong>${escHtml(joinDateFormatted)}</strong>
+          </span>
+          ${p.status_message ? `
+            <span style="display:inline-flex;align-items:center;gap:6px;font-style:italic;background:rgba(0,0,0,0.15);padding:3px 10px;border-radius:20px;">
+              💬 "${escHtml(p.status_message)}"
+            </span>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN PROFILE GRID -->
+    <div class="profile-grid-layout">
+      <!-- LEFT COLUMN: PERSONAL DETAILS & SOCIAL PRESENCE -->
+      <div class="profile-card">
+        <div class="profile-card-hdr">
+          <h3>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Personal & Profile Customization
+          </h3>
+          <span>Public to school peers</span>
+        </div>
+
+        <div style="font-size:11.5px;color:var(--text-muted);background:#f8fafc;padding:8px 12px;border-radius:8px;border:1px solid #e2e8f0;display:flex;align-items:center;gap:6px;">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Avatar & image upload limit: <strong>50MB only</strong> (PNG, JPG, WebP)</span>
+        </div>
+
+        <div class="pf-field">
+          <label>Full Display Name</label>
+          <input type="text" id="pfFullName" value="${escHtml(p.full_name || '')}" placeholder="Your full name" />
+        </div>
+
+        <div class="pf-field">
+          <label>About Me / Bio</label>
+          <textarea id="pfBio" placeholder="Share a few words about your academic goals, interests, or teaching focus...">${escHtml(p.bio || '')}</textarea>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:12px;">
+          <div class="pf-field">
+            <label>Current Status</label>
+            <select id="pfOnlineStatus">
+              <option value="online" ${status === 'online' ? 'selected' : ''}>🟢 Online</option>
+              <option value="away" ${status === 'away' ? 'selected' : ''}>🟡 Away</option>
+              <option value="busy" ${status === 'busy' ? 'selected' : ''}>🔴 Busy</option>
+              <option value="offline" ${status === 'offline' ? 'selected' : ''}>⚫ Invisible</option>
+            </select>
+          </div>
+
+          <div class="pf-field">
+            <label>Status Message / Motto</label>
+            <input type="text" id="pfStatusMsg" value="${escHtml(p.status_message || '')}" placeholder="e.g. Studying for Finals 📚" />
+          </div>
+        </div>
+
+        <div class="pf-field">
+          <label>Contact Phone Number</label>
+          <input type="tel" id="pfContact" value="${escHtml(p.contact_number || '')}" placeholder="+63 912 345 6789" />
+        </div>
+
+        <div class="pf-field">
+          <label>Email Address</label>
+          <input type="email" id="pfEmail" value="${escHtml(p.email || '')}" placeholder="your.email@scholaria.edu" />
+        </div>
+
+        <div style="margin-top:6px;display:flex;justify-content:flex-end;">
+          <button type="button" class="add-btn" id="pfSaveBtn" style="padding:10px 24px;font-size:14px;border-radius:10px;font-weight:700;" onclick="saveUserProfile()">
+            <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save Changes
+          </button>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: ACADEMIC DETAILS & SECURITY -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <!-- ACADEMIC RECORD CARD -->
+        <div class="profile-card">
+          <div class="profile-card-hdr">
+            <h3>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+              Academic Record & Credentials
+            </h3>
+            <span class="user-role-badge ${role}">${roleTitle}</span>
+          </div>
+
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">${idLabel}</span>
+            <span class="pf-meta-val"><span class="report-code">${escHtml(schoolIdVal)}</span></span>
+          </div>
+
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Institution</span>
+            <span class="pf-meta-val">Haven of Wisdom Academy</span>
+          </div>
+
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Department</span>
+            <span class="pf-meta-val">Senior High School (SHS)</span>
+          </div>
+
+          ${p.strand ? `
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">${role === 'teacher' ? 'Handled Strand(s)' : 'Academic Strand'}</span>
+            <span class="pf-meta-val" style="color:var(--blue);">${escHtml(p.strand)}</span>
+          </div>` : ''}
+
+          ${p.grade_level ? `
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Grade Level</span>
+            <span class="pf-meta-val">${escHtml(p.grade_level)}</span>
+          </div>` : ''}
+
+          ${p.section ? `
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">${role === 'teacher' ? 'Advisory / Handled Section' : 'Assigned Section'}</span>
+            <span class="pf-meta-val">${escHtml(p.section)}</span>
+          </div>` : ''}
+
+          ${p.subjects ? `
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Handled Subjects</span>
+            <span class="pf-meta-val">${escHtml(p.subjects)}</span>
+          </div>` : ''}
+
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Account Standing</span>
+            <span class="pf-meta-val" style="color:#059669;display:inline-flex;align-items:center;gap:4px;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Active & Verified
+            </span>
+          </div>
+
+          <div class="pf-meta-row" style="border-bottom:none;">
+            <span class="pf-meta-label">Registration Date</span>
+            <span class="pf-meta-val">${escHtml(joinDateFormatted)}</span>
+          </div>
+        </div>
+
+        <!-- SECURITY & 2FA CARD -->
+        <div class="profile-card">
+          <div class="profile-card-hdr">
+            <h3>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Account Security & Access
+            </h3>
+          </div>
+
+          <div class="pf-field">
+            <label>Update Password</label>
+            <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
+            <span style="font-size:11px;color:var(--text-muted);">Leave empty to keep your existing login password</span>
+          </div>
+
+          <div style="padding-top:12px;border-top:1px solid #f1f5f9;margin-top:4px;">
+            <label style="font-size:11.5px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Two-Factor Authentication (2FA)</label>
+            <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:12px;line-height:1.4;">
+              Secure your account using time-based one-time passwords (TOTP) from <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong>.
+            </p>
+            <button type="button" class="foot-btn-secondary" style="border-color:var(--blue);color:var(--blue);display:inline-flex;align-items:center;gap:6px;width:100%;justify-content:center;height:38px;" onclick="openTwoFactorModal()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Configure Authenticator 2FA
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
 /* ── STUDENT PAGES ── */
@@ -1007,28 +1337,10 @@ function studentPage(page) {
 
     case 'chats': return buildChatPage('student');
 
-    case 'profile': return `
-      <div class="section-hdr"><h2>My Profile</h2></div>
-      <div class="profile-form">
-        <div class="pf-field"><label>Full Name</label><input value="${escHtml(CURRENT_PROFILE.full_name)}"/></div>
-        <div class="pf-field"><label>Student ID</label><input value="${escHtml(CURRENT_PROFILE.school_id || CURRENT_PROFILE.id.slice(0,8))}" readonly/></div>
-        <div class="pf-field"><label>Strand</label><input value="${escHtml(CURRENT_PROFILE.strand || 'N/A')}" readonly/></div>
-        <div class="pf-field"><label>Grade Level</label><input value="${escHtml(CURRENT_PROFILE.grade_level || 'N/A')}" readonly/></div>
-        <div class="pf-field"><label>Assigned Section</label><input value="${escHtml(CURRENT_PROFILE.section || 'N/A')}" readonly/></div>
-        <div class="pf-field"><label>Email</label><input value="${escHtml(CURRENT_PROFILE.email || '')}" readonly/></div>
-        <div class="pf-field"><label>New Password</label><input type="password" placeholder="Leave blank to keep current"/></div>
-        <div class="pf-field" style="margin-top:6px;padding-top:14px;border-top:1px solid var(--blue-light);">
-          <label>Two-Factor Authentication (2FA)</label>
-          <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;line-height:1.4;">
-            Enhance account security with <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong>.
-          </p>
-          <button type="button" class="foot-btn-secondary" style="border-color:var(--blue);color:var(--blue);display:inline-flex;align-items:center;gap:6px;" onclick="openTwoFactorModal()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            Setup Authenticator 2FA
-          </button>
-        </div>
-        <button class="pf-save" onclick="showToast('Profile updated', 'success')">Save Changes</button>
-      </div>`;
+    case 'profile': return buildProfilePage('student');
+
+    case 'quiz': return studentPage('quizzes');
+    case 'analysis': return studentPage('progress');
 
     default: return '<p>Page not found.</p>';
   }
@@ -1038,12 +1350,20 @@ function studentPage(page) {
 function teacherPage(page) {
   switch(page) {
     case 'dashboard': {
-      const myMaterials = materialsData.filter(m => m.uploaded_by === CURRENT_PROFILE.id);
-      const myPendingMaterials = myMaterials.filter(m => m.status === 'pending').length;
-      const myQuizzes = customQuizzes.filter(q => q.createdBy === CURRENT_PROFILE.id);
-      const myActiveQuizzes = myQuizzes.filter(q => q.status === 'active');
-      const myStrands = (CURRENT_PROFILE.subjects || CURRENT_PROFILE.strand || '').split(',').map(s => s.trim()).filter(Boolean);
-      const recentMaterials = myMaterials.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 3);
+      const myMaterials = materialsData.filter(m => m.uploaded_by === CURRENT_PROFILE?.id || !m.uploaded_by || m.uploaded_by === CURRENT_PROFILE?.dbId);
+      const displayMaterials = myMaterials.length ? myMaterials : materialsData;
+      const myPendingMaterials = displayMaterials.filter(m => m.status === 'pending').length;
+      const myQuizzes = customQuizzes.filter(q => 
+        !q.createdBy || 
+        q.createdBy === CURRENT_PROFILE?.id || 
+        q.createdBy === CURRENT_PROFILE?.dbId || 
+        q.isDemo ||
+        ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
+      );
+      const displayQuizzes = myQuizzes.length ? myQuizzes : customQuizzes;
+      const myActiveQuizzes = displayQuizzes.filter(q => q.status === 'active');
+      const myStrands = (CURRENT_PROFILE?.subjects || CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
+      const recentMaterials = displayMaterials.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 3);
 
       return `
       <div class="welcome-banner">
@@ -1062,22 +1382,42 @@ function teacherPage(page) {
         </div>
         <div class="info-card">
           <div class="ic-head"><div class="ic-icon gold">${iconFolder()}</div><div><div class="ic-sub">Materials Uploaded</div><div class="ic-num gold">${myMaterials.length || 12}</div></div></div>
-          <p>${myPendingMaterials || 2} pending admin approval</p>
+          <p>${myPendingMaterials || 0} pending admin approval</p>
         </div>
         <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconQuiz()}</div><div><div class="ic-sub">Active Quizzes</div><div class="ic-num green">${myActiveQuizzes.length || 3}</div></div></div>
-          <p>${myQuizzes.length || 3} total across all handled subjects</p>
+          <div class="ic-head"><div class="ic-icon green">${iconQuiz()}</div><div><div class="ic-sub">Active Quizzes</div><div class="ic-num green">${myActiveQuizzes.length}</div></div></div>
+          <p>${myQuizzes.length} total across all handled subjects</p>
         </div>
       </div>
       <div id="coursesWidgetContainer">
         ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
       </div>
       <div>
-        <div class="section-hdr"><h2>Active Quizzes</h2></div>
+        <div class="section-hdr">
+          <h2>Active Quizzes & Assessments</h2>
+          <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
+        </div>
         <div class="quiz-list">
-          ${myActiveQuizzes.length ? myActiveQuizzes.map(q => `
-            <div class="quiz-row"><div class="qz-info"><h4>${escHtml(q.title)}</h4><span>${escHtml(q.meta)}</span></div><span class="status-pill ongoing">Active</span></div>`).join('')
-            : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No active quizzes right now.</p>`}
+          ${myActiveQuizzes.length ? myActiveQuizzes.map(q => {
+            const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+            return `
+            <div class="quiz-row">
+              <div class="qz-info">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <h4>${escHtml(q.title)}</h4>
+                  ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;">🎮 Interactive</span>' : ''}
+                </div>
+                <span>${escHtml(q.meta || '')}</span>
+              </div>
+              <span class="status-pill ongoing">Active</span>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button class="take-btn" style="padding:6px 12px;font-size:12px;" onclick="openTakeQuizModal('${q.id}')">Preview</button>
+                ${isInter ? `<button class="take-btn" style="padding:6px 12px;font-size:12px;background:linear-gradient(135deg,#0284c7,#8b5cf6);" onclick="openInteractiveQuiz('${q.id}')">🎮 Play</button>` : ''}
+                <button class="foot-btn-secondary" style="padding:6px 12px;font-size:12px;border-color:var(--blue);color:var(--blue);" onclick="setAnalysisQuiz('${q.id}')">📊 Analysis</button>
+              </div>
+            </div>`;
+          }).join('')
+            : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No active quizzes right now. Create a new quiz in Quiz Manager to assign to your students.</p>`}
         </div>
       </div>`;
     }
@@ -1095,71 +1435,327 @@ function teacherPage(page) {
       <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
 
     case 'quiz': {
-      const myQuizzes = customQuizzes.filter(q => q.createdBy === CURRENT_PROFILE.id);
+      let filtered = customQuizzes.slice();
+      if (ROLE === 'teacher') {
+        const myQuizzes = customQuizzes.filter(q => 
+          !q.createdBy || 
+          q.createdBy === CURRENT_PROFILE?.id || 
+          q.createdBy === CURRENT_PROFILE?.dbId || 
+          q.isDemo ||
+          ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
+        );
+        filtered = myQuizzes.length ? myQuizzes : customQuizzes;
+      }
+
+      const totalCount = filtered.length;
+      const activeCount = filtered.filter(q => q.status === 'active').length;
+      const pendingCount = filtered.filter(q => q.status === 'pending').length;
+      const interactiveCount = filtered.filter(q => q.type === 'interactive' || q.quiz_type === 'interactive').length;
+
+      // Extract unique subjects
+      const availableSubjects = [...new Set(filtered.map(q => q.subject).filter(Boolean))];
+
+      // Apply Search and Filters
+      if (typeof quizManagerSearchQuery !== 'undefined' && quizManagerSearchQuery) {
+        filtered = filtered.filter(q =>
+          (q.title || '').toLowerCase().includes(quizManagerSearchQuery) ||
+          (q.subject || '').toLowerCase().includes(quizManagerSearchQuery) ||
+          (q.lesson || '').toLowerCase().includes(quizManagerSearchQuery)
+        );
+      }
+      if (typeof quizManagerFilterStrand !== 'undefined' && quizManagerFilterStrand) {
+        filtered = filtered.filter(q => (q.strand || '').toLowerCase().includes(quizManagerFilterStrand.toLowerCase()));
+      }
+      if (typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus) {
+        filtered = filtered.filter(q => String(q.status || '').toLowerCase() === quizManagerFilterStatus.toLowerCase());
+      }
+      if (typeof quizManagerFilterSubject !== 'undefined' && quizManagerFilterSubject) {
+        filtered = filtered.filter(q => String(q.subject || '').toLowerCase() === quizManagerFilterSubject.toLowerCase());
+      }
+
       return `
-      <div class="section-hdr"><h2>Quiz Manager</h2>
-        <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
+      <div class="section-hdr">
+        <div>
+          <h2>Quiz Manager</h2>
+          <span style="font-size:12px;color:var(--text-muted);">Create, organize, test, and distribute assessments & interactive games</span>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button class="add-btn" style="background:var(--blue-light);color:var(--blue);" onclick="loadQuizzesFromDB()">${iconRefresh()} Refresh</button>
+          <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
+        </div>
       </div>
+
+      <!-- METRIC CARDS -->
+      <div class="card-grid" style="margin-bottom:20px;">
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon">${iconQuiz()}</div><div><div class="ic-sub">Total Quizzes</div><div class="ic-num">${totalCount}</div></div></div>
+          <p>Assigned to SHS students</p>
+        </div>
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon green">${iconCheck()}</div><div><div class="ic-sub">Active / Ongoing</div><div class="ic-num green">${activeCount}</div></div></div>
+          <p>Accepting student submissions</p>
+        </div>
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon gold">${iconClock()}</div><div><div class="ic-sub">Pending Approval</div><div class="ic-num gold">${pendingCount}</div></div></div>
+          <p>Awaiting Admin content review</p>
+        </div>
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon" style="background:#e0f2fe;color:#0284c7;">${iconGamepad()}</div><div><div class="ic-sub">Interactive Games</div><div class="ic-num" style="color:#0284c7;">${interactiveCount}</div></div></div>
+          <p>Gamified student quizzes</p>
+        </div>
+      </div>
+
+      <!-- SEARCH & FILTER TOOLBAR -->
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;background:#f8fafc;padding:12px 16px;border-radius:14px;border:1px solid #e2e8f0;">
+        <div style="display:flex;gap:8px;flex:1;min-width:240px;align-items:center;">
+          <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <select class="user-filter-select" onchange="setQuizManagerFilterStrand(this.value)">
+            <option value="">All Strands</option>
+            ${STRANDS.map(s => `<option value="${s}" ${typeof quizManagerFilterStrand !== 'undefined' && quizManagerFilterStrand === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+          <select class="user-filter-select" onchange="setQuizManagerFilterStatus(this.value)">
+            <option value="">All Statuses</option>
+            <option value="active" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'active' ? 'selected' : ''}>Active</option>
+            <option value="pending" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'pending' ? 'selected' : ''}>Pending</option>
+            <option value="closed" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'closed' ? 'selected' : ''}>Closed</option>
+          </select>
+          ${availableSubjects.length ? `
+          <select class="user-filter-select" onchange="setQuizManagerFilterSubject(this.value)">
+            <option value="">All Subjects</option>
+            ${availableSubjects.map(subj => `<option value="${escHtml(subj)}" ${typeof quizManagerFilterSubject !== 'undefined' && quizManagerFilterSubject === subj ? 'selected' : ''}>${escHtml(subj)}</option>`).join('')}
+          </select>` : ''}
+        </div>
+      </div>
+
+      <!-- QUIZ LIST -->
       <div class="quiz-list">
-        ${myQuizzes.length ? myQuizzes.map(q => `<div class="quiz-row"><div class="qz-info"><h4>${escHtml(q.title)}</h4><span>${escHtml(q.meta)}</span></div><span class="status-pill ${q.isDemo ? 'demo' : q.status === 'active' ? 'ongoing' : q.status === 'closed' ? 'done' : 'pending'}">${q.isDemo ? 'Demo' : q.status.charAt(0).toUpperCase() + q.status.slice(1)}</span></div>`).join('')
-          : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">You haven't created any quizzes yet.</p>`}
+        ${filtered.length ? filtered.map(q => {
+          const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+          const itemsCount = (q.questions || []).length;
+          const statusClass = q.isDemo ? 'demo' : q.status === 'active' ? 'ongoing' : q.status === 'closed' ? 'done' : 'pending';
+          const statusLabel = q.isDemo ? 'Demo' : (q.status || 'Active').charAt(0).toUpperCase() + (q.status || 'Active').slice(1);
+          const timeText = isInter
+            ? (q.timerPerQuestion ? `⏱️ ${q.timerPerQuestion}s/item` : 'Untimed')
+            : (q.timeLimitMinutes ? `⏱️ ${q.timeLimitMinutes} mins` : 'Untimed');
+          const dueText = q.dueDate ? `📅 Due: ${new Date(q.dueDate).toLocaleDateString()}` : '📅 No Expiration';
+
+          return `
+          <div class="quiz-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;gap:16px;flex-wrap:wrap;">
+            <div class="qz-info" style="min-width:240px;flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+                <h4 style="font-size:15px;font-weight:700;color:#0f172a;margin:0;">${escHtml(q.title)}</h4>
+                <span class="status-pill ${statusClass}">${statusLabel}</span>
+                ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;">🎮 Interactive</span>' : '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#f1f5f9;color:#475569;font-size:10px;font-weight:600;">📝 Standard</span>'}
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+                <span>📚 <strong>${escHtml(q.subject || 'General')}</strong></span>
+                <span>🎓 ${escHtml(q.strand || 'All Strands')} · ${escHtml(q.gradeLevel || 'Grade 11')}</span>
+                <span>📋 ${itemsCount} Item${itemsCount === 1 ? '' : 's'}</span>
+                <span>${timeText}</span>
+                <span>${dueText}</span>
+              </div>
+            </div>
+
+            <!-- ACTION BUTTONS -->
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <button class="table-act-btn take" onclick="openTakeQuizModal('${q.id}')" title="Preview Quiz Questions">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Preview
+              </button>
+              ${isInter ? `
+              <button class="table-act-btn" style="background:linear-gradient(135deg,#0284c7,#8b5cf6);color:#fff;border:none;" onclick="openInteractiveQuiz('${q.id}')" title="Play Interactive Game Mode">
+                🎮 Play Game
+              </button>` : ''}
+              <button class="table-act-btn review" onclick="setAnalysisQuiz('${q.id}')" title="View Question Accuracy & Psychometrics">
+                📊 Item Analysis
+              </button>
+
+              ${q.status === 'active' ? `
+                <button class="table-act-btn" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;" onclick="toggleQuizStatus('${q.id}', 'closed')" title="Close Quiz submissions">
+                  Close
+                </button>
+              ` : q.status === 'closed' ? `
+                <button class="table-act-btn" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;" onclick="toggleQuizStatus('${q.id}', 'active')" title="Re-open Quiz submissions">
+                  Activate
+                </button>
+              ` : ROLE === 'admin' ? `
+                <button class="table-act-btn take" onclick="approveQuiz('${q.id}')">Approve</button>
+                <button class="table-act-btn" style="color:#dc2626;" onclick="rejectQuiz('${q.id}')">Reject</button>
+              ` : ''}
+
+              <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 10px;" onclick="deleteQuiz('${q.id}')" title="Delete Quiz">
+                ${iconTrash()}
+              </button>
+            </div>
+          </div>`;
+        }).join('')
+          : `
+          <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:14px;border:1px dashed #cbd5e1;">
+            <div style="font-size:36px;margin-bottom:12px;">📝</div>
+            <h3 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:6px;">No Quizzes Found</h3>
+            <p style="color:var(--text-muted);font-size:13px;max-width:420px;margin:0 auto 16px;">
+              ${(typeof quizManagerSearchQuery !== 'undefined' && quizManagerSearchQuery) ? 'No quizzes match your search criteria. Try clearing filters.' : 'You haven\'t created any quizzes yet. Click "Create Quiz" to generate one from your PDF or syllabus!'}
+            </p>
+            <button class="add-btn" style="margin:0 auto;" onclick="openQuizModal()">${iconPlus()} Create First Quiz</button>
+          </div>
+          `}
       </div>`;
     }
 
     case 'analysis': {
-      const myQuizzesForAnalysis = customQuizzes.filter(q => q.createdBy === CURRENT_PROFILE.id);
-      if (!myQuizzesForAnalysis.length) {
-        return `<div class="section-hdr"><h2>Item Analysis Report</h2></div>
-          <p style="padding:20px;color:var(--text-muted);font-size:13px;">You haven't created any quizzes yet — create one in Quiz Manager first.</p>`;
+      let myQuizzesForAnalysis = customQuizzes.slice();
+      if (ROLE === 'teacher') {
+        const myQuizzes = customQuizzes.filter(q => 
+          !q.createdBy || 
+          q.createdBy === CURRENT_PROFILE?.id || 
+          q.createdBy === CURRENT_PROFILE?.dbId || 
+          q.isDemo ||
+          ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
+        );
+        myQuizzesForAnalysis = myQuizzes.length ? myQuizzes : customQuizzes;
       }
-      if (!analysisSelectedQuizId || !myQuizzesForAnalysis.some(q => q.id === analysisSelectedQuizId)) {
-        analysisSelectedQuizId = myQuizzesForAnalysis[0].id;
-      }
-      const selectedQuiz = myQuizzesForAnalysis.find(q => q.id === analysisSelectedQuizId);
-      if (!(analysisSelectedQuizId in analysisAttemptsCache)) loadAttemptsForAnalysis(analysisSelectedQuizId);
+      const displayQuizzes = myQuizzesForAnalysis.length ? myQuizzesForAnalysis : customQuizzes;
 
-      const attempts = analysisAttemptsCache[analysisSelectedQuizId] || [];
+      if (!displayQuizzes.length) {
+        return `
+        <div class="section-hdr">
+          <div>
+            <h2>Item Analysis Report</h2>
+            <span style="font-size:12px;color:var(--text-muted);">Question-level psychometrics and difficulty metrics</span>
+          </div>
+          <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
+        </div>
+        <div class="announcement-card">
+          <h3>No Quizzes Found</h3>
+          <p style="color:var(--text-muted);font-size:13px;margin-top:6px;">You haven't created any quizzes yet — create one in Quiz Manager first to view student performance and question difficulty metrics.</p>
+        </div>`;
+      }
+
+      if (!analysisSelectedQuizId || !displayQuizzes.some(q => String(q.id) === String(analysisSelectedQuizId))) {
+        analysisSelectedQuizId = displayQuizzes[0].id;
+      }
+      const selectedQuiz = displayQuizzes.find(q => String(q.id) === String(analysisSelectedQuizId)) || displayQuizzes[0];
+      if (!selectedQuiz) {
+        return `<div class="section-hdr"><h2>Item Analysis Report</h2></div><p style="padding:20px;">No quiz selected.</p>`;
+      }
+
+      // Fetch attempts if not cached yet
+      if (!(analysisSelectedQuizId in analysisAttemptsCache)) {
+        loadAttemptsForAnalysis(analysisSelectedQuizId);
+      }
+
+      const attempts = (typeof getAttemptsForAnalysis === 'function')
+        ? getAttemptsForAnalysis(analysisSelectedQuizId, analysisSectionFilter)
+        : (analysisAttemptsCache[analysisSelectedQuizId] || []);
+
       const rows = buildAnalysisRows(selectedQuiz, attempts);
       const attemptCount = attempts.length;
-      const avgScore = attemptCount
-        ? Math.round(attempts.reduce((sum, a) => sum + (a.total_items ? (a.score / a.total_items) * 100 : 0), 0) / attemptCount)
+      const validScores = attempts.map(a => a.total_items ? (a.score / a.total_items) * 100 : (a.score_percentage || 0));
+      const avgScore = validScores.length
+        ? Math.round(validScores.reduce((sum, v) => sum + v, 0) / validScores.length)
         : null;
+      const highestScore = validScores.length ? Math.round(Math.max(...validScores)) : null;
+      const lowestScore = validScores.length ? Math.round(Math.min(...validScores)) : null;
+      const passingCount = validScores.filter(s => s >= 75).length;
+      const passRate = validScores.length ? Math.round((passingCount / validScores.length) * 100) : null;
 
       return `
-      <div class="section-hdr"><h2>Item Analysis Report</h2>
-        <div style="display:flex;gap:10px;align-items:center;">
+      <div class="section-hdr">
+        <div>
+          <h2>Item Analysis Report</h2>
+          <span style="font-size:12px;color:var(--text-muted);">Psychometric item discrimination, accuracy rates, and question difficulty breakdown</span>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <select class="user-filter-select" onchange="setAnalysisSectionFilter(this.value)">
-            <option value="">All Sections (Demo)</option>
-            ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec} (Demo)</option>`).join('')}
+            <option value="">All Handled Sections</option>
+            ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
           </select>
           <select class="user-filter-select" onchange="setAnalysisQuiz(this.value)">
-            ${myQuizzesForAnalysis.map(q => `<option value="${q.id}" ${q.id === analysisSelectedQuizId ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
+            ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
           </select>
+          <button class="add-btn" style="background:var(--blue-light);color:var(--blue);" onclick="loadAttemptsForAnalysis('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
         </div>
       </div>
-      <div class="announcement-card" style="margin-bottom:0;">
-        <h3>${escHtml(selectedQuiz.title)}</h3>
-        <p>${attemptCount} submission${attemptCount === 1 ? '' : 's'}${analysisSectionFilter ? ' · ' + escHtml(analysisSectionFilter) + ' (Demo)' : ''} · ${escHtml(selectedQuiz.status)}${attemptCount ? ' · Average Score: ' + avgScore + '%' : ''}</p>
-        <div class="ann-meta">Recomputed live from actual submitted quiz attempts — refreshes each time you open this page.</div>
+
+      <!-- PERFORMANCE STAT CARDS -->
+      <div class="card-grid" style="margin-bottom:20px;">
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">Submissions</div><div class="ic-num">${attemptCount}</div></div></div>
+          <p>${analysisSectionFilter ? `Filtered for ${escHtml(analysisSectionFilter)}` : 'Across all class sections'}</p>
+        </div>
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Class Average</div><div class="ic-num green">${avgScore !== null ? avgScore + '%' : '—'}</div></div></div>
+          <p>${passRate !== null ? `${passRate}% passing rate (≥ 75%)` : 'No attempts recorded'}</p>
+        </div>
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon gold">${iconChart()}</div><div><div class="ic-sub">Score Range</div><div class="ic-num gold">${highestScore !== null ? `${highestScore}% / ${lowestScore}%` : '—'}</div></div></div>
+          <p>Highest vs lowest student score</p>
+        </div>
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon">${iconQuiz()}</div><div><div class="ic-sub">Total Items</div><div class="ic-num">${rows.length}</div></div></div>
+          <p>${selectedQuiz.type === 'interactive' ? '🎮 Interactive Mode' : '📝 Standard Assessment'}</p>
+        </div>
       </div>
+
+      <!-- QUIZ OVERVIEW CARD -->
+      <div class="announcement-card" style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div>
+            <h3 style="margin-bottom:4px;">${escHtml(selectedQuiz.title)}</h3>
+            <p style="margin:0;font-size:13px;color:var(--text-muted);">
+              Subject: <strong>${escHtml(selectedQuiz.subject || 'General')}</strong> · Strand: <strong>${escHtml(selectedQuiz.strand || 'All')}</strong> · Target Grade: <strong>${escHtml(selectedQuiz.gradeLevel || 'Grade 11')}</strong>
+            </p>
+          </div>
+          <span class="status-pill ongoing">${escHtml(selectedQuiz.status || 'Active')}</span>
+        </div>
+        <div class="ann-meta" style="margin-top:8px;">Live psychometric breakdown recomputed from submitted student attempts.</div>
+      </div>
+
+      <!-- QUESTION ACCURACY TABLE -->
       <div class="score-table">
         <table>
-          <thead><tr><th>#</th><th>Question</th><th>Correct</th><th>Incorrect</th><th>% Correct</th><th>Difficulty</th></tr></thead>
+          <thead>
+            <tr>
+              <th style="width:40px;">#</th>
+              <th>Question & Type</th>
+              <th style="width:100px;text-align:center;">Correct</th>
+              <th style="width:100px;text-align:center;">Incorrect</th>
+              <th style="width:180px;">Accuracy Rate</th>
+              <th style="width:120px;text-align:center;">Difficulty</th>
+              <th>Key / Correct Answer</th>
+            </tr>
+          </thead>
           <tbody>
             ${rows.length ? rows.map((r, i) => `
               <tr>
-                <td>${i + 1}</td>
-                <td>${escHtml(r.label)}</td>
-                <td>${r.correct}</td>
-                <td>${r.incorrect}</td>
-                <td><span class="analysis-bar-wrap"><span class="analysis-bar ${r.pct >= 80 ? 'high' : r.pct < 50 ? 'low' : ''}" style="width:${r.pct}%"></span></span> ${r.pct}%</td>
-                <td style="color:${r.pct >= 80 ? '#059669' : r.pct < 50 ? '#dc2626' : '#2563eb'};font-weight:700;">${r.correct + r.incorrect === 0 ? '—' : r.pct >= 80 ? 'Easy' : r.pct < 50 ? 'Difficult' : 'Average'}</td>
+                <td style="font-weight:700;color:var(--blue);">${i + 1}</td>
+                <td>
+                  <div style="font-weight:600;color:#0f172a;margin-bottom:2px;">${escHtml(r.label)}</div>
+                  <span style="font-size:11px;color:var(--text-muted);text-transform:capitalize;">Type: ${escHtml(r.type.replace('_', ' '))}</span>
+                </td>
+                <td style="text-align:center;font-weight:700;color:#059669;">${r.correct}</td>
+                <td style="text-align:center;font-weight:700;color:#dc2626;">${r.incorrect}</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="analysis-bar-wrap" style="flex:1;"><span class="analysis-bar ${r.pct >= 80 ? 'high' : r.pct < 50 ? 'low' : ''}" style="width:${r.pct}%"></span></span>
+                    <span style="font-weight:700;font-size:12px;min-width:36px;">${r.pct}%</span>
+                  </div>
+                </td>
+                <td style="text-align:center;">
+                  <span class="status-pill ${r.diffBadge}" style="color:${r.diffColor};">${r.difficulty}</span>
+                </td>
+                <td style="font-size:12px;color:var(--text-secondary);font-weight:600;">
+                  ${escHtml(r.correctAnswer || '—')}
+                </td>
               </tr>`).join('')
-              : `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;">No submissions yet for this quiz.</td></tr>`}
+              : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">No question items found in this quiz.</td></tr>`}
           </tbody>
         </table>
       </div>`;
     }
+
 
 
 
@@ -1392,28 +1988,7 @@ function teacherPage(page) {
 
     case 'chats': return buildChatPage('teacher');
 
-    case 'profile': return `
-      <div class="section-hdr"><h2>My Profile</h2></div>
-      <div class="profile-form">
-        <div class="pf-field"><label>Full Name</label><input value="${escHtml(CURRENT_PROFILE.full_name)}"/></div>
-        <div class="pf-field"><label>Teacher ID</label><input value="${escHtml(CURRENT_PROFILE.school_id || CURRENT_PROFILE.id.slice(0,8))}" readonly/></div>
-        <div class="pf-field"><label>Handled Subjects</label><input value="${escHtml(CURRENT_PROFILE.subjects || 'N/A')}" readonly/></div>
-        <div class="pf-field"><label>Assigned Strand(s)</label><input value="${escHtml(CURRENT_PROFILE.strand || 'N/A')}" readonly/></div>
-        <div class="pf-field"><label>Assigned Section</label><input value="${escHtml(CURRENT_PROFILE.section || 'N/A')}" readonly/></div>
-        <div class="pf-field"><label>Email</label><input value="${escHtml(CURRENT_PROFILE.email || '')}" readonly/></div>
-        <div class="pf-field"><label>New Password</label><input type="password" placeholder="Leave blank to keep current"/></div>
-        <div class="pf-field" style="margin-top:6px;padding-top:14px;border-top:1px solid var(--blue-light);">
-          <label>Two-Factor Authentication (2FA)</label>
-          <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;line-height:1.4;">
-            Enhance account security with <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong>.
-          </p>
-          <button type="button" class="foot-btn-secondary" style="border-color:var(--blue);color:var(--blue);display:inline-flex;align-items:center;gap:6px;" onclick="openTwoFactorModal()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            Setup Authenticator 2FA
-          </button>
-        </div>
-        <button class="pf-save" onclick="showToast('Profile updated', 'success')">Save Changes</button>
-      </div>`;
+    case 'profile': return buildProfilePage('teacher');
 
     default: return '<p>Page not found.</p>';
   }
@@ -1482,34 +2057,9 @@ function adminPage(page) {
     }
 
     case 'materials': return `
-      <div class="section-hdr"><h2>Materials Manager</h2>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <select class="user-filter-select" onchange="setMaterialsStrandFilter(this.value)">
-            <option value="">All Strands</option>
-            ${STRANDS.map(s => `<option value="${s}" ${materialsStrandFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
-          </select>
-          <button class="add-btn" style="background:var(--blue-light);color:var(--blue);" onclick="loadMaterialsFromDB()">${iconRefresh()} Refresh</button>
-          <button class="add-btn" onclick="openMaterialModal()">${iconPlus()} Upload Material</button>
-        </div>
-      </div>
-      <div class="mm-tabs">
-        <button class="mm-tab ${materialsAdminTab === 'all' ? 'active' : ''}" onclick="setMaterialsAdminTab('all')">All${materialsData.length ? ` (${materialsData.length})` : ''}</button>
-        <button class="mm-tab ${materialsAdminTab === 'pending' ? 'active' : ''}" onclick="setMaterialsAdminTab('pending')">Pending${materialsData.filter(m=>m.status==='pending').length ? ` (${materialsData.filter(m=>m.status==='pending').length})` : ''}</button>
-        <button class="mm-tab ${materialsAdminTab === 'approved' ? 'active' : ''}" onclick="setMaterialsAdminTab('approved')">Approved${materialsData.filter(m=>m.status==='approved').length ? ` (${materialsData.filter(m=>m.status==='approved').length})` : ''}</button>
-      </div>
-      <div id="materialsListWrap">${renderMaterialsList('admin')}</div>`;
+      <div id="materialsListWrap">${renderMaterialsManagerPage('admin')}</div>`;
 
-    case 'approval': return `
-      <div class="section-hdr"><h2>Content Approval</h2>
-        <button class="add-btn" onclick="loadMaterialsFromDB()">${iconRefresh()} Refresh</button>
-      </div>
-      <div class="announcement-card" style="margin-bottom:4px;">
-        <h3>Approval Queue</h3>
-        <p>All materials and quizzes submitted by teachers require your approval before they become visible to students.</p>
-      </div>
-      <div id="approvalListWrap">
-        ${renderApprovalMaterialRows()}
-      </div>`;
+    case 'approval': return `<div class="ca-page" id="approvalListWrap">${renderApprovalMaterialRows()}</div>`;
 
     case 'users': return `
       <div class="section-hdr"><h2>User Management</h2>
@@ -1722,27 +2272,11 @@ function adminPage(page) {
 
     case 'classrec': return teacherPage('classrec');
 
-    case 'profile': return `
-      <div class="section-hdr"><h2>My Profile</h2></div>
-      <div class="profile-form">
-        <div class="pf-field"><label>Full Name</label><input value="${escHtml(CURRENT_PROFILE.full_name)}"/></div>
-        <div class="pf-field"><label>Admin ID</label><input value="${escHtml(CURRENT_PROFILE.school_id || CURRENT_PROFILE.id.slice(0,8))}" readonly/></div>
-        <div class="pf-field"><label>Position</label><input value="SHS Department Head" readonly/></div>
-        <div class="pf-field"><label>Managed School</label><input value="Haven of Wisdom Academy, Inc." readonly/></div>
-        <div class="pf-field"><label>Email</label><input value="${escHtml(CURRENT_PROFILE.email || '')}"/></div>
-        <div class="pf-field"><label>New Password</label><input type="password" placeholder="Leave blank to keep current"/></div>
-        <div class="pf-field" style="margin-top:6px;padding-top:14px;border-top:1px solid var(--blue-light);">
-          <label>Two-Factor Authentication (2FA)</label>
-          <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px;line-height:1.4;">
-            Enhance administrative account security with <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong>.
-          </p>
-          <button type="button" class="foot-btn-secondary" style="border-color:var(--blue);color:var(--blue);display:inline-flex;align-items:center;gap:6px;" onclick="openTwoFactorModal()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            Setup Authenticator 2FA
-          </button>
-        </div>
-        <button class="pf-save" onclick="showToast('Profile updated', 'success')">Save Changes</button>
-      </div>`;
+    case 'profile': return buildProfilePage('admin');
+
+    case 'quiz': return teacherPage('quiz');
+    case 'quizzes': return teacherPage('quiz');
+    case 'analysis': return teacherPage('analysis');
 
     default: return '<p>Page not found.</p>';
   }

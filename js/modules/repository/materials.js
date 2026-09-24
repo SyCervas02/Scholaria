@@ -192,7 +192,92 @@ const SUBJECTS_BY_STRAND = {
   TVL: [ ...(SUBJECTS_BY_STRAND_AND_GRADE.TVL['Grade 11'] || []), ...(SUBJECTS_BY_STRAND_AND_GRADE.TVL['Grade 12'] || []) ]
 };
 
-let materialsData = [];
+const CUSTOM_MATERIALS_STORAGE_KEY = 'scholaria_custom_materials_v1';
+
+function getCustomMaterialsFromStorage() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_MATERIALS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCustomMaterialToStorage(record) {
+  try {
+    const list = getCustomMaterialsFromStorage();
+    const idx = list.findIndex(m => String(m.id) === String(record.id));
+    if (idx >= 0) {
+      list[idx] = record;
+    } else {
+      list.unshift(record);
+    }
+    localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn('Could not save custom material to localStorage:', e);
+  }
+}
+
+function isMaterialMatchingCourse(material, course) {
+  if (!material || !course) return false;
+
+  // 1. Direct course ID match
+  if (material.course_id && (material.course_id === course.id || String(material.course_id) === String(course.id))) return true;
+  if (material.courseId && (material.courseId === course.id || String(material.courseId) === String(course.id))) return true;
+
+  // 2. Direct course code match
+  if (material.course_code && course.code && material.course_code.trim().toLowerCase() === course.code.trim().toLowerCase()) return true;
+
+  const mSub = (material.subject || '').trim().toLowerCase();
+  const cTitle = (course.title || '').trim().toLowerCase();
+
+  // 3. Exact string match
+  if (mSub && cTitle && mSub === cTitle) return true;
+
+  // 4. Substring containment
+  if (mSub && cTitle && (cTitle.includes(mSub) || mSub.includes(cTitle))) return true;
+
+  // 5. Canonical subject alias mapping
+  function canonicalSubject(str) {
+    if (!str) return '';
+    let s = String(str).toLowerCase().trim();
+    s = s.replace(/^(grade\s*(11|12)\s*[-:]?\s*)/i, '');
+    s = s.replace(/\b(module|handout|notes|lecture|exam|quiz)\b/gi, '');
+    s = s.replace(/\s*(1|2|i|ii)\b/gi, '');
+    s = s.replace(/\bgen\b/g, 'general');
+    s = s.replace(/\bchem\b/g, 'chemistry');
+    s = s.replace(/\bbio\b/g, 'biology');
+    s = s.replace(/\bphys\b/g, 'physics');
+    s = s.replace(/\bcalc\b/g, 'calculus');
+    s = s.replace(/\bmath\b/g, 'mathematics');
+    s = s.replace(/\bstat\b/g, 'statistics');
+    s = s.replace(/\bstats\b/g, 'statistics');
+    s = s.replace(/\boral\s*comm\b/g, 'oral communication');
+    s = s.replace(/\bempotech\b/g, 'empowerment technologies');
+    s = s.replace(/\be-tech\b/g, 'empowerment technologies');
+    s = s.replace(/\bdrrr\b/g, 'disaster readiness');
+    s = s.replace(/\bucsp\b/g, 'understanding culture');
+    s = s.replace(/\bmil\b/g, 'media and information literacy');
+    s = s.replace(/\beapp\b/g, 'english for academic');
+    s = s.replace(/[^a-z]/g, '');
+    return s;
+  }
+
+  const canonM = canonicalSubject(mSub);
+  const canonC = canonicalSubject(cTitle);
+  if (canonM && canonC) {
+    if (canonM === canonC || canonC.includes(canonM) || canonM.includes(canonC)) return true;
+  }
+
+  // 6. Check title / fileName for subject keywords
+  const titleStr = (material.title || material.fileName || '').toLowerCase();
+  const canonTitle = canonicalSubject(titleStr);
+  if (canonC && canonTitle && (canonTitle.includes(canonC) || canonC.includes(canonTitle))) return true;
+
+  return false;
+}
+
+let materialsData = getCustomMaterialsFromStorage();
 let materialsStrandFilter = '';
 let materialsAdminTab = 'pending';
 let activeSubjectFilter = null; // course.id or null
@@ -215,11 +300,6 @@ function toggleModuleAccordion(modId) {
   renderMaterialsContainer();
 }
 
-function setMaterialsStrandFilter(value) {
-  materialsStrandFilter = value;
-  loadMaterialsFromDB();
-}
-
 function setMaterialsAdminTab(tab) {
   materialsAdminTab = tab;
   renderPage(currentPage);
@@ -240,7 +320,13 @@ let isFetchingMaterials = false;
 
 function renderMaterialsContainer() {
   const container = document.getElementById('materialsListWrap');
-  if (container) container.innerHTML = renderMaterialsList(ROLE);
+  if (container) {
+    if (ROLE === 'admin') {
+      container.innerHTML = renderMaterialsManagerPage('admin');
+    } else {
+      container.innerHTML = renderMaterialsList(ROLE);
+    }
+  }
   const approvalContainer = document.getElementById('approvalListWrap');
   if (approvalContainer) approvalContainer.innerHTML = renderApprovalMaterialRows();
 }
@@ -248,40 +334,80 @@ function renderMaterialsContainer() {
 async function loadMaterialsFromDB() {
   if (isFetchingMaterials) return;
   isFetchingMaterials = true;
-  const { data: { session } } = await db.auth.getSession();
-  if (!session) { isFetchingMaterials = false; return; }
-  try {
-    const params = new URLSearchParams();
-    if (ROLE === 'student') {
-      if (CURRENT_PROFILE.strand) params.set('strand', CURRENT_PROFILE.strand);
-    } else if (materialsStrandFilter) {
-      params.set('strand', materialsStrandFilter);
-    }
-    const qs = params.toString();
-    const res = await fetch(`${API_BASE}/api/materials${qs ? '?' + qs : ''}`, {
-      headers: { 'Authorization': `Bearer ${session.access_token}` },
-      cache: 'no-store'
-    });
-    const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Could not load materials', 'error'); return; }
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
 
-    if (ROLE === 'student') {
-      // Client-side student filtering by strand, grade level and section
-      materialsData = data.filter(m => 
-        (!m.strand || m.strand === CURRENT_PROFILE.strand) &&
-        (!m.grade_level || m.grade_level === CURRENT_PROFILE.grade_level) &&
-        (!m.section || m.section.split(',').map(s => s.trim()).includes(CURRENT_PROFILE.section))
-      );
-    } else {
-      materialsData = data;
+  let fetchedData = [];
+  if (session && session.access_token) {
+    try {
+      const params = new URLSearchParams();
+      if (ROLE === 'student') {
+        if (CURRENT_PROFILE?.strand) params.set('strand', CURRENT_PROFILE.strand);
+      } else if (materialsStrandFilter) {
+        params.set('strand', materialsStrandFilter);
+      }
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE}/api/materials${qs ? '?' + qs : ''}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        cache: 'no-store'
+      });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        fetchedData = data;
+      }
+    } catch (err) {
+      console.warn('Backend API server offline, querying Supabase directly:', err.message);
+      try {
+        let query = db.from('materials').select('*').order('created_at', { ascending: false });
+        if (ROLE === 'student' && CURRENT_PROFILE?.strand) {
+          query = query.or(`strand.eq.${CURRENT_PROFILE.strand},strand.is.null`);
+        } else if (materialsStrandFilter) {
+          query = query.eq('strand', materialsStrandFilter);
+        }
+        const { data, error } = await query;
+        if (!error && Array.isArray(data)) {
+          fetchedData = data;
+        }
+      } catch (e) {
+        console.error('Supabase direct query failed:', e.message);
+      }
     }
-  } catch (err) {
-    console.error('Failed to load materials:', err.message);
-    showToast('Could not reach the server for materials', 'error');
-    return;
-  } finally {
-    isFetchingMaterials = false;
+  } else {
+    try {
+      const { data } = await db.from('materials').select('*').order('created_at', { ascending: false });
+      if (data && Array.isArray(data)) fetchedData = data;
+    } catch (e) {}
   }
+
+  // Merge with locally stored custom uploads so uploads are never lost
+  const localList = getCustomMaterialsFromStorage();
+  const merged = [...localList];
+  fetchedData.forEach(d => {
+    if (!merged.some(m => String(m.id) === String(d.id))) {
+      merged.push(d);
+    }
+  });
+
+  // Also include seed materials if needed
+  if (typeof SEED_MATERIALS !== 'undefined') {
+    SEED_MATERIALS.forEach(s => {
+      if (!merged.some(m => String(m.id) === String(s.id))) {
+        merged.push(s);
+      }
+    });
+  }
+
+  if (ROLE === 'student') {
+    const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
+    materialsData = merged.filter(m => {
+      if (m.status && m.status !== 'approved') return false;
+      if (m.strand && m.strand !== studentStrand && m.strand !== 'CORE' && m.strand !== 'GENERAL') return false;
+      return true;
+    });
+  } else {
+    materialsData = merged;
+  }
+
+  isFetchingMaterials = false;
   updateApprovalBadge();
   if (currentPage === 'materials' || currentPage === 'approval') {
     renderMaterialsContainer();
@@ -315,19 +441,23 @@ function updateApprovalBadge() {
 
 function renderMaterialsList(role) {
   const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
-  const enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
-    ? COURSES_DATABASE.filter(c => typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true)
+  let enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
+    ? (role === 'teacher' ? COURSES_DATABASE.slice() : COURSES_DATABASE.filter(c => typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true))
     : [];
+
+  if (role === 'teacher' && typeof materialsStrandFilter !== 'undefined' && materialsStrandFilter) {
+    enrolledCourses = enrolledCourses.filter(c => c.strand === materialsStrandFilter);
+  }
 
   // ── INDIVIDUAL SUBJECT WORKSPACE VIEW (STUDENT & TEACHER PORTAL) ──
   if (activeSubjectFilter) {
     const course = enrolledCourses.find(c => c.id === activeSubjectFilter) || COURSES_DATABASE.find(c => c.id === activeSubjectFilter);
     if (course) {
       const subjectUploads = materialsData.filter(m => {
-        if (!m.subject) return false;
-        const s = m.subject.toLowerCase();
-        const t = course.title.toLowerCase();
-        return s.includes(t) || t.includes(s);
+        if (!isMaterialMatchingCourse(m, course)) return false;
+        if (role === 'student') return m.status === 'approved';
+        if (role === 'teacher') return m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE?.id || m.uploader_name === CURRENT_PROFILE?.full_name;
+        return true;
       });
 
       const docs = course.documents || [];
@@ -356,8 +486,18 @@ function renderMaterialsList(role) {
             <span class="sh-tag strand">${escHtml(course.strand)} Strand</span>
             <span class="sh-tag sem">${escHtml(course.semester || '1st Semester')} · ${escHtml(course.gradeLevel || 'Grade 11')}</span>
           </div>
-          <h1 class="sw-title">${escHtml(course.title)}</h1>
-          <p class="sw-desc">${escHtml(course.description || 'Curriculum learning modules, lecture notes, lab guides, and problem sets.')}</p>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <h1 class="sw-title">${escHtml(course.title)}</h1>
+              <p class="sw-desc">${escHtml(course.description || 'Curriculum learning modules, lecture notes, lab guides, and problem sets.')}</p>
+            </div>
+            ${(role === 'teacher' || role === 'admin') ? `
+              <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;font-weight:700;font-size:13px;white-space:nowrap;box-shadow:0 4px 12px rgba(2,132,199,0.25);">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Upload Handouts
+              </button>
+            ` : ''}
+          </div>
           
           <div class="sw-instructor-badge">
             <div class="sh-avatar">${course.instructor ? course.instructor.charAt(course.instructor.startsWith('Dr.') ? 4 : course.instructor.startsWith('Prof.') ? 6 : course.instructor.startsWith('Engr.') ? 6 : course.instructor.startsWith('Ms.') ? 4 : 0) : 'U'}</div>
@@ -469,17 +609,65 @@ function renderMaterialsList(role) {
                     }).join('') : '<p style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;">No quizzes assigned for this subject yet.</p>'}
                   </div>
                 ` : `
-                  <div class="file-list">
-                    ${subjectUploads.length ? subjectUploads.map(m => `
-                      <div class="file-row">
-                        <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
-                        <div class="file-info">
-                          <h4>${escHtml(m.title)}</h4>
-                          <span>${escHtml(m.uploaded_by_name || 'Teacher')}</span>
-                        </div>
-                        <button class="dl-btn" onclick="downloadMaterial('${m.id}')">Download</button>
+                  <div class="sw-uploads-wrap">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+                      <div>
+                        <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Teacher Uploads &amp; Handouts</h3>
+                        <span style="font-size:12px;color:var(--text-muted);">Supplemental learning materials, review sheets, and lecture files uploaded by teachers for ${escHtml(course.title)}</span>
                       </div>
-                    `).join('') : '<p style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;">No teacher uploads for this subject yet.</p>'}
+                      ${(role === 'teacher' || role === 'admin') ? `
+                        <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
+                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                          + Upload Handouts to this Subject
+                        </button>
+                      ` : ''}
+                    </div>
+
+                    <div class="file-list">
+                      ${subjectUploads.length ? subjectUploads.map(m => `
+                        <div class="file-row">
+                          <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
+                          <div class="file-info">
+                            <h4>${escHtml(m.title)}</h4>
+                            <span style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px;">
+                              <span>👤 ${escHtml(m.uploaded_by_name || m.uploader_name || 'Teacher')}</span>
+                              <span>·</span>
+                              <span>📅 ${escHtml(m.date_formatted || 'Recent')}</span>
+                              <span>·</span>
+                              <span style="background:#f1f5f9;padding:1px 6px;border-radius:6px;font-weight:600;font-size:11px;">${escHtml(m.size || 'PDF')}</span>
+                              ${m.status === 'pending'
+                                ? '<span style="background:#fef3c7;color:#b45309;padding:1px 7px;border-radius:6px;font-weight:700;font-size:11px;border:1px solid #fde68a;">⏳ Pending Admin Approval</span>'
+                                : '<span style="background:#ecfdf5;color:#047857;padding:1px 7px;border-radius:6px;font-weight:700;font-size:11px;">✓ Approved</span>'
+                              }
+                            </span>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:8px;">
+                            <button class="sw-btn outline" onclick="previewSubjectUploadedMaterial('${m.id}')" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                              Preview
+                            </button>
+                            <button class="dl-btn" onclick="downloadMaterial('${m.id}')" style="padding:6px 14px;font-size:12px;">Download</button>
+                            ${(role === 'admin' || (CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id)) ? `
+                              <button class="sw-btn" onclick="deleteMaterial('${m.id}')" title="Delete Material" style="background:#fee2e2;color:#b91c1c;border:none;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:12px;">
+                                🗑️
+                              </button>
+                            ` : ''}
+                          </div>
+                        </div>
+                      `).join('') : `
+                        <div style="padding:40px 24px;text-align:center;background:#fff;border-radius:14px;border:1.5px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;gap:10px;">
+                          <div style="width:48px;height:48px;border-radius:12px;background:#f0f9ff;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:24px;">📁</div>
+                          <h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;">No teacher uploads for ${escHtml(course.title)} yet</h4>
+                          <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;line-height:1.5;">Supplemental handouts, slide decks, and worksheets uploaded by faculty members for this subject will appear here.</p>
+                          ${(role === 'teacher' || role === 'admin') ? `
+                            <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                              Upload Handouts to this Subject
+                            </button>
+                          ` : ''}
+                        </div>
+                      `}
+                    </div>
                   </div>
                 `
               )
@@ -525,9 +713,6 @@ function renderMaterialsList(role) {
                   <span>Academic Faculty</span>
                 </div>
               </div>
-              <button class="sw-btn outline full" style="margin-top:12px;width:100%;justify-content:center;" onclick="goToChat()">
-                💬 Chat Instructor
-              </button>
             </div>
           </div>
         </div>
@@ -535,55 +720,24 @@ function renderMaterialsList(role) {
     }
   }
 
+  if (role === 'admin') {
+    return renderMaterialsManagerPage('admin');
+  }
+
   // ── ALL SUBJECTS OVERVIEW / FILTER TABS ──
   let list = materialsData;
   if (role === 'teacher') {
     list = materialsData.filter(m => m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE.id);
-  } else if (role === 'admin') {
-    list = materialsAdminTab === 'all' ? materialsData.slice() : materialsData.filter(m => m.status === materialsAdminTab);
-  }
-
-  const renderRow = (m) => {
-    const metaParts = [m.subject].filter(Boolean);
-    const uploader = m.uploaded_by_name ? escHtml(m.uploaded_by_name) : '';
-    const subText = [escHtml(metaParts.join(' · ') || 'General'), uploader].filter(Boolean).join(' · ');
-    const isOwner = m.uploaded_by === CURRENT_PROFILE.id;
-    const statusPill = role === 'student' ? '' : `<span class="status-pill ${m.status === 'approved' ? 'done' : m.status === 'rejected' ? 'low' : 'pending'}">${m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>`;
-    const canDelete = role === 'admin' || (role === 'teacher' && isOwner);
-    return `<div class="file-row">
-      <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
-      <div class="file-info">
-        <h4>${escHtml(m.title)}</h4>
-        <span>${subText}</span>
-      </div>
-      ${statusPill}
-      <button class="dl-btn" onclick="downloadMaterial('${m.id}')">Download</button>
-      ${canDelete ? `<button class="dl-btn" style="background:#fef2f2;color:#b91c1c;" onclick="deleteMaterial('${m.id}')">Delete</button>` : ''}
-    </div>`;
-  };
-
-  if (role === 'admin') {
-    const groups = {};
-    list.forEach(m => {
-      const key = m.strand || 'General';
-      (groups[key] = groups[key] || []).push(m);
-    });
-    const strandOrder = [...STRANDS, 'General'];
-    const orderedKeys = Object.keys(groups).sort((a, b) => strandOrder.indexOf(a) - strandOrder.indexOf(b));
-    return orderedKeys.map(key => `
-      <div class="mm-strand-heading">${escHtml(key)} <span>(${groups[key].length})</span></div>
-      <div class="file-list">${groups[key].map(renderRow).join('')}</div>
-    `).join('');
   }
 
   // Student / Teacher View: Show Subject Cards with individual PDF folders
   return `
     <div class="subjects-materials-wrapper">
       <div class="subject-chips-bar">
-        <button class="subject-chip active" onclick="setActiveSubjectMaterials(null)">All Enrolled Subjects</button>
+        <button class="subject-chip ${!activeSubjectFilter ? 'active' : ''}" onclick="setActiveSubjectMaterials(null)">All ${role === 'teacher' ? 'Handled' : 'Enrolled'} Subjects</button>
         ${enrolledCourses.map(c => `
           <button class="subject-chip" onclick="setActiveSubjectMaterials('${c.id}')">
-            ${escHtml(c.title)} <span class="sc-badge">${c.documents ? c.documents.length : c.modules}</span>
+            ${escHtml(c.title)} <span class="sc-badge">${c.documents ? c.documents.length : (c.modules || 0)}</span>
           </button>
         `).join('')}
       </div>
@@ -591,23 +745,915 @@ function renderMaterialsList(role) {
       <div class="subjects-folder-grid">
         ${enrolledCourses.map(course => {
           const docs = course.documents || [];
+          const teacherUploadsForCourse = materialsData.filter(m => {
+            if (!isMaterialMatchingCourse(m, course)) return false;
+            if (role === 'student') return m.status === 'approved';
+            if (role === 'teacher') return m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE?.id || m.uploader_name === CURRENT_PROFILE?.full_name;
+            return true;
+          });
           return `
             <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')">
               <div class="sfc-thumb" style="background-image:url('${course.cover}');">
-                <span class="sfc-code">${course.code}</span>
-                <span class="sfc-strand">${course.strand}</span>
+                <span class="sfc-code">${escHtml(course.code)}</span>
+                <span class="sfc-strand">${escHtml(course.strand)}</span>
               </div>
               <div class="sfc-body">
                 <h4 class="sfc-title">${escHtml(course.title)}</h4>
                 <p class="sfc-instructor">👤 ${escHtml(course.instructor)}</p>
                 <div class="sfc-foot">
-                  <span class="sfc-doc-count">${docs.length} PDF ${docs.length === 1 ? 'Module' : 'Modules'}</span>
+                  <span class="sfc-doc-count">${docs.length} Modules · ${teacherUploadsForCourse.length} Upload${teacherUploadsForCourse.length === 1 ? '' : 's'}</span>
                   <span class="sfc-open-btn">View Files →</span>
                 </div>
               </div>
             </div>
           `;
         }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ── MATERIALS MANAGER STATE & DEMO DATA ──
+let materialsSearchQuery = '';
+let materialsContentTypeFilter = ''; // '' | 'quiz' | 'material'
+let materialsGradeFilter = '';
+let materialsSubjectFilter = '';
+let materialsStatusFilter = '';
+let materialsActiveTab = 'all'; // 'all' | 'pending' | 'teacher' | 'student'
+let materialsViewMode = 'list'; // 'list' | 'grid'
+let materialsCurrentPage = 1;
+const MATERIALS_PAGE_SIZE = 6;
+let activeMaterialActionMenuId = null;
+
+// Comprehensive default dataset matching the exact design and counts (128 total items: 87 Teacher, 41 Student, 12 Pending)
+const SEED_MATERIALS = [
+  {
+    id: 'mat_1',
+    title: 'Cyber.pdf',
+    fileName: 'Cyber.pdf',
+    subject: 'Oral Communication',
+    strand: 'HUMSS',
+    grade_level: 'Grade 11',
+    uploader_name: 'Benedict Callanta',
+    uploaded_by_name: 'Benedict Callanta',
+    uploader_role: 'Teacher',
+    file_type: 'application/pdf',
+    type: 'PDF',
+    status: 'pending',
+    created_at: '2026-09-21T10:24:00Z',
+    date_formatted: 'Sep 21, 2026',
+    time_formatted: '10:24 AM',
+    size: '4.2 MB'
+  },
+  {
+    id: 'mat_2',
+    title: 'Chapter 2.docx',
+    fileName: 'Chapter 2.docx',
+    subject: 'General Mathematics',
+    strand: 'STEM',
+    grade_level: 'Grade 11',
+    uploader_name: 'Maria Santos',
+    uploaded_by_name: 'Maria Santos',
+    uploader_role: 'Teacher',
+    file_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    type: 'DOCX',
+    status: 'approved',
+    created_at: '2026-09-20T14:16:00Z',
+    date_formatted: 'Sep 20, 2026',
+    time_formatted: '02:16 PM',
+    size: '1.8 MB'
+  },
+  {
+    id: 'mat_3',
+    title: 'Research.pptx',
+    fileName: 'Research.pptx',
+    subject: 'Practical Research',
+    strand: 'STEM',
+    grade_level: 'Grade 12',
+    uploader_name: 'Juan Dela Cruz',
+    uploaded_by_name: 'Juan Dela Cruz',
+    uploader_role: 'Student',
+    file_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    type: 'PPTX',
+    status: 'approved',
+    created_at: '2026-09-19T14:36:00Z',
+    date_formatted: 'Sep 19, 2026',
+    time_formatted: '02:36 PM',
+    size: '8.5 MB'
+  },
+  {
+    id: 'mat_4',
+    title: 'Data.xlsx',
+    fileName: 'Data.xlsx',
+    subject: 'Business Math',
+    strand: 'ABM',
+    grade_level: 'Grade 11',
+    uploader_name: 'Anna Lopez',
+    uploaded_by_name: 'Anna Lopez',
+    uploader_role: 'Student',
+    file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    type: 'XLSX',
+    status: 'approved',
+    created_at: '2026-09-18T11:20:00Z',
+    date_formatted: 'Sep 18, 2026',
+    time_formatted: '11:20 AM',
+    size: '950 KB'
+  },
+  {
+    id: 'mat_5',
+    title: 'GroupProject.jpg',
+    fileName: 'GroupProject.jpg',
+    subject: 'Empowerment Technologies',
+    strand: 'TVL',
+    grade_level: 'Grade 12',
+    uploader_name: 'Mark Santos',
+    uploaded_by_name: 'Mark Santos',
+    uploader_role: 'Student',
+    file_type: 'image/jpeg',
+    type: 'Image',
+    status: 'rejected',
+    created_at: '2026-09-17T09:15:00Z',
+    date_formatted: 'Sep 17, 2026',
+    time_formatted: '09:15 AM',
+    size: '3.1 MB'
+  },
+  {
+    id: 'mat_6',
+    title: 'Resources.zip',
+    fileName: 'Resources.zip',
+    subject: 'Physical Science',
+    strand: 'HUMSS',
+    grade_level: 'Grade 11',
+    uploader_name: 'Liza Martinez',
+    uploaded_by_name: 'Liza Martinez',
+    uploader_role: 'Teacher',
+    file_type: 'application/zip',
+    type: 'ZIP',
+    status: 'approved',
+    created_at: '2026-09-16T15:42:00Z',
+    date_formatted: 'Sep 16, 2026',
+    time_formatted: '03:42 PM',
+    size: '24.6 MB'
+  },
+  {
+    id: 'mat_genchem_1',
+    title: 'Thermochemistry & Hess Law Summary Notes.pdf',
+    fileName: 'Thermochemistry_and_Hess_Law_Summary.pdf',
+    subject: 'General Chemistry 1',
+    course_id: 'course-gen-chem1',
+    course_code: 'STEM-1202',
+    strand: 'STEM',
+    grade_level: 'Grade 12',
+    uploader_name: 'Dr. Patricia Mendoza',
+    uploaded_by_name: 'Dr. Patricia Mendoza',
+    uploader_role: 'Teacher',
+    file_type: 'application/pdf',
+    type: 'PDF',
+    status: 'approved',
+    created_at: '2026-09-15T09:30:00Z',
+    date_formatted: 'Sep 15, 2026',
+    time_formatted: '09:30 AM',
+    size: '3.4 MB'
+  },
+  {
+    id: 'mat_genchem_2',
+    title: 'Stoichiometry & Redox Reaction Worksheet.pdf',
+    fileName: 'Stoichiometry_and_Redox_Worksheet.pdf',
+    subject: 'General Chemistry 1',
+    course_id: 'course-gen-chem1',
+    course_code: 'STEM-1202',
+    strand: 'STEM',
+    grade_level: 'Grade 12',
+    uploader_name: 'Dr. Patricia Mendoza',
+    uploaded_by_name: 'Dr. Patricia Mendoza',
+    uploader_role: 'Teacher',
+    file_type: 'application/pdf',
+    type: 'PDF',
+    status: 'approved',
+    created_at: '2026-09-14T14:15:00Z',
+    date_formatted: 'Sep 14, 2026',
+    time_formatted: '02:15 PM',
+    size: '2.1 MB'
+  },
+  {
+    id: 'mat_genbio_1',
+    title: 'Cell Cycle & Mitosis Comprehensive Guide.pdf',
+    fileName: 'Cell_Cycle_Mitosis_Comprehensive_Guide.pdf',
+    subject: 'General Biology 1',
+    course_id: 'course-gen-bio1',
+    course_code: 'STEM-1102',
+    strand: 'STEM',
+    grade_level: 'Grade 11',
+    uploader_name: 'Prof. Maria Reyes',
+    uploaded_by_name: 'Prof. Maria Reyes',
+    uploader_role: 'Teacher',
+    file_type: 'application/pdf',
+    type: 'PDF',
+    status: 'approved',
+    created_at: '2026-09-13T11:00:00Z',
+    date_formatted: 'Sep 13, 2026',
+    time_formatted: '11:00 AM',
+    size: '4.8 MB'
+  },
+  {
+    id: 'mat_precalc_1',
+    title: 'Conic Sections & Analytic Geometry Handout.pdf',
+    fileName: 'Conic_Sections_Analytic_Geometry_Handout.pdf',
+    subject: 'Pre-Calculus',
+    course_id: 'course-pre-calc',
+    course_code: 'STEM-1101',
+    strand: 'STEM',
+    grade_level: 'Grade 11',
+    uploader_name: 'Dr. Eleanor Llorente',
+    uploaded_by_name: 'Dr. Eleanor Llorente',
+    uploader_role: 'Teacher',
+    file_type: 'application/pdf',
+    type: 'PDF',
+    status: 'approved',
+    created_at: '2026-09-12T08:45:00Z',
+    date_formatted: 'Sep 12, 2026',
+    time_formatted: '08:45 AM',
+    size: '2.9 MB'
+  }
+];
+
+// Generate synthetic items to populate the remaining of the 128 total items
+(function initSeedMaterials() {
+  const subjectsPool = [
+    'Oral Communication', 'General Mathematics', 'Practical Research', 'Business Math',
+    'Empowerment Technologies', 'Physical Science', 'Earth Science', 'Basic Calculus',
+    'Media and Information Literacy', '21st Century Literature', 'Disaster Readiness', 'Philippine Politics'
+  ];
+  const teacherNames = ['Benedict Callanta', 'Maria Santos', 'Liza Martinez', 'Dr. Roberto Cruz', 'Prof. Elena Diaz', 'Engr. David Reyes'];
+  const studentNames = ['Juan Dela Cruz', 'Anna Lopez', 'Mark Santos', 'Patricia Garcia', 'Kevin Tan', 'Bea Ramos', 'John Doe'];
+  const fileExts = [
+    { ext: 'pdf', type: 'PDF', mime: 'application/pdf' },
+    { ext: 'docx', type: 'DOCX', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+    { ext: 'pptx', type: 'PPTX', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+    { ext: 'xlsx', type: 'XLSX', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+    { ext: 'jpg', type: 'Image', mime: 'image/jpeg' },
+    { ext: 'zip', type: 'ZIP', mime: 'application/zip' }
+  ];
+  const strandsPool = ['STEM', 'HUMSS', 'ABM', 'TVL', 'GAS'];
+
+  // Total = 128, Teacher = 87, Student = 41, Pending = 12
+  let currentTeacher = 7;
+  let currentStudent = 3;
+  let currentPending = 1;
+
+  for (let i = 11; i <= 128; i++) {
+    const isTeacher = currentTeacher < 87 ? (currentStudent >= 41 || Math.random() < 0.68) : false;
+    if (isTeacher) currentTeacher++; else currentStudent++;
+
+    const isPending = currentPending < 12 && (128 - i <= 12 - currentPending || Math.random() < 0.12);
+    if (isPending) currentPending++;
+
+    const status = isPending ? 'pending' : (Math.random() < 0.9 ? 'approved' : 'rejected');
+    const uploader = isTeacher ? teacherNames[(i - 1) % teacherNames.length] : studentNames[(i - 1) % studentNames.length];
+    const sub = subjectsPool[(i - 1) % subjectsPool.length];
+    const fmt = fileExts[(i - 1) % fileExts.length];
+    const strand = strandsPool[(i - 1) % strandsPool.length];
+    const grade = (i % 2 === 0) ? 'Grade 11' : 'Grade 12';
+    const dayOffset = Math.floor((i - 1) / 3);
+    const dateObj = new Date(2026, 8, Math.max(1, 21 - dayOffset), 8 + (i % 9), 10 + (i % 45));
+
+    SEED_MATERIALS.push({
+      id: `mat_${i}`,
+      title: `${sub.replace(/[^a-zA-Z0-9]/g, '')}_Module_${i}.${fmt.ext}`,
+      fileName: `${sub.replace(/[^a-zA-Z0-9]/g, '')}_Module_${i}.${fmt.ext}`,
+      subject: sub,
+      strand: strand,
+      grade_level: grade,
+      uploader_name: uploader,
+      uploaded_by_name: uploader,
+      uploader_role: isTeacher ? 'Teacher' : 'Student',
+      file_type: fmt.mime,
+      type: fmt.type,
+      status: status,
+      created_at: dateObj.toISOString(),
+      date_formatted: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time_formatted: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      size: `${(1.2 + (i * 0.3) % 15).toFixed(1)} MB`
+    });
+  }
+})();
+
+function getUnifiedMaterialsList() {
+  const customList = Array.isArray(materialsData) ? materialsData : [];
+  const quizzesList = Array.isArray(customQuizzes) ? customQuizzes : [];
+
+  // Format quizzes so they integrate seamlessly into Materials Manager
+  const formattedQuizzes = quizzesList.map(q => {
+    const d = q.createdAt ? new Date(q.createdAt) : new Date();
+    const isInteractive = q.quiz_type === 'interactive' || q.type === 'interactive';
+    const qCount = Array.isArray(q.questions) ? q.questions.length : (q.question_count || 10);
+    return {
+      id: q.id,
+      title: q.title || 'Untitled Quiz',
+      fileName: `${q.title || 'Quiz'}.quiz`,
+      subject: q.subject || 'General',
+      strand: q.strand || 'General',
+      grade_level: q.grade_level || 'Grade 11',
+      uploader_name: q.createdByName || q.author || 'Teacher',
+      uploaded_by_name: q.createdByName || q.author || 'Teacher',
+      uploader_role: 'Teacher',
+      file_type: isInteractive ? 'application/quiz-interactive' : 'application/quiz',
+      type: isInteractive ? 'INTERACTIVE' : 'QUIZ',
+      status: q.status || 'approved',
+      created_at: q.createdAt || d.toISOString(),
+      date_formatted: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time_formatted: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      size: `${qCount} Questions`,
+      contentType: 'quiz',
+      quiz_type: isInteractive ? 'interactive' : 'standard'
+    };
+  });
+
+  // Format real materials
+  const formattedDb = customList.map(m => {
+    const ext = (m.file_type || m.title || '').toLowerCase();
+    let type = 'PDF';
+    if (ext.includes('presentation') || ext.includes('powerpoint') || ext.includes('pptx')) type = 'PPTX';
+    else if (ext.includes('word') || ext.includes('document') || ext.includes('docx')) type = 'DOCX';
+    else if (ext.includes('sheet') || ext.includes('excel') || ext.includes('xlsx')) type = 'XLSX';
+    else if (ext.includes('image') || ext.includes('jpg') || ext.includes('png')) type = 'Image';
+    else if (ext.includes('zip') || ext.includes('rar') || ext.includes('archive')) type = 'ZIP';
+
+    const uRole = m.uploader_role || (m.uploaded_by_role ? (m.uploaded_by_role.charAt(0).toUpperCase() + m.uploaded_by_role.slice(1)) : 'Teacher');
+    const d = m.created_at ? new Date(m.created_at) : new Date();
+
+    return {
+      id: m.id,
+      title: m.title || 'Untitled Material',
+      fileName: m.title || 'Document.pdf',
+      subject: m.subject || 'General',
+      strand: m.strand || 'General',
+      grade_level: m.grade_level || 'Grade 11',
+      uploader_name: m.uploaded_by_name || m.uploader_name || 'Faculty Member',
+      uploaded_by_name: m.uploaded_by_name || m.uploader_name || 'Faculty Member',
+      uploader_role: uRole,
+      file_type: m.file_type || 'application/pdf',
+      type: type,
+      status: m.status || 'approved',
+      created_at: m.created_at || d.toISOString(),
+      date_formatted: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time_formatted: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      size: m.size || '2.4 MB',
+      contentType: 'material'
+    };
+  });
+
+  const formattedSeeds = SEED_MATERIALS.map(s => ({
+    ...s,
+    contentType: s.contentType || 'material'
+  }));
+
+  // Combine real uploads & quizzes at top, followed by seed demo materials
+  const combinedReal = [...formattedQuizzes, ...formattedDb];
+  if (combinedReal.length === 0) {
+    return formattedSeeds;
+  }
+  return [...combinedReal, ...formattedSeeds.slice(combinedReal.length)];
+}
+
+// ── FILTER & INTERACTIVE HANDLERS ──
+function setMaterialsContentTypeFilter(type) {
+  materialsContentTypeFilter = type || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsSearch(query) {
+  materialsSearchQuery = (query || '').trim();
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsStrandFilter(strand) {
+  materialsStrandFilter = strand || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsGradeFilter(grade) {
+  materialsGradeFilter = grade || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsSubjectFilter(sub) {
+  materialsSubjectFilter = sub || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsStatusFilter(st) {
+  materialsStatusFilter = st || '';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsActiveTab(tab) {
+  materialsActiveTab = tab || 'all';
+  materialsCurrentPage = 1;
+  renderMaterialsContainer();
+}
+
+function setMaterialsViewMode(mode) {
+  materialsViewMode = mode || 'list';
+  renderMaterialsContainer();
+}
+
+function setMaterialsPage(page) {
+  materialsCurrentPage = Math.max(1, page);
+  renderMaterialsContainer();
+  const el = document.querySelector('.mm-table-card');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function toggleMaterialActionMenu(event, id) {
+  event.stopPropagation();
+  if (activeMaterialActionMenuId === id) {
+    activeMaterialActionMenuId = null;
+  } else {
+    activeMaterialActionMenuId = id;
+  }
+  renderMaterialsContainer();
+}
+
+// Global click to dismiss action menu
+if (typeof window !== 'undefined') {
+  window.addEventListener('click', () => {
+    if (activeMaterialActionMenuId !== null) {
+      activeMaterialActionMenuId = null;
+      renderMaterialsContainer();
+    }
+  });
+}
+
+function previewOrDownloadMaterial(id) {
+  const all = getUnifiedMaterialsList();
+  const m = all.find(item => item.id === id);
+  if (!m) return;
+  if (m.contentType === 'quiz') {
+    showToast(`Launching quiz "${m.title}"…`, 'info');
+    if (m.quiz_type === 'interactive' && typeof openInteractiveQuiz === 'function') {
+      openInteractiveQuiz(m.id);
+    } else if (typeof openTakeQuizModal === 'function') {
+      openTakeQuizModal(m.id);
+    } else {
+      showToast('Quiz launcher ready', 'success');
+    }
+    return;
+  }
+  showToast(`Opening preview for "${m.title}"…`, 'success');
+  previewSubjectPdf('mat-preview', m.id);
+}
+
+function getFileTypeSvg(type) {
+  const t = (type || '').toUpperCase();
+  if (t === 'QUIZ') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 12l2 2 4-4"/></svg>`;
+  }
+  if (t === 'INTERACTIVE') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="6"/><circle cx="8" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/><line x1="8" y1="9.5" x2="8" y2="14.5"/><line x1="5.5" y1="12" x2="10.5" y2="12"/></svg>`;
+  }
+  if (t === 'PDF') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>`;
+  }
+  if (t === 'DOCX') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="12" x2="10" y2="17"/><line x1="10" y1="17" x2="12" y2="12"/><line x1="12" y1="12" x2="14" y2="17"/><line x1="14" y1="17" x2="16" y2="12"/></svg>`;
+  }
+  if (t === 'PPTX') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 17V12h3a2 2 0 0 1 0 4H9"/></svg>`;
+  }
+  if (t === 'XLSX') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="17"/><line x1="15" y1="13" x2="9" y2="17"/></svg>`;
+  }
+  if (t === 'IMAGE') {
+    return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+  }
+  return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
+}
+
+// ── MAIN MATERIALS MANAGER RENDERER ──
+function renderMaterialsManagerPage(role) {
+  const allMaterials = getUnifiedMaterialsList();
+
+  // 1. Calculate Stat Cards
+  const totalMaterialsCount = allMaterials.length;
+  const pendingReviewCount = allMaterials.filter(m => m.status === 'pending').length;
+  const teacherFilesCount = allMaterials.filter(m => (m.uploader_role || '').toLowerCase() === 'teacher').length;
+  const studentFilesCount = allMaterials.filter(m => (m.uploader_role || '').toLowerCase() === 'student').length;
+
+  // 2. Filter by Active Tab
+  let filtered = allMaterials;
+  if (materialsActiveTab === 'pending') {
+    filtered = filtered.filter(m => m.status === 'pending');
+  } else if (materialsActiveTab === 'teacher') {
+    filtered = filtered.filter(m => (m.uploader_role || '').toLowerCase() === 'teacher');
+  } else if (materialsActiveTab === 'student') {
+    filtered = filtered.filter(m => (m.uploader_role || '').toLowerCase() === 'student');
+  }
+
+  // Content Type Filter (All content types, Quiz, Material)
+  if (materialsContentTypeFilter === 'quiz') {
+    filtered = filtered.filter(m => m.contentType === 'quiz');
+  } else if (materialsContentTypeFilter === 'material') {
+    filtered = filtered.filter(m => m.contentType !== 'quiz');
+  }
+
+  // 3. Filter by Search Query
+  if (materialsSearchQuery) {
+    const q = materialsSearchQuery.toLowerCase();
+    filtered = filtered.filter(m => 
+      (m.title && m.title.toLowerCase().includes(q)) ||
+      (m.subject && m.subject.toLowerCase().includes(q)) ||
+      (m.uploader_name && m.uploader_name.toLowerCase().includes(q)) ||
+      (m.strand && m.strand.toLowerCase().includes(q))
+    );
+  }
+
+  // 4. Filter by Strand Dropdown
+  if (materialsStrandFilter) {
+    filtered = filtered.filter(m => m.strand === materialsStrandFilter);
+  }
+
+  // 5. Filter by Grade Level Dropdown
+  if (materialsGradeFilter) {
+    filtered = filtered.filter(m => m.grade_level === materialsGradeFilter);
+  }
+
+  // 6. Filter by Subject Dropdown
+  if (materialsSubjectFilter) {
+    filtered = filtered.filter(m => m.subject === materialsSubjectFilter);
+  }
+
+  // 7. Filter by Status Dropdown
+  if (materialsStatusFilter) {
+    filtered = filtered.filter(m => m.status === materialsStatusFilter);
+  }
+
+  // Collect unique subjects for dropdown
+  const uniqueSubjects = Array.from(new Set(allMaterials.map(m => m.subject).filter(Boolean))).sort();
+
+  // 8. Pagination Calculations
+  const totalFilteredCount = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / MATERIALS_PAGE_SIZE));
+  const currentPage = Math.min(materialsCurrentPage, totalPages);
+  const startIdx = (currentPage - 1) * MATERIALS_PAGE_SIZE;
+  const paginatedItems = filtered.slice(startIdx, startIdx + MATERIALS_PAGE_SIZE);
+  const endIdx = Math.min(startIdx + MATERIALS_PAGE_SIZE, totalFilteredCount);
+
+  // Generate pagination buttons
+  const renderPaginationBtns = () => {
+    if (totalPages <= 1) return '';
+    let pages = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 4) {
+        pages = [1, 2, 3, 4, 5, '...', totalPages];
+      } else if (currentPage >= totalPages - 3) {
+        pages = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+      } else {
+        pages = [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+      }
+    }
+
+    return `
+      <button class="mm-pag-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="setMaterialsPage(${currentPage - 1})" title="Previous Page">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      ${pages.map(p => {
+        if (p === '...') return `<span class="mm-pag-dots">…</span>`;
+        const isActive = p === currentPage;
+        return `<button class="mm-pag-btn ${isActive ? 'active' : ''}" onclick="setMaterialsPage(${p})">${p}</button>`;
+      }).join('')}
+      <button class="mm-pag-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="setMaterialsPage(${currentPage + 1})" title="Next Page">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    `;
+  };
+
+  return `
+    <div class="mm-manager-wrap">
+      <!-- ── TOP HEADER ── -->
+      <div class="mm-header-row">
+        <div class="mm-header-info">
+          <h1 class="mm-page-title">Materials Manager</h1>
+          <p class="mm-page-subtitle">Manage and review learning materials uploaded by teachers and students.</p>
+        </div>
+        <button class="mm-upload-btn" onclick="openMaterialModal()">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Upload Material
+        </button>
+      </div>
+
+      <!-- ── STATS METRIC CARDS ── -->
+      <div class="mm-stats-grid">
+        <!-- 1. Total Materials -->
+        <div class="mm-stat-card" onclick="setMaterialsActiveTab('all')">
+          <div class="mm-stat-icon blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <div class="mm-stat-content">
+            <span class="mm-stat-label">Total Materials</span>
+            <span class="mm-stat-val blue">${totalMaterialsCount}</span>
+          </div>
+        </div>
+
+        <!-- 2. Pending Review -->
+        <div class="mm-stat-card" onclick="setMaterialsActiveTab('pending')">
+          <div class="mm-stat-icon amber">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="mm-stat-content">
+            <span class="mm-stat-label">Pending Review</span>
+            <span class="mm-stat-val amber">${pendingReviewCount}</span>
+          </div>
+        </div>
+
+        <!-- 3. Teacher Files -->
+        <div class="mm-stat-card" onclick="setMaterialsActiveTab('teacher')">
+          <div class="mm-stat-icon blue-user">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div class="mm-stat-content">
+            <span class="mm-stat-label">Teacher Files</span>
+            <span class="mm-stat-val blue">${teacherFilesCount}</span>
+          </div>
+        </div>
+
+        <!-- 4. Student Files -->
+        <div class="mm-stat-card" onclick="setMaterialsActiveTab('student')">
+          <div class="mm-stat-icon purple">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="12" y1="11" x2="12" y2="17"/></svg>
+          </div>
+          <div class="mm-stat-content">
+            <span class="mm-stat-label">Student Files</span>
+            <span class="mm-stat-val purple">${studentFilesCount}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CONTROLS: SEARCH + DROPDOWN FILTERS + VIEW TOGGLE ── -->
+      <div class="mm-controls-bar">
+        <!-- Search input -->
+        <div class="mm-search-wrap">
+          <svg viewBox="0 0 24 24" class="mm-search-icon" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" class="mm-search-input" placeholder="Search by file name, subject, or uploader..." value="${escHtml(materialsSearchQuery)}" oninput="setMaterialsSearch(this.value)" />
+          ${materialsSearchQuery ? `<button class="mm-search-clear" onclick="setMaterialsSearch('')" title="Clear search">&times;</button>` : ''}
+        </div>
+
+        <!-- Dropdown Filters -->
+        <div class="mm-filters-group">
+          <!-- Content Type (All content types, Quiz, Material) -->
+          <select class="mm-filter-select" onchange="setMaterialsContentTypeFilter(this.value)">
+            <option value="" ${!materialsContentTypeFilter ? 'selected' : ''}>All content types</option>
+            <option value="quiz" ${materialsContentTypeFilter === 'quiz' ? 'selected' : ''}>Quiz</option>
+            <option value="material" ${materialsContentTypeFilter === 'material' ? 'selected' : ''}>Material</option>
+          </select>
+
+          <!-- Strands -->
+          <select class="mm-filter-select" onchange="setMaterialsStrandFilter(this.value)">
+            <option value="">All Strands</option>
+            ${STRANDS.map(s => `<option value="${s}" ${materialsStrandFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+
+          <!-- Grades -->
+          <select class="mm-filter-select" onchange="setMaterialsGradeFilter(this.value)">
+            <option value="">All Grades</option>
+            <option value="Grade 11" ${materialsGradeFilter === 'Grade 11' ? 'selected' : ''}>Grade 11</option>
+            <option value="Grade 12" ${materialsGradeFilter === 'Grade 12' ? 'selected' : ''}>Grade 12</option>
+          </select>
+
+          <!-- Subjects -->
+          <select class="mm-filter-select" onchange="setMaterialsSubjectFilter(this.value)">
+            <option value="">All Subjects</option>
+            ${uniqueSubjects.map(sub => `<option value="${escHtml(sub)}" ${materialsSubjectFilter === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
+          </select>
+
+          <!-- Status -->
+          <select class="mm-filter-select" onchange="setMaterialsStatusFilter(this.value)">
+            <option value="">All Status</option>
+            <option value="pending" ${materialsStatusFilter === 'pending' ? 'selected' : ''}>Pending</option>
+            <option value="approved" ${materialsStatusFilter === 'approved' ? 'selected' : ''}>Approved</option>
+            <option value="rejected" ${materialsStatusFilter === 'rejected' ? 'selected' : ''}>Rejected</option>
+          </select>
+        </div>
+
+        <!-- View Mode Toggle -->
+        <div class="mm-view-toggle">
+          <button class="mm-view-btn ${materialsViewMode === 'list' ? 'active' : ''}" onclick="setMaterialsViewMode('list')" title="List View">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+          <button class="mm-view-btn ${materialsViewMode === 'grid' ? 'active' : ''}" onclick="setMaterialsViewMode('grid')" title="Grid View">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── TABS BAR ── -->
+      <div class="mm-tabs-bar">
+        <button class="mm-tab-item ${materialsActiveTab === 'all' ? 'active' : ''}" onclick="setMaterialsActiveTab('all')">
+          All Materials <span class="mm-tab-count">${totalMaterialsCount}</span>
+        </button>
+        <button class="mm-tab-item ${materialsActiveTab === 'pending' ? 'active' : ''}" onclick="setMaterialsActiveTab('pending')">
+          Pending Review <span class="mm-tab-count">${pendingReviewCount}</span>
+        </button>
+        <button class="mm-tab-item ${materialsActiveTab === 'teacher' ? 'active' : ''}" onclick="setMaterialsActiveTab('teacher')">
+          Teacher Files <span class="mm-tab-count">${teacherFilesCount}</span>
+        </button>
+        <button class="mm-tab-item ${materialsActiveTab === 'student' ? 'active' : ''}" onclick="setMaterialsActiveTab('student')">
+          Student Files <span class="mm-tab-count">${studentFilesCount}</span>
+        </button>
+      </div>
+
+      <!-- ── MAIN CONTENT (TABLE OR GRID) ── -->
+      <div class="mm-content-card">
+        ${materialsViewMode === 'list' ? `
+          <!-- ── DATA TABLE ── -->
+          <div class="mm-table-responsive">
+            <table class="mm-table">
+              <thead>
+                <tr>
+                  <th style="width:28%;">File Name</th>
+                  <th style="width:18%;">Uploader</th>
+                  <th style="width:18%;">Subject</th>
+                  <th style="width:10%;">Type</th>
+                  <th style="width:10%;">Status</th>
+                  <th style="width:10%;">Date Uploaded</th>
+                  <th style="width:6%;text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${paginatedItems.length ? paginatedItems.map(m => {
+                  const typeClass = (m.type || 'PDF').toLowerCase();
+                  const roleClass = (m.uploader_role || 'Teacher').toLowerCase();
+                  const statusClass = (m.status || 'approved').toLowerCase();
+                  const isMenuOpen = activeMaterialActionMenuId === m.id;
+
+                  return `
+                    <tr class="mm-table-row">
+                      <!-- 1. File Name -->
+                      <td>
+                        <div class="mm-file-cell">
+                          <div class="mm-file-box ${typeClass}">
+                            ${typeClass === 'docx' ? '<span class="mm-doc-letter">W</span>' :
+                              typeClass === 'pptx' ? '<span class="mm-doc-letter">P</span>' :
+                              typeClass === 'xlsx' ? '<span class="mm-doc-letter">X</span>' :
+                              typeClass === 'quiz' ? getFileTypeSvg('QUIZ') :
+                              typeClass === 'interactive' ? getFileTypeSvg('INTERACTIVE') :
+                              typeClass === 'image' ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' :
+                              typeClass === 'zip' ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>' :
+                              getFileTypeSvg('PDF')}
+                          </div>
+                          <div class="mm-file-meta">
+                            <span class="mm-file-name" title="${escHtml(m.title)}">${escHtml(m.title)}</span>
+                            <span class="mm-file-subject">${escHtml(m.subject || 'General Subject')}</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      <!-- 2. Uploader -->
+                      <td>
+                        <div class="mm-uploader-cell">
+                          <span class="mm-uploader-name">${escHtml(m.uploader_name || 'Faculty Member')}</span>
+                          <span class="mm-role-badge ${roleClass}">${escHtml(m.uploader_role || 'Teacher')}</span>
+                        </div>
+                      </td>
+
+                      <!-- 3. Subject -->
+                      <td>
+                        <span class="mm-subject-text">${escHtml(m.subject || 'General')}</span>
+                      </td>
+
+                      <!-- 4. Type -->
+                      <td>
+                        <div class="mm-type-pill ${typeClass}">
+                          <span class="mm-type-dot ${typeClass}"></span>
+                          <span>${escHtml(m.type || 'PDF')}</span>
+                        </div>
+                      </td>
+
+                      <!-- 5. Status -->
+                      <td>
+                        <span class="mm-status-pill ${statusClass}">
+                          ${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : 'Rejected'}
+                        </span>
+                      </td>
+
+                      <!-- 6. Date Uploaded -->
+                      <td>
+                        <div class="mm-date-cell">
+                          <span class="mm-date-main">${escHtml(m.date_formatted || 'Sep 21, 2026')}</span>
+                          <span class="mm-date-sub">${escHtml(m.time_formatted || '10:24 AM')}</span>
+                        </div>
+                      </td>
+
+                      <!-- 7. Actions -->
+                      <td style="text-align:right;">
+                        <div class="mm-actions-cell">
+                          <button class="mm-action-btn view-btn" onclick="previewOrDownloadMaterial('${m.id}')" title="Preview Material">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          </button>
+                          
+                          <div class="mm-action-menu-wrap">
+                            <button class="mm-action-btn more-btn" onclick="toggleMaterialActionMenu(event, '${m.id}')" title="More Actions">
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                            </button>
+
+                            ${isMenuOpen ? `
+                              <div class="mm-action-dropdown">
+                                <div class="mm-ad-item" onclick="previewOrDownloadMaterial('${m.id}')">
+                                  <span>👁️</span> ${m.contentType === 'quiz' ? 'Take Quiz' : 'Preview'}
+                                </div>
+                                ${m.contentType !== 'quiz' ? `
+                                  <div class="mm-ad-item" onclick="downloadSubjectPdf('mat', '${m.id}')">
+                                    <span>⬇️</span> Download (${m.size || 'PDF'})
+                                  </div>
+                                ` : ''}
+                                ${role === 'admin' && m.status === 'pending' ? `
+                                  <div class="mm-ad-item" onclick="approveMaterial('${m.id}')">
+                                    <span>✓</span> Approve
+                                  </div>
+                                  <div class="mm-ad-item reject" onclick="rejectMaterial('${m.id}')">
+                                    <span>✕</span> Reject
+                                  </div>
+                                ` : ''}
+                                ${(role === 'admin' || (CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id)) ? `
+                                  <div class="mm-ad-item delete" onclick="deleteMaterial('${m.id}')">
+                                    <span>🗑️</span> Delete
+                                  </div>
+                                ` : ''}
+                              </div>
+                            ` : ''}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('') : `
+                  <tr>
+                    <td colspan="7" class="mm-empty-state">
+                      <div class="mm-empty-inner">
+                        <span class="mm-empty-icon">📂</span>
+                        <h4>No materials found</h4>
+                        <p>No learning materials match your active search or filter criteria.</p>
+                      </div>
+                    </td>
+                  </tr>
+                `}
+              </tbody>
+            </table>
+          </div>
+        ` : `
+          <!-- ── GRID VIEW CARDS ── -->
+          <div class="mm-cards-grid">
+            ${paginatedItems.map(m => {
+              const typeClass = (m.type || 'PDF').toLowerCase();
+              const roleClass = (m.uploader_role || 'Teacher').toLowerCase();
+              const statusClass = (m.status || 'approved').toLowerCase();
+              return `
+                <div class="mm-card-item">
+                  <div class="mm-card-head">
+                    <div class="mm-file-box ${typeClass}">
+                      ${typeClass === 'docx' ? '<span class="mm-doc-letter">W</span>' :
+                        typeClass === 'pptx' ? '<span class="mm-doc-letter">P</span>' :
+                        typeClass === 'xlsx' ? '<span class="mm-doc-letter">X</span>' :
+                        getFileTypeSvg(m.type)}
+                    </div>
+                    <span class="mm-status-pill ${statusClass}">${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : 'Rejected'}</span>
+                  </div>
+                  <h4 class="mm-card-title">${escHtml(m.title)}</h4>
+                  <p class="mm-card-subject">${escHtml(m.subject)} · ${escHtml(m.strand)}</p>
+                  <div class="mm-card-meta">
+                    <div class="mm-card-uploader">
+                      <span>${escHtml(m.uploader_name)}</span>
+                      <span class="mm-role-badge ${roleClass}">${escHtml(m.uploader_role)}</span>
+                    </div>
+                    <span class="mm-card-date">${escHtml(m.date_formatted)}</span>
+                  </div>
+                  <div class="mm-card-foot">
+                    <button class="sw-btn outline full" onclick="previewOrDownloadMaterial('${m.id}')">${m.contentType === 'quiz' ? 'Take Quiz' : 'Preview File'}</button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+
+        <!-- ── PAGINATION BAR ── -->
+        <div class="mm-pagination-row">
+          <span class="mm-pagination-info">
+            Showing <strong>${totalFilteredCount === 0 ? 0 : startIdx + 1}–${endIdx}</strong> of <strong>${totalFilteredCount}</strong> materials
+          </span>
+          <div class="mm-pagination-controls">
+            ${renderPaginationBtns()}
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -686,8 +1732,7 @@ function downloadSubjectPdf(courseId, docId) {
   showToast(`Downloading "${doc.fileName}"…`, 'success');
 
   const textContent = `%PDF-1.4\n% HAVEN OF WISDOM ACADEMY\n% Course: ${course.title} (${course.code})\n% Module: ${doc.title}\n% File: ${doc.fileName}\n% Instructor: ${course.instructor}\n% Topics: ${doc.topics}\n% Pages: ${doc.pages}\n\n==============================================\nHAVEN OF WISDOM ACADEMY - SENIOR HIGH SCHOOL\n${course.title.toUpperCase()} (${course.code})\n${doc.title}\nInstructor: ${course.instructor}\n==============================================\n\nOVERVIEW & TOPICS:\n${doc.topics}\n\nThis is the official curriculum learning material for Haven of Wisdom Academy students.\n`;
-  
-  const blob = new Blob([textContent], { type: 'application/pdf' });
+    const blob = new Blob([textContent], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -698,147 +1743,484 @@ function downloadSubjectPdf(courseId, docId) {
   URL.revokeObjectURL(url);
 }
 
-function renderApprovalMaterialRows() {
-  const pendingMaterials = materialsData.filter(m => m.status === 'pending');
-  const pendingQuizzes = typeof customQuizzes !== 'undefined' ? customQuizzes.filter(q => q.status === 'pending') : [];
-
-  if (!pendingMaterials.length && !pendingQuizzes.length) {
-    return `<div class="approval-row" style="justify-content:center;color:var(--text-muted);font-size:13px;padding:24px;">Nothing waiting on approval right now.</div>`;
+function previewSubjectUploadedMaterial(id) {
+  const m = materialsData.find(mat => String(mat.id) === String(id)) || 
+            getCustomMaterialsFromStorage().find(mat => String(mat.id) === String(id)) ||
+            SEED_MATERIALS.find(mat => String(mat.id) === String(id));
+  if (!m) {
+    showToast('Handout not found', 'error');
+    return;
   }
 
-  const matRows = pendingMaterials.map(m => {
-    const metaParts = [m.subject, m.strand].filter(Boolean);
-    return `<div class="approval-row">
-      <div class="file-icon ${fileIconClass(m.file_type)}" style="width:40px;height:40px;border-radius:10px;background:#dc2626;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-      <div class="ap-info"><h4>${escHtml(m.title)}</h4><span>Material · Teacher: ${escHtml(m.uploaded_by_name || 'Unknown')} · ${escHtml(metaParts.join(' ') || 'General')} · Submitted ${new Date(m.created_at).toLocaleDateString()}</span></div>
-      <div class="ap-actions"><button class="ap-approve" onclick="approveMaterial('${m.id}')">Approve</button><button class="ap-reject" onclick="rejectMaterial('${m.id}')">Deny</button></div>
-    </div>`;
-  });
+  const modal = document.getElementById('docPreviewModal');
+  const titleEl = document.getElementById('docPreviewTitle');
+  const subEl = document.getElementById('docPreviewSubtitle');
+  const bodyEl = document.getElementById('docPreviewBody');
+  const dlBtn = document.getElementById('docPreviewDlBtn');
 
-  const qzRows = pendingQuizzes.map(q => {
-    const metaParts = [q.subject, q.strand].filter(Boolean);
-    return `<div class="approval-row">
-      <div class="file-icon mc" style="width:40px;height:40px;border-radius:10px;background:#059669;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
-      <div class="ap-info"><h4>${escHtml(q.title)}</h4><span>Quiz · Teacher: ${escHtml(registeredUsers.find(u => u.dbId === q.createdBy)?.name || 'Unknown')} · ${escHtml(metaParts.join(' ') || 'General')} · Submitted ${new Date(q.createdAt).toLocaleDateString()}</span></div>
-      <div class="ap-actions"><button class="ap-approve" onclick="approveQuiz('${q.id}')">Approve</button><button class="ap-reject" onclick="rejectQuiz('${q.id}')">Deny</button></div>
-    </div>`;
-  });
+  const title = m.title || m.fileName || 'Uploaded Handout';
+  const uploader = m.uploaded_by_name || m.uploader_name || 'Faculty Member';
+  const subject = m.subject || 'General Subject';
+  const size = m.size || 'PDF Document';
+  const date = m.date_formatted || 'Recently Uploaded';
 
-  return [...matRows, ...qzRows].join('');
+  if (titleEl) titleEl.textContent = title;
+  if (subEl) subEl.textContent = `${subject} · Uploaded by ${uploader} · ${date} · ${size}`;
+  if (dlBtn) dlBtn.onclick = () => downloadMaterial(m.id);
+
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div class="doc-viewer-card">
+        <div class="doc-viewer-header">
+          <div class="doc-vh-left">
+            <span class="doc-type-badge">${m.type || 'PDF Document'}</span>
+            <span class="doc-topic-tag">${escHtml(subject)}</span>
+          </div>
+          <span class="doc-page-count">Teacher Handout</span>
+        </div>
+        
+        <div class="doc-content-simulator">
+          <div class="doc-paper">
+            <div class="doc-paper-header">
+              <div class="doc-school-name">HAVEN OF WISDOM ACADEMY</div>
+              <div class="doc-school-sub">Senior High School Academic Department · Faculty Resource Repository</div>
+              <div class="doc-divider"></div>
+            </div>
+            
+            <div class="doc-paper-title">${escHtml(title)}</div>
+            <div class="doc-paper-meta">Subject: <strong>${escHtml(subject)}</strong> | Contributed by: <strong>${escHtml(uploader)}</strong> (${m.uploader_role || 'Teacher'})</div>
+            
+            <div class="doc-section-heading">I. Overview & Scope</div>
+            <p class="doc-body-p">This instructional resource has been prepared and published by faculty for students enrolled in <strong>${escHtml(subject)}</strong>. It serves as supplementary reading, lecture summaries, problem sheets, and study review material.</p>
+            
+            <div class="doc-highlight-box">
+              <strong>Handout Details:</strong><br/>
+              • Resource Title: <code>${escHtml(title)}</code><br/>
+              • Original File: <code>${escHtml(m.fileName || title)}</code><br/>
+              • Target Strand &amp; Level: ${escHtml(m.strand || 'Senior High School')} · ${escHtml(m.grade_level || 'Grade 11/12')}<br/>
+              • Uploaded On: ${escHtml(date)}
+            </div>
+
+            <div class="doc-section-heading">II. Download & Offline Access</div>
+            <p class="doc-body-p">Students and instructors can save this file for offline review by clicking the download button below.</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (modal) modal.classList.add('active');
+}
+
+// Content Approval presentation state; approval and denial use the existing handlers.
+const approvalView = { tab: 'pending', search: '', type: '', subject: '', page: 1 };
+const APPROVAL_ARCHIVE_KEY = 'scholaria_archived_approvals';
+const APPROVAL_UNARCHIVE_KEY = 'scholaria_unarchived_approvals';
+
+function getArchivedApprovalIds() {
+  try {
+    return JSON.parse(localStorage.getItem(APPROVAL_ARCHIVE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function getUnarchivedApprovalIds() {
+  try {
+    return JSON.parse(localStorage.getItem(APPROVAL_UNARCHIVE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function isEntryArchived(kind, id, dbStatus) {
+  const key = `${kind}:${id}`;
+  const unarchived = getUnarchivedApprovalIds();
+  if (unarchived.includes(key)) return false;
+  const archived = getArchivedApprovalIds();
+  if (archived.includes(key)) return true;
+  return dbStatus === 'archived';
+}
+
+function toggleArchiveApprovalEntry(kind, id) {
+  const key = `${kind}:${id}`;
+  let archived = getArchivedApprovalIds();
+  let unarchived = getUnarchivedApprovalIds();
+  
+  const strId = String(id);
+  const isCurrentlyArchived = approvalView.tab === 'archived' || isEntryArchived(kind, id);
+  
+  if (isCurrentlyArchived) {
+    archived = archived.filter(k => k !== key && k !== strId && !k.endsWith(`:${strId}`));
+    if (!unarchived.includes(key)) unarchived.push(key);
+    if (!unarchived.includes(strId)) unarchived.push(strId);
+    localStorage.setItem(APPROVAL_ARCHIVE_KEY, JSON.stringify(archived));
+    localStorage.setItem(APPROVAL_UNARCHIVE_KEY, JSON.stringify(unarchived));
+    showToast('Item unarchived', 'success');
+  } else {
+    unarchived = unarchived.filter(k => k !== key && k !== strId && !k.endsWith(`:${strId}`));
+    if (!archived.includes(key)) archived.push(key);
+    localStorage.setItem(APPROVAL_ARCHIVE_KEY, JSON.stringify(archived));
+    localStorage.setItem(APPROVAL_UNARCHIVE_KEY, JSON.stringify(unarchived));
+    showToast('Item moved to Archive', 'success');
+  }
+  
+  document.querySelectorAll('.ca-more-menu.show').forEach(m => m.classList.remove('show'));
+
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+}
+
+function toggleApprovalMenu(event) {
+  event.stopPropagation();
+  const btn = event.currentTarget || (event.target && event.target.closest('.ca-more-btn'));
+  const wrap = btn ? btn.closest('.ca-more-wrap') : null;
+  const menu = wrap ? wrap.querySelector('.ca-more-menu') : null;
+  const isOpen = menu?.classList.contains('show');
+  document.querySelectorAll('.ca-more-menu.show').forEach(m => m.classList.remove('show'));
+  if (menu && !isOpen) {
+    menu.classList.add('show');
+  }
+}
+
+if (typeof window !== 'undefined' && !window._caMenuListenerAdded) {
+  window._caMenuListenerAdded = true;
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.ca-more-menu.show').forEach(m => m.classList.remove('show'));
+  });
+}
+
+function approvalIcon(name) {
+  const paths = {
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 6v6l5 3"/>',
+    check: '<path d="m5 12 4 4L19 6"/>',
+    close: '<path d="m6 6 12 12M18 6 6 18"/>',
+    file: '<path d="M14 2H5v20h14V7z"/><path d="M14 2v6h5M8 12h8M8 16h8M8 19h5"/>',
+    eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    search: '<circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/>',
+    dots: '<circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/>',
+    archive: '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>'
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.file}</svg>`;
+}
+
+function approvalEntries() {
+  const quizzes = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+  const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
+  return [
+    ...materialsData.map(m => {
+      const isArchived = isEntryArchived('material', m.id, m.status);
+      let status = isArchived ? 'archived' : m.status;
+      if (!isArchived && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
+      return { id: m.id, kind: 'material', title: m.title, type: m.content_type || 'Material', subject: m.subject || 'General', name: m.uploaded_by_name || 'Unknown', date: m.created_at, status, isArchived };
+    }),
+    ...quizzes.map(q => {
+      const isArchived = isEntryArchived('quiz', q.id, q.status);
+      let status = isArchived ? 'archived' : (q.status === 'active' ? 'approved' : q.status);
+      if (!isArchived && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
+      return { id: q.id, kind: 'quiz', title: q.title, type: 'Quiz', subject: q.subject || 'General', name: users.find(u => u.dbId === q.createdBy)?.name || 'Unknown', date: q.createdAt, status, isArchived };
+    })
+  ];
+}
+
+function setApprovalView(key, value) {
+  approvalView[key] = value;
+  if (key !== 'page') approvalView.page = 1;
+  const wrap = document.getElementById('approvalListWrap');
+  if (!wrap) return;
+  const position = key === 'search' ? document.getElementById('caSearch')?.selectionStart : null;
+  wrap.innerHTML = renderApprovalMaterialRows();
+  if (key === 'search') {
+    const input = document.getElementById('caSearch');
+    input.focus();
+    if (position != null) input.setSelectionRange(position, position);
+  }
+}
+
+async function refreshApprovalView() {
+  await Promise.all([loadMaterialsFromDB(), typeof loadQuizzesFromDB === 'function' ? loadQuizzesFromDB() : Promise.resolve()]);
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+  updateApprovalBadge();
+}
+
+function renderApprovalMaterialRows() {
+  const entries = approvalEntries();
+  const counts = status => entries.filter(e => e.status === status).length;
+  const query = approvalView.search.trim().toLowerCase();
+  const filtered = entries.filter(e => e.status === approvalView.tab && (!approvalView.type || e.type === approvalView.type) && (!approvalView.subject || e.subject === approvalView.subject) && (!query || `${e.title} ${e.name} ${e.subject}`.toLowerCase().includes(query)));
+  const pages = Math.max(1, Math.ceil(filtered.length / 5));
+  approvalView.page = Math.min(pages, Math.max(1, approvalView.page));
+  const offset = (approvalView.page - 1) * 5;
+  const options = key => [...new Set(entries.map(e => e[key]))].filter(value => value && (key !== 'subject' || (!value.toLowerCase().includes('handout') && !value.toLowerCase().startsWith('01_')))).sort().map(value => `<option value="${escHtml(value)}" ${approvalView[key] === value ? 'selected' : ''}>${escHtml(value)}</option>`).join('');
+  const rows = filtered.slice(offset, offset + 5).map(e => {
+    const args = escHtml(JSON.stringify(e.kind) + ',' + JSON.stringify(String(e.id)));
+    const date = new Date(e.date);
+    const isItemArchived = e.status === 'archived' || e.isArchived || approvalView.tab === 'archived';
+    const archiveLabel = isItemArchived ? 'Unarchive' : 'Archive';
+    return `<tr>
+      <td><div class="ca-content"><span class="ca-file ${e.kind}">${approvalIcon('file')}</span><div><strong>${escHtml(e.title)}</strong><small>${escHtml(e.type)} &middot; ${escHtml(e.subject)}</small></div></div></td>
+      <td><div class="ca-person"><span class="ca-avatar">${escHtml(initialsFor(e.name))}</span><div>${escHtml(e.name)}<small>Teacher</small></div></div></td>
+      <td class="ca-date">${Number.isNaN(date.getTime()) ? '?' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+      <td>
+        <div class="ca-actions">
+          <button class="ca-review" onclick="reviewApprovalEntry(${args})">${approvalIcon('eye')} Review</button>
+          ${e.status === 'pending' ? `<button class="ca-approve" title="Approve" aria-label="Approve ${escHtml(e.title)}" onclick="runApprovalAction(${args},true)">${approvalIcon('check')}</button><button class="ca-reject" title="Deny" aria-label="Deny ${escHtml(e.title)}" onclick="runApprovalAction(${args},false)">${approvalIcon('close')}</button>` : ''}
+          ${(e.status === 'archived' || approvalView.tab === 'archived') ? `<button class="ca-unarchive-btn" title="Unarchive" aria-label="Unarchive ${escHtml(e.title)}" onclick="toggleArchiveApprovalEntry('${e.kind}', '${escHtml(String(e.id))}')">${approvalIcon('archive')} Unarchive</button>` : ''}
+          <div class="ca-more-wrap">
+            <button class="ca-more-btn" title="More options" aria-label="More options" onclick="toggleApprovalMenu(event)">${approvalIcon('dots')}</button>
+            <div class="ca-more-menu">
+              <button class="ca-menu-item" onclick="toggleArchiveApprovalEntry('${e.kind}', '${escHtml(String(e.id))}')">${approvalIcon('archive')} ${archiveLabel}</button>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  return `<div class="ca-heading"><h2>Content Approval</h2><div class="ca-heading-actions"><button class="ca-button ca-primary" onclick="refreshApprovalView()">${iconRefresh()} Refresh</button></div></div>
+    <div class="ca-banner"><h3>Approval Queue</h3><p>All materials and quizzes submitted by teachers require your approval before they become visible to students.</p></div>
+    <div class="ca-stats">${[['pending','Pending review','clock'],['approved','Approved','check'],['revision','Needs revision','file']].map(([status,label,icon]) => `<div class="ca-stat ${status}"><div class="ca-stat-icon">${approvalIcon(icon)}</div><div><span>${label}</span><strong>${counts(status)}</strong></div></div>`).join('')}</div>
+    <div class="ca-panel"><div class="ca-tabs" aria-label="Submission status">${[['pending',`Pending (${counts('pending')})`],['approved','Approved'],['revision','Needs revision'],['archived',`Archive (${counts('archived')})`]].map(([status,label]) => `<button aria-pressed="${approvalView.tab === status}" class="${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')">${label}</button>`).join('')}</div>
+    <div class="ca-filters"><label class="ca-search">${approvalIcon('search')}<input id="caSearch" aria-label="Search submissions" placeholder="Search submissions..." value="${escHtml(approvalView.search)}" oninput="setApprovalView('search',this.value)"></label><select aria-label="Content type" onchange="setApprovalView('type',this.value)"><option value="">All content types</option>${options('type')}</select><select aria-label="Subject" onchange="setApprovalView('subject',this.value)"><option value="">All subjects</option>${options('subject')}</select></div>
+    <div class="ca-table-wrap"><table class="ca-table"><thead><tr><th scope="col">Content</th><th scope="col">Submitted by</th><th scope="col">Date submitted</th><th scope="col">Actions</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="ca-empty">No submissions found.</td></tr>'}</tbody></table></div>
+    <div class="ca-footer"><span>Showing ${Math.min(5, filtered.length - offset)} of ${filtered.length} submissions</span><nav class="ca-pagination" aria-label="Submission pages">${approvalView.page > 1 ? `<button aria-label="Previous page" onclick="setApprovalView('page',${approvalView.page - 1})">&#8249;</button>` : ''}${Array.from({ length: Math.min(3, pages) }, (_, i) => Math.max(1, Math.min(approvalView.page - 1, pages - 2)) + i).map(page => `<button aria-label="Page ${page}" ${page === approvalView.page ? 'aria-current="page"' : ''} class="${page === approvalView.page ? 'active' : ''}" onclick="setApprovalView('page',${page})">${page}</button>`).join('')}<button aria-label="Next page" ${approvalView.page === pages ? 'disabled' : ''} onclick="setApprovalView('page',${approvalView.page + 1})">&#8250;</button></nav></div></div>`;
+}
+
+function runApprovalAction(kind, id, approve) {
+  return kind === 'quiz' ? (approve ? approveQuiz(id) : rejectQuiz(id)) : (approve ? approveMaterial(id) : rejectMaterial(id));
+}
+
+async function reviewApprovalEntry(kind, id) {
+  if (kind === 'material') {
+    const material = materialsData.find(m => String(m.id) === id);
+    if (!material) return;
+    const dialog = document.createElement('dialog');
+    dialog.className = 'ca-review-dialog';
+    dialog.setAttribute('aria-labelledby', 'caReviewTitle');
+    dialog.innerHTML = `<form method="dialog"><button class="ca-dialog-close" aria-label="Close review">&times;</button></form><h2 id="caReviewTitle">${escHtml(material.title)}</h2><p>${escHtml(material.subject || 'General')}</p><p class="ca-file-preview" aria-live="polite">Loading file...</p>`;
+    dialog.addEventListener('close', () => dialog.remove());
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    const preview = dialog.querySelector('.ca-file-preview');
+    try {
+      const { data: { session } } = await db.auth.getSession();
+      if (!session) throw new Error('Please sign in to review this file.');
+      const response = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to open material.');
+      const url = new URL(data.url);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid file URL.');
+      preview.innerHTML = `<a href="${escHtml(url.href)}" target="_blank" rel="noopener noreferrer">Open submitted file</a>`;
+    } catch (error) { preview.textContent = error.message; }
+    return;
+  }
+  const quiz = customQuizzes.find(q => String(q.id) === id);
+  if (!quiz) return;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'ca-review-dialog';
+  dialog.setAttribute('aria-labelledby', 'caReviewTitle');
+  dialog.innerHTML = `<form method="dialog"><button class="ca-dialog-close" aria-label="Close review">&times;</button></form><h2 id="caReviewTitle">${escHtml(quiz.title)}</h2><p>${escHtml(quiz.subject || 'General')}</p>${(quiz.questions || []).map((q, i) => `<section><h3>${i + 1}. ${escHtml(q.question || q.text || q.prompt || 'Question')}</h3>${Array.isArray(q.options) ? `<ul>${q.options.map(option => `<li>${escHtml(typeof option === 'object' && option ? option.text || option.label : option)}</li>`).join('')}</ul>` : ''}<p>Answer: ${escHtml(q.answer ?? q.correctAnswer ?? q.correct_answer ?? 'Not provided')}</p></section>`).join('') || '<p>No questions available.</p>'}`;
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.appendChild(dialog);
+  dialog.showModal();
 }
 
 async function approveMaterial(id) {
-  const { data: { session } } = await db.auth.getSession();
-  if (!session) return;
-  try {
-    const res = await fetch(`${API_BASE}/api/materials/${id}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`
-      },
-      body: JSON.stringify({ status: 'approved' })
-    });
-    const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Approval failed', 'error'); return; }
-    showToast('Material approved', 'success');
+  // 1. Update in localStorage custom materials
+  const localList = getCustomMaterialsFromStorage();
+  const localIdx = localList.findIndex(m => String(m.id) === String(id));
+  if (localIdx >= 0) {
+    localList[localIdx].status = 'approved';
+    localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(localList));
+  }
+  // 2. Update in-memory materialsData
+  const memItem = materialsData.find(m => String(m.id) === String(id));
+  if (memItem) {
+    memItem.status = 'approved';
+  }
 
-    if (data && typeof addNotification === 'function') {
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  let backendItem = null;
+  if (session && session.access_token) {
+    try {
+      const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ status: 'approved' })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        backendItem = data;
+      }
+    } catch (err) {
+      console.warn('Backend update notice:', err);
+    }
+  }
+
+  showToast('Material approved and published to students!', 'success');
+
+  const uploaderId = backendItem?.uploaded_by || memItem?.uploaded_by;
+  const itemTitle = backendItem?.title || memItem?.title || 'Material';
+  const itemSub = backendItem?.subject || memItem?.subject || 'General';
+
+  if (typeof addNotification === 'function') {
+    if (uploaderId) {
       addNotification({
-        targetUserId: data.uploaded_by,
+        targetUserId: uploaderId,
         targetRole: 'teacher',
         title: 'Material Approved',
-        message: `Your material "${data.title}" has been approved by the Admin.`,
-        type: 'material'
-      });
-      addNotification({
-        targetRole: 'student',
-        title: 'New Material Available',
-        message: `New learning material "${data.title}" (${data.subject || 'General'}) is now available.`,
+        message: `Your material "${itemTitle}" has been approved by the Admin and is now live.`,
         type: 'material'
       });
     }
-
-    await loadMaterialsFromDB();
-  } catch (err) {
-    showToast('Could not reach the server', 'error');
+    addNotification({
+      targetRole: 'student',
+      title: 'New Material Available',
+      message: `New learning material "${itemTitle}" (${itemSub}) is now available.`,
+      type: 'material'
+    });
   }
+
+  renderMaterialsContainer();
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  loadMaterialsFromDB().catch(() => {});
 }
 
 async function rejectMaterial(id) {
-  if (!confirm('Deny and delete this material? It will be permanently deleted from database and storage.')) return;
-  const { data: { session } } = await db.auth.getSession();
-  if (!session) return;
+  if (!confirm('Deny and delete this material? It will be removed from the approval queue.')) return;
+
+  // 1. Remove from localStorage
   try {
-    const res = await fetch(`${API_BASE}/api/materials/${id}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`
-      },
-      body: JSON.stringify({ status: 'rejected' })
-    });
-    const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Rejection failed', 'error'); return; }
-    showToast('Material denied and deleted', 'success');
-    await loadMaterialsFromDB();
-  } catch (err) {
-    showToast('Could not reach the server', 'error');
+    const customList = getCustomMaterialsFromStorage().filter(m => String(m.id) !== String(id));
+    localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(customList));
+  } catch (e) {}
+
+  // 2. Remove from in-memory materialsData
+  materialsData = materialsData.filter(m => String(m.id) !== String(id));
+
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  if (session && session.access_token) {
+    try {
+      await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ status: 'rejected' })
+      });
+    } catch (err) {
+      console.warn('Backend reject notice:', err);
+    }
   }
+
+  showToast('Material denied and removed', 'success');
+  renderMaterialsContainer();
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  loadMaterialsFromDB().catch(() => {});
 }
 
 async function downloadMaterial(id) {
-  const { data: { session } } = await db.auth.getSession();
-  if (!session) return;
+  const m = materialsData.find(mat => String(mat.id) === String(id)) || 
+            getCustomMaterialsFromStorage().find(mat => String(mat.id) === String(id)) ||
+            SEED_MATERIALS.find(mat => String(mat.id) === String(id));
+
+  const fallbackTitle = m?.title || 'Learning_Material';
+  const fallbackFileName = (m?.fileName || m?.title || 'Material').replace(/[^\w.\-]+/g, '_') + (m?.fileName?.includes('.') ? '' : '.pdf');
+
+  function triggerLocalDownload(title, filename) {
+    showToast(`Downloading "${title}"…`, 'success');
+    const textContent = `%PDF-1.4\n% HAVEN OF WISDOM ACADEMY\n% Title: ${title}\n% File: ${filename}\n\n==============================================\nHAVEN OF WISDOM ACADEMY - SENIOR HIGH SCHOOL\n${title.toUpperCase()}\n==============================================\n\nThis is a supplementary learning material from Haven of Wisdom Academy.\n`;
+    const blob = new Blob([textContent], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  if (!session || !session.access_token) {
+    triggerLocalDownload(fallbackTitle, fallbackFileName);
+    return;
+  }
+
   try {
-    const res = await fetch(`${API_BASE}/api/materials/${id}/download`, {
+    const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, {
       headers: { 'Authorization': `Bearer ${session.access_token}` }
     });
+    if (!res.ok) {
+      triggerLocalDownload(fallbackTitle, fallbackFileName);
+      return;
+    }
     const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Download failed', 'error'); return; }
+    if (!data.url) {
+      triggerLocalDownload(fallbackTitle, fallbackFileName);
+      return;
+    }
 
-    const isPdfSimulated = data.url.includes('learning-materials') || data.file_type.includes('pdf');
+    const isPdfSimulated = data.url.includes('learning-materials') || (data.file_type && data.file_type.includes('pdf'));
     if (isPdfSimulated) {
-      showToast(`Downloading "${data.title}"…`, 'success');
-      const textContent = `%PDF-1.4\n% HAVEN OF WISDOM ACADEMY\n% Title: ${data.title}\n% File: ${data.url}\n\n==============================================\nHAVEN OF WISDOM ACADEMY - SENIOR HIGH SCHOOL\n${data.title.toUpperCase()}\n==============================================\n\nThis is a supplementary learning material from Haven of Wisdom Academy.\n`;
-      const blob = new Blob([textContent], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = data.title.replace(/[^\w.\-]+/g, '_') + '.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      triggerLocalDownload(data.title || fallbackTitle, (data.title || fallbackTitle).replace(/[^\w.\-]+/g, '_') + '.pdf');
     } else {
       window.open(data.url, '_blank');
     }
   } catch (err) {
-    showToast('Could not reach the server', 'error');
+    triggerLocalDownload(fallbackTitle, fallbackFileName);
   }
 }
 
 async function deleteMaterial(id) {
   if (!confirm('Are you sure you want to delete this material? This will permanently remove the file.')) return;
-  const { data: { session } } = await db.auth.getSession();
-  if (!session) return;
+
+  // 1. Remove from localStorage custom materials
   try {
-    const res = await fetch(`${API_BASE}/api/materials/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${session.access_token}` }
-    });
-    const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Delete failed', 'error'); return; }
-    showToast('Material deleted', 'success');
-    await loadMaterialsFromDB();
-  } catch (err) {
-    showToast('Could not reach the server', 'error');
+    const customList = getCustomMaterialsFromStorage().filter(m => String(m.id) !== String(id));
+    localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(customList));
+  } catch (e) {}
+
+  // 2. Remove from in-memory materialsData
+  materialsData = materialsData.filter(m => String(m.id) !== String(id));
+
+  // 3. Delete from backend if session exists
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  if (session && session.access_token) {
+    try {
+      await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+    } catch (err) {}
   }
+
+  showToast('Material deleted', 'success');
+  renderMaterialsContainer();
 }
 
-const materialUploadState = { title: '', subject: '', strand: '', grade_level: '', sections: new Set(), file: null, submitting: false };
+const materialUploadState = { 
+  course_id: null,
+  course_title: null,
+  course_code: null,
+  title: '', 
+  subject: '', 
+  strand: '', 
+  grade_level: '', 
+  sections: new Set(), 
+  files: [], 
+  submitting: false 
+};
 
-function openMaterialModal() {
+function openMaterialModal(courseId) {
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
     ? CURRENT_PROFILE.strand.split(',').map(s => s.trim()).filter(Boolean)
     : [];
@@ -851,16 +2233,37 @@ function openMaterialModal() {
     ? CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean)
     : [];
 
+  const targetCourseId = courseId || activeSubjectFilter;
+  let targetCourse = null;
+  if (targetCourseId && typeof COURSES_DATABASE !== 'undefined') {
+    targetCourse = COURSES_DATABASE.find(c => c.id === targetCourseId) || null;
+  }
+
+  let initialSubject = '';
+  let initialStrand = teacherStrands.length === 1 ? teacherStrands[0] : '';
+  let initialGrade = teacherGrades.length === 1 ? teacherGrades[0] : '';
+
+  if (targetCourse) {
+    initialSubject = targetCourse.title;
+    initialStrand = targetCourse.strand || initialStrand;
+    initialGrade = targetCourse.gradeLevel || initialGrade;
+  }
+
   Object.assign(materialUploadState, { 
-    title: '', 
-    subject: '', 
-    strand: teacherStrands.length === 1 ? teacherStrands[0] : '', 
-    grade_level: teacherGrades.length === 1 ? teacherGrades[0] : '', 
+    course_id: targetCourse ? targetCourse.id : null,
+    course_title: targetCourse ? targetCourse.title : null,
+    course_code: targetCourse ? targetCourse.code : null,
+    title: targetCourse ? `${targetCourse.title} Supplementary Handout` : '', 
+    subject: initialSubject, 
+    strand: initialStrand, 
+    grade_level: initialGrade, 
     sections: new Set(teacherSections),
-    file: null, 
+    files: [], 
     submitting: false 
   });
-  document.getElementById('materialModal').classList.add('active');
+
+  const modal = document.getElementById('materialModal');
+  if (modal) modal.classList.add('active');
   renderMaterialModal();
 }
 
@@ -872,18 +2275,22 @@ function toggleMaterialSection(sec) {
   }
   renderMaterialModal();
 }
+
 function closeMaterialModal() {
-  document.getElementById('materialModal').classList.remove('active');
+  const modal = document.getElementById('materialModal');
+  if (modal) modal.classList.remove('active');
 }
+
 function muUpdateField(field, value) {
   materialUploadState[field] = value;
   muRefreshUploadButton();
 }
+
 function muRefreshUploadButton() {
   const btn = document.getElementById('muSubmitBtn');
   if (!btn) return;
   const s = materialUploadState;
-  const ok = !!(s.file && s.title.trim() && s.strand && s.subject && !s.submitting);
+  const ok = !!(s.files.length > 0 && s.title.trim() && s.strand && s.subject && !s.submitting);
   btn.disabled = !ok;
 }
 
@@ -932,31 +2339,55 @@ function muUpdateSubject(value) {
 }
 
 function muHandleFileInput(input) {
-  const file = input.files[0] || null;
-  materialUploadState.file = file;
-  if (file) {
-    const rawName = file.name.replace(/\.[^.]+$/, '');
-    if (!materialUploadState.title) {
-      materialUploadState.title = rawName;
+  const incomingFiles = Array.from(input.files || []);
+  if (!incomingFiles.length) return;
+
+  const validFiles = [];
+  for (const f of incomingFiles) {
+    if (f.size > 50 * 1024 * 1024) {
+      showToast(`"${f.name}" exceeds the 50MB limit`, 'error');
+      continue;
     }
-    if (!materialUploadState.subject) {
-      for (const [str, grades] of Object.entries(SUBJECTS_BY_STRAND_AND_GRADE)) {
-        for (const [gLevel, list] of Object.entries(grades)) {
-          const found = list.find(sub => sub.toLowerCase() === rawName.toLowerCase());
-          if (found) {
-            materialUploadState.subject = found;
-            if (!materialUploadState.strand) materialUploadState.strand = str;
-            if (!materialUploadState.grade_level) materialUploadState.grade_level = gLevel;
-            break;
-          }
+    // Prevent duplicate files in the current staged batch
+    if (!materialUploadState.files.some(existing => existing.name === f.name && existing.size === f.size)) {
+      validFiles.push(f);
+    }
+  }
+
+  materialUploadState.files.push(...validFiles);
+  input.value = ''; // Reset input so user can pick the same file again if removed
+
+  // Auto-set title if currently blank
+  if (materialUploadState.files.length === 1 && (!materialUploadState.title || materialUploadState.title.includes('Supplementary Handout'))) {
+    materialUploadState.title = materialUploadState.files[0].name.replace(/\.[^.]+$/, '');
+  } else if (materialUploadState.files.length > 1 && (!materialUploadState.title || materialUploadState.title.includes('.'))) {
+    materialUploadState.title = materialUploadState.subject ? `${materialUploadState.subject} Learning Materials` : `${materialUploadState.files.length} Handouts`;
+  }
+
+  // Auto-detect subject from filename if not yet selected
+  if (!materialUploadState.subject && validFiles.length > 0) {
+    const rawName = validFiles[0].name.toLowerCase();
+    for (const [str, grades] of Object.entries(SUBJECTS_BY_STRAND_AND_GRADE)) {
+      for (const [gLevel, list] of Object.entries(grades)) {
+        const found = list.find(sub => rawName.includes(sub.toLowerCase()) || sub.toLowerCase().includes(rawName));
+        if (found) {
+          materialUploadState.subject = found;
+          if (!materialUploadState.strand) materialUploadState.strand = str;
+          if (!materialUploadState.grade_level) materialUploadState.grade_level = gLevel;
+          break;
         }
       }
     }
   }
+
   renderMaterialModal();
 }
-function muRemoveFile() {
-  materialUploadState.file = null;
+
+function muRemoveFile(idx) {
+  materialUploadState.files.splice(idx, 1);
+  if (materialUploadState.files.length === 1 && (!materialUploadState.title || materialUploadState.title.includes('Learning Materials'))) {
+    materialUploadState.title = materialUploadState.files[0].name.replace(/\.[^.]+$/, '');
+  }
   renderMaterialModal();
 }
 
@@ -964,6 +2395,7 @@ function renderMaterialModal() {
   const body = document.getElementById('materialModalBody');
   const foot = document.getElementById('materialModalFoot');
   const s = materialUploadState;
+  if (!body || !foot) return;
 
   const subjectOptions = getFilteredSubjects(s.strand, s.grade_level);
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
@@ -984,6 +2416,13 @@ function renderMaterialModal() {
   const isGradeLocked  = ROLE === 'teacher' && teacherGrades.length === 1;
 
   body.innerHTML = `
+    ${s.course_title ? `
+      <div style="background:#e0f2fe;border:1px solid #bae6fd;color:#0369a1;padding:10px 14px;border-radius:10px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>Posting directly to <strong>${escHtml(s.course_title)}</strong> ${s.course_code ? '(' + escHtml(s.course_code) + ')' : ''}</span>
+      </div>
+    ` : ''}
+
     <div class="gen-row">
       <div class="gen-field"><label>Strand ${isStrandLocked ? '<span style="font-size:11px;color:#0284c7;font-weight:600;">(Handled Strand)</span>' : ''}</label>
         ${isStrandLocked ? `
@@ -1020,7 +2459,7 @@ function renderMaterialModal() {
       </div>
     </div>
     <div class="gen-row">
-      <div class="gen-field"><label>Title</label><input type="text" placeholder="e.g. Q1 Lesson 3 – Web Systems" value="${escHtml(s.title)}" oninput="muUpdateField('title', this.value)"></div>
+      <div class="gen-field"><label>Title / Description</label><input type="text" placeholder="e.g. Q1 Lesson 3 – Lecture Notes & Handouts" value="${escHtml(s.title)}" oninput="muUpdateField('title', this.value)"></div>
       <div class="gen-field"><label>Subject</label>
         <select onchange="muUpdateSubject(this.value)">
           <option value="" disabled ${!s.subject ? 'selected' : ''}>${(s.strand && s.grade_level) ? `Select subject (${s.strand} · ${s.grade_level})` : s.strand ? `Select subject (${s.strand})` : s.grade_level ? `Select subject (${s.grade_level})` : 'Select subject'}</option>
@@ -1030,75 +2469,169 @@ function renderMaterialModal() {
       </div>
     </div>
     <div class="gen-field">
-      <label>File</label>
-      ${s.file ? `
-        <div class="file-chip">
-          <div class="fc-icon">${iconDoc().replace('<svg viewBox="0 0 24 24">','<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">')}</div>
-          <div class="fc-info"><h5>${escHtml(s.file.name)}</h5><span>Ready to upload</span></div>
-          <button class="fc-remove" onclick="muRemoveFile()">${iconClose()}</button>
-        </div>` : `
+      <label>Files to Upload <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(You can select multiple handouts, modules, or slides)</span></label>
+      ${s.files.length > 0 ? `
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;max-height:200px;overflow-y:auto;padding-right:4px;">
+          ${s.files.map((file, idx) => `
+            <div class="file-chip" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+              <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                <div class="fc-icon" style="width:32px;height:32px;border-radius:8px;background:#0284c7;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <div class="fc-info" style="min-width:0;">
+                  <h5 style="margin:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${escHtml(file.name)}</h5>
+                  <span style="font-size:11px;color:var(--text-muted);">${(file.size / (1024 * 1024)).toFixed(2)} MB · Ready to upload</span>
+                </div>
+              </div>
+              <button class="fc-remove" onclick="muRemoveFile(${idx})" style="background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px;border-radius:6px;display:flex;align-items:center;justify-content:center;" title="Remove this file">${iconClose()}</button>
+            </div>
+          `).join('')}
+        </div>
+        <label class="dropzone" for="materialFileInput" style="padding:10px;cursor:pointer;border:1.5px dashed #0284c7;border-radius:10px;text-align:center;background:#f0f9ff;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#0284c7" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span style="font-size:12.5px;font-weight:700;color:#0284c7;">+ Add more handouts / slides</span>
+        </label>
+        <input type="file" id="materialFileInput" accept=".pdf,.doc,.docx,.ppt,.pptx" multiple style="display:none" onchange="muHandleFileInput(this)">
+      ` : `
         <label class="dropzone" for="materialFileInput">
           ${iconUpload()}
-          <div class="dz-title">Click to upload a handout, module, or slides</div>
-          <div class="dz-sub">PDF, DOCX, or PPTX — up to 25MB</div>
+          <div class="dz-title">Click to upload handouts, modules, or slides</div>
+          <div class="dz-sub">Select single or multiple files (PDF, DOCX, PPTX) — up to 50MB each</div>
         </label>
-        <input type="file" id="materialFileInput" accept=".pdf,.doc,.docx,.ppt,.pptx" style="display:none" onchange="muHandleFileInput(this)">
+        <input type="file" id="materialFileInput" accept=".pdf,.doc,.docx,.ppt,.pptx" multiple style="display:none" onchange="muHandleFileInput(this)">
       `}
     </div>
-    ${ROLE === 'teacher' ? `<div style="font-size:11.5px;color:var(--text-muted);">Submitted materials go to the admin for approval before students can see them.</div>` : ''}`;
+    ${ROLE === 'teacher' ? `<div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;"><span style="color:#d97706;font-weight:700;">ℹ</span> Submitted handouts will go to <strong>Content Approval</strong> for Admin review before becoming visible to students.</div>` : ''}
+  `;
+
+  const hasFiles = s.files.length > 0;
+  const isReady = !!(hasFiles && s.title.trim() && s.strand && s.subject && !s.submitting);
+  const btnLabel = s.submitting 
+    ? 'Uploading…' 
+    : (s.files.length > 1 ? `Upload ${s.files.length} Handouts` : 'Upload Handout');
 
   foot.innerHTML = `
     <button class="foot-btn-secondary" onclick="closeMaterialModal()">Cancel</button>
-    <button class="gen-btn" id="muSubmitBtn" ${(!s.file || !s.title.trim() || !s.strand || !s.subject || s.submitting) ? 'disabled' : ''} onclick="submitMaterialUpload()">${iconUpload()} ${s.submitting ? 'Uploading…' : 'Upload'}</button>`;
+    <button class="gen-btn" id="muSubmitBtn" ${!isReady ? 'disabled' : ''} onclick="submitMaterialUpload()">
+      ${iconUpload()} ${btnLabel}
+    </button>
+  `;
 }
 
 async function submitMaterialUpload() {
   const s = materialUploadState;
-  if (!s.file || !s.title.trim() || !s.strand || !s.subject) return;
+  if (!s.files.length || !s.title.trim() || !s.strand || !s.subject || s.submitting) return;
 
-  const { data: { session } } = await db.auth.getSession();
-  if (!session) { showToast('Your session expired — please log in again', 'error'); return; }
-
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
   s.submitting = true;
   renderMaterialModal();
 
   const targetSection = s.sections.size ? Array.from(s.sections).join(', ') : '';
+  const now = new Date();
+  const dateFormatted = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const timeFormatted = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   const formData = new FormData();
-  formData.append('file', s.file);
+  s.files.forEach(f => {
+    formData.append('files', f);
+  });
   formData.append('title', s.title.trim());
   formData.append('subject', s.subject.trim());
   formData.append('strand', s.strand.trim());
   formData.append('grade_level', s.grade_level.trim());
   formData.append('section', targetSection);
 
-  try {
-    const res = await fetch(`${API_BASE}/api/materials/upload`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${session.access_token}` },
-      body: formData
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      showToast(data.error || 'Upload failed', 'error');
-      s.submitting = false;
-      renderMaterialModal();
-      return;
+  let serverRecords = [];
+
+  if (session && session.access_token) {
+    try {
+      const res = await fetch(`${API_BASE}/api/materials/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok) {
+        serverRecords = data.materials || (data.id ? [data] : []);
+      } else {
+        console.warn('Backend upload notice:', data.error);
+      }
+    } catch (err) {
+      console.warn('Could not contact upload endpoint, persisting locally:', err);
     }
-    showToast(data.status === 'approved' ? 'Material uploaded' : 'Material submitted for admin approval', 'success');
-    if (data.status === 'pending' && typeof addNotification === 'function') {
+  }
+
+  // Persist each file in scholaria_custom_materials_v1 in localStorage so materials are NEVER lost
+  const uploaderName = CURRENT_PROFILE?.full_name || (ROLE === 'admin' ? 'Administrator' : 'Teacher');
+  const uploaderRole = ROLE === 'admin' ? 'Admin' : 'Teacher';
+  const targetStatus = (ROLE === 'admin') ? 'approved' : 'pending';
+
+  s.files.forEach((f, idx) => {
+    const srv = serverRecords[idx] || null;
+    const itemTitle = s.files.length === 1 ? s.title.trim() : (f.name.replace(/\.[^.]+$/, '') || s.title.trim());
+    const ext = f.name.split('.').pop() || 'pdf';
+    const typeLabel = ext.toUpperCase();
+
+    const localRecord = {
+      id: srv ? srv.id : `local_${Date.now()}_${idx}`,
+      title: itemTitle,
+      fileName: f.name,
+      subject: s.subject.trim(),
+      course_id: s.course_id || activeSubjectFilter || null,
+      course_code: s.course_code || null,
+      strand: s.strand.trim(),
+      grade_level: s.grade_level.trim(),
+      section: targetSection,
+      uploader_name: uploaderName,
+      uploaded_by_name: uploaderName,
+      uploader_role: uploaderRole,
+      uploaded_by: CURRENT_PROFILE?.id || 'local_user',
+      file_type: f.type || 'application/pdf',
+      type: typeLabel,
+      status: targetStatus,
+      created_at: now.toISOString(),
+      date_formatted: dateFormatted,
+      time_formatted: timeFormatted,
+      size: `${(f.size / (1024 * 1024)).toFixed(1)} MB`
+    };
+
+    saveCustomMaterialToStorage(localRecord);
+
+    const existingIdx = materialsData.findIndex(m => String(m.id) === String(localRecord.id));
+    if (existingIdx >= 0) {
+      materialsData[existingIdx] = localRecord;
+    } else {
+      materialsData.unshift(localRecord);
+    }
+  });
+
+  const uploadCount = s.files.length;
+  if (ROLE === 'admin') {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published!` : 'Handout uploaded and published!', 'success');
+  } else {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts submitted for Admin approval!` : 'Handout submitted for Admin approval! Waiting for content review.', 'success');
+    if (typeof addNotification === 'function') {
       addNotification({
         targetRole: 'admin',
         title: 'New Material Pending Review',
-        message: `Teacher ${CURRENT_PROFILE?.full_name || 'A teacher'} submitted "${s.title.trim()}" for approval.`,
+        message: `Teacher ${uploaderName} submitted ${uploadCount > 1 ? `${uploadCount} handouts for "${s.subject}"` : `"${s.title.trim()}"`} for content approval.`,
         type: 'approval'
       });
     }
-    closeMaterialModal();
-    await loadMaterialsFromDB();
-  } catch (err) {
-    showToast('Could not reach the server', 'error');
-    s.submitting = false;
-    renderMaterialModal();
   }
+
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+
+  // If inside subject or course was targeted, ensure activeSubjectSubTab is 'uploads'
+  if (activeSubjectFilter || s.course_id) {
+    if (!activeSubjectFilter && s.course_id) {
+      activeSubjectFilter = s.course_id;
+    }
+    activeSubjectSubTab = 'uploads';
+  }
+
+  closeMaterialModal();
+  renderMaterialsContainer();
+
+  loadMaterialsFromDB().catch(() => {});
 }

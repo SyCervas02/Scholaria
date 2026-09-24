@@ -216,13 +216,13 @@ function renderEmergencyTopBanner() {
 
   container.innerHTML = `
     <div class="emergency-top-banner">
-      <div class="eb-content">
+      <div class="eb-content" style="cursor:pointer;" onclick="openAnnouncementDetailModal('${emergency.id}')" title="Click to view full news advisory">
         <span class="eb-badge">🚨 EMERGENCY ADVISORY</span>
         <span class="eb-text"><strong>${escHtml(emergency.title)}:</strong> ${escHtml(emergency.message.split('\n\n')[0])} ${remaining ? `<span style="opacity:0.85;font-weight:700;margin-left:6px;">(Ends in: ${remaining})</span>` : ''}</span>
       </div>
       <div class="eb-actions">
         <button class="eb-btn" onclick="openEmergencyHotlinesModal()">📞 City Emergency Hotlines</button>
-        <button class="eb-btn" onclick="renderPage('announcements')">View Details</button>
+        <button class="eb-btn" onclick="openAnnouncementDetailModal('${emergency.id}')">View Details</button>
         <button class="eb-close-btn" onclick="closeEmergencyBanner()" title="Dismiss Banner">
           <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -248,9 +248,101 @@ function closeEmergencyHotlinesModal() {
   if (modal) modal.classList.remove('active');
 }
 
+function openAnnouncementDetailModal(id) {
+  const all = getStoredAnnouncements();
+  const anc = all.find(a => String(a.id) === String(id));
+  if (!anc) return;
+
+  // Mark as read for current user
+  markAnnouncementRead(id);
+  // Re-render page in background to update unread indicators (non-blocking)
+  if (typeof renderPage === 'function') {
+    setTimeout(() => renderPage('announcements'), 0);
+  }
+
+  const modal = document.getElementById('announcementDetailModal');
+  if (!modal) return;
+
+  const titleEl = document.getElementById('ancDetailTitle');
+  const catEl = document.getElementById('ancDetailCatBadge');
+  const prioEl = document.getElementById('ancDetailPrioBadge');
+  const authorEl = document.getElementById('ancDetailAuthor');
+  const dateEl = document.getElementById('ancDetailDate');
+  const audienceEl = document.getElementById('ancDetailAudience');
+  const msgEl = document.getElementById('ancDetailMsg');
+  const hotlinesWrap = document.getElementById('ancDetailHotlinesWrap');
+  const hotlinesList = document.getElementById('ancDetailHotlinesList');
+
+  if (titleEl) titleEl.textContent = anc.title || 'Announcement';
+  if (catEl) {
+    let catLabel = '📢 General';
+    let catClass = anc.category || 'general';
+    if (anc.category === 'emergency') catLabel = '🚨 Emergency & Suspensions';
+    else if (anc.category === 'academic') catLabel = '📚 Academic';
+    else if (anc.category === 'event') catLabel = '🏫 School Events';
+    else if (anc.category === 'others' && anc.customCategory) catLabel = `📌 ${anc.customCategory}`;
+    catEl.className = `anc-cat-tag ${catClass}`;
+    catEl.textContent = catLabel;
+  }
+
+  if (prioEl) {
+    if (anc.priority === 'critical') {
+      prioEl.innerHTML = '<span style="font-size:11px;font-weight:700;color:#dc2626;background:#fee2e2;padding:2px 8px;border-radius:10px;">⚡ Critical Priority</span>';
+    } else if (anc.priority === 'important') {
+      prioEl.innerHTML = '<span style="font-size:11px;font-weight:700;color:#d97706;background:#fef3c7;padding:2px 8px;border-radius:10px;">⭐ Important</span>';
+    } else {
+      prioEl.innerHTML = '<span style="font-size:11px;font-weight:700;color:#059669;background:#dcfce7;padding:2px 8px;border-radius:10px;">📢 Bulletin</span>';
+    }
+  }
+
+  if (authorEl) authorEl.textContent = `👤 Posted by: ${anc.authorName || 'School Administration'} (${anc.authorRole || 'Admin'})`;
+  if (dateEl) dateEl.textContent = `📅 ${formatSentDate(anc.timestamp)}`;
+  if (audienceEl) audienceEl.textContent = `👥 Audience: ${(anc.audience || ['All']).join(', ')}`;
+  if (msgEl) msgEl.textContent = anc.message || '';
+
+  if (hotlinesWrap && hotlinesList) {
+    if (anc.hotlines && anc.hotlines.length) {
+      hotlinesWrap.style.display = 'block';
+      hotlinesList.innerHTML = anc.hotlines.map(h => `
+        <a href="tel:${h.number.replace(/[^0-9+]/g, '')}" class="anc-hotline-chip" title="Click to call ${h.name}" onclick="event.stopPropagation()">
+          <span>${h.icon || '📞'} <strong>${escHtml(h.name)}:</strong></span>
+          <span class="anc-hotline-num">${escHtml(h.number)}</span>
+        </a>
+      `).join('');
+    } else {
+      hotlinesWrap.style.display = 'none';
+      hotlinesList.innerHTML = '';
+    }
+  }
+
+  modal.classList.add('active');
+}
+
+function closeAnnouncementDetailModal() {
+  const modal = document.getElementById('announcementDetailModal');
+  if (modal) modal.classList.remove('active');
+}
+
 /* ── ANNOUNCEMENTS HUB PAGE MODULE ── */
 let ancCategoryFilter = 'all'; // 'all' | 'emergency' | 'academic' | 'event'
-let ancArchiveView = 'active'; // 'active' | 'archived'
+let ancArchiveView = 'active'; // 'active' | 'drafts' | 'archived'
+
+/* ── READ RECEIPT HELPERS ── */
+const ANC_READ_KEY = 'scholaria_anc_read_v1';
+function getReadAnnouncementIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(ANC_READ_KEY) || '[]'));
+  } catch (e) {
+    return new Set();
+  }
+}
+function markAnnouncementRead(id) {
+  const read = getReadAnnouncementIds();
+  read.add(String(id));
+  try {
+    localStorage.setItem(ANC_READ_KEY, JSON.stringify([...read]));
+  } catch (e) {}
+}
 
 function setAncCategoryFilter(cat) {
   ancCategoryFilter = cat;
@@ -267,6 +359,7 @@ function deleteAnnouncement(id) {
   all = all.filter(a => a.id !== id);
   saveAnnouncements(all);
   showToast('Announcement deleted', 'success');
+  if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
   renderEmergencyTopBanner();
   if (typeof renderPage === 'function') renderPage('announcements');
 }
@@ -274,9 +367,13 @@ function deleteAnnouncement(id) {
 function buildAnnouncementsPage() {
   const all = getStoredAnnouncements();
 
-  const activeAnnouncements = all.filter(a => !isAnnouncementExpired(a));
-  const archivedAnnouncements = all.filter(a => isAnnouncementExpired(a));
-  const currentList = ancArchiveView === 'active' ? activeAnnouncements : archivedAnnouncements;
+  const activeAnnouncements = all.filter(a => !isAnnouncementExpired(a) && a.status !== 'draft' && !a.isDraft);
+  const draftAnnouncements = all.filter(a => a.status === 'draft' || a.isDraft);
+  const archivedAnnouncements = all.filter(a => isAnnouncementExpired(a) && a.status !== 'draft' && !a.isDraft);
+
+  let currentList = activeAnnouncements;
+  if (ancArchiveView === 'drafts') currentList = draftAnnouncements;
+  else if (ancArchiveView === 'archived') currentList = archivedAnnouncements;
 
   const filtered = ancCategoryFilter === 'all' 
     ? currentList 
@@ -303,7 +400,7 @@ function buildAnnouncementsPage() {
       ` : ''}
     </div>
 
-    <!-- Filter Chips Bar + Archive Toggle (Highlighted Location) -->
+    <!-- Filter Chips Bar + Archive/Draft Toggle -->
     <div class="anc-filter-bar">
       <div class="anc-chip-group">
         <button class="anc-chip ${ancCategoryFilter === 'all' ? 'active' : ''}" onclick="setAncCategoryFilter('all')">
@@ -320,11 +417,16 @@ function buildAnnouncementsPage() {
         </button>
       </div>
 
-      <!-- Archive View Toggle (Highlighted Red Box Location) -->
+      <!-- Archive / Draft View Toggle -->
       <div class="anc-archive-toggle-wrap">
         <button class="anc-archive-tab ${ancArchiveView === 'active' ? 'active' : ''}" onclick="setAncArchiveView('active')">
           ${typeof iconClock === 'function' ? iconClock() : ''} Active (${activeAnnouncements.length})
         </button>
+        ${canPost ? `
+          <button class="anc-archive-tab ${ancArchiveView === 'drafts' ? 'active' : ''}" onclick="setAncArchiveView('drafts')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Drafts / Unposted (${draftAnnouncements.length})
+          </button>
+        ` : ''}
         <button class="anc-archive-tab ${ancArchiveView === 'archived' ? 'active' : ''}" onclick="setAncArchiveView('archived')">
           ${typeof iconArchive === 'function' ? iconArchive() : ''} Archived (${archivedAnnouncements.length})
         </button>
@@ -350,15 +452,22 @@ function buildAnnouncementsPage() {
           }
           const dateStr = formatSentDate(anc.timestamp);
           const canManage = ROLE === 'admin' || (ROLE === 'teacher' && anc.authorRole === 'Teacher');
-          const isExpired = isAnnouncementExpired(anc);
-          const remainingText = getRemainingTimeText(anc.expiresAt);
+          const isDraft = anc.status === 'draft' || anc.isDraft;
+          const isExpired = !isDraft && isAnnouncementExpired(anc);
+          const remainingText = isDraft ? null : getRemainingTimeText(anc.expiresAt);
+          const readIds = getReadAnnouncementIds();
+          const isUnread = !isDraft && !isExpired && !readIds.has(String(anc.id));
 
           return `
-            <div class="anc-card ${categoryClass}" style="${isExpired ? 'opacity:0.85;background:#f8fafc;' : ''}">
+            <div class="anc-card ${categoryClass}${isUnread ? ' anc-card--unread' : ''}" onclick="openAnnouncementDetailModal('${anc.id}')" style="cursor:pointer;${isExpired ? 'opacity:0.85;background:#f8fafc;' : isDraft ? 'border-left:4px solid #f59e0b;background:#fffdfa;' : ''}" title="Click to view full announcement details">
               <div class="anc-card-header">
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                   <span class="anc-cat-tag ${categoryClass}">${catLabel}</span>
-                  ${isExpired ? `
+                  ${isDraft ? `
+                    <span style="font-size:11px;font-weight:700;color:#b45309;background:#fef3c7;padding:2px 8px;border-radius:10px;display:inline-flex;align-items:center;gap:4px;">
+                      📝 Draft · Hindi Pa Na-popost
+                    </span>
+                  ` : isExpired ? `
                     <span style="font-size:11px;font-weight:700;color:#64748b;background:#e2e8f0;padding:2px 8px;border-radius:10px;display:inline-flex;align-items:center;gap:4px;">
                       ${typeof iconArchive === 'function' ? iconArchive() : ''} Archived
                     </span>
@@ -371,11 +480,17 @@ function buildAnnouncementsPage() {
                       ${typeof iconInfinity === 'function' ? iconInfinity() : ''} Permanent
                     </span>
                   `}
+                  ${isUnread ? '<span class="anc-unread-badge">NEW</span>' : ''}
                 </div>
                 <div class="anc-meta">
                   <span>📅 ${dateStr}</span>
+                  ${isDraft && canManage ? `
+                    <button class="ca-approve" style="padding:4px 10px;font-size:11.5px;font-weight:700;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin-left:6px;" onclick="event.stopPropagation(); publishAnnouncementDraft('${anc.id}')" title="Publish Announcement Live">
+                      🚀 Post Now
+                    </button>
+                  ` : ''}
                   ${canManage ? `
-                    <button class="notif-del-row-btn" style="margin-left:8px;" onclick="deleteAnnouncement('${anc.id}')" title="Delete Announcement">
+                    <button class="notif-del-row-btn" style="margin-left:8px;" onclick="event.stopPropagation(); deleteAnnouncement('${anc.id}')" title="Delete Announcement">
                       <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                     </button>
                   ` : ''}
@@ -383,15 +498,15 @@ function buildAnnouncementsPage() {
               </div>
 
               <div class="anc-card-body">
-                <h3 class="anc-card-title">${escHtml(anc.title)}</h3>
+                <h3 class="anc-card-title${isUnread ? ' unread' : ''}" style="${isUnread ? 'font-weight:900;' : ''}">${isUnread ? '<span class="anc-unread-dot"></span>' : ''}${escHtml(anc.title)}</h3>
                 <p class="anc-card-msg">${escHtml(anc.message)}</p>
 
                 ${anc.hotlines && anc.hotlines.length ? `
-                  <div class="anc-hotline-box">
+                  <div class="anc-hotline-box" onclick="event.stopPropagation()">
                     <div style="font-size:11.5px;font-weight:800;color:#b91c1c;text-transform:uppercase;letter-spacing:0.5px;">📞 City of Imus Emergency Hotlines</div>
                     <div class="anc-hotline-chips">
                       ${anc.hotlines.map(h => `
-                        <a href="tel:${h.number.replace(/[^0-9+]/g, '')}" class="anc-hotline-chip" title="Click to call ${h.name}">
+                        <a href="tel:${h.number.replace(/[^0-9+]/g, '')}" class="anc-hotline-chip" title="Click to call ${h.name}" onclick="event.stopPropagation()">
                           <span>${h.icon || '📞'} <strong>${escHtml(h.name)}:</strong></span>
                           <span class="anc-hotline-num">${escHtml(h.number)}</span>
                         </a>
@@ -407,20 +522,26 @@ function buildAnnouncementsPage() {
                   <span>Posted by: <strong>${escHtml(anc.authorName || 'School Administration')}</strong></span>
                 </div>
                 
-                <div style="display:flex;align-items:center;gap:8px;">
+                <div style="display:flex;align-items:center;gap:8px;" onclick="event.stopPropagation()">
                   ${canManage ? `
-                    ${isExpired ? `
-                      <button class="anc-preset-btn" style="padding:3px 8px;font-size:11px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;" onclick="reuseAnnouncement('${anc.id}')" title="Reuse & Edit this Announcement">
+                    ${isDraft ? `
+                      <button class="anc-preset-btn" style="padding:3px 8px;font-size:11px;background:#fef3c7;color:#b45309;border-color:#fde68a;" onclick="event.stopPropagation(); reuseAnnouncement('${anc.id}')" title="Edit Draft">
+                        ✏️ Edit Draft
+                      </button>
+                    ` : isExpired ? `
+                      <button class="anc-preset-btn" style="padding:3px 8px;font-size:11px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;" onclick="event.stopPropagation(); reuseAnnouncement('${anc.id}')" title="Reuse & Edit this Announcement">
                         ${typeof iconRefresh === 'function' ? iconRefresh() : ''} Reuse Announcement
                       </button>
                     ` : anc.expiresAt ? `
-                      <button class="anc-preset-btn" style="padding:3px 8px;font-size:11px;" onclick="extendAnnouncementDeadline('${anc.id}', 2)" title="Extend Deadline by 2 Days">
+                      <button class="anc-preset-btn" style="padding:3px 8px;font-size:11px;" onclick="event.stopPropagation(); extendAnnouncementDeadline('${anc.id}', 2)" title="Extend Deadline by 2 Days">
                         ${typeof iconPlus === 'function' ? iconPlus() : ''} Extend +2 Days
                       </button>
                     ` : ''}
-                    <button class="anc-preset-btn" style="padding:3px 8px;font-size:11px;" onclick="toggleArchiveAnnouncement('${anc.id}')">
-                      ${typeof iconArchive === 'function' ? iconArchive() : ''} ${anc.isArchived ? 'Restore' : 'Archive'}
-                    </button>
+                    ${!isDraft ? `
+                      <button class="anc-preset-btn" style="padding:3px 8px;font-size:11px;" onclick="event.stopPropagation(); toggleArchiveAnnouncement('${anc.id}')">
+                        ${typeof iconArchive === 'function' ? iconArchive() : ''} ${anc.isArchived ? 'Unarchive' : 'Archive'}
+                      </button>
+                    ` : ''}
                   ` : ''}
                   <span>Audience: ${(anc.audience || ['All']).join(', ')}</span>
                 </div>
@@ -429,7 +550,7 @@ function buildAnnouncementsPage() {
           `;
         }).join('') : `
           <div style="padding:40px;text-align:center;color:var(--text-muted);background:#fff;border-radius:16px;border:1.5px solid #e8f0fe;">
-            No ${ancArchiveView === 'active' ? 'active' : 'archived'} announcements in this category.
+            No ${ancArchiveView === 'active' ? 'active' : ancArchiveView === 'drafts' ? 'draft' : 'archived'} announcements in this category.
           </div>
         `}
       </div>
@@ -647,7 +768,7 @@ function closeCreateAnnouncementModal() {
   if (modal) modal.classList.remove('active');
 }
 
-function submitCreateAnnouncement() {
+function submitCreateAnnouncement(isDraft = false) {
   const titleInput = document.getElementById('ancTitleInput');
   const catInput = document.getElementById('ancCategoryInput');
   const customCatInput = document.getElementById('ancCustomCategoryInput');
@@ -662,7 +783,7 @@ function submitCreateAnnouncement() {
 
   let categoryValue = catInput ? catInput.value : 'emergency';
 
-  if (ROLE === 'teacher' && categoryValue === 'emergency') {
+  if (!isDraft && ROLE === 'teacher' && categoryValue === 'emergency') {
     showToast('Only Admins can broadcast Emergency & Class Suspensions', 'error');
     return;
   }
@@ -715,6 +836,8 @@ function submitCreateAnnouncement() {
     timestamp: new Date().toISOString(),
     expiresAt: expiresAtVal,
     isArchived: false,
+    isDraft: !!isDraft,
+    status: isDraft ? 'draft' : 'active',
     hotlines: selectedHotlines.length ? selectedHotlines : DEFAULT_HOTLINES.slice(0, 4)
   };
 
@@ -722,26 +845,60 @@ function submitCreateAnnouncement() {
   all.unshift(newAnc);
   saveAnnouncements(all);
 
-  // Send real-time notification
-  if (typeof addNotification === 'function') {
-    addNotification({
-      targetRole: 'all',
-      title: (newAnc.priority === 'critical' ? '🚨 EMERGENCY: ' : '') + newAnc.title,
-      message: newAnc.message.slice(0, 100) + '…',
-      type: newAnc.category === 'emergency' ? 'approval' : 'info',
-      senderName: newAnc.authorName,
-      senderAvatar: initialsFor(newAnc.authorName)
-    });
+  if (!isDraft) {
+    // Send real-time notification
+    if (typeof addNotification === 'function') {
+      addNotification({
+        targetRole: 'all',
+        title: (newAnc.priority === 'critical' ? '🚨 EMERGENCY: ' : '') + newAnc.title,
+        message: newAnc.message.slice(0, 100) + '…',
+        type: newAnc.category === 'emergency' ? 'approval' : 'info',
+        senderName: newAnc.authorName,
+        senderAvatar: typeof initialsFor === 'function' ? initialsFor(newAnc.authorName) : 'SA'
+      });
+    }
+
+    if (newAnc.priority === 'critical') {
+      sessionStorage.removeItem('scholaria_emergency_dismissed');
+    }
+    showToast('Announcement broadcasted successfully!', 'success');
+  } else {
+    showToast('Announcement saved as draft (not yet posted)', 'info');
   }
 
   closeCreateAnnouncementModal();
-  showToast('Announcement broadcasted successfully!', 'success');
+  if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
+  renderEmergencyTopBanner();
+  if (typeof renderPage === 'function') renderPage('announcements');
+}
 
-  // Reset session dismissal if critical emergency broadcasted
-  if (newAnc.priority === 'critical') {
+function publishAnnouncementDraft(id) {
+  const all = getStoredAnnouncements();
+  const anc = all.find(a => String(a.id) === String(id));
+  if (!anc) return;
+
+  anc.isDraft = false;
+  anc.status = 'active';
+  anc.timestamp = new Date().toISOString();
+  saveAnnouncements(all);
+
+  if (typeof addNotification === 'function') {
+    addNotification({
+      targetRole: 'all',
+      title: (anc.priority === 'critical' ? '🚨 EMERGENCY: ' : '') + anc.title,
+      message: anc.message.slice(0, 100) + '…',
+      type: anc.category === 'emergency' ? 'approval' : 'info',
+      senderName: anc.authorName,
+      senderAvatar: typeof initialsFor === 'function' ? initialsFor(anc.authorName) : 'SA'
+    });
+  }
+
+  if (anc.priority === 'critical') {
     sessionStorage.removeItem('scholaria_emergency_dismissed');
   }
 
+  showToast('Announcement published and broadcasted live!', 'success');
+  if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
   renderEmergencyTopBanner();
   if (typeof renderPage === 'function') renderPage('announcements');
 }

@@ -540,8 +540,6 @@
         .back-pill:hover { background: rgba(255,255,255,0.25); }
         .back-pill svg { width: 14px; height: 14px; }
 
-        .header-title {}
-
         .role-badge {
             display: inline-flex;
             align-items: center;
@@ -620,7 +618,6 @@
             flex-shrink: 0;
         }
         .role-icon svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-        .role-icon.gold { background: #d4a017; }
 
         .role-text { flex: 1; }
         .role-text h3 { font-size: 15px; font-weight: 700; color: #1e3a8a; margin-bottom: 2px; }
@@ -895,7 +892,6 @@
                         class="logo-img"
                         src="assets/logo.png"
                         alt="Haven of Wisdom Academy"
-                        crossorigin="anonymous"
                     >
                     <div class="logo-text">
                         <h1>Haven Of Wisdom</h1>
@@ -921,7 +917,7 @@
         <!-- ── BODY ── -->
         <div class="card-body">
 
-            <!-- STEP 1: ROLE SELECTION -->
+            <!-- STEP 1: ROLE SELECTION (ONLY STUDENT & TEACHER) -->
             <div class="view active" id="roleView">
                 <div class="role-list">
 
@@ -957,129 +953,10 @@
                         </div>
                     </button>
 
-                    <button class="role-card" onclick="selectRole('admin')">
-                        <div class="role-icon gold">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/>
-                                <path d="M9 12l2 2 4-4"/>
-                            </svg>
-                        </div>
-                        <div class="role-text">
-                            <h3>School Admin</h3>
-                            <p>Department head access &mdash; code required</p>
-                        </div>
-                        <div class="role-arrow">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-                        </div>
-                    </button>
-
                 </div>
             </div>
 
-            <!-- STEP 2: ADMIN REGISTRATION & AUTHENTICATION -->
-            <div class="view" id="adminRegisterView">
-                <p class="helper-text" style="border-left-color:#d4a017;">
-                    <strong>School Admin Portal:</strong> Register the administrator account for the Senior High School Department Head. Institutional authorization key required.
-                </p>
-
-                <div class="field">
-                    <label>Full Name</label>
-                    <div class="input-wrap">
-                        <input type="text" id="reg-name" placeholder="e.g. Dr. Juan Santos" autocomplete="name" oninput="clearError('reg-name-err')">
-                    </div>
-                    <div class="field-error" id="reg-name-err"></div>
-                </div>
-
-                <div class="field">
-                    <label>Gmail / Official Email</label>
-                    <div class="input-wrap">
-                        <input type="email" id="reg-email" placeholder="e.g. admin@gmail.com or admin@hwa.edu.ph" autocomplete="email" oninput="clearError('reg-email-err')">
-                    </div>
-                    <div class="field-error" id="reg-email-err"></div>
-                </div>
-
-                <div class="field">
-                    <label>Password</label>
-                    <div class="input-wrap">
-                        <input type="password" id="reg-pw" placeholder="Create a secure password (min. 6 chars)" autocomplete="new-password" oninput="clearError('reg-pw-err')">
-                        <button class="eye-btn" type="button" onclick="toggleEye('reg-pw', this)" aria-label="Toggle password visibility">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                <circle cx="12" cy="12" r="3"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="field-error" id="reg-pw-err"></div>
-                </div>
-
-                <div class="field">
-                    <label>Institutional Admin Key</label>
-                    <div class="input-wrap">
-                        <input type="password" id="reg-key" class="code-field" placeholder="• • • • • •" maxlength="100" autocomplete="new-password" oninput="clearError('reg-key-err')">
-                        <button class="eye-btn" type="button" onclick="toggleEye('reg-key', this)" aria-label="Toggle key visibility">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                <circle cx="12" cy="12" r="3"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="field-error" id="reg-key-err"></div>
-                </div>
-
-                <button class="submit-btn" id="regAdminSubmitBtn" style="background:linear-gradient(135deg, #d4a017 0%, #b45309 100%);" onclick="handleRegisterAdmin()">
-                    Create Admin Account
-                </button>
-
-                <div style="margin-top:14px;text-align:center;">
-                    <a href="#" style="color:#2a4db5;font-weight:600;font-size:13px;text-decoration:none;" onclick="showAdminLoginView();return false;">
-                        Already registered? Sign in with your Gmail &rarr;
-                    </a>
-                </div>
-
-                <div class="divider">
-                    <a href="#" class="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
-                </div>
-            </div>
-
-            <!-- STEP 2B: ADMIN 2FA GOOGLE AUTHENTICATOR ENROLLMENT -->
-            <div class="view" id="adminMfaSetupView">
-                <p class="helper-text" style="border-left-color:#2a4db5;">
-                    <strong>Google Authenticator Setup:</strong> Open <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong> on your phone and scan the QR code below.
-                </p>
-
-                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;margin:18px 0;text-align:center;">
-                    <div style="background:#ffffff;padding:16px;border:2px solid #e0ebfa;border-radius:18px;box-shadow:0 8px 24px rgba(30,60,120,0.08);display:inline-flex;align-items:center;justify-content:center;">
-                        <div id="regMfaQrContainer" style="width:190px;height:190px;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:8px;">
-                            <p style="font-size:12px;color:#6b7280;">Loading QR Code…</p>
-                        </div>
-                    </div>
-
-                    <div style="margin-top:12px;display:flex;flex-direction:column;align-items:center;gap:4px;">
-                        <span style="font-size:11.5px;color:#6b7280;font-weight:500;">Or enter this setup key manually:</span>
-                        <div style="display:inline-flex;align-items:center;gap:6px;background:#f0f5ff;border:1px solid #dce8f5;padding:4px 10px;border-radius:8px;">
-                            <code id="regMfaSecret" style="font-family:monospace;font-size:12px;color:#1e3a8a;font-weight:700;letter-spacing:1px;">—</code>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="field">
-                    <label style="text-align:center;display:block;">Enter 6-Digit Code from Authenticator App</label>
-                    <div class="input-wrap">
-                        <input type="text" id="reg-mfa-code" class="code-field" placeholder="• • • • • •" maxlength="6" inputmode="numeric" oninput="clearError('reg-mfa-code-err')" onkeydown="if(event.key==='Enter') verifyAdminRegistrationMfa()">
-                    </div>
-                    <div class="field-error" id="reg-mfa-code-err" style="text-align:center;"></div>
-                </div>
-
-                <button class="submit-btn" id="regMfaSubmitBtn" style="background:linear-gradient(135deg, #2a4db5 0%, #1e3a8a 100%);" onclick="verifyAdminRegistrationMfa()">
-                    Verify 2FA & Continue
-                </button>
-
-                <div class="divider" style="margin-top:14px;">
-                    <a href="#" onclick="showAdminLoginView();return false;">&larr; Cancel & back to login</a>
-                </div>
-            </div>
-
-            <!-- STEP 3: LOGIN -->
+            <!-- STEP 2: LOGIN FORM -->
             <div class="view" id="loginView">
 
                 <div class="field">
@@ -1096,7 +973,7 @@
                         <input type="password" id="l-pw" placeholder="Enter your password" oninput="validateRequired('l-pw','l-pw-err')" onkeydown="if(event.key==='Enter') handleLogin()">
                         <button class="eye-btn" type="button" onclick="toggleEye('l-pw', this)" aria-label="Toggle password visibility">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/>
                                 <circle cx="12" cy="12" r="3"/>
                             </svg>
                         </button>
@@ -1106,18 +983,12 @@
 
                 <button class="submit-btn" id="loginSubmitBtn" onclick="handleLogin()">Login to Portal</button>
 
-                <div id="adminRegisterLinkWrap" style="margin-top:14px;text-align:center;display:none;">
-                    <a href="#" style="color:#2a4db5;font-weight:600;font-size:13px;text-decoration:none;" onclick="showAdminRegisterView();return false;">
-                        First time? Create Admin Account &rarr;
-                    </a>
-                </div>
-
                 <div class="divider">
                     <a href="#" class="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
                 </div>
             </div>
 
-            <!-- STEP 4 (OPTIONAL): 2FA TOTP AUTHENTICATOR -->
+            <!-- STEP 3 (OPTIONAL): 2FA TOTP AUTHENTICATOR -->
             <div class="view" id="totpView">
                 <p class="helper-text">
                     <strong>Two-Factor Authentication:</strong> Enter the 6-digit verification code from your <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong> app.
@@ -1138,35 +1009,6 @@
                 </div>
             </div>
 
-            <!-- STEP 5 (ADMIN ONLY): INSTITUTIONAL KEY CONFIRMATION -->
-            <div class="view" id="adminKeyGateView">
-                <p class="helper-text" style="border-left-color:#d4a017;">
-                    <strong>Institutional Authorization:</strong> Enter the Institutional Admin Key provided by Haven of Wisdom Academy to confirm administrator credentials.
-                </p>
-
-                <div class="field">
-                    <label>Institutional Admin Key</label>
-                    <div class="input-wrap">
-                        <input type="password" id="gate-admin-key" class="code-field" placeholder="• • • • • •" maxlength="100" autocomplete="new-password" oninput="clearError('gate-admin-key-err')" onkeydown="if(event.key==='Enter') verifyAdminGateKey()">
-                        <button class="eye-btn" type="button" onclick="toggleEye('gate-admin-key', this)" aria-label="Toggle key visibility">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                                <circle cx="12" cy="12" r="3"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="field-error" id="gate-admin-key-err"></div>
-                </div>
-
-                <button class="submit-btn" id="adminGateSubmitBtn" style="background:linear-gradient(135deg, #d4a017 0%, #b45309 100%);" onclick="verifyAdminGateKey()">
-                    Authorize & Enter Dashboard
-                </button>
-
-                <div class="divider" style="margin-top:14px;">
-                    <a href="#" onclick="showAdminLoginView();return false;">&larr; Cancel & back to login</a>
-                </div>
-            </div>
-
         </div>
     </div>
 </div>
@@ -1179,9 +1021,6 @@
 <script>
     /* ════════════════════════════════════════
        SUPABASE + BACKEND INIT
-       Same project the dashboard uses — the anon key below is public
-       by design (Supabase's RLS is what actually protects data, see
-       scholaria_auth_schema.sql). Never put the SERVICE ROLE key here.
     ════════════════════════════════════════ */
     const SUPABASE_URL  = 'https://qxpsbewbgdwkermxeeso.supabase.co';
     const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cHNiZXdiZ2R3a2VybXhlZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDgzMTgsImV4cCI6MjA5ODI4NDMxOH0.cmG-pVotNZ5KI81_8XsUN5AL5vNVYOPFy8oHegz6cvg';
@@ -1190,11 +1029,6 @@
 
     let currentRole = null;
     let currentView = 'roleView';
-
-    // Institutional admin access code, provided by Haven of Wisdom Academy.
-    // Gates entry to the admin login form only — the real account check
-    // still happens against Supabase in handleLogin(), same as any other role.
-    const ADMIN_CODE = "HWA-ADMIN-2026";
 
     const ROLE_CONFIG = {
         student: {
@@ -1214,22 +1048,12 @@
             idPattern: /^HWA-T-(DEMO|\d{4}-\d{3,})$/,
             idError: 'Format: HWA-T-YYYY-NNN or HWA-T-DEMO',
             badgeLabel: 'Teacher Portal'
-        },
-        admin: {
-            title: 'Welcome, Admin',
-            sub: 'Sign in to the School Admin portal',
-            idLabel: 'Admin Gmail / Email',
-            idPlaceholder: 'e.g. admin@gmail.com or admin@hwa.edu.ph',
-            idPattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-            idError: 'Please enter a valid email address',
-            badgeLabel: 'Admin Portal'
         }
     };
 
     const ROLE_ICONS = {
         student: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 1.5 9 1.5 12 0v-5"/></svg>`,
-        teacher: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>`,
-        admin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/><path d="M9 12l2 2 4-4"/></svg>`
+        teacher: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>`
     };
 
     const ICONS = {
@@ -1240,10 +1064,11 @@
 
     function showView(viewId) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        document.getElementById(viewId).classList.add('active');
+        const el = document.getElementById(viewId);
+        if (el) el.classList.add('active');
         currentView = viewId;
         const backBtn = document.getElementById('backBtn');
-        backBtn.style.display = (viewId === 'roleView') ? 'none' : 'flex';
+        if (backBtn) backBtn.style.display = (viewId === 'roleView') ? 'none' : 'flex';
     }
 
     function goToRoleSelect() {
@@ -1257,16 +1082,13 @@
     function selectRole(role) {
         currentRole = role;
         const cfg = ROLE_CONFIG[role];
+        if (!cfg) return;
         document.getElementById('roleBadgeWrap').innerHTML =
             `<div class="role-badge">${ROLE_ICONS[role]}${cfg.badgeLabel}</div>`;
         applyRoleToLoginForm(role);
         document.getElementById('tabLabel').textContent = cfg.title;
         document.getElementById('tabSub').textContent = cfg.sub;
         showView('loginView');
-    }
-
-    function showAdminLoginView() {
-        selectRole('admin');
     }
 
     function applyRoleToLoginForm(role) {
@@ -1277,8 +1099,6 @@
         document.getElementById('l-pw').value = '';
         clearError('l-id-err'); clearError('l-pw-err');
         resetFieldState('l-id'); resetFieldState('l-pw');
-        const adminLink = document.getElementById('adminRegisterLinkWrap');
-        if (adminLink) adminLink.style.display = (role === 'admin') ? 'block' : 'none';
     }
 
     function toggleEye(inputId, btn) {
@@ -1293,6 +1113,7 @@
     function setFieldState(id, errId, ok, msg) {
         const el = document.getElementById(id);
         const er = document.getElementById(errId);
+        if (!el) return ok;
         el.classList.toggle('valid',   ok && el.value.length > 0);
         el.classList.toggle('invalid', !ok && el.value.length > 0);
         if (er) er.textContent = ok ? '' : msg;
@@ -1301,7 +1122,7 @@
 
     function resetFieldState(id) {
         const el = document.getElementById(id);
-        el.classList.remove('valid', 'invalid');
+        if (el) el.classList.remove('valid', 'invalid');
     }
 
     function clearError(errId) {
@@ -1327,12 +1148,10 @@
 
     function validateId(id, errId) {
         const el = document.getElementById(id);
-        let val = el.value.trim();
-        if (currentRole !== 'admin') {
-            val = val.toUpperCase();
-            el.value = val;
-        }
+        let val = el.value.trim().toUpperCase();
+        el.value = val;
         const cfg = ROLE_CONFIG[currentRole];
+        if (!cfg) return true;
         const ok  = cfg.idPattern.test(val) || val.length === 0;
         return setFieldState(id, errId, ok || val.length === 0, cfg.idError);
     }
@@ -1356,208 +1175,19 @@
 
     function setLoginBusy(busy) {
         const btn = document.getElementById('loginSubmitBtn');
+        if (!btn) return;
         btn.disabled = busy;
         btn.textContent = busy ? 'Logging in…' : 'Login to Portal';
     }
 
     let pendingTotpFactorId = null;
 
-    function showAdminRegisterView() {
-        currentRole = 'admin';
-        document.getElementById('tabLabel').textContent = 'Admin Registration';
-        document.getElementById('tabSub').textContent = 'Register the primary institutional administrator';
-        document.getElementById('reg-key').value = '';
-        document.getElementById('reg-pw').value = '';
-        clearError('reg-key-err');
-        clearError('reg-name-err');
-        clearError('reg-email-err');
-        clearError('reg-pw-err');
-        showView('adminRegisterView');
-    }
-
-    let pendingRegistrationFactorId = null;
-
-    function renderMfaQrCode(qrData, containerId) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-        container.innerHTML = '';
-
-        if (!qrData) {
-            container.innerHTML = '<p style="font-size:12px;color:#6b7280;">Use the manual key below</p>';
-            return;
-        }
-
-        try {
-            if (qrData.startsWith('data:image/svg+xml;utf-8,')) {
-                const svgContent = decodeURIComponent(qrData.replace('data:image/svg+xml;utf-8,', ''));
-                container.innerHTML = svgContent;
-                const svg = container.querySelector('svg');
-                if (svg) {
-                    svg.setAttribute('width', '100%');
-                    svg.setAttribute('height', '100%');
-                    svg.style.display = 'block';
-                }
-            } else if (qrData.startsWith('<svg')) {
-                container.innerHTML = qrData;
-                const svg = container.querySelector('svg');
-                if (svg) {
-                    svg.setAttribute('width', '100%');
-                    svg.setAttribute('height', '100%');
-                    svg.style.display = 'block';
-                }
-            } else {
-                const img = document.createElement('img');
-                img.src = qrData;
-                img.alt = '2FA QR Code';
-                img.style.width = '100%';
-                img.style.height = '100%';
-                img.style.display = 'block';
-                img.style.objectFit = 'contain';
-                container.appendChild(img);
-            }
-        } catch (e) {
-            container.innerHTML = '<p style="font-size:12px;color:#6b7280;">Scan or enter manual key below</p>';
-        }
-    }
-
-    async function handleRegisterAdmin() {
-        const name = document.getElementById('reg-name').value.trim();
-        const email = document.getElementById('reg-email').value.trim();
-        const pw = document.getElementById('reg-pw').value;
-        const key = document.getElementById('reg-key').value.trim();
-
-        let hasErr = false;
-        if (!name) { document.getElementById('reg-name-err').textContent = 'Full name is required'; hasErr = true; }
-        if (!email || !/^\S+@\S+\.\S+$/.test(email)) { document.getElementById('reg-email-err').textContent = 'Valid Gmail or email is required'; hasErr = true; }
-        if (!pw || pw.length < 6) { document.getElementById('reg-pw-err').textContent = 'Password must be at least 6 characters'; hasErr = true; }
-        if (!key) { document.getElementById('reg-key-err').textContent = 'Admin institutional key is required'; hasErr = true; }
-        if (hasErr) return;
-
-        const btn = document.getElementById('regAdminSubmitBtn');
-        btn.disabled = true;
-        btn.textContent = 'Verifying key & creating account…';
-
-        try {
-            const res = await fetch(`${API_BASE}/api/admin/register-original-admin`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ full_name: name, email, password: pw, admin_key: key })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                showToast(data.error || 'Registration failed', 'error');
-                return;
-            }
-
-            // Sign in to session
-            const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email, password: pw });
-            if (authErr || !authData.session) {
-                applyRoleToLoginForm('admin');
-                document.getElementById('l-id').value = email;
-                showView('loginView');
-                showToast(`Admin created! Please log in with ${email}`, 'info');
-                return;
-            }
-
-            // Clean up any stale unverified factors first
-            try {
-                const { data: factorList } = await db.auth.mfa.listFactors();
-                if (factorList?.totp) {
-                    for (const f of factorList.totp) {
-                        if (f.status === 'unverified') {
-                            await db.auth.mfa.unenroll({ factorId: f.id });
-                        }
-                    }
-                }
-            } catch (_) {}
-
-            // Enroll TOTP Factor for Google Authenticator
-            const { data: mfaData, error: mfaErr } = await db.auth.mfa.enroll({
-                factorType: 'totp',
-                issuer: 'Scholaria (Admin)'
-            });
-
-            if (mfaErr || !mfaData) {
-                showToast('Admin account created! Entering dashboard…', 'success');
-                setTimeout(() => { window.location.href = 'dashboard.html'; }, 1000);
-                return;
-            }
-
-            pendingRegistrationFactorId = mfaData.id;
-            renderMfaQrCode(mfaData.totp?.qr_code, 'regMfaQrContainer');
-            document.getElementById('regMfaSecret').textContent = mfaData.totp?.secret || '—';
-            document.getElementById('reg-mfa-code').value = '';
-            clearError('reg-mfa-code-err');
-
-            document.getElementById('tabLabel').textContent = '2FA Setup';
-            document.getElementById('tabSub').textContent = 'Scan QR Code with Google Authenticator';
-            showView('adminMfaSetupView');
-            showToast('Scan the QR code with Google Authenticator', 'info');
-        } catch (err) {
-            showToast('Could not reach the server to register', 'error');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Create Admin Account';
-        }
-    }
-
-    async function verifyAdminRegistrationMfa() {
-        const code = document.getElementById('reg-mfa-code').value.trim();
-        if (!code || code.length < 6) {
-            document.getElementById('reg-mfa-code-err').textContent = 'Please enter the 6-digit code from Google Authenticator';
-            return;
-        }
-
-        const btn = document.getElementById('regMfaSubmitBtn');
-        btn.disabled = true;
-        btn.textContent = 'Verifying code…';
-
-        try {
-            const { data, error } = await db.auth.mfa.challengeAndVerify({
-                factorId: pendingRegistrationFactorId,
-                code: code
-            });
-
-            if (error) {
-                document.getElementById('reg-mfa-code-err').textContent = 'Invalid code. Check Google Authenticator and try again.';
-                showToast('Invalid 2FA code', 'error');
-                return;
-            }
-
-            showToast('2FA verified! Please confirm your Institutional Admin Key.', 'success');
-            document.getElementById('gate-admin-key').value = '';
-            clearError('gate-admin-key-err');
-            document.getElementById('tabLabel').textContent = 'Admin Authorization';
-            document.getElementById('tabSub').textContent = 'Enter the Institutional Admin Key';
-            showView('adminKeyGateView');
-        } catch (err) {
-            showToast('2FA verification failed', 'error');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Verify 2FA & Continue';
-        }
-    }
-
-    function verifyAdminGateKey() {
-        const key = document.getElementById('gate-admin-key').value.trim().toUpperCase();
-        if (!key) {
-            document.getElementById('gate-admin-key-err').textContent = 'Institutional admin key is required';
-            return;
-        }
-        if (key !== ADMIN_CODE) {
-            document.getElementById('gate-admin-key-err').textContent = 'Incorrect key. Please enter the valid institutional key.';
-            showToast('Incorrect institutional key', 'error');
-            return;
-        }
-
-        showToast('Admin authorized! Entering dashboard…', 'success');
-        setTimeout(() => {
-            window.location.href = 'dashboard.html';
-        }, 600);
-    }
-
     async function handleLogin() {
         const cfg = ROLE_CONFIG[currentRole];
+        if (!cfg) {
+            showToast('Please select a role first', 'error');
+            return;
+        }
         const inputVal = document.getElementById('l-id').value.trim();
         const pw = document.getElementById('l-pw').value;
         if (!inputVal) { document.getElementById('l-id-err').textContent = cfg.idLabel + ' is required'; return; }
@@ -1565,24 +1195,13 @@
 
         setLoginBusy(true);
         try {
-            let email = null;
-            if (currentRole === 'admin') {
-                if (inputVal.includes('@')) {
-                    email = inputVal.toLowerCase();
-                } else {
-                    const { data, error } = await db.rpc('email_for_school_id', { p_school_id: inputVal.toUpperCase() });
-                    if (!error && data) email = data;
-                    else email = inputVal;
-                }
-            } else {
-                const { data, error } = await db.rpc('email_for_school_id', { p_school_id: inputVal.toUpperCase() });
-                if (error || !data) {
-                    showError('l-id-err', 'Invalid ID or account not found');
-                    showToast('Invalid ID or password', 'error');
-                    return;
-                }
-                email = data;
+            const { data, error } = await db.rpc('email_for_school_id', { p_school_id: inputVal.toUpperCase() });
+            if (error || !data) {
+                showError('l-id-err', 'Invalid ID or account not found');
+                showToast('Invalid ID or password', 'error');
+                return;
             }
+            const email = data;
 
             const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email, password: pw });
             if (authErr || !authData.session) {
@@ -1600,51 +1219,7 @@
                 return;
             }
 
-            // If Admin, check Google Authenticator TOTP
-            if (currentRole === 'admin') {
-                const { data: mfaFactors } = await db.auth.mfa.listFactors();
-                const totpFactor = mfaFactors?.totp?.find(f => f.status === 'verified');
-                if (totpFactor) {
-                    pendingTotpFactorId = totpFactor.id;
-                    document.getElementById('totp-code').value = '';
-                    clearError('totp-code-err');
-                    document.getElementById('tabLabel').textContent = '2FA Verification';
-                    document.getElementById('tabSub').textContent = 'Open your Google or Microsoft Authenticator app';
-                    showView('totpView');
-                    return;
-                } else {
-                    // Clean up any stale unverified factors first
-                    try {
-                        if (mfaFactors?.totp) {
-                            for (const f of mfaFactors.totp) {
-                                if (f.status === 'unverified') {
-                                    await db.auth.mfa.unenroll({ factorId: f.id });
-                                }
-                            }
-                        }
-                    } catch (_) {}
-
-                    // Admin has no 2FA setup yet — force enrollment with centered QR
-                    const { data: mfaData, error: mfaErr } = await db.auth.mfa.enroll({
-                        factorType: 'totp',
-                        issuer: 'Scholaria (Admin)'
-                    });
-                    if (mfaData && !mfaErr) {
-                        pendingRegistrationFactorId = mfaData.id;
-                        renderMfaQrCode(mfaData.totp?.qr_code, 'regMfaQrContainer');
-                        document.getElementById('regMfaSecret').textContent = mfaData.totp?.secret || '—';
-                        document.getElementById('reg-mfa-code').value = '';
-                        clearError('reg-mfa-code-err');
-                        document.getElementById('tabLabel').textContent = '2FA Setup Required';
-                        document.getElementById('tabSub').textContent = 'Scan QR Code with Google Authenticator';
-                        showView('adminMfaSetupView');
-                        showToast('Admin accounts require Google Authenticator', 'info');
-                        return;
-                    }
-                }
-            }
-
-            // Check if 2FA (TOTP) is enrolled for non-admin roles
+            // Check if 2FA (TOTP) is enrolled
             const { data: mfaFactors } = await db.auth.mfa.listFactors();
             const totpFactor = mfaFactors?.totp?.find(f => f.status === 'verified');
             if (totpFactor) {
@@ -1696,15 +1271,6 @@
                 return;
             }
 
-            if (currentRole === 'admin') {
-                document.getElementById('gate-admin-key').value = '';
-                clearError('gate-admin-key-err');
-                document.getElementById('tabLabel').textContent = 'Admin Authorization';
-                document.getElementById('tabSub').textContent = 'Enter the Institutional Admin Key';
-                showView('adminKeyGateView');
-                return;
-            }
-
             showToast('Login successful', 'success');
             window.location.href = 'dashboard.html';
         } catch (err) {
@@ -1750,7 +1316,7 @@
 
     (async () => {
         const { data } = await db.auth.getSession();
-        if (data.session) window.location.href = 'dashboard.html';
+        if (data?.session) window.location.href = 'dashboard.html';
     })();
 
     /* ════════════════════════════════════════
