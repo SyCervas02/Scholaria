@@ -387,6 +387,7 @@ function openInteractiveQuiz(quizId) {
     ? quiz.timerPerQuestion 
     : (typeof quiz.questions?.[0]?._meta?.timerPerQuestion === 'number' ? quiz.questions[0]._meta.timerPerQuestion : 0);
 
+  lastActiveTimerIndex = -1;
   Object.assign(interactivePlayerState, {
     quiz,
     questions,
@@ -472,14 +473,28 @@ function toggleInteractiveFullscreen() {
   }
 }
 
+let lastActiveTimerIndex = -1;
+
 /**
  * Starts countdown timer for the current question
  */
 function startQuestionTimer() {
+  if (lastActiveTimerIndex === interactivePlayerState.currentIndex && interactivePlayerState.timerInterval) {
+    return;
+  }
+  lastActiveTimerIndex = interactivePlayerState.currentIndex;
   clearInterval(interactivePlayerState.timerInterval);
-  if (interactivePlayerState.timerPerQuestion <= 0) return;
 
-  interactivePlayerState.timerSecondsLeft = interactivePlayerState.timerPerQuestion;
+  const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
+  let timerVal = interactivePlayerState.timerPerQuestion;
+  if (curQ && curQ.type === 'matching') {
+    const pairCount = (curQ.pairs || []).length || 4;
+    timerVal = Math.max(45, timerVal * Math.min(2, pairCount));
+  }
+
+  if (timerVal <= 0) return;
+
+  interactivePlayerState.timerSecondsLeft = timerVal;
   updateTimerUI();
 
   interactivePlayerState.timerInterval = setInterval(() => {
@@ -496,11 +511,11 @@ function startQuestionTimer() {
 function updateTimerUI() {
   const timerEl = document.getElementById('iqTimerDisplay');
   if (!timerEl) return;
-  timerEl.textContent = `⏱️ ${interactivePlayerState.timerSecondsLeft}s`;
+  timerEl.innerHTML = `⏱️ ${interactivePlayerState.timerSecondsLeft}s`;
   if (interactivePlayerState.timerSecondsLeft <= 5) {
-    timerEl.classList.add('warning');
+    timerEl.classList.add('urgent', 'warning');
   } else {
-    timerEl.classList.remove('warning');
+    timerEl.classList.remove('urgent', 'warning');
   }
 }
 
@@ -508,12 +523,12 @@ function handleQuestionTimeout() {
   const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!curQ) return;
 
-  if (curQ.type === 'multiple_choice') {
+  if (curQ.type === 'multiple_choice' || curQ.type === 'true_false' || curQ.type === 'tf') {
     submitMultipleChoiceAnswer(null);
   } else if (curQ.type === 'identification') {
     submitIdentificationAnswer('');
   } else if (curQ.type === 'matching') {
-    submitMatchingAnswer();
+    forceSubmitMatchingOnTimeout();
   }
 }
 
@@ -587,12 +602,14 @@ function renderCurrentInteractiveQuestion() {
 
     <!-- Arena Body -->
     <div class="iq-body">
-      <div style="text-align: center; margin-bottom: 8px;">
-        <span class="iq-progress-badge">
-          ${currentIndex + 1} / ${questions.length}
-          ${interactivePlayerState.timerPerQuestion > 0 ? `<span class="iq-timer-indicator" id="iqTimerDisplay">⏱️ ${interactivePlayerState.timerSecondsLeft}s</span>` : ''}
-        </span>
-      </div>
+      ${q.type !== 'matching' ? `
+        <div style="text-align: center; margin-bottom: 8px;">
+          <span class="iq-progress-badge">
+            ${currentIndex + 1} / ${questions.length}
+            ${interactivePlayerState.timerPerQuestion > 0 ? `<span class="iq-timer-indicator" id="iqTimerDisplay">⏱️ ${interactivePlayerState.timerSecondsLeft}s</span>` : ''}
+          </span>
+        </div>
+      ` : ''}
       ${questionBodyHTML}
     </div>
 
@@ -600,6 +617,19 @@ function renderCurrentInteractiveQuestion() {
     <div class="iq-student-badge">
       <div class="iq-student-avatar">${studentInitial}</div>
       <span>${escHtml(studentName)}</span>
+    </div>
+
+    <!-- Arena Controls (Bottom Right) -->
+    <div class="iq-bottom-dock-right">
+      <div class="iq-dock-score-pill" title="Current Score">
+        +${(interactivePlayerState.score || 0) * 10} pts
+      </div>
+      <button class="iq-dock-btn" onclick="openInteractiveHandoutView()" title="Review Handout">
+        📖
+      </button>
+      <button class="iq-dock-btn" onclick="openInteractiveHint()" title="Hint / Info">
+        💡
+      </button>
     </div>
 
     <!-- Exit Confirmation Modal Dialog -->
@@ -721,37 +751,74 @@ function submitIdentificationAnswer(val) {
  * View 2: Matching Type (Drag and Drop / Tap to Pair)
  */
 function renderMatchingView(q) {
-  const selections = interactivePlayerState.matchingSelections;
+  const docRef = q.sourceFile || q.sourceMaterial || '';
+  const cleanPageText = q.sourcePage ? String(q.sourcePage).replace(/^(page\s*)+/i, '').trim() : '';
+
+  return `
+    <div class="iq-match-hero-header">
+      <div class="iq-match-hero-left">
+        <span class="iq-match-kcheck">Knowledge Check</span>
+        <h2 class="iq-match-title">Match the pairs</h2>
+        <p class="iq-match-subtitle">Drag each answer to its matching term.</p>
+        ${docRef ? `
+          <div class="iq-q-source-pill" style="margin-top:6px;" title="Handout Reference">
+            <span>📄 Handout:</span> <strong>${escHtml(docRef)}</strong>${cleanPageText ? ` · <span>Page ${escHtml(cleanPageText)}</span>` : ''}
+          </div>
+        ` : ''}
+      </div>
+      <div class="iq-match-hero-right">
+        <div class="iq-match-progress-wrap">
+          <span class="iq-match-progress-label">Question ${interactivePlayerState.currentIndex + 1} of ${interactivePlayerState.questions.length}</span>
+          <div class="iq-match-progress-bar">
+            <div class="iq-match-progress-fill" style="width: ${Math.round(((interactivePlayerState.currentIndex + 1) / interactivePlayerState.questions.length) * 100)}%;"></div>
+          </div>
+        </div>
+        ${interactivePlayerState.timerPerQuestion > 0 ? `
+          <div class="iq-match-timer-pill ${interactivePlayerState.timerSecondsLeft <= 5 ? 'urgent' : ''}" id="iqTimerDisplay">
+            ⏱️ ${interactivePlayerState.timerSecondsLeft}s
+          </div>
+        ` : ''}
+      </div>
+    </div>
+
+    <!-- Main Two Column Grid (Board) -->
+    <div id="iqMatchingBoardWrap" style="width:100%;">
+      ${renderMatchingBoardHTML(q)}
+    </div>
+  `;
+}
+
+function renderMatchingBoardHTML(q) {
+  const selections = interactivePlayerState.matchingSelections || {};
   const usedKeys = Object.values(selections);
+  const totalPairs = (q.pairs || []).length;
+  const matchedCount = Object.keys(selections).filter(k => selections[k] != null).length;
 
   const colorClasses = ['color-a', 'color-b', 'color-c', 'color-d', 'color-e'];
-  const numClasses = ['num-1', 'num-2', 'num-3', 'num-4', 'num-5'];
-  const borderClasses = ['border-1', 'border-2', 'border-3', 'border-4', 'border-5'];
-
-  const docRef = q.sourceFile || q.sourceMaterial || '';
 
   return `
     <div class="iq-match-container">
-      ${docRef ? `
-      <div style="text-align:center;width:100%;margin-bottom:12px;">
-        <div class="iq-q-source-pill" title="Handout Reference">
-          <span>📄 Handout:</span> <strong>${escHtml(docRef)}</strong>
-        </div>
-      </div>` : ''}
-      <!-- Left Column: Choices -->
-      <div class="iq-match-left">
-        <div class="iq-match-left-head">
-          <div class="iq-match-left-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+      <!-- Left Column: Answer Bank -->
+      <div class="iq-match-bank-card">
+        <div class="iq-bank-head">
+          <div class="iq-bank-head-left">
+            <div class="iq-bank-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+              </svg>
+            </div>
+            <div>
+              <h4>Answer bank</h4>
+              <p>Drag a card to make a match.</p>
+            </div>
           </div>
-          <div>
-            <h4>Choices</h4>
-            <p>Match the correct answer to each question.</p>
-          </div>
+          <span class="iq-bank-badge">${(q.choices || []).length} choices</span>
         </div>
 
         <div class="iq-choices-list" id="iqChoicesContainer">
-          ${q.choices.map((c, i) => {
+          ${(q.choices || []).map((c, i) => {
             const isUsed = usedKeys.includes(c.key);
             const isSelected = interactivePlayerState.selectedMatchingChoice === c.key;
             const col = colorClasses[i % colorClasses.length];
@@ -761,53 +828,96 @@ function renderMatchingView(q) {
                    draggable="${!isUsed}" 
                    ondragstart="handleChoiceDragStart(event, '${c.key}')"
                    onclick="handleChoiceTap('${c.key}')">
+                <div class="iq-drag-handle" title="Drag this card">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="8" cy="6" r="2"/><circle cx="16" cy="6" r="2"/>
+                    <circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/>
+                    <circle cx="8" cy="18" r="2"/><circle cx="16" cy="18" r="2"/>
+                  </svg>
+                </div>
                 <span class="iq-choice-badge">${c.key}</span>
-                <span>${escHtml(c.text)}</span>
+                <span class="iq-choice-text">${escHtml(c.text)}</span>
               </div>
             `;
           }).join('')}
         </div>
       </div>
 
-      <!-- Right Column: Prompts -->
-      <div class="iq-match-right">
-        ${q.pairs.map((p, i) => {
-          const assignedKey = selections[i];
-          const assignedChoice = assignedKey ? q.choices.find(c => c.key === assignedKey) : null;
-          const choiceIndex = assignedChoice ? q.choices.indexOf(assignedChoice) : 0;
-          const assignedCol = colorClasses[choiceIndex % colorClasses.length];
+      <!-- Right Column: Match the terms -->
+      <div class="iq-match-terms-card">
+        <div class="iq-terms-head">
+          <h4>Match the terms</h4>
+          <p>${matchedCount} of ${totalPairs} matched</p>
+        </div>
 
-          return `
-            <div class="iq-prompt-row ${borderClasses[i % borderClasses.length]}">
-              <div class="iq-prompt-left">
-                <div class="iq-prompt-num ${numClasses[i % numClasses.length]}">${i + 1}</div>
-                <div class="iq-prompt-text">${escHtml(p.left)}</div>
-              </div>
-              <div class="iq-drop-target ${assignedChoice ? 'filled' : ''}" 
-                   id="drop_target_${i}"
-                   ondragover="handleDropOver(event)"
-                   ondrop="handleChoiceDrop(event, ${i})"
-                   onclick="handleTargetTap(${i})">
-                ${assignedChoice ? `
-                  <div class="iq-choice-pill ${assignedCol}" style="width: 100%; border: none; cursor: pointer;" title="Click to remove">
-                    <span class="iq-choice-badge" style="width:24px;height:24px;font-size:11px;">${assignedChoice.key}</span>
-                    <span style="font-size:12.5px;">${escHtml(assignedChoice.text)}</span>
-                  </div>
-                ` : `Drag your answer here`}
-              </div>
-            </div>
-          `;
-        }).join('')}
+        <div class="iq-terms-list">
+          ${(q.pairs || []).map((p, i) => {
+            const assignedKey = selections[i];
+            const assignedChoice = assignedKey ? q.choices.find(c => c.key === assignedKey) : null;
+            const choiceIndex = assignedChoice ? q.choices.indexOf(assignedChoice) : 0;
+            const assignedCol = colorClasses[choiceIndex % colorClasses.length];
+            const numStr = (i + 1) < 10 ? `0${i + 1}` : `${i + 1}`;
 
-        <div class="iq-submit-btn-wrap" style="margin-top: 12px;">
-          <button class="iq-submit-btn" onclick="submitMatchingAnswer()">
-            <span>Submit Matches</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-          </button>
+            return `
+              <div class="iq-term-row">
+                <div class="iq-term-left">
+                  <div class="iq-term-num-badge">${numStr}</div>
+                  <div class="iq-term-label">${escHtml(p.left)}</div>
+                </div>
+                <div class="iq-drop-slot ${assignedChoice ? 'filled ' + assignedCol : ''}" 
+                     id="drop_slot_${i}"
+                     ondragover="handleDropOver(event)"
+                     ondragleave="handleDropLeave(event)"
+                     ondrop="handleChoiceDrop(event, ${i})"
+                     onclick="handleTargetTap(${i})">
+                  ${assignedChoice ? `
+                    <div class="iq-slot-filled-card">
+                      <span class="iq-choice-badge" style="width:24px;height:24px;font-size:11px;">${assignedChoice.key}</span>
+                      <span class="iq-choice-text" style="font-size:12px;">${escHtml(assignedChoice.text)}</span>
+                      <button type="button" class="iq-slot-remove-btn" onclick="clearMatchingSlot(event, ${i})" title="Remove match">&times;</button>
+                    </div>
+                  ` : `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" y1="8" x2="12" y2="16"></line>
+                      <line x1="8" y1="12" x2="16" y2="12"></line>
+                    </svg>
+                    <span>Drop answer here</span>
+                  `}
+                </div>
+              </div>
+            `;
+          }).join('')}
         </div>
       </div>
     </div>
+
+    <!-- Bottom Row: Rearrange note & Submit button -->
+    <div class="iq-match-bottom-bar">
+      <span class="iq-match-bottom-note">You can rearrange your answers before submitting.</span>
+      <button class="iq-submit-btn ${matchedCount === totalPairs ? 'ready' : 'incomplete'}" 
+              id="iqSubmitMatchesBtn" 
+              onclick="submitMatchingAnswer()">
+        <span>Submit Matches</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+          <polyline points="12 5 19 12 12 19"></polyline>
+        </svg>
+      </button>
+    </div>
   `;
+}
+
+function renderMatchingBoardOnly() {
+  const wrap = document.getElementById('iqMatchingBoardWrap');
+  if (!wrap) {
+    renderCurrentInteractiveQuestion();
+    return;
+  }
+  const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
+  if (!q || q.type !== 'matching') return;
+
+  wrap.innerHTML = renderMatchingBoardHTML(q);
 }
 
 function handleChoiceDragStart(e, key) {
@@ -819,8 +929,13 @@ function handleDropOver(e) {
   e.currentTarget.classList.add('hovered');
 }
 
+function handleDropLeave(e) {
+  e.currentTarget.classList.remove('hovered');
+}
+
 function handleChoiceDrop(e, targetIdx) {
   e.preventDefault();
+  e.stopPropagation();
   e.currentTarget.classList.remove('hovered');
   const key = e.dataTransfer.getData('text/plain');
   if (!key) return;
@@ -829,7 +944,7 @@ function handleChoiceDrop(e, targetIdx) {
 }
 
 function handleChoiceTap(key) {
-  const selections = interactivePlayerState.matchingSelections;
+  const selections = interactivePlayerState.matchingSelections || {};
   if (Object.values(selections).includes(key)) return;
 
   if (interactivePlayerState.selectedMatchingChoice === key) {
@@ -837,25 +952,33 @@ function handleChoiceTap(key) {
   } else {
     interactivePlayerState.selectedMatchingChoice = key;
   }
-  renderCurrentInteractiveQuestion();
+  renderMatchingBoardOnly();
 }
 
 function handleTargetTap(targetIdx) {
-  if (interactivePlayerState.matchingSelections[targetIdx]) {
-    // Clicked an already filled target -> clear it!
-    delete interactivePlayerState.matchingSelections[targetIdx];
-    interactivePlayerState.selectedMatchingChoice = null;
-    renderCurrentInteractiveQuestion();
-    return;
-  }
-
   if (interactivePlayerState.selectedMatchingChoice) {
     assignMatchingChoice(targetIdx, interactivePlayerState.selectedMatchingChoice);
   }
 }
 
+function clearMatchingSlot(e, targetIdx) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  if (interactivePlayerState.matchingSelections) {
+    delete interactivePlayerState.matchingSelections[targetIdx];
+  }
+  interactivePlayerState.selectedMatchingChoice = null;
+  renderMatchingBoardOnly();
+}
+
 function assignMatchingChoice(targetIdx, key) {
-  // Remove if previously assigned elsewhere
+  if (!interactivePlayerState.matchingSelections) {
+    interactivePlayerState.matchingSelections = {};
+  }
+
+  // Remove if assigned to another slot
   for (const idx in interactivePlayerState.matchingSelections) {
     if (interactivePlayerState.matchingSelections[idx] === key) {
       delete interactivePlayerState.matchingSelections[idx];
@@ -864,18 +987,35 @@ function assignMatchingChoice(targetIdx, key) {
 
   interactivePlayerState.matchingSelections[targetIdx] = key;
   interactivePlayerState.selectedMatchingChoice = null;
-  renderCurrentInteractiveQuestion();
+  renderMatchingBoardOnly();
 }
 
 function submitMatchingAnswer() {
   if (interactivePlayerState.isWaitingFeedback) return;
-  interactivePlayerState.isWaitingFeedback = true;
 
-  clearInterval(interactivePlayerState.timerInterval);
   const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!q) return;
 
-  const selections = interactivePlayerState.matchingSelections;
+  const totalPairs = (q.pairs || []).length;
+  const selections = interactivePlayerState.matchingSelections || {};
+  const matchedCount = Object.keys(selections).filter(k => selections[k] != null).length;
+
+  if (matchedCount < totalPairs) {
+    if (typeof showToast === 'function') {
+      showToast(`Please match all ${totalPairs} terms before submitting (${matchedCount}/${totalPairs} matched).`, 'warning');
+    }
+    const btn = document.getElementById('iqSubmitMatchesBtn');
+    if (btn) {
+      btn.classList.remove('iq-shake');
+      void btn.offsetWidth;
+      btn.classList.add('iq-shake');
+    }
+    return;
+  }
+
+  interactivePlayerState.isWaitingFeedback = true;
+  clearInterval(interactivePlayerState.timerInterval);
+
   let matchesCorrect = 0;
   const pairDetails = [];
 
@@ -900,6 +1040,53 @@ function submitMatchingAnswer() {
     };
   });
 
+  const isAllCorrect = matchesCorrect === totalPairs;
+
+  interactivePlayerState.matchingSelections = {};
+  interactivePlayerState.selectedMatchingChoice = null;
+
+  showAnswerFeedback({
+    isCorrect: isAllCorrect,
+    correctAnswerText: `${matchesCorrect}/${totalPairs} Pairs Matched. Key: ${pairDetails.slice(0, 3).join(' | ')}${pairDetails.length > 3 ? '...' : ''}`,
+    sourceMaterialText: q.sourceFile || q.sourceMaterial,
+    sourcePageText: q.sourcePage || null,
+    lessonText: q.lesson
+  });
+}
+
+function forceSubmitMatchingOnTimeout() {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  interactivePlayerState.isWaitingFeedback = true;
+  clearInterval(interactivePlayerState.timerInterval);
+
+  const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
+  if (!q) return;
+
+  const selections = interactivePlayerState.matchingSelections || {};
+  let matchesCorrect = 0;
+  const pairDetails = [];
+
+  (q.pairs || []).forEach((pair, pi) => {
+    const assignedKey = selections[pi];
+    const assignedChoice = assignedKey ? q.choices.find(c => c.key === assignedKey) : null;
+    const givenText = assignedChoice ? assignedChoice.text : '';
+    const correctText = pair.right;
+    const isCorrect = givenText && (givenText.trim().toLowerCase() === correctText.trim().toLowerCase());
+
+    if (isCorrect) {
+      interactivePlayerState.score++;
+      matchesCorrect++;
+    }
+    pairDetails.push(`${pair.left} ➔ ${pair.right}`);
+
+    interactivePlayerState.userResponses[`${q.id}_${pi}`] = {
+      label: pair.left,
+      given: givenText,
+      correct: correctText,
+      isCorrect: !!isCorrect
+    };
+  });
+
   const totalPairs = (q.pairs || []).length;
   const isAllCorrect = matchesCorrect === totalPairs;
 
@@ -913,6 +1100,34 @@ function submitMatchingAnswer() {
     sourcePageText: q.sourcePage || null,
     lessonText: q.lesson
   });
+}
+
+function openInteractiveHandoutView() {
+  const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
+  if (!curQ) return;
+  const docRef = curQ.sourceFile || curQ.sourceMaterial || 'Learning Material';
+  const pageRef = curQ.sourcePage ? ` (Page ${curQ.sourcePage})` : '';
+  if (typeof showToast === 'function') {
+    showToast(`Handout Reference: ${docRef}${pageRef}`, 'info');
+  }
+}
+
+function openInteractiveHint() {
+  const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
+  if (!curQ) return;
+  if (curQ.type === 'matching') {
+    if (typeof showToast === 'function') {
+      showToast('Tip: Drag cards into drop zones, or tap a card then tap a slot to match!', 'info');
+    }
+  } else if (curQ.type === 'identification') {
+    if (typeof showToast === 'function') {
+      showToast('Tip: Type your answer into the input box and submit.', 'info');
+    }
+  } else {
+    if (typeof showToast === 'function') {
+      showToast('Tip: Click any choice card to lock in your answer.', 'info');
+    }
+  }
 }
 
 /**
@@ -1085,6 +1300,7 @@ function handleFeedbackContinue() {
  * Advance to next question or complete
  */
 function advanceToNextQuestion() {
+  lastActiveTimerIndex = -1;
   interactivePlayerState.currentIndex++;
   if (interactivePlayerState.currentIndex >= interactivePlayerState.questions.length) {
     interactivePlayerState.isSubmitted = true;
