@@ -72,6 +72,7 @@ function initDashboardShell() {
   renderPage('dashboard');
   refreshNotificationsUI();
   if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
+  if (typeof showNewsAlertIfNeeded === 'function') showNewsAlertIfNeeded();
   loadConversationsFromDB().then(ensureChatRealtimeSubscription);
 }
 
@@ -1095,6 +1096,87 @@ function studentPage(page) {
       <div id="coursesWidgetContainer">
         ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
       </div>
+
+      ${(() => {
+        // ── RECENT NEWS & BULLETINS WIDGET ──
+        const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+        const activeNews = allAnc
+          .filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft &&
+            !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()))
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 4);
+
+        if (!activeNews.length) return '';
+
+        const catConfig = {
+          emergency: { label: '🚨 Suspension / Emergency', bg: '#fee2e2', color: '#dc2626', border: '#fca5a5' },
+          academic:  { label: '📚 Academic',               bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc' },
+          event:     { label: '🏫 School Events',           bg: '#dcfce7', color: '#15803d', border: '#86efac' },
+          others:    { label: '📌 Others',                  bg: '#ede9fe', color: '#6d28d9', border: '#c4b5fd' },
+          general:   { label: '📢 General',                 bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
+        };
+
+        const newsCards = activeNews.map(anc => {
+          const cfg = catConfig[anc.category] || catConfig.general;
+          const readIds = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
+          const isUnread = !readIds.has(String(anc.id));
+          const timeAgo = (() => {
+            const diff = Date.now() - new Date(anc.timestamp).getTime();
+            const mins = Math.floor(diff / 60000);
+            const hrs  = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            if (days > 0) return `${days}d ago`;
+            if (hrs > 0)  return `${hrs}h ago`;
+            if (mins > 0) return `${mins}m ago`;
+            return 'Just now';
+          })();
+
+          return `
+            <div onclick="openAnnouncementDetailModal('${anc.id}')" style="
+              display:flex; align-items:flex-start; gap:14px;
+              padding:14px 16px; border-radius:14px; cursor:pointer;
+              background:${isUnread ? '#f8faff' : '#ffffff'};
+              border:1.5px solid ${isUnread ? '#bfdbfe' : '#e8f0fe'};
+              transition:all 0.2s;
+              ${anc.category === 'emergency' ? 'border-left:4px solid #dc2626;' : ''}
+            "
+            onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(37,99,235,0.1)'"
+            onmouseout="this.style.transform='';this.style.boxShadow=''"
+            title="Click to read full announcement">
+              <div style="
+                width:38px; height:38px; border-radius:10px; flex-shrink:0;
+                background:${cfg.bg}; border:1.5px solid ${cfg.border};
+                display:flex; align-items:center; justify-content:center; font-size:18px;
+              ">${anc.category === 'emergency' ? '🚨' : anc.category === 'academic' ? '📚' : anc.category === 'event' ? '🏫' : anc.category === 'others' ? '📌' : '📢'}</div>
+              <div style="flex:1; min-width:0;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
+                  <span style="font-size:10px; font-weight:800; padding:2px 8px; border-radius:20px; background:${cfg.bg}; color:${cfg.color}; letter-spacing:0.3px; text-transform:uppercase;">${cfg.label}</span>
+                  ${isUnread ? '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:#2563eb;color:#fff;">NEW</span>' : ''}
+                  <span style="font-size:11px; color:#94a3b8; margin-left:auto;">${timeAgo}</span>
+                </div>
+                <div style="font-size:13.5px; font-weight:${isUnread ? '800' : '700'}; color:#0f172a; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(anc.title)}</div>
+                <div style="font-size:12px; color:#64748b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${escHtml(anc.message.replace(/\n/g, ' '))}</div>
+              </div>
+            </div>`;
+        }).join('');
+
+        return `
+        <div style="margin-top:8px;">
+          <div class="section-hdr" style="margin-bottom:12px;">
+            <div>
+              <h2>📰 Recent News &amp; Bulletins</h2>
+              <span style="font-size:12.5px;color:var(--text-muted);">Latest school announcements — suspensions, academic updates, and events</span>
+            </div>
+            <button class="add-btn" style="background:#f1f5f9;color:#0284c7;border:1.5px solid #bfdbfe;font-size:12px;padding:7px 14px;" onclick="renderPage('announcements')">
+              View All →
+            </button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            ${newsCards}
+          </div>
+        </div>`;
+      })()}
+
       <div>
         <div class="section-hdr"><h2>Available Quizzes</h2></div>
         <div class="quiz-list">
