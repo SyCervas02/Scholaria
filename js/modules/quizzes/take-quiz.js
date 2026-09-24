@@ -64,9 +64,45 @@ function buildQuizItems(quiz) {
   return items;
 }
 
+/**
+ * Normalizes text for lenient, accurate comparison:
+ * - Lowercases and trims
+ * - Removes leading articles ("a", "an", "the")
+ * - Removes trailing punctuation (.,;:!?)
+ * - Collapses extra whitespace
+ */
+function normalizeAnswerString(str) {
+  if (str == null) return '';
+  let s = String(str).trim().toLowerCase();
+  s = s.replace(/[.,;:!?]+$/, '').trim();
+  s = s.replace(/^(a|an|the)\s+/i, '').trim();
+  s = s.replace(/\s+/g, ' ');
+  return s;
+}
+
+function compareAnswers(given, correct) {
+  if (given == null || correct == null) return false;
+  const gRaw = String(given).trim().toLowerCase();
+  const cRaw = String(correct).trim().toLowerCase();
+  if (!gRaw || !cRaw) return false;
+  if (gRaw === cRaw) return true;
+
+  const gNorm = normalizeAnswerString(given);
+  const cNorm = normalizeAnswerString(correct);
+  if (gNorm && cNorm && gNorm === cNorm) return true;
+
+  const alternatives = String(correct).split(/[\/|;]/).map(a => normalizeAnswerString(a)).filter(Boolean);
+  if (alternatives.some(alt => alt === gNorm)) return true;
+
+  const cNoParen = normalizeAnswerString(String(correct).replace(/\(.*?\)/g, ''));
+  if (cNoParen && cNoParen === gNorm) return true;
+
+  return false;
+}
+
 function gradeItem(item, given) {
   if (given == null || given === '') return false;
-  return String(given).trim().toLowerCase() === String(item.correct || '').trim().toLowerCase();
+  return compareAnswers(given, item.correct || '');
 }
 
 function startTakeQuizTimer() {

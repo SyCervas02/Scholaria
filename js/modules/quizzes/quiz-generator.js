@@ -777,6 +777,50 @@ function removeAllFiles() {
   renderQuizModal();
 }
 
+function isForbiddenQuizLabel(text) {
+  if (!text || typeof text !== 'string') return false;
+  const clean = text.trim();
+  if (/^(figure|fig|table|tbl|diagram|chart|graph|image|photo|illustration|page|pg|chapter|ch|section|sec|module|mod|part|lesson|appendix|step|box|item|no|num)\b[\s.:–-]*\d+/i.test(clean)) return true;
+  if (/^(figure|table|diagram|chart|graph|image|photo|illustration|page|chapter|appendix|section|module|lesson|handout|reference|notes|summary)$/i.test(clean)) return true;
+  return false;
+}
+
+function isValidQuizTerm(term) {
+  if (!term || typeof term !== 'string') return false;
+  let clean = term.trim().replace(/^["'`“‘(]+|[)"'`”’:,;.]+$/g, '').trim();
+  clean = clean.replace(/^(the|a|an)\s+/i, '').trim();
+  if (clean.length < 2 || clean.length > 45) return false;
+
+  // Reject figure, table, diagram, page labels
+  if (isForbiddenQuizLabel(clean)) return false;
+
+  // Reject sentence fragments containing copula/linking verbs
+  if (/\b(is|are|was|were|has|have|can|will|should|represents|defined)\b/i.test(clean)) return false;
+
+  // Reject terms ending with conjunctions, prepositions, or articles
+  if (/\b(and|or|but|with|to|for|of|in|on|at|by|as|from|which|that|the|a|an)$/i.test(clean)) return false;
+
+  const words = clean.split(/\s+/);
+  if (words.length < 1 || words.length > 5) return false;
+  if (/^(one|a|an|the|this|that|these|those|there|here|some|many|most|all|any|another|other|each|every|such|few|several|what|which|who|whom|whose|when|where|why|how|it|its|their|they|we|you|he|she|in|on|at|by|for|with|about|as|if|because|due|since|according|furthermore|moreover|however|therefore|additionally|first|second|third|finally|also)\b/i.test(clean)) return false;
+  if (/^[0-9\W]+$/.test(clean)) return false;
+
+  return true;
+}
+
+function cleanQuizTerm(term) {
+  if (!term || typeof term !== 'string') return '';
+  let str = term.trim().replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
+  // Strip trailing conjunctions, prepositions, or copulas (e.g. "and", "or", "is", "which")
+  str = str.replace(/\s+(and|or|but|with|to|for|of|in|on|at|by|is|are|was|were|which|that|the|a|an)$/i, '').trim();
+  // If answer starts with "The ... is ... and" or "X is a ...", extract the subject X
+  const clauseMatch = str.match(/^(?:the|a|an)?\s*([A-Za-z0-9\s_-]{2,35})\s+(?:is|are)\s+(?:a|an|the|defined|used|special)/i);
+  if (clauseMatch && clauseMatch[1] && clauseMatch[1].trim().length >= 2) {
+    str = clauseMatch[1].trim();
+  }
+  return str;
+}
+
 function extractQuestionsFromTextClient(params) {
   const { title = 'Quiz', fileName = '', formats = ['mc'], count = 10, formatCounts, distributionMode = 'even', sourceText = '' } = params;
   let targetCount = typeof count === 'number' && count > 0 ? count : (typeof count === 'string' && /^\d+$/.test(count) ? parseInt(count, 10) : 10);
@@ -789,20 +833,23 @@ function extractQuestionsFromTextClient(params) {
 
   const sentences = rawClean.split(/(?<=[.!?\n])\s+/)
     .map(s => s.trim())
-    .filter(s => s.length > 25 && s.length < 220 && !s.startsWith('%') && !s.startsWith('#') && !s.includes('---'));
+    .filter(s => s.length > 20 && s.length < 240 && !s.startsWith('%') && !s.startsWith('#') && !s.includes('---'));
 
-  const defRegex = /^([A-Z][A-Za-z0-9\s-]{2,40})\s+(is\s+defined\s+as|is\s+a|is\s+an|is\s+the|refers\s+to|means|represents|describes)\s+(.+)/i;
   const pairs = [];
   const extractedTerms = [];
 
   sentences.forEach(s => {
-    const m = s.match(defRegex);
-    if (m && m[1] && m[3]) {
-      const term = m[1].trim();
-      const def = m[3].trim().replace(/[.;]+$/, '');
-      if (term.length > 2 && def.length > 10 && !extractedTerms.includes(term)) {
-        pairs.push({ term, def });
-        extractedTerms.push(term);
+    // Non-greedily find definition verbs
+    const verbMatch = s.match(/\b(is\s+defined\s+as|is\s+described\s+as|refers\s+to|means|represents|is\s+(?:a|an|the))\b/i);
+    if (verbMatch && verbMatch.index > 0) {
+      let rawTerm = s.slice(0, verbMatch.index).trim().replace(/^[•\-*]\s*/, '').replace(/^(the|a|an)\s+/i, '').trim();
+      let rawDef = s.slice(verbMatch.index + verbMatch[0].length).trim().replace(/[.;]+$/, '');
+      rawTerm = cleanQuizTerm(rawTerm);
+      if (isValidQuizTerm(rawTerm) && rawDef.length > 8 && !isForbiddenQuizLabel(rawTerm)) {
+        if (!extractedTerms.some(t => t.toLowerCase() === rawTerm.toLowerCase())) {
+          pairs.push({ term: rawTerm, def: rawDef });
+          extractedTerms.push(rawTerm);
+        }
       }
     }
   });
@@ -812,11 +859,13 @@ function extractQuestionsFromTextClient(params) {
   colonLines.forEach(l => {
     const m = l.match(colonRegex);
     if (m && m[1] && m[2]) {
-      const term = m[1].trim();
-      const def = m[2].trim().replace(/[.;]+$/, '');
-      if (term.length > 2 && def.length > 10 && !extractedTerms.includes(term)) {
-        pairs.push({ term, def });
-        extractedTerms.push(term);
+      let term = cleanQuizTerm(m[1]);
+      let def = m[2].trim().replace(/[.;]+$/, '');
+      if (isValidQuizTerm(term) && def.length > 10 && !isForbiddenQuizLabel(term)) {
+        if (!extractedTerms.some(t => t.toLowerCase() === term.toLowerCase())) {
+          pairs.push({ term, def });
+          extractedTerms.push(term);
+        }
       }
     }
   });
@@ -857,14 +906,14 @@ function extractQuestionsFromTextClient(params) {
       let qText = '';
       let correct = '';
       if (pair) {
-        qText = `Which of the following describes "${pair.def}"?`;
-        correct = pair.term;
+        qText = `Which concept is described as: "${pair.def}"?`;
+        correct = cleanQuizTerm(pair.term);
       } else {
-        qText = `Based on the learning material for ${title || fileName}, which concept corresponds to: "${sentence}"?`;
-        correct = (extractedTerms[i % Math.max(1, extractedTerms.length)]) || `${title} Principle`;
+        qText = `Based on the learning material for ${title || fileName}, which concept corresponds to: "${sentence.slice(0, 95)}..."?`;
+        correct = cleanQuizTerm(extractedTerms[i % Math.max(1, extractedTerms.length)]) || `${title} Principle`;
       }
-      const otherTerms = extractedTerms.filter(t => t !== correct);
-      const distractors = [...otherTerms, ...defaultDistractors].filter(t => t !== correct).slice(0, 3);
+      const otherTerms = extractedTerms.filter(t => t.toLowerCase() !== correct.toLowerCase());
+      const distractors = [...otherTerms, ...defaultDistractors].filter(t => t.toLowerCase() !== correct.toLowerCase() && !isForbiddenQuizLabel(t)).slice(0, 3);
       while (distractors.length < 3) {
         distractors.push(`Concept Option ${distractors.length + 1}`);
       }
@@ -879,26 +928,33 @@ function extractQuestionsFromTextClient(params) {
       });
     } else if (isId) {
       if (pair) {
+        let cleanDef = pair.def.trim();
+        cleanDef = cleanDef.replace(/^["']+|["']+$/g, '');
+        const qText = cleanDef.toLowerCase().startsWith('the ') || cleanDef.toLowerCase().startsWith('a ')
+          ? `Which concept is described as: "${cleanDef}"?`
+          : `Identify the term: "${cleanDef}".`;
         questions.push({
           _id: 'q_' + i + '_' + Date.now(),
           type: 'identification',
-          question: `Identify the term or concept defined as: "${pair.def}".`,
-          answer: pair.term
+          question: qText,
+          answer: cleanQuizTerm(pair.term)
         });
       } else {
+        const candidateTerm = cleanQuizTerm(extractedTerms[i % Math.max(1, extractedTerms.length)]) || `${title.split(' ')[0] || 'Core'} Principle`;
         questions.push({
           _id: 'q_' + i + '_' + Date.now(),
           type: 'identification',
-          question: `State the key concept highlighted in: "${sentence}".`,
-          answer: (extractedTerms[i % Math.max(1, extractedTerms.length)]) || title
+          question: `State the key concept highlighted in: "${sentence.slice(0, 95)}...".`,
+          answer: candidateTerm
         });
       }
     } else if (isMatch) {
-      const pCount = Math.min(Math.max(3, pairs.length), 5);
-      const mPairs = pairs.slice(0, pCount).map(p => ({ left: p.term, right: p.def }));
+      const validPairs = pairs.filter(p => !isForbiddenQuizLabel(p.term) && !isForbiddenQuizLabel(p.def));
+      const pCount = Math.min(Math.max(3, validPairs.length), 5);
+      const mPairs = validPairs.slice(0, pCount).map(p => ({ left: cleanQuizTerm(p.term), right: p.def }));
       if (mPairs.length < 2) {
-        mPairs.push({ left: `${title} - Concept A`, right: 'Core operational principle and guideline' });
-        mPairs.push({ left: `${title} - Concept B`, right: 'Foundational framework and implementation' });
+        mPairs.push({ left: `${title} - Principle A`, right: 'Core operational principle and guideline' });
+        mPairs.push({ left: `${title} - Principle B`, right: 'Foundational framework and implementation' });
       }
       questions.push({
         _id: 'q_' + i + '_' + Date.now(),
@@ -953,7 +1009,7 @@ async function generateQuiz() {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 18000);
+    const timeoutId = setTimeout(() => controller.abort(), 75000); // 75 seconds leeway for AI models
     const response = await fetch(QUIZ_API_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

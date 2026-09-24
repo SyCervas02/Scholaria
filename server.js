@@ -525,50 +525,65 @@ function requireTeacherOrAdmin(profile, res) {
   return true;
 }
 
-app.post('/api/materials/upload', materialUpload.single('file'), async (req, res) => {
+app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
   if (!requireTeacherOrAdmin(profile, res)) return;
 
+  const files = (req.files && req.files.length) ? req.files : (req.file ? [req.file] : []);
   const { title, subject, strand, grade_level, section } = req.body;
-  if (!req.file || !title || !title.trim()) {
-    return res.status(400).json({ error: 'Missing file or title' });
+  if (!files.length || !title || !title.trim()) {
+    return res.status(400).json({ error: 'Missing file(s) or title' });
   }
 
   // Force section to teacher's connected section if assigned
   const targetSection = (profile.role === 'teacher' && profile.section) ? profile.section : (section || null);
-
-  const safeName = req.file.originalname.replace(/[^\w.\-]+/g, '_');
-  const storagePath = `${profile.id}/${Date.now()}-${safeName}`;
-
-  const { error: uploadErr } = await supabaseAdmin.storage
-    .from('learning-materials')
-    .upload(storagePath, req.file.buffer, { contentType: req.file.mimetype });
-  if (uploadErr) return res.status(500).json({ error: uploadErr.message });
-
   const status = profile.role === 'admin' ? 'approved' : 'pending';
 
-  const { data: material, error: insertErr } = await supabaseAdmin
-    .from('materials')
-    .insert({
-      title: title.trim(),
-      subject: subject || null,
-      strand: strand || null,
-      grade_level: grade_level || null,
-      section: targetSection,
-      file_url: storagePath,
-      file_type: req.file.mimetype,
-      uploaded_by: profile.id,
-      status,
-    })
-    .select().single();
+  const insertedMaterials = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const safeName = f.originalname.replace(/[^\w.\-]+/g, '_');
+    const storagePath = `${profile.id}/${Date.now()}_${i}-${safeName}`;
 
-  if (insertErr) {
-    await supabaseAdmin.storage.from('learning-materials').remove([storagePath]);
-    return res.status(500).json({ error: insertErr.message });
+    const { error: uploadErr } = await supabaseAdmin.storage
+      .from('learning-materials')
+      .upload(storagePath, f.buffer, { contentType: f.mimetype });
+    if (uploadErr) {
+      console.warn('Storage upload error for file:', safeName, uploadErr.message);
+    }
+
+    const itemTitle = files.length === 1 ? title.trim() : (f.originalname.replace(/\.[^.]+$/, '') || title.trim());
+
+    const { data: material, error: insertErr } = await supabaseAdmin
+      .from('materials')
+      .insert({
+        title: itemTitle,
+        subject: subject || null,
+        strand: strand || null,
+        grade_level: grade_level || null,
+        section: targetSection,
+        file_url: storagePath,
+        file_type: f.mimetype,
+        uploaded_by: profile.id,
+        status,
+      })
+      .select().single();
+
+    if (!insertErr && material) {
+      insertedMaterials.push(material);
+    }
   }
 
-  res.json(material);
+  if (insertedMaterials.length === 0) {
+    return res.status(500).json({ error: 'Failed to upload materials' });
+  }
+
+  if (files.length === 1) {
+    res.json(insertedMaterials[0]);
+  } else {
+    res.json({ success: true, count: insertedMaterials.length, materials: insertedMaterials });
+  }
 });
 
 app.get('/api/materials', async (req, res) => {
@@ -886,7 +901,40 @@ Return ONLY raw JSON (no markdown fences, no commentary) matching this exact sch
     }
   ]
 }
+CRITICAL QUALITY AND ACCURACY RULES:
+1. NEVER USE FIGURE, TABLE, DIAGRAM, OR PAGE LABELS AS ANSWERS:
+   - Do NOT create questions where the correct answer or any option is "Figure 1", "Figure 2", "Table 1", "Diagram 3", "Image 1", "Page 2", "Module 1", "Chapter 1", etc.
+   - The answer must ALWAYS be the actual technical term, concept, function, tool, or principle (e.g. "Java Virtual Machine", "main method", "Bytecode", "JDK", "Inheritance").
+2. CONCISE, CLEAN, SELF-CONTAINED ANSWERS ONLY:
+   - Identification and Multiple Choice answers must be concise terms or short phrases (1 to 5 words).
+   - NEVER provide a cut-off sentence fragment or run-on clause ending in conjunctions (e.g. NEVER "The main method is a special method and" or "which is used to").
+   - If a sentence says "The main method is a special method and is the entry point of the program execution", the answer is strictly "main method", NOT the sentence fragment.
+3. PROFESSIONAL QUESTION FORMULATION:
+   - Formulate natural, well-phrased questions that test understanding (e.g., "What is the primary method that acts as the entry point of program execution in Java?").
+
 Only include "type" values matching the requested formats. For True/False, options must be ["True", "False"]. For multiple choice, ensure ${numChoices} options. Base every question directly on the source material provided. Always include the specific individual "source_file" and "source_page" attributes.`;
+}
+
+function isForbiddenFigureLabel(text) {
+  if (!text || typeof text !== 'string') return false;
+  const clean = text.trim();
+  if (/^(figure|fig|table|tbl|diagram|chart|graph|image|photo|illustration|page|pg|chapter|ch|section|sec|module|mod|part|lesson|appendix|step|box|item|no|num)\b[\s.:–-]*\d+/i.test(clean)) return true;
+  if (/^(figure|table|diagram|chart|graph|image|photo|illustration|page|chapter|appendix|section|module|lesson|handout|module\s*no)$/i.test(clean)) return true;
+  return false;
+}
+
+function cleanAnswerTerm(answer) {
+  if (!answer || typeof answer !== 'string') return '';
+  let str = answer.trim();
+  str = str.replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
+  // Strip trailing conjunctions, prepositions, or copulas (e.g. "and", "or", "is", "which")
+  str = str.replace(/\s+(and|or|but|with|to|for|of|in|on|at|by|is|are|was|were|which|that|the|a|an)$/i, '').trim();
+  // If answer starts with "The ... is ... and" or "X is a ...", extract the subject X
+  const clauseMatch = str.match(/^(?:the|a|an)?\s*([A-Za-z0-9\s_-]{2,35})\s+(?:is|are)\s+(?:a|an|the|defined|used|special)/i);
+  if (clauseMatch && clauseMatch[1] && clauseMatch[1].trim().length >= 2) {
+    str = clauseMatch[1].trim();
+  }
+  return str;
 }
 
 function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
@@ -905,8 +953,17 @@ function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
     return { ...q, type };
   }).filter(q => {
     if (!q || (typeof q.question !== 'string' && q.type !== 'matching')) return false;
+
+    // Check and clean answer
+    if (typeof q.answer === 'string') {
+      q.answer = cleanAnswerTerm(q.answer);
+      if (isForbiddenFigureLabel(q.answer)) return false;
+    }
+
     if (q.type === 'multiple_choice') {
       if (!Array.isArray(q.options) || q.options.length < 2) return false;
+      q.options = q.options.map(o => cleanAnswerTerm(String(o))).filter(o => !isForbiddenFigureLabel(o));
+      if (q.options.length < 2) return false;
       if (!q.options.includes(q.answer)) {
         const match = q.options.find(o => String(o).trim().toLowerCase() === String(q.answer || '').trim().toLowerCase());
         if (match) q.answer = match;
@@ -919,8 +976,20 @@ function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
       if (typeof q.answer !== 'string') q.answer = 'True';
       return true;
     }
-    if (q.type === 'identification') return typeof q.answer === 'string' && q.answer.trim().length > 0;
-    if (q.type === 'matching') return Array.isArray(q.pairs) && q.pairs.length >= 2 && q.pairs.every(p => p && typeof p.left === 'string' && typeof p.right === 'string');
+    if (q.type === 'identification') {
+      if (typeof q.answer !== 'string' || q.answer.trim().length < 2) return false;
+      if (isForbiddenFigureLabel(q.answer)) return false;
+      // Refine repetitive robotic question phrasing
+      if (/^Identify the term or concept defined as:\s*"/i.test(q.question)) {
+        q.question = q.question.replace(/^Identify the term or concept defined as:\s*"/i, 'Which concept is described as: "');
+      }
+      return true;
+    }
+    if (q.type === 'matching') {
+      if (!Array.isArray(q.pairs) || q.pairs.length < 2) return false;
+      q.pairs = q.pairs.filter(p => p && typeof p.left === 'string' && typeof p.right === 'string' && !isForbiddenFigureLabel(p.right) && !isForbiddenFigureLabel(p.left));
+      return q.pairs.length >= 2;
+    }
     return false;
   }).map((q, idx) => {
     let srcFile = (q.source_file || '').trim();
@@ -954,14 +1023,24 @@ const INVALID_TERM_STARTERS = /^(one|a|an|the|this|that|these|those|there|here|s
 
 function isValidAcademicTerm(term) {
   if (!term || typeof term !== 'string') return false;
-  const clean = term.trim().replace(/^["'`“‘(]+|[)"'`”’:,;.]+$/g, '').trim();
-  if (clean.length < 3 || clean.length > 42) return false;
+  let clean = term.trim().replace(/^["'`“‘(]+|[)"'`”’:,;.]+$/g, '').trim();
+  clean = clean.replace(/^(the|a|an)\s+/i, '').trim();
+  if (clean.length < 2 || clean.length > 45) return false;
+
+  // Reject figure, table, diagram, page labels
+  if (isForbiddenFigureLabel(clean)) return false;
+
+  // Reject sentence fragments containing copula/linking verbs
+  if (/\b(is|are|was|were|has|have|can|will|should|represents|defined)\b/i.test(clean)) return false;
+
+  // Reject terms ending with conjunctions, prepositions, or articles
+  if (/\b(and|or|but|with|to|for|of|in|on|at|by|as|from|which|that|the|a|an)$/i.test(clean)) return false;
+
   const words = clean.split(/\s+/);
-  if (words.length < 1 || words.length > 4) return false;
+  if (words.length < 1 || words.length > 5) return false;
   if (INVALID_TERM_STARTERS.test(clean)) return false;
-  if (STOP_WORDS.has(clean.toLowerCase())) return false;
+  if (STOP_WORDS && STOP_WORDS.has(clean.toLowerCase())) return false;
   if (/^[0-9\W]+$/.test(clean)) return false;
-  if (/^(is|are|was|were|has|have|can|will|should|of|to|in|for|with|and|or|by|at)$/i.test(words[words.length - 1])) return false;
   return true;
 }
 
@@ -1031,7 +1110,6 @@ function extractQuestionsFromText(params) {
   }
 
   // Extract definition pairs and sentences grouped by document
-  const defRegex = /^([A-Z][A-Za-z0-9\s-]{2,40})\s+(is\s+defined\s+as|is\s+a|is\s+an|is\s+the|refers\s+to|means|represents|describes)\s+(.+)/i;
   const colonRegex = /^([A-Z][A-Za-z0-9\s-]{2,35})\s*[:–-]\s*(.{15,200})$/;
   const allItems = [];
   const itemsByDoc = {};
@@ -1044,11 +1122,11 @@ function extractQuestionsFromText(params) {
     // Check line-by-line for bullet / colon definitions
     lines.forEach(line => {
       const cMatch = line.match(colonRegex);
-      if (cMatch && isValidAcademicTerm(cMatch[1])) {
-        const term = cMatch[1].trim();
+      if (cMatch) {
+        const rawTerm = cMatch[1].trim().replace(/^(the|a|an)\s+/i, '').trim();
         const def = cMatch[2].trim().replace(/[.;]+$/, '');
-        if (def.length >= 12) {
-          const itemObj = { doc: sec.doc, page: sec.page, term, def, sentence: line, isDef: true };
+        if (isValidAcademicTerm(rawTerm) && def.length >= 10 && !isForbiddenFigureLabel(rawTerm)) {
+          const itemObj = { doc: sec.doc, page: sec.page, term: rawTerm, def, sentence: line, isDef: true };
           allItems.push(itemObj);
           itemsByDoc[sec.doc].push(itemObj);
         }
@@ -1058,15 +1136,16 @@ function extractQuestionsFromText(params) {
     // Check sentence-by-sentence
     const sList = sec.text.split(/(?<=[.!?\n])\s+/)
       .map(s => s.trim())
-      .filter(s => s.length > 25 && s.length < 220 && !s.startsWith('%') && !s.startsWith('#'));
+      .filter(s => s.length > 20 && s.length < 240 && !s.startsWith('%') && !s.startsWith('#'));
 
     sList.forEach(s => {
-      const m = s.match(defRegex);
-      if (m && m[1] && m[3] && isValidAcademicTerm(m[1])) {
-        const rawTerm = m[1].trim().replace(/^(the|a|an)\s+/i, '').trim();
-        const def = m[3].trim().replace(/[.;]+$/, '');
-        if (isValidAcademicTerm(rawTerm) && def.length > 10) {
-          const itemObj = { doc: sec.doc, page: sec.page, term: rawTerm, def, sentence: s, isDef: true };
+      // Find definition verb non-greedily
+      const verbMatch = s.match(/\b(is\s+defined\s+as|is\s+described\s+as|refers\s+to|means|represents|is\s+(?:a|an|the))\b/i);
+      if (verbMatch && verbMatch.index > 0) {
+        const rawSubject = s.slice(0, verbMatch.index).trim().replace(/^(the|a|an)\s+/i, '').replace(/^[•\-*]\s*/, '').trim();
+        const rawDef = s.slice(verbMatch.index + verbMatch[0].length).trim().replace(/[.;]+$/, '');
+        if (isValidAcademicTerm(rawSubject) && rawDef.length > 8 && !isForbiddenFigureLabel(rawSubject)) {
+          const itemObj = { doc: sec.doc, page: sec.page, term: rawSubject, def: rawDef, sentence: s, isDef: true };
           allItems.push(itemObj);
           itemsByDoc[sec.doc].push(itemObj);
           return;
