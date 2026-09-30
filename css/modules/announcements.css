@@ -289,14 +289,18 @@
   overflow: hidden;
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
   transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
   display: flex;
   flex-direction: column;
   position: relative;
+  cursor: pointer;
 }
 
 .anc-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(37, 99, 235, 0.08);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.12);
+  border-color: #93c5fd;
 }
 
 .anc-card.emergency {
@@ -550,3 +554,52 @@
   color: #334155;
   cursor: pointer;
 }
+
+/* ── UNREAD / READ RECEIPT INDICATORS ── */
+
+/* Blue pulsing dot before the announcement title when unread */
+.anc-unread-dot {
+  width: 9px;
+  height: 9px;
+  background: #2563eb;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+  flex-shrink: 0;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+  animation: ancDotPulse 2s ease-in-out infinite;
+}
+
+@keyframes ancDotPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+  50%       { box-shadow: 0 0 0 5px rgba(37, 99, 235, 0); }
+}
+
+/* Bold title class for unread cards */
+.anc-card-title.unread {
+  color: #0f172a;
+}
+
+/* NEW badge chip next to category tags */
+.anc-unread-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: #2563eb;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Card left-border highlight for unread cards */
+.anc-card.anc-card--unread {
+  border-top: 2.5px solid #93c5fd;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 60px);
+}
+

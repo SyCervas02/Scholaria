@@ -10,7 +10,24 @@ function closeAcademicReportModal() {
 }
 
 function triggerPrintReport() {
+  const prevTitle = document.title;
+  if (activeReportType === 'section') {
+    document.title = `Master_Grade_Sheet_${(activeReportSection || 'Section').replace(/\s+/g, '_')}`;
+  } else if (activeReportType === 'student') {
+    const studentObj = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).find(u => u.dbId === activeReportStudent || u.id === activeReportStudent || u.name === activeReportStudent);
+    const sName = studentObj?.name || activeReportStudent || 'Student';
+    document.title = `Grade_Slip_${sName.replace(/\s+/g, '_')}`;
+  }
+
+  const body = document.getElementById('academicReportModalBody');
+  if (body) body.scrollTop = 0;
+  window.scrollTo(0, 0);
+
   window.print();
+
+  setTimeout(() => {
+    document.title = prevTitle;
+  }, 1000);
 }
 
 /**

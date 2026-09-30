@@ -213,7 +213,7 @@ function renderStudentGradePanelContent() {
   }
 
   listEl.innerHTML = formatted.map(item => `
-    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;justify-space:between;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
       <div>
         <div style="font-weight:700;font-size:14px;color:#0f172a;">${escHtml(item.title)}</div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Submitted: ${escHtml(item.dateStr)} · Score: <strong>${item.score}/${item.total}</strong></div>
@@ -332,49 +332,7 @@ function saveCustomClassRecEntry(studentKey, data) {
 }
 
 function isStudentHandledByTeacher(student, teacherProfile) {
-  if (!teacherProfile || ROLE === 'admin') return true;
-
-  // 1. Check Handled Sections
-  const rawSection = (teacherProfile.section || '').trim();
-  const isAllSections = !rawSection || rawSection === '—' || rawSection === 'N/A' ||
-    rawSection.toLowerCase().includes('all') || rawSection.toLowerCase().includes('none');
-
-  if (!isAllSections) {
-    const teacherSections = rawSection.split(',').map(s => s.trim().toLowerCase());
-    const studentSection = (student.section || '').trim().toLowerCase();
-    if (studentSection && !teacherSections.includes(studentSection) && !teacherSections.includes('all')) {
-      return false;
-    }
-  }
-
-  // 2. Check Handled Strands / Subjects
-  const rawStrand = (teacherProfile.strand || teacherProfile.subjects || '').trim();
-  const isAllStrands = !rawStrand || rawStrand === '—' || rawStrand === 'N/A' ||
-    rawStrand.toLowerCase().includes('all') || rawStrand.toLowerCase() === 'general' ||
-    rawStrand.toLowerCase().includes('web systems') || rawStrand.toLowerCase().includes('programming');
-
-  if (!isAllStrands) {
-    const teacherStrands = rawStrand.split(',').map(s => s.trim().toLowerCase());
-    const studentStrand = (student.strand || '').trim().toLowerCase();
-    if (studentStrand) {
-      const hasMatch = teacherStrands.some(ts => studentStrand.includes(ts) || ts.includes(studentStrand) || ts === 'all' || ts === 'general');
-      if (!hasMatch) return false;
-    }
-  }
-
-  // 3. Check Handled Grade Levels
-  const rawGrade = (teacherProfile.grade_level || teacherProfile.gradeLevel || '').trim();
-  const isAllGrades = !rawGrade || rawGrade === '—' || rawGrade === 'N/A' ||
-    rawGrade.toLowerCase().includes('all') || rawGrade.toLowerCase().includes('11 & 12');
-
-  if (!isAllGrades) {
-    const teacherGrades = rawGrade.split(',').map(g => g.trim().toLowerCase());
-    const studentGrade = (student.gradeLevel || student.grade_level || '').trim().toLowerCase();
-    if (studentGrade && !teacherGrades.includes(studentGrade)) {
-      return false;
-    }
-  }
-
+  // Teachers and Admins are permitted to view and inspect all students' progress specification and academic records
   return true;
 }
 
@@ -518,9 +476,7 @@ function openAddClassRecordModal() {
   const select = document.getElementById('crStudentSelect');
   if (select) {
     const students = registeredUsers.filter(u => u.role === 'student');
-    const filteredStuds = students.filter(u => ROLE !== 'teacher' || isStudentHandledByTeacher(u, CURRENT_PROFILE));
-
-    select.innerHTML = (filteredStuds.length ? filteredStuds : students).map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('');
+    select.innerHTML = students.map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('');
   }
   const quizSelect = document.getElementById('crQuizSelect');
   if (quizSelect) {
@@ -565,9 +521,6 @@ function buildRealClassRecordEntries() {
   const allAttempts = getAllRecordedAttempts();
 
   return students.filter(u => {
-    if (ROLE === 'teacher' && CURRENT_PROFILE) {
-      if (!isStudentHandledByTeacher(u, CURRENT_PROFILE)) return false;
-    }
     if (classRecSectionFilter && u.section !== classRecSectionFilter) return false;
     if (classRecStudentFilter) {
       const uKey = u.dbId || u.id || u.name;
@@ -1470,7 +1423,16 @@ function teacherPage(page) {
     }
 
     case 'materials': return `
-      <div id="materialsListWrap">${renderMaterialsManagerPage('teacher')}</div>`;
+      <div class="section-hdr"><h2>Materials Manager</h2>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <select class="user-filter-select" onchange="setMaterialsStrandFilter(this.value)">
+            <option value="">All Strands</option>
+            ${STRANDS.map(s => `<option value="${s}" ${materialsStrandFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+          <button class="add-btn" onclick="openMaterialModal()">${iconPlus()} Upload Material</button>
+        </div>
+      </div>
+      <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
 
     case 'quiz': {
       let filtered = customQuizzes.slice();

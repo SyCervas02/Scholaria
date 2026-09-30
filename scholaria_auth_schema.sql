@@ -130,6 +130,11 @@ create policy "Owners and admins update quizzes"
   using (created_by = auth.uid() or public.is_admin())
   with check (created_by = auth.uid() or public.is_admin());
 
+drop policy if exists "Owners and admins delete quizzes" on public.quizzes;
+create policy "Owners and admins delete quizzes"
+  on public.quizzes for delete
+  using (created_by = auth.uid() or public.is_admin());
+
 drop policy if exists "Public read approved materials" on public.materials;
 create policy "Public read approved materials"
   on public.materials for select
