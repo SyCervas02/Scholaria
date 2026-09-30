@@ -2323,12 +2323,22 @@ function adminPage(page) {
 /* ── SHARED CHAT PAGE LAYOUT ── */
 function buildChatPage(role) {
   return `
-    <div class="section-hdr"><h2>Chats</h2></div>
+    <section class="scholaria-chat">
+    <div class="chat-page-heading">
+      <div><h2>Chats</h2><p>Connect with your ${role === 'teacher' ? 'students and fellow teachers' : 'teachers and classmates'}.</p></div>
+      <button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button>
+    </div>
     <div class="chat-layout">
       <div class="chat-contacts">
         <div class="chat-contacts-hdr">
           <span>Conversations</span>
-          <button class="new-chat-btn" title="New chat" onclick="openNewChatModal()">${iconPlus()}</button>
+          <button class="new-chat-btn" title="New conversation" aria-label="New conversation" onclick="openNewChatModal()">${iconPlus()}</button>
+        </div>
+        <label class="chat-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/></svg><input type="search" aria-label="Search conversations" placeholder="Search conversations..." oninput="filterChatConversations(this.value)"></label>
+        <div class="chat-filters" aria-label="Filter conversations">
+          <button class="active" aria-pressed="true" data-chat-filter="all" onclick="setChatFilter('all')">All</button>
+          <button aria-pressed="false" data-chat-filter="teacher" onclick="setChatFilter('teacher')">Teachers</button>
+          ${role === 'student' ? '' : '<button aria-pressed="false" data-chat-filter="student" onclick="setChatFilter(\'student\')">Students</button>'}
         </div>
         <div class="contact-list" id="chatContactList">
           <div class="contact-empty">Loading conversations…</div>
@@ -2336,18 +2346,19 @@ function buildChatPage(role) {
       </div>
       <div class="chat-window">
         <div class="cw-header">
-          <div class="contact-avatar" id="cwAvatar" style="width:34px;height:34px;font-size:12px;"></div>
+          <div class="contact-avatar cw-placeholder-avatar" id="cwAvatar">${chatOutlineIcon()}</div>
           <div>
-            <div class="cw-name" id="cwName">Select a conversation</div>
-            <div class="cw-role" id="cwRole"></div>
+            <div class="cw-name" id="cwName">Your conversations</div>
+            <div class="cw-role" id="cwRole">Stay connected, keep learning.</div>
           </div>
         </div>
         <div class="cw-messages" id="cwMessages">
-          <div class="cw-empty">Pick a conversation on the left, or start a new one.</div>
+          <div class="cw-empty chat-welcome">${chatEmptyIllustration()}<h3>Start a conversation</h3><p>${role === 'teacher' ? 'Message a student, connect with fellow teachers,<br>or create a class group.' : 'Message a teacher, connect with classmates,<br>or create a study group.'}</p><button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button></div>
         </div>
         <div class="cw-input-area" id="cwInputArea"></div>
       </div>
-    </div>`;
+    </div>
+    </section>`;
 }
 
 /* ── PAGE ROUTER & POLL TIMER ── */

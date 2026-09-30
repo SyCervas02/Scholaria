@@ -5,13 +5,46 @@ let activeConversationId = null;
 let seenMessageIds = new Set();
 let chatRealtimeChannel = null;
 const newChatState = { selected: new Set(), search: '', loaded: false, directory: [] };
+const chatListState = { search: '', role: 'all' };
+
+function chatOutlineIcon() {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 9 9 0 0 1-4-.9L3 21l1.9-5.5a9 9 0 0 1-.9-4A8.5 8.5 0 0 1 12.5 3a8.5 8.5 0 0 1 8.5 8.5Z"/></svg>';
+}
+
+function chatEmptyIllustration() {
+  return `<svg class="chat-empty-art" viewBox="0 0 240 200" fill="none" aria-hidden="true">
+    <circle cx="119" cy="100" r="88" fill="#eef3ff"/>
+    <circle cx="19" cy="73" r="6" fill="#b8c8ff"/><circle cx="217" cy="158" r="6" fill="#b8c8ff"/>
+    <path d="M140 84h24c23 0 39 12 39 33 0 12-5 22-14 28l3 17-21-10h-25c-23 0-36-13-36-33" fill="#e8eeff" stroke="#a9baff" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M97 58c-27 0-44 13-44 35 0 13 5 23 14 29l-5 19 22-10h19c26 0 41-13 41-37 0-23-17-36-41-36Z" fill="#e2ebff" stroke="#1c5cff" stroke-width="3.2" stroke-linejoin="round"/>
+    <path d="m202 55 7-12m6 26 12-5" stroke="#1c5cff" stroke-width="4" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function filterChatConversations(value) {
+  chatListState.search = value;
+  renderContactsList();
+}
+
+function setChatFilter(role) {
+  chatListState.role = role;
+  document.querySelectorAll('[data-chat-filter]').forEach(button => {
+    const selected = button.dataset.chatFilter === role;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+  renderContactsList();
+}
 
 async function loadChatsPage() {
+  chatListState.search = '';
+  chatListState.role = 'all';
   await loadConversationsFromDB();
   renderContactsList();
   if (chatConversations.length > 0) {
     openConversation(chatConversations[0].id);
   } else {
+    activeConversationId = null;
     renderInputArea();
   }
   ensureChatRealtimeSubscription();
@@ -96,10 +129,18 @@ function renderContactsList() {
   const box = document.getElementById('chatContactList');
   if (!box) return;
   if (chatConversations.length === 0) {
-    box.innerHTML = `<div class="contact-empty">No conversations yet.<br>Tap + above to message a teacher, student, or start a group.</div>`;
+    box.innerHTML = `<div class="contact-empty chat-list-empty">${chatEmptyIllustration()}<h3>No conversations yet</h3><p>Tap the + button to message a teacher,<br>student, or start a group.</p><button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New conversation</button></div>`;
     return;
   }
-  box.innerHTML = chatConversations.map(c => `
+  const query = chatListState.search.trim().toLowerCase();
+  const filtered = chatConversations.filter(c =>
+    (!query || conversationLabel(c).toLowerCase().includes(query) || c.lastMessage.toLowerCase().includes(query)) &&
+    (chatListState.role === 'all' || c.participants.some(p => p.user_id !== CURRENT_PROFILE.id && p.role === chatListState.role)));
+  if (!filtered.length) {
+    box.innerHTML = '<div class="contact-empty">No matching conversations.</div>';
+    return;
+  }
+  box.innerHTML = filtered.map(c => `
     <div class="contact-row ${c.id === activeConversationId ? 'active-contact' : ''}" data-conv="${c.id}" onclick="openConversation('${c.id}')">
       <div class="contact-avatar ${c.isGroup ? 'group-avatar' : ''}">${conversationInitials(c)}</div>
       <div class="contact-info">
@@ -180,10 +221,11 @@ function renderInputArea() {
   }
 
   area.innerHTML = `
-    <button class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" onclick="toggleEmojiPicker(event)">🙂</button>
+    <button class="cw-attachment-btn" title="Attachments are not available" aria-label="Attachments are not available" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l8-8a4 4 0 0 1 5.7 5.7l-8 8a2 2 0 0 1-2.8-2.8L15 6"/></svg></button>
+    <button class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" aria-label="Choose emoji" onclick="toggleEmojiPicker(event)" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 8h.01M16 8h.01"/></svg></button>
     <div class="emoji-picker" id="cwEmojiPicker"></div>
-    <input type="text" id="cwInput" placeholder="${activeConversationId ? 'Type a message…' : 'Select a conversation'}" onkeypress="if(event.key==='Enter')sendChatMsg()" ${activeConversationId ? '' : 'disabled'}>
-    <button class="cw-send" onclick="sendChatMsg()">${iconSend()}</button>`;
+    <input type="text" id="cwInput" aria-label="Message" placeholder="${activeConversationId ? 'Type a message…' : 'Select a conversation to start messaging'}" onkeypress="if(event.key==='Enter')sendChatMsg()" ${activeConversationId ? '' : 'disabled'}>
+    <button class="cw-send" aria-label="Send message" onclick="sendChatMsg()" ${activeConversationId ? '' : 'disabled'}>${iconSend()}</button>`;
 }
 
 async function refreshOwnMuteStatus() {
