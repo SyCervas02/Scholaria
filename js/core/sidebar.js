@@ -72,6 +72,7 @@ function initDashboardShell() {
   renderPage('dashboard');
   refreshNotificationsUI();
   if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
+  if (typeof resetChatState === 'function') resetChatState();
   loadConversationsFromDB().then(ensureChatRealtimeSubscription);
 }
 

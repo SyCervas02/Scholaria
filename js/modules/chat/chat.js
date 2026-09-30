@@ -7,6 +7,22 @@ let chatRealtimeChannel = null;
 const newChatState = { selected: new Set(), search: '', loaded: false, directory: [] };
 const chatListState = { search: '', role: 'all' };
 
+function resetChatState() {
+  chatConversations = [];
+  activeConversationId = null;
+  seenMessageIds = new Set();
+  newChatState.selected = new Set();
+  newChatState.search = '';
+  newChatState.loaded = false;
+  newChatState.directory = [];
+  chatListState.search = '';
+  chatListState.role = 'all';
+  if (chatRealtimeChannel) {
+    try { db.removeChannel(chatRealtimeChannel); } catch (e) {}
+    chatRealtimeChannel = null;
+  }
+}
+
 function chatOutlineIcon() {
   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 9 9 0 0 1-4-.9L3 21l1.9-5.5a9 9 0 0 1-.9-4A8.5 8.5 0 0 1 12.5 3a8.5 8.5 0 0 1 8.5 8.5Z"/></svg>';
 }
@@ -39,29 +55,30 @@ function setChatFilter(role) {
 async function loadChatsPage() {
   chatListState.search = '';
   chatListState.role = 'all';
+  activeConversationId = null;
   await loadConversationsFromDB();
   renderContactsList();
-  if (chatConversations.length > 0) {
-    openConversation(chatConversations[0].id);
-  } else {
-    activeConversationId = null;
-    renderInputArea();
-  }
+  renderInputArea();
   ensureChatRealtimeSubscription();
 }
 
 async function loadConversationsFromDB() {
-  if (!CURRENT_PROFILE) return;
+  if (!CURRENT_PROFILE) { chatConversations = []; return; }
   const { data: partRows, error } = await db
     .from('conversation_participants')
     .select('conversation_id, conversations(id, is_group, title, created_by, created_at)')
     .eq('user_id', CURRENT_PROFILE.id);
-  if (error) { console.error('Failed to load conversations:', error.message); return; }
+  if (error) {
+    console.error('Failed to load conversations:', error.message);
+    chatConversations = [];
+    return;
+  }
 
   const prevUnread = {};
   chatConversations.forEach(c => { prevUnread[c.id] = c.unread; });
 
-  const convIds = (partRows || []).map(r => r.conversation_id);
+  const validPartRows = (partRows || []).filter(r => r && r.conversation_id && r.conversations);
+  const convIds = validPartRows.map(r => r.conversation_id);
   if (convIds.length === 0) { chatConversations = []; return; }
 
   const { data: allParts } = await db
@@ -78,36 +95,41 @@ async function loadConversationsFromDB() {
   const lastByConv = {};
   (lastMsgs || []).forEach(m => { if (!lastByConv[m.conversation_id]) lastByConv[m.conversation_id] = m; });
 
-  chatConversations = (partRows || []).map(r => {
-    const conv = r.conversations;
+  chatConversations = validPartRows.map(r => {
+    const conv = Array.isArray(r.conversations) ? r.conversations[0] : r.conversations;
+    if (!conv) return null;
     const participants = (allParts || []).filter(p => p.conversation_id === conv.id);
     const last = lastByConv[conv.id];
     return {
       id: conv.id,
-      isGroup: conv.is_group,
+      isGroup: Boolean(conv.is_group),
       title: conv.title,
       participants,
       lastMessage: last ? last.body : '',
       lastMessageAt: last ? last.created_at : conv.created_at,
       unread: prevUnread[conv.id] || 0
     };
-  }).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+  }).filter(Boolean).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
 }
 
 function conversationOther(conv) {
-  return conv.participants.find(p => p.user_id !== CURRENT_PROFILE.id);
+  if (!conv || !Array.isArray(conv.participants)) return null;
+  return conv.participants.find(p => String(p.user_id) !== String(CURRENT_PROFILE?.id));
 }
 function conversationLabel(conv) {
-  if (conv.isGroup) return conv.title || conv.participants.map(p => p.full_name.split(',')[0]).join(', ');
+  if (!conv) return 'Conversation';
+  if (conv.isGroup) return conv.title || (conv.participants || []).map(p => (p.full_name || '').split(',')[0]).filter(Boolean).join(', ') || 'Group Chat';
   const other = conversationOther(conv);
-  return other ? other.full_name : 'Conversation';
+  return other ? other.full_name : (conv.title || 'Conversation');
 }
 function conversationSub(conv) {
-  if (conv.isGroup) return `${conv.participants.length} members`;
+  if (!conv) return '';
+  if (conv.isGroup) return `${(conv.participants || []).length} members`;
   const other = conversationOther(conv);
-  return other ? other.role.charAt(0).toUpperCase() + other.role.slice(1) : '';
+  return other && other.role ? other.role.charAt(0).toUpperCase() + other.role.slice(1) : '';
 }
 function conversationInitials(conv) {
+  if (!conv) return '?';
   if (conv.isGroup) return '👥';
   const other = conversationOther(conv);
   return other ? initialsFor(other.full_name) : '?';
@@ -192,8 +214,8 @@ function renderMessages(conv, msgs) {
 }
 
 function messageBubbleHtml(conv, m) {
-  const mine = m.sender_id === CURRENT_PROFILE.id;
-  const showName = conv.isGroup && !mine;
+  const mine = String(m.sender_id) === String(CURRENT_PROFILE?.id);
+  const showName = (conv.isGroup || !mine) && m.sender_name && !mine;
   return `<div class="msg-bubble ${mine ? 'me' : 'them'}" data-mid="${m.id}">
     ${showName ? `<div class="msg-sender">${escHtml(m.sender_name)}</div>` : ''}
     <div class="msg-text">${escHtml(m.body)}</div>
@@ -324,6 +346,7 @@ function ensureChatRealtimeSubscription() {
 }
 
 function handleIncomingMessage(msg) {
+  if (!msg || !CURRENT_PROFILE) return;
   if (seenMessageIds.has(msg.id)) return;
   seenMessageIds.add(msg.id);
 
@@ -336,7 +359,7 @@ function handleIncomingMessage(msg) {
   conv.lastMessage = msg.body;
   conv.lastMessageAt = msg.created_at;
 
-  const isMine = msg.sender_id === CURRENT_PROFILE.id;
+  const isMine = String(msg.sender_id) === String(CURRENT_PROFILE.id);
   const isOpen = currentPage === 'chats' && activeConversationId === conv.id;
 
   if (isOpen) {
@@ -361,10 +384,10 @@ async function openNewChatModal() {
   document.getElementById('newChatModal').classList.add('active');
   document.getElementById('newChatModalBody').innerHTML = '<div class="nc-empty">Loading people…</div>';
   document.getElementById('newChatModalFoot').innerHTML = '';
-  if (!newChatState.loaded) {
+  if (!newChatState.loaded || !newChatState.directory.length) {
     const { data, error } = await db.rpc('list_contacts');
     if (error) { showToast('Could not load contact list', 'error'); console.error(error.message); return; }
-    newChatState.directory = data || [];
+    newChatState.directory = (data || []).filter(u => String(u.id) !== String(CURRENT_PROFILE?.id));
     newChatState.loaded = true;
   }
   renderNewChatModal();
