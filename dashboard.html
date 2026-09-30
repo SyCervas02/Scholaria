@@ -6,7 +6,7 @@
   <title>Scholaria • Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20005"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css"/>
   <link rel="stylesheet" href="css/modules/chat.css?v=20006"/>
@@ -21,12 +21,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-
-<button class="chat-fab" id="chatFab" onclick="goToChat()">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;display:block;">
-    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-  </svg>
-</button>
 
 <body>
 
@@ -136,22 +130,6 @@
   </div>
 
   <div class="toast" id="toast"></div>
-
-  <div class="modal-overlay" id="quizModal">
-    <div class="modal-card">
-      <div class="modal-head">
-        <div>
-          <h3>Create New Quiz</h3>
-          <span>Generate questions straight from your teaching material</span>
-        </div>
-        <button class="modal-x" onclick="quizModalClose()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="modal-body" id="quizModalBody"></div>
-      <div class="modal-foot" id="quizModalFoot"></div>
-    </div>
-  </div>
 
   <div class="modal-overlay" id="takeQuizModal">
     <div class="modal-card">
@@ -439,7 +417,11 @@
 
       <div class="modal-foot" style="border-top:1px solid #f1f5f9;padding:14px 24px;display:flex;justify-content:flex-end;gap:10px;">
         <button class="pf-save" style="background:#64748b;border-radius:8px;" onclick="closeCreateAnnouncementModal()">Cancel</button>
-        <button class="pf-save" style="background:#0284c7;border-radius:8px;display:flex;align-items:center;gap:6px;" onclick="submitCreateAnnouncement()">
+        <button class="pf-save" style="background:#f59e0b;color:#fff;border-radius:8px;display:flex;align-items:center;gap:6px;" onclick="submitCreateAnnouncement(true)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save as Draft
+        </button>
+        <button class="pf-save" style="background:#0284c7;border-radius:8px;display:flex;align-items:center;gap:6px;" onclick="submitCreateAnnouncement(false)">
           Broadcast Announcement
         </button>
       </div>
@@ -640,20 +622,57 @@
     </div>
   </div>
 
+  <!-- SCHOOL NEWS & ANNOUNCEMENT DETAIL VIEW MODAL -->
+  <div class="modal-overlay" id="announcementDetailModal">
+    <div class="modal-card" style="max-width:620px;border-radius:20px;">
+      <div class="modal-head" style="border-bottom:1px solid #f1f5f9;padding:18px 24px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="anc-cat-tag" id="ancDetailCatBadge" style="font-size:11px;">📢 Bulletin</span>
+          <span id="ancDetailPrioBadge"></span>
+        </div>
+        <button class="modal-x" onclick="closeAnnouncementDetailModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding:22px 24px;display:flex;flex-direction:column;gap:16px;max-height:480px;overflow-y:auto;">
+        <div>
+          <h2 id="ancDetailTitle" style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#0f172a;line-height:1.3;margin:0 0 8px;">News Title</h2>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--text-muted);">
+            <span id="ancDetailAuthor">👤 Posted by: Administration</span>
+            <span id="ancDetailDate">📅 Date</span>
+            <span id="ancDetailAudience">👥 Audience: All</span>
+          </div>
+        </div>
+
+        <div id="ancDetailMsg" style="font-size:14px;color:#334155;line-height:1.7;white-space:pre-wrap;background:#f8fafc;padding:16px;border-radius:12px;border:1px solid #e2e8f0;"></div>
+
+        <div id="ancDetailHotlinesWrap" style="display:none;">
+          <div style="font-size:12px;font-weight:800;color:#b91c1c;text-transform:uppercase;margin-bottom:8px;">📞 Attached Emergency Hotlines</div>
+          <div class="anc-hotline-chips" id="ancDetailHotlinesList"></div>
+        </div>
+      </div>
+
+      <div class="modal-foot" style="padding:14px 24px;display:flex;justify-content:flex-end;">
+        <button class="pf-save" style="background:var(--blue);border-radius:8px;padding:8px 18px;" onclick="closeAnnouncementDetailModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modular Scripts -->
-  <script src="js/core/ui-helpers.js?v=20001"></script>
-  <script src="js/core/notifications.js?v=20001"></script>
-  <script src="js/core/announcements.js?v=20001"></script>
-  <script src="js/modules/repository/materials.js?v=20001"></script>
-  <script src="js/modules/quizzes/take-quiz.js?v=20001"></script>
-  <script src="js/modules/quizzes/interactive-player.js?v=20001"></script>
-  <script src="js/modules/quizzes/item-analysis.js?v=20001"></script>
-  <script src="js/modules/quizzes/quiz-generator.js?v=20001"></script>
-  <script src="js/modules/chat/chat.js?v=20001"></script>
-  <script src="js/modules/admin/user-management.js?v=20001"></script>
-  <script src="js/modules/admin/report-generator.js?v=20001"></script>
-  <script src="js/modules/courses.js?v=20001"></script>
-  <script src="js/core/sidebar.js?v=20001"></script>
-  <script src="js/core/auth.js?v=20001"></script>
+  <script src="js/core/ui-helpers.js?v=20005"></script>
+  <script src="js/core/notifications.js?v=20005"></script>
+  <script src="js/core/announcements.js?v=20005"></script>
+  <script src="js/modules/repository/materials.js?v=20005"></script>
+  <script src="js/modules/quizzes/take-quiz.js?v=20005"></script>
+  <script src="js/modules/quizzes/interactive-player.js?v=20005"></script>
+  <script src="js/modules/quizzes/item-analysis.js?v=20005"></script>
+  <script src="js/modules/quizzes/quiz-generator.js?v=20005"></script>
+  <script src="js/modules/chat/chat.js?v=20005"></script>
+  <script src="js/modules/admin/user-management.js?v=20005"></script>
+  <script src="js/modules/admin/report-generator.js?v=20005"></script>
+  <script src="js/modules/courses.js?v=20005"></script>
+  <script src="js/core/sidebar.js?v=20005"></script>
+  <script src="js/core/auth.js?v=20005"></script>
 </body>
 </html>

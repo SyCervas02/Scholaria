@@ -15,20 +15,37 @@ const takeQuizState = {
 function buildQuizItems(quiz) {
   const items = [];
   (quiz?.questions || []).forEach((q, qi) => {
+    const srcFile = q.source_file || q.sourceMaterial || q.source_material || '';
+    const srcPage = q.source_page || null;
+
     if (q.type === 'multiple_choice') {
       items.push({ 
         itemId: `q${qi}`, 
         label: q.question || `Question ${qi + 1}`, 
         type: 'multiple_choice', 
         options: Array.isArray(q.options) ? q.options : [], 
-        correct: q.answer 
+        correct: q.answer,
+        sourceFile: srcFile,
+        sourcePage: srcPage
+      });
+    } else if (q.type === 'true_false' || q.type === 'tf') {
+      items.push({ 
+        itemId: `q${qi}`, 
+        label: q.question || `Question ${qi + 1}`, 
+        type: 'true_false', 
+        options: ['True', 'False'], 
+        correct: q.answer || 'True',
+        sourceFile: srcFile,
+        sourcePage: srcPage
       });
     } else if (q.type === 'identification') {
       items.push({ 
         itemId: `q${qi}`, 
         label: q.question || `Question ${qi + 1}`, 
         type: 'identification', 
-        correct: q.answer 
+        correct: q.answer,
+        sourceFile: srcFile,
+        sourcePage: srcPage
       });
     } else if (q.type === 'matching') {
       (q.pairs || []).forEach((p, pi) => {
@@ -37,7 +54,9 @@ function buildQuizItems(quiz) {
           label: `${q.instructions || 'Matching'} — ${p.left || 'Item'}`,
           type: 'matching',
           options: (q.pairs || []).map(x => x.right).filter(Boolean),
-          correct: p.right
+          correct: p.right,
+          sourceFile: srcFile,
+          sourcePage: srcPage
         });
       });
     }
@@ -45,9 +64,45 @@ function buildQuizItems(quiz) {
   return items;
 }
 
+/**
+ * Normalizes text for lenient, accurate comparison:
+ * - Lowercases and trims
+ * - Removes leading articles ("a", "an", "the")
+ * - Removes trailing punctuation (.,;:!?)
+ * - Collapses extra whitespace
+ */
+function normalizeAnswerString(str) {
+  if (str == null) return '';
+  let s = String(str).trim().toLowerCase();
+  s = s.replace(/[.,;:!?]+$/, '').trim();
+  s = s.replace(/^(a|an|the)\s+/i, '').trim();
+  s = s.replace(/\s+/g, ' ');
+  return s;
+}
+
+function compareAnswers(given, correct) {
+  if (given == null || correct == null) return false;
+  const gRaw = String(given).trim().toLowerCase();
+  const cRaw = String(correct).trim().toLowerCase();
+  if (!gRaw || !cRaw) return false;
+  if (gRaw === cRaw) return true;
+
+  const gNorm = normalizeAnswerString(given);
+  const cNorm = normalizeAnswerString(correct);
+  if (gNorm && cNorm && gNorm === cNorm) return true;
+
+  const alternatives = String(correct).split(/[\/|;]/).map(a => normalizeAnswerString(a)).filter(Boolean);
+  if (alternatives.some(alt => alt === gNorm)) return true;
+
+  const cNoParen = normalizeAnswerString(String(correct).replace(/\(.*?\)/g, ''));
+  if (cNoParen && cNoParen === gNorm) return true;
+
+  return false;
+}
+
 function gradeItem(item, given) {
   if (given == null || given === '') return false;
-  return String(given).trim().toLowerCase() === String(item.correct || '').trim().toLowerCase();
+  return compareAnswers(given, item.correct || '');
 }
 
 function startTakeQuizTimer() {
@@ -87,11 +142,23 @@ function handleTakeQuizTimeout() {
 }
 
 function openTakeQuizModal(quizId) {
-  const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
-  const quiz = quizList.find(q => String(q.id) === String(quizId));
+  let quiz = null;
+  if (quizId && typeof quizId === 'object') {
+    quiz = quizId;
+  } else {
+    const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+    quiz = quizList.find(q => String(q.id) === String(quizId));
+  }
   if (!quiz) { 
     if (typeof showToast === 'function') showToast('Quiz not found', 'error'); 
     return; 
+  }
+
+  if (quiz.type === 'interactive' || quiz.quiz_type === 'interactive') {
+    if (typeof openInteractiveQuiz === 'function') {
+      openInteractiveQuiz(quizId);
+      return;
+    }
   }
 
   const items = buildQuizItems(quiz);
@@ -258,7 +325,7 @@ function renderTakeQuizModal() {
 
     let inputHtml = '';
 
-    if (item.type === 'multiple_choice') {
+    if (item.type === 'multiple_choice' || item.type === 'true_false') {
       const currentVal = reviewMode ? (reviewAns ? reviewAns.given : null) : responses[item.itemId];
       const optionsList = (item.options || []).map((opt, optIdx) => {
         const isSelected = String(currentVal) === String(opt);
@@ -306,12 +373,21 @@ function renderTakeQuizModal() {
       </select>${feedbackHtml}`;
     }
 
+    const cleanPage = item.sourcePage ? String(item.sourcePage).replace(/^(page\s*)+/i, '').trim() : '';
+    const citationHtml = (reviewMode && item.sourceFile)
+      ? `<div class="qz-source-badge" style="margin-top:12px;display:inline-flex;align-items:center;gap:6px;">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span>📍 Find in handout:</span> <strong>${safeEsc(item.sourceFile)}</strong> ${cleanPage ? `· <span>Page ${safeEsc(cleanPage)}</span>` : ''}
+        </div>`
+      : '';
+
     return `<div class="sq-question-card" id="sq-card-${safeEsc(item.itemId)}">
       <div class="sq-qcard-header">
         <span class="sq-qnum">${idx + 1}.</span>
         <span class="sq-qlabel">${safeEsc(item.label)}</span>
       </div>
       ${inputHtml}
+      ${citationHtml}
     </div>`;
   }
 
@@ -459,61 +535,63 @@ async function submitQuizAttempt(isAutoSubmit = false) {
     submitted_at: new Date().toISOString()
   };
 
-  try {
-    const raw = localStorage.getItem('scholaria_all_attempts_v1');
-    const list = raw ? JSON.parse(raw) : [];
-    list.unshift(attemptObj);
-    localStorage.setItem('scholaria_all_attempts_v1', JSON.stringify(list));
-  } catch(e) {}
-
-  try {
-    const rawCR = localStorage.getItem('scholaria_class_records_v2');
-    const listCR = rawCR ? JSON.parse(rawCR) : [];
-    listCR.unshift(attemptObj);
-    localStorage.setItem('scholaria_class_records_v2', JSON.stringify(listCR));
-  } catch(e) {}
-
-  // Dual insert into quiz_attempts AND dedicated class_records table if db is available
-  if (typeof db !== 'undefined' && db && db.from) {
+  if (!quiz?.is_preview) {
     try {
-      await db.from('class_records').insert({
-        student_id: String(studentId),
-        student_name: studentName,
-        section: section,
-        subject: subject,
-        strand: strand,
-        quiz_id: String(quiz?.id || ''),
-        quiz_title: quiz?.title || 'Quiz',
-        score,
-        total_items: total,
-        score_percentage: total ? Math.round((score / total) * 100) : 0
-      });
-    } catch(crErr) {
-      console.warn('Class Records table sync notice:', crErr);
-    }
+      const raw = localStorage.getItem('scholaria_all_attempts_v1');
+      const list = raw ? JSON.parse(raw) : [];
+      list.unshift(attemptObj);
+      localStorage.setItem('scholaria_all_attempts_v1', JSON.stringify(list));
+    } catch(e) {}
 
     try {
-      let { error } = await db.from('quiz_attempts').insert({
-        quiz_id: quiz?.id || '',
-        quiz_title: quiz?.title || 'Quiz',
-        student_id: prof.id || studentId,
-        student_name: studentName,
-        score,
-        total_items: total,
-        answers: gradedAnswers
-      });
+      const rawCR = localStorage.getItem('scholaria_class_records_v2');
+      const listCR = rawCR ? JSON.parse(rawCR) : [];
+      listCR.unshift(attemptObj);
+      localStorage.setItem('scholaria_class_records_v2', JSON.stringify(listCR));
+    } catch(e) {}
 
-      if (error) {
-        await db.from('quiz_attempts').insert({
+    // Dual insert into quiz_attempts AND dedicated class_records table if db is available
+    if (typeof db !== 'undefined' && db && db.from) {
+      try {
+        await db.from('class_records').insert({
+          student_id: String(studentId),
+          student_name: studentName,
+          section: section,
+          subject: subject,
+          strand: strand,
+          quiz_id: String(quiz?.id || ''),
+          quiz_title: quiz?.title || 'Quiz',
+          score,
+          total_items: total,
+          score_percentage: total ? Math.round((score / total) * 100) : 0
+        });
+      } catch(crErr) {
+        console.warn('Class Records table sync notice:', crErr);
+      }
+
+      try {
+        let { error } = await db.from('quiz_attempts').insert({
           quiz_id: quiz?.id || '',
+          quiz_title: quiz?.title || 'Quiz',
           student_id: prof.id || studentId,
+          student_name: studentName,
           score,
           total_items: total,
           answers: gradedAnswers
         });
+
+        if (error) {
+          await db.from('quiz_attempts').insert({
+            quiz_id: quiz?.id || '',
+            student_id: prof.id || studentId,
+            score,
+            total_items: total,
+            answers: gradedAnswers
+          });
+        }
+      } catch(dbErr) {
+        console.warn('Supabase insert notice:', dbErr);
       }
-    } catch(dbErr) {
-      console.warn('Supabase insert notice:', dbErr);
     }
   }
 

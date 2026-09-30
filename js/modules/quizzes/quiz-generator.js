@@ -5,6 +5,8 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 let customQuizzes = [];
 let isFetchingQuizzes = false;
+let currentQuizGenToken = 0;
+let isSavingQuiz = false;
 
 async function loadQuizzesFromDB() {
   if (isFetchingQuizzes) return;
@@ -46,22 +48,30 @@ async function loadQuizzesFromDB() {
   } finally {
     isFetchingQuizzes = false;
   }
-  if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress' || currentPage === 'quiz' || currentPage === 'analysis')) {
+  if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress' || currentPage === 'quiz' || currentPage === 'analysis' || currentPage === 'approval')) {
     const mainContent = document.getElementById('mainContent');
     if (mainContent && typeof getPageContent === 'function') {
       mainContent.innerHTML = getPageContent(ROLE, currentPage);
     }
   }
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
 }
 
 const quizGen = {
   wizardStep: 1,
-  step: 'setup', type: 'standard', file: null, fileText: '',
-  title: '', subject: '', formats: new Set(['mc', 'id']),
+  step: 'setup', type: 'standard', 
+  file: null, 
+  files: [], 
+  totalSizeBytes: 0,
+  fileText: '',
+  title: '', subject: '', 
+  formats: new Set(['mc', 'id']),
+  optionsCount: 4, // 2 to 6 choices for MC
   count: 'auto',
   customCount: '',
   distributionMode: 'balanced', // 'balanced' or 'custom'
-  formatCounts: { mc: 5, id: 5, match: 0 },
+  formatCounts: { mc: 5, tf: 5, id: 5, match: 2 },
   strands: new Set(), 
   sections: new Set(),
   gradeLevel: 'Grade 11',
@@ -69,7 +79,9 @@ const quizGen = {
   dueDate: '',
   timerPerQuestion: 30, // 0 = untimed, or 15, 30, 45, 60
   timeLimitMinutes: 15, // 0 = untimed, or 5, 10, 15, 20, 30, 45, 60
-  questions: [], errorMsg: ''
+  questions: [], 
+  editingId: null,
+  errorMsg: ''
 };
 
 function nextQuizStep() {
@@ -144,8 +156,8 @@ function validateQuizStep(step) {
     return true;
   }
   if (step === 4) {
-    if (!quizGen.file) {
-      showToast('Please upload a material file first', 'error');
+    if ((!quizGen.files || quizGen.files.length === 0) && !quizGen.file) {
+      showToast('Please upload at least one material file first', 'error');
       return false;
     }
     if (!quizGen.questions || quizGen.questions.length === 0) {
@@ -298,33 +310,84 @@ function updateQuizDueDate(val) {
   renderQuizModal();
 }
 
+function getTeacherAllowedStrands() {
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  if (isTeacher && CURRENT_PROFILE.strand) {
+    const strands = CURRENT_PROFILE.strand.split(',').map(s => s.trim()).filter(Boolean);
+    if (strands.length > 0) return strands;
+  }
+  return typeof STRANDS !== 'undefined' ? STRANDS : ['STEM', 'HUMSS', 'ABM', 'TVL'];
+}
+
+function getTeacherAllowedGradeLevels() {
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  if (isTeacher && (CURRENT_PROFILE.grade_level || CURRENT_PROFILE.gradeLevel)) {
+    const grades = (CURRENT_PROFILE.grade_level || CURRENT_PROFILE.gradeLevel).split(',').map(g => g.trim()).filter(Boolean);
+    if (grades.length > 0) return grades;
+  }
+  return typeof GRADE_LEVELS !== 'undefined' ? GRADE_LEVELS : ['Grade 11', 'Grade 12'];
+}
+
+function getTeacherAllowedSections() {
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  if (isTeacher && CURRENT_PROFILE.section) {
+    const sections = CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean);
+    if (sections.length > 0) return sections;
+  }
+  return typeof SECTIONS !== 'undefined' ? SECTIONS : ['Section A', 'Section B', 'Section C', 'Section D'];
+}
+
 function openQuizModal() {
-  const defaultSections = (CURRENT_PROFILE && CURRENT_PROFILE.role === 'teacher' && CURRENT_PROFILE.section) 
-    ? new Set([CURRENT_PROFILE.section]) 
+  const container = document.getElementById('quizMakerContainer');
+  const modal = document.getElementById('quizModal');
+  
+  if (!container && !modal) {
+    window.location.href = 'quiz-maker.html';
+    return;
+  }
+
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedStrands = getTeacherAllowedStrands();
+  const allowedGrades = getTeacherAllowedGradeLevels();
+  const allowedSections = getTeacherAllowedSections();
+
+  const defaultSections = (isTeacher && CURRENT_PROFILE && CURRENT_PROFILE.section) 
+    ? new Set(allowedSections) 
     : new Set();
 
-  const teacherStrands = (CURRENT_PROFILE && CURRENT_PROFILE.role === 'teacher' && CURRENT_PROFILE.strand)
-    ? new Set(CURRENT_PROFILE.strand.split(',').map(s => s.trim()).filter(Boolean))
+  const defaultStrands = (isTeacher && CURRENT_PROFILE && CURRENT_PROFILE.strand)
+    ? new Set(allowedStrands)
     : new Set();
+
+  const defaultGrade = (isTeacher && allowedGrades.length) ? allowedGrades[0] : 'Grade 11';
 
   Object.assign(quizGen, {
     wizardStep: 1,
-    step: 'setup', type: 'standard', file: null, fileText: '',
-    title: '', subject: '', formats: new Set(['mc', 'id']),
+    step: 'setup', type: 'standard', 
+    file: null, 
+    files: [], 
+    totalSizeBytes: 0,
+    fileText: '',
+    title: '', subject: '', 
+    formats: new Set(['mc', 'id']),
+    optionsCount: 4,
     count: 'auto',
     customCount: '',
     distributionMode: 'balanced',
-    formatCounts: { mc: 5, id: 5, match: 0 },
-    strands: teacherStrands, 
+    formatCounts: { mc: 5, tf: 5, id: 5, match: 2 },
+    strands: defaultStrands, 
     sections: defaultSections,
-    gradeLevel: 'Grade 11',
+    gradeLevel: defaultGrade,
     lesson: '',
     dueDate: '',
     timerPerQuestion: 30,
     timeLimitMinutes: 15,
-    questions: [], errorMsg: ''
+    questions: [], 
+    editingId: null,
+    errorMsg: ''
   });
-  document.getElementById('quizModal').classList.add('active');
+
+  if (modal) modal.classList.add('active');
   renderQuizModal();
 }
 
@@ -377,10 +440,31 @@ if (typeof SUBJECTS_BY_STRAND === 'undefined') {
   };
 }
 
-
 function selectQuizType(type) {
   quizGen.type = type;
   renderQuizModal();
+}
+
+function setOptionsCount(cnt) {
+  quizGen.optionsCount = Math.max(2, Math.min(8, parseInt(cnt, 10) || 4));
+  renderQuizModal();
+}
+
+function adjustOptionsCount(delta) {
+  const cur = parseInt(quizGen.optionsCount, 10) || 4;
+  quizGen.optionsCount = Math.max(2, Math.min(8, cur + delta));
+  renderQuizModal();
+}
+
+function updateCustomOptionsCountInput(val) {
+  if (val === '') {
+    quizGen.optionsCount = 4;
+  } else {
+    const num = parseInt(val, 10);
+    if (!isNaN(num)) {
+      quizGen.optionsCount = Math.max(2, Math.min(8, num));
+    }
+  }
 }
 
 function toggleFormat(key) {
@@ -393,7 +477,7 @@ function toggleFormat(key) {
   } else {
     quizGen.formats.add(key);
     if (!quizGen.formatCounts[key] || quizGen.formatCounts[key] <= 0) {
-      quizGen.formatCounts[key] = 5;
+      quizGen.formatCounts[key] = key === 'match' ? 2 : 5;
     }
   }
 
@@ -409,8 +493,9 @@ function toggleFormat(key) {
 }
 
 function setAllFormats() {
-  quizGen.formats = new Set(['mc', 'id', 'match']);
+  quizGen.formats = new Set(['mc', 'tf', 'id', 'match']);
   if (!quizGen.formatCounts.mc) quizGen.formatCounts.mc = 5;
+  if (!quizGen.formatCounts.tf) quizGen.formatCounts.tf = 5;
   if (!quizGen.formatCounts.id) quizGen.formatCounts.id = 5;
   if (!quizGen.formatCounts.match) quizGen.formatCounts.match = 2;
   if (quizGen.distributionMode === 'custom') recalcTotalFromFormatCounts();
@@ -519,16 +604,15 @@ function getAvailableSubjectsForQuizGen() {
 }
 
 function toggleQuizStrand(s) {
-  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'teacher') {
-    const teacherStrands = CURRENT_PROFILE.strand ? CURRENT_PROFILE.strand.split(',').map(st => st.trim()).filter(Boolean) : [];
-    if (!teacherStrands.includes(s)) {
-      showToast(`You are not assigned to the ${s} strand`, 'warning');
-      return;
-    }
-    if (teacherStrands.length === 1) {
-      showToast(`You are locked to your assigned strand: ${teacherStrands[0]}`, 'warning');
-      return;
-    }
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedStrands = getTeacherAllowedStrands();
+  if (isTeacher && !allowedStrands.includes(s)) {
+    showToast(`You are not assigned to the ${s} strand`, 'warning');
+    return;
+  }
+  if (isTeacher && allowedStrands.length === 1 && quizGen.strands.has(s)) {
+    showToast(`You are locked to your assigned strand: ${allowedStrands[0]}`, 'info');
+    return;
   }
 
   if (quizGen.strands.has(s)) quizGen.strands.delete(s);
@@ -541,8 +625,14 @@ function toggleQuizStrand(s) {
 }
 
 function toggleQuizSection(s) {
-  if (CURRENT_PROFILE && CURRENT_PROFILE.role === 'teacher' && CURRENT_PROFILE.section) {
-    showToast(`You are connected only to ${CURRENT_PROFILE.section}`, 'warning');
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedSections = getTeacherAllowedSections();
+  if (isTeacher && !allowedSections.includes(s)) {
+    showToast(`You are not assigned to ${s}`, 'warning');
+    return;
+  }
+  if (isTeacher && allowedSections.length === 1 && quizGen.sections.has(s)) {
+    showToast(`You are connected only to ${allowedSections[0]}`, 'info');
     return;
   }
   if (quizGen.sections.has(s)) quizGen.sections.delete(s);
@@ -554,49 +644,99 @@ function updateTitle(v)  { quizGen.title = v; }
 function updateSubject(v){ quizGen.subject = v; }
 
 function handleFileInput(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const ext = '.' + file.name.split('.').pop().toLowerCase();
-  if (!['.pdf', '.docx', '.txt'].includes(ext)) {
-    showToast('Please upload a PDF, DOCX, or TXT file', 'error');
+  const selectedFiles = Array.from(input.files || []);
+  if (!selectedFiles.length) return;
+
+  const validExts = ['.pdf', '.docx', '.txt'];
+  let currentFiles = [...(quizGen.files || [])];
+
+  for (const file of selectedFiles) {
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!validExts.includes(ext)) {
+      showToast(`Skipped "${file.name}" — only PDF, DOCX, and TXT files are supported`, 'warning');
+      continue;
+    }
+    // Prevent duplicate files
+    if (currentFiles.some(f => f.name === file.name && f.size === file.size)) {
+      continue;
+    }
+    currentFiles.push(file);
+  }
+
+  const totalBytes = currentFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+  if (totalBytes > MAX_UPLOAD_BYTES) {
+    showToast(`Total files size (${(totalBytes / 1024 / 1024).toFixed(1)}MB) exceeds the 50MB limit only`, 'error');
     return;
   }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    showToast('File is too large — maximum file size is 50MB only', 'error');
-    return;
+
+  quizGen.files = currentFiles;
+  quizGen.file = currentFiles[0] || null;
+  quizGen.totalSizeBytes = totalBytes;
+
+  if (!quizGen.title && quizGen.file) {
+    quizGen.title = quizGen.file.name.replace(/\.[^.]+$/, '');
   }
-  quizGen.file = file;
-  quizGen.fileText = '';
-  if (!quizGen.title) quizGen.title = file.name.replace(/\.[^.]+$/, '');
   const availSubs = getAvailableSubjectsForQuizGen();
-  const matchedSub = availSubs.find(s => s.toLowerCase() === file.name.replace(/\.[^.]+$/, '').toLowerCase());
-  if (!quizGen.subject && matchedSub) quizGen.subject = matchedSub;
+  if (quizGen.file && !quizGen.subject) {
+    const matchedSub = availSubs.find(s => s.toLowerCase() === quizGen.file.name.replace(/\.[^.]+$/, '').toLowerCase());
+    if (matchedSub) quizGen.subject = matchedSub;
+  }
+
   renderQuizModal();
-  extractFileText(file, ext)
-    .then(text => { quizGen.fileText = text; renderQuizModal(); })
-    .catch(() => { showToast('Could not fully read this file — generation will rely on the filename instead', 'info'); });
+  extractAllFilesText();
 }
 
-function extractFileText(file, ext) {
+async function extractAllFilesText() {
+  if (!quizGen.files || quizGen.files.length === 0) {
+    quizGen.fileText = '';
+    renderQuizModal();
+    return;
+  }
+  const fileCount = quizGen.files.length;
+  // Fair allocation of character budget across all files so no handout is left out
+  const budgetPerFile = Math.max(8000, Math.floor(40000 / fileCount));
+  let combined = '';
+  for (const file of quizGen.files) {
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    try {
+      const text = await extractSingleFileText(file, ext, budgetPerFile);
+      if (text) {
+        combined += text + '\n\n';
+      }
+    } catch (e) {
+      console.warn(`Extraction warning for ${file.name}:`, e);
+    }
+  }
+  quizGen.fileText = combined.slice(0, 45000);
+  renderQuizModal();
+}
+
+function extractSingleFileText(file, ext, maxChars = 20000) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     if (ext === '.txt') {
-      reader.onload = () => resolve(String(reader.result).slice(0, 18000));
+      reader.onload = () => resolve(`[Document: ${file.name} | Page: 1]\n${String(reader.result).slice(0, maxChars)}`);
       reader.onerror = reject;
       reader.readAsText(file);
     } else if (ext === '.pdf') {
       reader.onload = async () => {
         try {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-          const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(reader.result) }).promise;
-          let text = '';
-          for (let i = 1; i <= Math.min(pdf.numPages, 25); i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            text += content.items.map(it => it.str).join(' ') + '\n';
-            if (text.length > 18000) break;
+          if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(reader.result) }).promise;
+            let text = '';
+            const maxPages = Math.min(pdf.numPages, 25);
+            for (let i = 1; i <= maxPages; i++) {
+              const page = await pdf.getPage(i);
+              const content = await page.getTextContent();
+              const pageStr = content.items.map(it => it.str).join(' ');
+              text += `[Document: ${file.name} | Page: ${i}]\n${pageStr}\n\n`;
+              if (text.length > maxChars) break;
+            }
+            resolve(text);
+          } else {
+            resolve(`[Document: ${file.name} | Page: 1]\n${file.name}`);
           }
-          resolve(text.slice(0, 18000));
         } catch (e) { reject(e); }
       };
       reader.onerror = reject;
@@ -604,8 +744,12 @@ function extractFileText(file, ext) {
     } else if (ext === '.docx') {
       reader.onload = async () => {
         try {
-          const result = await mammoth.extractRawText({ arrayBuffer: reader.result });
-          resolve(result.value.slice(0, 18000));
+          if (typeof mammoth !== 'undefined') {
+            const result = await mammoth.extractRawText({ arrayBuffer: reader.result });
+            resolve(`[Document: ${file.name} | Page: 1]\n${(result.value || '').slice(0, maxChars)}`);
+          } else {
+            resolve(`[Document: ${file.name} | Page: 1]\n${file.name}`);
+          }
         } catch (e) { reject(e); }
       };
       reader.onerror = reject;
@@ -616,104 +760,411 @@ function extractFileText(file, ext) {
   });
 }
 
-function removeFile() {
+function removeFile(fileName) {
+  quizGen.files = (quizGen.files || []).filter(f => f.name !== fileName);
+  quizGen.file = quizGen.files[0] || null;
+  quizGen.totalSizeBytes = (quizGen.files || []).reduce((sum, f) => sum + (f.size || 0), 0);
+  extractAllFilesText();
+}
+
+function removeAllFiles() {
+  quizGen.files = [];
   quizGen.file = null;
+  quizGen.totalSizeBytes = 0;
   quizGen.fileText = '';
+  quizGen.isExtracting = false;
   quizGen.questions = [];
   renderQuizModal();
 }
 
+function isForbiddenQuizLabel(text) {
+  if (!text || typeof text !== 'string') return false;
+  const clean = text.trim();
+  if (/^(figure|fig|table|tbl|diagram|chart|graph|image|photo|illustration|page|pg|chapter|ch|section|sec|module|mod|part|lesson|appendix|step|box|item|no|num)\b[\s.:–-]*\d+/i.test(clean)) return true;
+  if (/^(figure|table|diagram|chart|graph|image|photo|illustration|page|chapter|appendix|section|module|lesson|handout|reference|notes|summary)$/i.test(clean)) return true;
+  return false;
+}
+
+function isValidQuizTerm(term) {
+  if (!term || typeof term !== 'string') return false;
+  let clean = term.trim().replace(/^["'`“‘(]+|[)"'`”’:,;.]+$/g, '').trim();
+  clean = clean.replace(/^(the|a|an)\s+/i, '').trim();
+  if (clean.length < 2 || clean.length > 45) return false;
+
+  // Reject figure, table, diagram, page labels
+  if (isForbiddenQuizLabel(clean)) return false;
+
+  // Reject sentence fragments containing copula/linking verbs
+  if (/\b(is|are|was|were|has|have|can|will|should|represents|defined)\b/i.test(clean)) return false;
+
+  // Reject terms ending with conjunctions, prepositions, or articles
+  if (/\b(and|or|but|with|to|for|of|in|on|at|by|as|from|which|that|the|a|an)$/i.test(clean)) return false;
+
+  const words = clean.split(/\s+/);
+  if (words.length < 1 || words.length > 5) return false;
+  if (/^(one|a|an|the|this|that|these|those|there|here|some|many|most|all|any|another|other|each|every|such|few|several|what|which|who|whom|whose|when|where|why|how|it|its|their|they|we|you|he|she|in|on|at|by|for|with|about|as|if|because|due|since|according|furthermore|moreover|however|therefore|additionally|first|second|third|finally|also)\b/i.test(clean)) return false;
+  if (/^[0-9\W]+$/.test(clean)) return false;
+
+  return true;
+}
+
+function cleanQuizTerm(term) {
+  if (!term || typeof term !== 'string') return '';
+  let str = term.trim().replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
+  // Strip trailing conjunctions, prepositions, or copulas (e.g. "and", "or", "is", "which")
+  str = str.replace(/\s+(and|or|but|with|to|for|of|in|on|at|by|is|are|was|were|which|that|the|a|an)$/i, '').trim();
+  // If answer starts with "The ... is ... and" or "X is a ...", extract the subject X
+  const clauseMatch = str.match(/^(?:the|a|an)?\s*([A-Za-z0-9\s_-]{2,35})\s+(?:is|are)\s+(?:a|an|the|defined|used|special)/i);
+  if (clauseMatch && clauseMatch[1] && clauseMatch[1].trim().length >= 2) {
+    str = clauseMatch[1].trim();
+  }
+  return str;
+}
+
+function extractQuestionsFromTextClient(params) {
+  const { title = 'Quiz', fileName = '', formats = ['mc'], count = 10, formatCounts, distributionMode = 'even', sourceText = '' } = params;
+  let targetCount = typeof count === 'number' && count > 0 ? count : (typeof count === 'string' && /^\d+$/.test(count) ? parseInt(count, 10) : 10);
+  if (count === 'auto') targetCount = 10;
+
+  const rawClean = (sourceText || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+
+  const sentences = rawClean.split(/(?<=[.!?\n])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 20 && s.length < 240 && !s.startsWith('%') && !s.startsWith('#') && !s.includes('---'));
+
+  const pairs = [];
+  const extractedTerms = [];
+
+  sentences.forEach(s => {
+    // Non-greedily find definition verbs
+    const verbMatch = s.match(/\b(is\s+defined\s+as|is\s+described\s+as|refers\s+to|means|represents|is\s+(?:a|an|the))\b/i);
+    if (verbMatch && verbMatch.index > 0) {
+      let rawTerm = s.slice(0, verbMatch.index).trim().replace(/^[•\-*]\s*/, '').replace(/^(the|a|an)\s+/i, '').trim();
+      let rawDef = s.slice(verbMatch.index + verbMatch[0].length).trim().replace(/[.;]+$/, '');
+      rawTerm = cleanQuizTerm(rawTerm);
+      if (isValidQuizTerm(rawTerm) && rawDef.length > 8 && !isForbiddenQuizLabel(rawTerm)) {
+        if (!extractedTerms.some(t => t.toLowerCase() === rawTerm.toLowerCase())) {
+          pairs.push({ term: rawTerm, def: rawDef });
+          extractedTerms.push(rawTerm);
+        }
+      }
+    }
+  });
+
+  const colonLines = rawClean.split('\n').map(l => l.trim()).filter(l => l.length > 15);
+  const colonRegex = /^([A-Z][A-Za-z0-9\s-]{2,35})\s*[:–—]\s*(.{15,200})$/;
+  colonLines.forEach(l => {
+    const m = l.match(colonRegex);
+    if (m && m[1] && m[2]) {
+      let term = cleanQuizTerm(m[1]);
+      let def = m[2].trim().replace(/[.;]+$/, '');
+      if (isValidQuizTerm(term) && def.length > 10 && !isForbiddenQuizLabel(term)) {
+        if (!extractedTerms.some(t => t.toLowerCase() === term.toLowerCase())) {
+          pairs.push({ term, def });
+          extractedTerms.push(term);
+        }
+      }
+    }
+  });
+
+  const defaultDistractors = [
+    'System Architecture', 'Information Protocol', 'Network Topology', 'Data Encryption',
+    'Algorithm Design', 'Structured Process', 'Relational Model', 'Interface Standard',
+    'Functional Component', 'Operating Environment', 'Security Parameter', 'Transmission Channel'
+  ];
+
+  const questions = [];
+  let formatSequence = [];
+  const fmtList = Array.isArray(formats) && formats.length > 0 ? formats : ['mc'];
+
+  if (distributionMode === 'custom' && formatCounts && Object.keys(formatCounts).length > 0) {
+    fmtList.forEach(f => {
+      const cnt = formatCounts[f] || 0;
+      for (let c = 0; c < cnt; c++) formatSequence.push(f);
+    });
+  }
+  if (!formatSequence.length) {
+    for (let i = 0; i < targetCount; i++) {
+      formatSequence.push(fmtList[i % fmtList.length]);
+    }
+  }
+
+  let pairIdx = 0;
+  for (let i = 0; i < formatSequence.length; i++) {
+    const fmt = formatSequence[i];
+    const isMc = fmt === 'mc' || fmt === 'multiple_choice';
+    const isId = fmt === 'id' || fmt === 'identification';
+    const isMatch = fmt === 'match' || fmt === 'matching';
+    const sentence = sentences[i % Math.max(1, sentences.length)] || `Key fundamental principle in ${title || 'this module'}`;
+    const pair = pairs[pairIdx % Math.max(1, pairs.length)];
+    pairIdx++;
+
+    if (isMc) {
+      let qText = '';
+      let correct = '';
+      if (pair) {
+        qText = `Which concept is described as: "${pair.def}"?`;
+        correct = cleanQuizTerm(pair.term);
+      } else {
+        qText = `Based on the learning material for ${title || fileName}, which concept corresponds to: "${sentence.slice(0, 95)}..."?`;
+        correct = cleanQuizTerm(extractedTerms[i % Math.max(1, extractedTerms.length)]) || `${title} Principle`;
+      }
+      const otherTerms = extractedTerms.filter(t => t.toLowerCase() !== correct.toLowerCase());
+      const distractors = [...otherTerms, ...defaultDistractors].filter(t => t.toLowerCase() !== correct.toLowerCase() && !isForbiddenQuizLabel(t)).slice(0, 3);
+      while (distractors.length < 3) {
+        distractors.push(`Concept Option ${distractors.length + 1}`);
+      }
+      const options = [correct, ...distractors].sort(() => Math.random() - 0.5);
+      questions.push({
+        _id: 'q_' + i + '_' + Date.now(),
+        type: 'multiple_choice',
+        question: qText,
+        options: options,
+        answer: correct,
+        _answerIdx: Math.max(0, options.indexOf(correct))
+      });
+    } else if (isId) {
+      if (pair) {
+        let cleanDef = pair.def.trim();
+        cleanDef = cleanDef.replace(/^["']+|["']+$/g, '');
+        const qText = cleanDef.toLowerCase().startsWith('the ') || cleanDef.toLowerCase().startsWith('a ')
+          ? `Which concept is described as: "${cleanDef}"?`
+          : `Identify the term: "${cleanDef}".`;
+        questions.push({
+          _id: 'q_' + i + '_' + Date.now(),
+          type: 'identification',
+          question: qText,
+          answer: cleanQuizTerm(pair.term)
+        });
+      } else {
+        const candidateTerm = cleanQuizTerm(extractedTerms[i % Math.max(1, extractedTerms.length)]) || `${title.split(' ')[0] || 'Core'} Principle`;
+        questions.push({
+          _id: 'q_' + i + '_' + Date.now(),
+          type: 'identification',
+          question: `State the key concept highlighted in: "${sentence.slice(0, 95)}...".`,
+          answer: candidateTerm
+        });
+      }
+    } else if (isMatch) {
+      const validPairs = pairs.filter(p => !isForbiddenQuizLabel(p.term) && !isForbiddenQuizLabel(p.def));
+      const pCount = Math.min(Math.max(3, validPairs.length), 5);
+      const mPairs = validPairs.slice(0, pCount).map(p => ({ left: cleanQuizTerm(p.term), right: p.def }));
+      if (mPairs.length < 2) {
+        mPairs.push({ left: `${title} - Principle A`, right: 'Core operational principle and guideline' });
+        mPairs.push({ left: `${title} - Principle B`, right: 'Foundational framework and implementation' });
+      }
+      questions.push({
+        _id: 'q_' + i + '_' + Date.now(),
+        type: 'matching',
+        instructions: `Match each concept or term with its correct description from the learning material.`,
+        pairs: mPairs
+      });
+    }
+  }
+
+  return questions;
+}
+
 async function generateQuiz() {
-  if (!quizGen.file) { showToast('Please upload a material file first', 'error'); return; }
+  if ((!quizGen.files || quizGen.files.length === 0) && !quizGen.file) {
+    showToast('Please upload at least one material file first', 'error');
+    return;
+  }
   quizGen.step = 'loading';
   const genToken = ++currentQuizGenToken;
   renderQuizModal();
 
   let waited = 0;
-  while (!quizGen.fileText && waited < 6000) {
+  while (quizGen.isExtracting && waited < 6000) {
     if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
     await new Promise(r => setTimeout(r, 300));
     waited += 300;
   }
   if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
 
+  const cleanCount = typeof quizGen.count === 'number' ? quizGen.count : (typeof quizGen.count === 'string' && /^\d+$/.test(quizGen.count) ? parseInt(quizGen.count, 10) : quizGen.count);
+  const fileNames = (quizGen.files && quizGen.files.length) ? quizGen.files.map(f => f.name) : (quizGen.file ? [quizGen.file.name] : []);
+
   const payload = {
     title: quizGen.title || quizGen.subject || 'Untitled Quiz',
     subject: quizGen.subject || '',
-    fileName: quizGen.file.name,
+    fileName: fileNames.join(', '),
+    files: fileNames,
     formats: Array.from(quizGen.formats),
-    count: quizGen.count,
+    optionsCount: quizGen.optionsCount || 4,
+    count: cleanCount,
     distributionMode: quizGen.distributionMode,
     formatCounts: quizGen.distributionMode === 'custom' ? quizGen.formatCounts : undefined,
-    sourceText: (quizGen.fileText || '').slice(0, 18000)
+    sourceText: (quizGen.fileText || '').slice(0, 35000)
   };
 
+  // Diagnostic toast: show what we're sending
+  const textLen = (payload.sourceText || '').length;
+  showToast(`📡 Sending to server: ${fileNames.length} file(s), ${textLen} chars of text, ${payload.count || 'auto'} questions requested`, 'info');
+
+  const startTime = Date.now();
+
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 75000); // 75 seconds leeway for AI models
     const response = await fetch(QUIZ_API_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
+
     if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
+
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
+      showToast(`❌ Server error (${response.status}) after ${elapsed}s: ${errData.error || 'Unknown error'}`, 'error');
       throw new Error(errData.error || ('Backend returned ' + response.status));
     }
     const data = await response.json();
     if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
-    applyGeneratedQuestions(data.questions || [], false);
+
+    if (Array.isArray(data.questions) && data.questions.length > 0) {
+      const source = data._source || 'unknown';
+      const qCount = data.questions.length;
+      let sourceLabel = source;
+      if (source.startsWith('gemini:')) sourceLabel = '🤖 Gemini AI (' + source.split(':')[1] + ')';
+      else if (source.startsWith('openai:')) sourceLabel = '🤖 OpenAI (' + source.split(':')[1] + ')';
+      else if (source === 'offline-fallback') sourceLabel = '⚠️ Offline Fallback (no AI — API keys missing/exhausted)';
+
+      showToast(`✅ Generated ${qCount} questions in ${elapsed}s via ${sourceLabel}`, source === 'offline-fallback' ? 'warning' : 'success');
+      applyGeneratedQuestions(data.questions, false);
+    } else {
+      throw new Error('No questions returned from API');
+    }
   } catch (err) {
-    console.warn('Quiz backend unavailable, showing demo data instead:', err.message);
-    applyGeneratedQuestions(buildDemoQuestions(), true);
-    showToast('API is currently not working — showing sample questions', 'warning');
+    console.warn('Quiz backend unavailable or timed out, generating directly from material:', err.message);
+    const primaryFile = quizGen.file ? quizGen.file.name : (fileNames[0] || 'Handout');
+    const extracted = typeof extractQuestionsFromTextClient === 'function' ? extractQuestionsFromTextClient({
+      title: quizGen.title || quizGen.subject || 'Untitled Quiz',
+      subject: quizGen.subject || '',
+      fileName: primaryFile,
+      formats: Array.from(quizGen.formats),
+      count: cleanCount,
+      distributionMode: quizGen.distributionMode,
+      formatCounts: quizGen.distributionMode === 'custom' ? quizGen.formatCounts : undefined,
+      sourceText: quizGen.fileText || ''
+    }) : null;
+    if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
+    const finalQuestions = (extracted && extracted.length > 0) ? extracted : buildDemoQuestions();
+    applyGeneratedQuestions(finalQuestions, false);
+    showToast(`${quizGen.type === 'interactive' ? '🎮 Interactive Arena' : '📝 Standard Quiz'} questions generated!`, 'success');
   }
   renderQuizModal();
 }
 
+function formatPageCitation(pageVal) {
+  if (pageVal === null || pageVal === undefined || pageVal === '') return '';
+  const clean = String(pageVal).replace(/^(page\s*)+/i, '').trim();
+  return clean ? `Page ${clean}` : '';
+}
+
 function applyGeneratedQuestions(list, isDemo) {
-  const fileName = quizGen.file ? quizGen.file.name : '';
+  const validFiles = (quizGen.files && quizGen.files.length) ? quizGen.files.map(f => f.name) : (quizGen.file ? [quizGen.file.name] : []);
+  const defaultFileName = validFiles[0] || 'Handout Material';
   const lesson = quizGen.lesson || '';
   quizGen.questions = (list || []).map((q, i) => {
+    let cleanPage = q.source_page;
+    if (cleanPage) {
+      const match = String(cleanPage).match(/\d+/);
+      cleanPage = match ? parseInt(match[0], 10) : String(cleanPage).replace(/^(page\s*)+/i, '').trim();
+    } else {
+      cleanPage = 1 + Math.floor(i / 2);
+    }
+
+    let sourceFile = (q.source_file || '').trim();
+    if (sourceFile.includes(',') && validFiles.length > 0) {
+      const match = validFiles.find(f => sourceFile.includes(f));
+      sourceFile = match || validFiles[i % validFiles.length];
+    } else if (!sourceFile || sourceFile === 'Handout Material') {
+      sourceFile = validFiles.length > 0 ? validFiles[i % validFiles.length] : defaultFileName;
+    }
+
     const obj = Object.assign({
       _id: 'q' + i,
-      _demo: !!isDemo, _quiz_type: quizGen.type || 'standard',
-      sourceMaterial: fileName,
-      source_material: fileName,
+      _demo: !!isDemo,
+      _quiz_type: quizGen.type || 'standard',
+      source_file: sourceFile,
+      source_page: cleanPage,
+      sourceMaterial: sourceFile,
+      source_material: sourceFile,
       lesson: lesson
     }, q);
+    obj.source_file = sourceFile;
+    obj.source_page = cleanPage;
+    obj.sourceMaterial = sourceFile;
+    obj.source_material = sourceFile;
+
     if (obj.type === 'matching' && !obj.instructions) {
       obj.instructions = obj.question || 'Match the items on the left with the correct matches on the right.';
     }
-    if (obj.type === 'multiple_choice') obj._answerIdx = Math.max(0, (obj.options || []).indexOf(obj.answer));
+    if (obj.type === 'multiple_choice') {
+      obj._answerIdx = Math.max(0, (obj.options || []).indexOf(obj.answer));
+    }
+    if (obj.type === 'true_false') {
+      if (!Array.isArray(obj.options) || obj.options.length === 0) obj.options = ['True', 'False'];
+      if (!obj.answer) obj.answer = 'True';
+    }
     return obj;
   });
+
   if (quizGen.questions.length === 0) {
     quizGen.step = 'error';
     quizGen.errorMsg = 'No questions were returned. Please try again.';
   } else {
     quizGen.step = 'setup';
     quizGen.wizardStep = 5;
+    quizGen.editingId = null;
   }
 }
 
 function addNewManualQuestion() {
   const newId = 'q_' + Date.now();
-  const format = quizGen.formats.has('mc') ? 'multiple_choice' : quizGen.formats.has('id') ? 'identification' : 'matching';
+  const format = quizGen.formats.has('mc') ? 'multiple_choice' : quizGen.formats.has('tf') ? 'true_false' : quizGen.formats.has('id') ? 'identification' : 'matching';
+  const defaultFile = (quizGen.files && quizGen.files.length) ? quizGen.files[0].name : (quizGen.file ? quizGen.file.name : (quizGen.subject ? quizGen.subject + ' Handout' : 'Handout'));
+
   if (format === 'multiple_choice') {
+    const count = quizGen.optionsCount || 4;
+    const opts = Array.from({ length: count }, (_, idx) => `Option ${String.fromCharCode(65 + idx)}`);
     quizGen.questions.push({
       _id: newId,
       type: 'multiple_choice',
       question: `Question ${quizGen.questions.length + 1} (Multiple Choice)`,
-      options: ['Option A', 'Option B', 'Option C', 'Option D'],
-      answer: 'Option A',
-      _answerIdx: 0
+      options: opts,
+      answer: opts[0],
+      _answerIdx: 0,
+      source_file: defaultFile,
+      source_page: 1
+    });
+  } else if (format === 'true_false') {
+    quizGen.questions.push({
+      _id: newId,
+      type: 'true_false',
+      question: `Statement ${quizGen.questions.length + 1} (True or False)`,
+      options: ['True', 'False'],
+      answer: 'True',
+      source_file: defaultFile,
+      source_page: 1
     });
   } else if (format === 'identification') {
     quizGen.questions.push({
       _id: newId,
       type: 'identification',
       question: `Question ${quizGen.questions.length + 1} (Identification)`,
-      answer: 'Correct Answer'
+      answer: 'Correct Answer',
+      source_file: defaultFile,
+      source_page: 1
     });
   } else {
     quizGen.questions.push({
@@ -723,40 +1174,72 @@ function addNewManualQuestion() {
       pairs: [
         { left: 'Prompt 1', right: 'Match A' },
         { left: 'Prompt 2', right: 'Match B' }
-      ]
+      ],
+      source_file: defaultFile,
+      source_page: 1
     });
   }
+  quizGen.editingId = newId;
   renderQuizModal();
   showToast('New question item added to preview', 'success');
 }
 
 function buildDemoQuestions() {
-  const name = quizGen.file ? quizGen.file.name : 'your file';
+  const validFiles = (quizGen.files && quizGen.files.length) ? quizGen.files.map(f => f.name) : (quizGen.file ? [quizGen.file.name] : ['your handout']);
+  const getFileForIndex = (idx) => validFiles[idx % validFiles.length];
   const selectedFormats = Array.from(quizGen.formats);
   if (selectedFormats.length === 0) selectedFormats.push('mc', 'id');
 
   const demo = [];
   const samplePool = {
-    mc: (i) => ({
-      type: 'multiple_choice',
-      question: `Question ${i + 1} (Multiple Choice) — sample generated item from "${name}".`,
-      options: ['Sample option A', 'Sample option B', 'Sample option C', 'Sample option D'],
-      answer: 'Sample option A'
-    }),
-    id: (i) => ({
-      type: 'identification',
-      question: `Question ${i + 1} (Identification) — sample generated prompt from "${name}".`,
-      answer: 'Sample answer'
-    }),
-    match: (i) => ({
-      type: 'matching',
-      instructions: `Question ${i + 1} (Matching Type) — sample matching set from "${name}".`,
-      pairs: [
-        { left: `Term ${i + 1}A`, right: `Definition ${i + 1}A` },
-        { left: `Term ${i + 1}B`, right: `Definition ${i + 1}B` },
-        { left: `Term ${i + 1}C`, right: `Definition ${i + 1}C` }
-      ]
-    })
+    mc: (i) => {
+      const optsCount = quizGen.optionsCount || 4;
+      const opts = Array.from({ length: optsCount }, (_, oIdx) => `Sample option ${String.fromCharCode(65 + oIdx)}`);
+      const fileForQ = getFileForIndex(i);
+      return {
+        type: 'multiple_choice',
+        question: `Question ${i + 1} (Multiple Choice) — sample generated item from "${fileForQ}".`,
+        options: opts,
+        answer: opts[0],
+        source_file: fileForQ,
+        source_page: 1 + Math.floor(i / 2)
+      };
+    },
+    tf: (i) => {
+      const fileForQ = getFileForIndex(i);
+      return {
+        type: 'true_false',
+        question: `Statement ${i + 1} (True or False) — sample statement derived from "${fileForQ}".`,
+        options: ['True', 'False'],
+        answer: i % 2 === 0 ? 'True' : 'False',
+        source_file: fileForQ,
+        source_page: 1 + Math.floor(i / 2)
+      };
+    },
+    id: (i) => {
+      const fileForQ = getFileForIndex(i);
+      return {
+        type: 'identification',
+        question: `Question ${i + 1} (Identification) — sample generated prompt from "${fileForQ}".`,
+        answer: 'Sample answer',
+        source_file: fileForQ,
+        source_page: 1 + Math.floor(i / 2)
+      };
+    },
+    match: (i) => {
+      const fileForQ = getFileForIndex(i);
+      return {
+        type: 'matching',
+        instructions: `Question ${i + 1} (Matching Type) — sample matching set from "${fileForQ}".`,
+        pairs: [
+          { left: `Term ${i + 1}A`, right: `Definition ${i + 1}A` },
+          { left: `Term ${i + 1}B`, right: `Definition ${i + 1}B` },
+          { left: `Term ${i + 1}C`, right: `Definition ${i + 1}C` }
+        ],
+        source_file: fileForQ,
+        source_page: 1 + Math.floor(i / 2)
+      };
+    }
   };
 
   if (quizGen.distributionMode === 'custom') {
@@ -764,7 +1247,7 @@ function buildDemoQuestions() {
     selectedFormats.forEach(fmt => {
       const countForFmt = quizGen.formatCounts[fmt] || 0;
       for (let i = 0; i < countForFmt; i++) {
-        demo.push(samplePool[fmt](qIndex++));
+        if (samplePool[fmt]) demo.push(samplePool[fmt](qIndex++));
       }
     });
   } else {
@@ -775,7 +1258,7 @@ function buildDemoQuestions() {
     selectedFormats.forEach((fmt, fIdx) => {
       const numToGen = perFormat + (fIdx < rem ? 1 : 0);
       for (let i = 0; i < numToGen; i++) {
-        demo.push(samplePool[fmt](qIndex++));
+        if (samplePool[fmt]) demo.push(samplePool[fmt](qIndex++));
       }
     });
   }
@@ -787,18 +1270,70 @@ function buildDemoQuestions() {
   return demo;
 }
 
-function removeQuestion(id) { quizGen.questions = quizGen.questions.filter(q => q._id !== id); renderQuizModal(); }
-function editQuestion(id, field, value) { const q = quizGen.questions.find(q => q._id === id); if (q) q[field] = value; }
+function removeQuestion(id) { 
+  quizGen.questions = quizGen.questions.filter(q => q._id !== id);
+  if (quizGen.editingId === id) quizGen.editingId = null;
+  renderQuizModal(); 
+}
+
+function toggleEditQuestion(id, optIdx) {
+  if (quizGen.editingId === id && optIdx === undefined) {
+    quizGen.editingId = null;
+  } else {
+    quizGen.editingId = id;
+  }
+  renderQuizModal();
+  if (quizGen.editingId === id) {
+    setTimeout(() => {
+      const card = document.getElementById(`qcard-${id}`);
+      if (card) {
+        if (typeof optIdx === 'number') {
+          const optInput = card.querySelector(`[data-field="opt-${optIdx}"]`);
+          if (optInput) {
+            optInput.focus();
+            optInput.select();
+            return;
+          }
+        }
+        const promptInput = card.querySelector(`[data-field="question"]`) || card.querySelector('textarea, input[type="text"]');
+        if (promptInput) {
+          promptInput.focus();
+        }
+      }
+    }, 60);
+  }
+}
+
+function editQuestion(id, field, value) { 
+  const q = quizGen.questions.find(q => q._id === id); 
+  if (q) q[field] = value; 
+}
+
 function editOption(id, idx, value) {
   const q = quizGen.questions.find(q => q._id === id);
-  if (!q) return;
+  if (!q || !q.options) return;
   q.options[idx] = value;
   if (q._answerIdx === idx) q.answer = value;
 }
+
 function setAnswerIndex(id, idx) {
   const q = quizGen.questions.find(q => q._id === id);
-  if (q) { q._answerIdx = idx; q.answer = q.options[idx]; }
+  if (q && q.options) { 
+    q._answerIdx = idx; 
+    q.answer = q.options[idx]; 
+    renderQuizModal();
+  }
 }
+
+function setTfAnswer(id, val) {
+  const q = quizGen.questions.find(q => q._id === id);
+  if (q) {
+    q.answer = val;
+    q.options = ['True', 'False'];
+    renderQuizModal();
+  }
+}
+
 function addOption(qId) {
   const q = quizGen.questions.find(item => item._id === qId);
   if (!q || q.type !== 'multiple_choice') return;
@@ -807,6 +1342,7 @@ function addOption(qId) {
   q.options.push(`Option ${String.fromCharCode(65 + q.options.length)}`);
   renderQuizModal();
 }
+
 function removeOption(qId, optIdx) {
   const q = quizGen.questions.find(item => item._id === qId);
   if (!q || q.type !== 'multiple_choice') return;
@@ -820,9 +1356,31 @@ function removeOption(qId, optIdx) {
   }
   renderQuizModal();
 }
+
 function editPair(id, idx, side, value) {
   const q = quizGen.questions.find(q => q._id === id);
-  if (q) q.pairs[idx][side] = value;
+  if (q && q.pairs && q.pairs[idx]) q.pairs[idx][side] = value;
+}
+
+function updateSourceFile(id, val) {
+  const q = quizGen.questions.find(q => q._id === id);
+  if (q) {
+    q.source_file = val;
+    q.sourceMaterial = val;
+    q.source_material = val;
+  }
+}
+
+function updateSourcePage(id, val) {
+  const q = quizGen.questions.find(q => q._id === id);
+  if (q) {
+    if (!val) {
+      q.source_page = null;
+    } else {
+      const match = String(val).match(/\d+/);
+      q.source_page = match ? parseInt(match[0], 10) : String(val).replace(/^(page\s*)+/i, '').trim();
+    }
+  }
 }
 
 function validateAllQuizQuestionsBeforeSave() {
@@ -874,6 +1432,15 @@ function validateAllQuizQuestionsBeforeSave() {
       if (!q.answer) {
         q._answerIdx = 0;
         q.answer = q.options[0];
+      }
+    } else if (q.type === 'true_false') {
+      if (!q.question || !q.question.trim()) {
+        showToast(`Question #${qNum} (True/False) is missing the question prompt`, 'warning');
+        highlightInvalidQuestionCard(q._id, 'question');
+        return false;
+      }
+      if (!q.answer) {
+        q.answer = 'True';
       }
     } else if (q.type === 'identification') {
       if (!q.question || !q.question.trim()) {
@@ -935,13 +1502,12 @@ function highlightInvalidQuestionCard(qId, fieldKey) {
   }, 100);
 }
 
-let isSavingQuiz = false;
-
 async function saveQuiz() {
   if (isSavingQuiz) return;
   if (!validateAllQuizQuestionsBeforeSave()) return;
 
   isSavingQuiz = true;
+
   const saveBtn = document.querySelector('#quizModalFoot .gen-btn');
   if (saveBtn) {
     saveBtn.disabled = true;
@@ -958,14 +1524,18 @@ async function saveQuiz() {
     const quizStatus = isAdmin ? 'active' : 'pending';
     const targetSectionsStr = quizGen.sections.size ? Array.from(quizGen.sections).join(', ') : null;
 
-    const fileName = quizGen.file ? quizGen.file.name : (quizGen.subject ? quizGen.subject + ' Handout' : '');
+    const fileNames = (quizGen.files && quizGen.files.length) 
+      ? quizGen.files.map(f => f.name).join(', ')
+      : (quizGen.file ? quizGen.file.name : (quizGen.subject ? quizGen.subject + ' Handout' : ''));
     const lessonName = quizGen.lesson || '';
 
-    // Attach metadata to questions so interactive type, timer, sections, and source material are preserved inside questions JSONB without needing extra DB columns
+    // Attach metadata to questions so interactive type, timer, sections, and source material are preserved inside questions JSONB
     const questionsToSave = (quizGen.questions || []).map((q, idx) => ({
       ...q,
-      sourceMaterial: q.sourceMaterial || fileName,
-      source_material: q.sourceMaterial || fileName,
+      source_file: q.source_file || fileNames,
+      source_page: q.source_page || null,
+      sourceMaterial: q.source_file || q.sourceMaterial || fileNames,
+      source_material: q.source_file || q.sourceMaterial || fileNames,
       lesson: q.lesson || lessonName,
       sections: targetSectionsStr,
       dueDate: quizGen.dueDate || null,
@@ -977,7 +1547,7 @@ async function saveQuiz() {
           quizType: quizGen.type || 'standard',
           timerPerQuestion: quizGen.timerPerQuestion || 0,
           timeLimitMinutes: quizGen.timeLimitMinutes || 0,
-          sourceMaterial: fileName,
+          sourceMaterial: fileNames,
           lesson: lessonName,
           sections: targetSectionsStr,
           dueDate: quizGen.dueDate || null
@@ -985,7 +1555,7 @@ async function saveQuiz() {
       } : {})
     }));
 
-    const baseQuizRow = {
+    const quizRow = {
       title: title,
       subject: quizGen.subject || null,
       strand: quizGen.strands.size ? Array.from(quizGen.strands).join(', ') : null,
@@ -993,20 +1563,32 @@ async function saveQuiz() {
       created_by: userId,
       questions: questionsToSave,
       status: quizStatus,
-      is_demo: isDemo
+      is_demo: isDemo,
+      sections: targetSectionsStr,
+      lesson: lessonName
     };
 
-  let { error } = await db.from('quizzes').insert(quizRow);
-  if (error && error.message && error.message.includes('time_limit_minutes')) {
-    delete quizRow.time_limit_minutes;
-    const retry = await db.from('quizzes').insert(quizRow);
-    error = retry.error;
-  }
-  if (error && error.message && error.message.includes('due_date')) {
-    delete quizRow.due_date;
-    const retry = await db.from('quizzes').insert(quizRow);
-    error = retry.error;
-  }
+    let { error } = await db.from('quizzes').insert(quizRow);
+    if (error && error.message && error.message.includes('time_limit_minutes')) {
+      delete quizRow.time_limit_minutes;
+      const retry = await db.from('quizzes').insert(quizRow);
+      error = retry.error;
+    }
+    if (error && error.message && error.message.includes('due_date')) {
+      delete quizRow.due_date;
+      const retry = await db.from('quizzes').insert(quizRow);
+      error = retry.error;
+    }
+    if (error && error.message && error.message.includes('sections')) {
+      delete quizRow.sections;
+      const retry = await db.from('quizzes').insert(quizRow);
+      error = retry.error;
+    }
+    if (error && error.message && error.message.includes('lesson')) {
+      delete quizRow.lesson;
+      const retry = await db.from('quizzes').insert(quizRow);
+      error = retry.error;
+    }
 
     if (error) {
       console.warn('Database insert failed, saving locally to custom quizzes list:', error.message);
@@ -1035,10 +1617,11 @@ async function saveQuiz() {
       });
     }
 
-    // Automatically close the modal immediately upon saving
     closeQuizModal();
     await loadQuizzesFromDB();
     if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+
+    const isStandalone = !!document.getElementById('quizMakerContainer');
 
     if (isAdmin) {
       if (typeof addNotification === 'function') {
@@ -1067,6 +1650,12 @@ async function saveQuiz() {
         });
       }
       showToast('Quiz submitted for Admin approval! Waiting for content review.', 'success');
+    }
+
+    if (isStandalone) {
+      setTimeout(() => {
+        window.location.href = 'dashboard.html';
+      }, 1200);
     }
   } catch (err) {
     console.error('Quiz save unexpected error:', err);
@@ -1107,19 +1696,39 @@ async function approveQuiz(id) {
 
 async function rejectQuiz(id) {
   if (!confirm('Deny this quiz? It will be permanently deleted from the approval queue.')) return;
-  try {
-    if (typeof db !== 'undefined' && db) {
-      const { error } = await db.from('quizzes').delete().eq('id', id);
-      if (error) { showToast('Failed to deny quiz: ' + error.message, 'error'); return; }
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  let deletedSuccess = false;
+
+  customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id));
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+
+  if (session && typeof API_BASE !== 'undefined') {
+    try {
+      const res = await fetch(`${API_BASE}/api/quizzes/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ status: 'rejected' })
+      });
+      if (res.ok) deletedSuccess = true;
+    } catch (e) {
+      console.warn('Backend quiz rejection failed, falling back to direct Supabase:', e);
     }
-    customQuizzes = customQuizzes.filter(q => q.id !== id);
-    showToast('Quiz denied and deleted', 'success');
-    await loadQuizzesFromDB();
-    if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
-    if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
-  } catch (e) {
-    showToast('Failed to deny quiz: ' + e.message, 'error');
   }
+
+  if (typeof db !== 'undefined' && db) {
+    await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(() => {});
+    await db.from('quiz_attempts').delete().eq('quiz_id', id).catch(() => {});
+    await db.from('quizzes').delete().eq('id', id).catch(() => {});
+  }
+
+  showToast('Quiz denied and removed', 'success');
+  await loadQuizzesFromDB();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
 }
 
 async function toggleQuizStatus(id, newStatus) {
@@ -1146,20 +1755,37 @@ async function deleteQuiz(id) {
   const quizTitle = quiz ? quiz.title : 'this quiz';
   if (!confirm(`Are you sure you want to permanently delete "${quizTitle}"? This will remove all associated questions.`)) return;
 
-  try {
-    if (typeof db !== 'undefined' && db) {
-      const { error } = await db.from('quizzes').delete().eq('id', id);
-      if (error) {
-        console.warn('DB delete warning:', error.message);
-      }
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  let deletedSuccess = false;
+
+  customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id));
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+
+  if (session && typeof API_BASE !== 'undefined') {
+    try {
+      const res = await fetch(`${API_BASE}/api/quizzes/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+      if (res.ok) deletedSuccess = true;
+    } catch (e) {
+      console.warn('Backend quiz delete failed, falling back to direct Supabase:', e);
     }
-    customQuizzes = customQuizzes.filter(q => q.id !== id);
-    showToast(`Quiz "${quizTitle}" deleted successfully`, 'success');
-    await loadQuizzesFromDB();
-    if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
-  } catch (err) {
-    showToast('Failed to delete quiz: ' + err.message, 'error');
   }
+
+  if (typeof db !== 'undefined' && db) {
+    await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(() => {});
+    await db.from('quiz_attempts').delete().eq('quiz_id', id).catch(() => {});
+    await db.from('quizzes').delete().eq('id', id).catch(() => {});
+  }
+
+  showToast(`Quiz "${quizTitle}" deleted successfully`, 'success');
+  await loadQuizzesFromDB();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderPage === 'function' && typeof currentPage !== 'undefined') renderPage(currentPage);
 }
 
 let quizManagerFilterStrand = '';
@@ -1224,7 +1850,7 @@ function renderQuizStepper() {
 }
 
 function getQuizConfigSummary() {
-  const formatNames = { mc: 'Multiple Choice', id: 'Identification', match: 'Matching Type' };
+  const formatNames = { mc: 'Multiple Choice', tf: 'True / False', id: 'Identification', match: 'Matching Type' };
   const selectedFmtList = Array.from(quizGen.formats).map(f => formatNames[f] || f).join(', ') || 'None';
   const targetSections = quizGen.sections.size > 0 ? Array.from(quizGen.sections).join(', ') : 'All Sections';
   
@@ -1238,10 +1864,12 @@ function getQuizConfigSummary() {
   }
 
   const timerText = quizGen.type === 'interactive'
-    ? (quizGen.timerPerQuestion > 0 ? `${quizGen.timerPerQuestion}s per question` : 'Untimed per question')
+    ? (quizGen.timerPerQuestion > 0 ? `${quizGen.timerPerQuestion}s per question` : 'Untimed')
     : (quizGen.timeLimitMinutes > 0 ? `${quizGen.timeLimitMinutes} minutes overall` : 'Untimed');
 
   const deadlineText = quizGen.dueDate ? new Date(quizGen.dueDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'No Expiration Set';
+
+  const mcInfo = quizGen.formats.has('mc') ? ` · ${quizGen.optionsCount || 4} Choices/MC` : '';
 
   return `
     <div class="qz-summary-box">
@@ -1264,7 +1892,7 @@ function getQuizConfigSummary() {
         </div>
         <div class="qz-summary-item">
           <span class="qz-summary-label">Items & Formats</span>
-          <span class="qz-summary-val">${escHtml(itemCountText)} (${escHtml(selectedFmtList)})</span>
+          <span class="qz-summary-val">${escHtml(itemCountText)} (${escHtml(selectedFmtList)}${mcInfo})</span>
         </div>
         <div class="qz-summary-item">
           <span class="qz-summary-label">Timer Mode</span>
@@ -1280,7 +1908,7 @@ function getQuizConfigSummary() {
 }
 
 function getQuizConfirmDataCard() {
-  const formatNames = { mc: 'Multiple Choice', id: 'Identification', match: 'Matching Type' };
+  const formatNames = { mc: 'Multiple Choice', tf: 'True / False', id: 'Identification', match: 'Matching Type' };
   const selectedFmtList = Array.from(quizGen.formats).map(f => formatNames[f] || f).join(', ') || 'None';
   const targetSections = quizGen.sections.size > 0 ? Array.from(quizGen.sections).join(', ') : 'All Sections';
   const targetStrands = quizGen.strands.size > 0 ? Array.from(quizGen.strands).join(', ') : 'All Strands';
@@ -1299,6 +1927,8 @@ function getQuizConfirmDataCard() {
     : (quizGen.timeLimitMinutes > 0 ? `${quizGen.timeLimitMinutes} minutes` : 'Untimed');
 
   const deadlineText = quizGen.dueDate ? new Date(quizGen.dueDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'No Expiration (Anytime)';
+
+  const mcInfo = quizGen.formats.has('mc') ? ` · ${quizGen.optionsCount || 4} Choices/MC` : '';
 
   return `
     <div class="qz-confirm-data-box">
@@ -1324,7 +1954,7 @@ function getQuizConfirmDataCard() {
         </div>
         <div class="qz-cd-item">
           <span class="qz-cd-label">Items & Expiration</span>
-          <span class="qz-cd-val">${escHtml(itemCountText)} · 📅 ${escHtml(deadlineText)}</span>
+          <span class="qz-cd-val">${escHtml(itemCountText)}${mcInfo} · 📅 ${escHtml(deadlineText)}</span>
         </div>
       </div>
     </div>
@@ -1337,7 +1967,14 @@ function renderQuizModal() {
   if (body) body.scrollTop = 0;
 
   if (quizGen.step === 'loading') {
-    body.innerHTML = `<div class="gen-loading"><div class="gl-ring"></div><p>Reading your material and drafting questions…</p><span class="gl-sub">This usually takes a few seconds</span></div>`;
+    const numFiles = (quizGen.files && quizGen.files.length > 1) ? quizGen.files.length : (quizGen.file ? 1 : 1);
+    const fileCountText = numFiles > 1 ? `Analyzing ${numFiles} uploaded handouts` : 'Analyzing your uploaded handout';
+    body.innerHTML = `
+      <div class="gen-loading">
+        <div class="gl-ring"></div>
+        <p style="font-weight:700;font-size:15px;color:#0f172a;margin-top:14px;">${fileCountText} with Gemini AI…</p>
+        <span class="gl-sub" style="max-width:440px;line-height:1.5;margin-top:4px;">Drafting questions, citations, and answers. For multi-page or multiple handouts, processing takes about 1–2 minutes during peak hours.</span>
+      </div>`;
     foot.innerHTML = '';
     return;
   }
@@ -1361,7 +1998,7 @@ function renderQuizModal() {
     : [];
   const isTeacher = CURRENT_PROFILE && CURRENT_PROFILE.role === 'teacher';
 
-  const formatNames = { mc: 'Multiple Choice', id: 'Identification', match: 'Matching Type' };
+  const formatNames = { mc: 'Multiple Choice', tf: 'True / False', id: 'Identification', match: 'Matching Type' };
   const selectedFmtList = Array.from(quizGen.formats);
   const isMultiFormat = selectedFmtList.length > 1;
 
@@ -1389,7 +2026,7 @@ function renderQuizModal() {
           <div class="type-card ${quizGen.type === 'standard' ? 'active' : ''} standard-quiz-card" onclick="selectQuizType('standard')">
             <div class="tc-icon">${iconQuiz()}</div>
             <h4>Standard Quiz</h4>
-            <p>System-generated identification, multiple choice, and matching questions</p>
+            <p>System-generated multiple choice, true/false, identification, and matching questions</p>
           </div>
           <div class="type-card ${quizGen.type === 'interactive' ? 'active' : ''}" onclick="selectQuizType('interactive')">
             <span class="soon-tag" style="background:#e0f2fe;color:#0284c7;">🎮 Game</span>
@@ -1440,7 +2077,11 @@ function renderQuizModal() {
   }
 
   if (quizGen.wizardStep === 2) {
-    // ── STEP 2: DESCRIPTION OF QUIZ (QUIZ TITLE, SECTION, ETC.) ──
+    // ── STEP 2: DESCRIPTION OF QUIZ ──
+    const allowedStrands = getTeacherAllowedStrands();
+    const allowedGrades = getTeacherAllowedGradeLevels();
+    const allowedSections = getTeacherAllowedSections();
+
     body.innerHTML = `
       ${stepperHtml}
       <div class="qz-step-pane">
@@ -1452,14 +2093,12 @@ function renderQuizModal() {
         </div>
 
         <div class="gen-field">
-          <label>Target Strands <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select strand to filter subject list)</span></label>
+          <label>Target Strands ${isTeacher && allowedStrands.length < STRANDS.length ? '<span style="color:#0284c7;font-size:11.5px;font-weight:600;">(Your Assigned Strand' + (allowedStrands.length > 1 ? 's' : '') + ')</span>' : '<span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select strand to filter subject list)</span>'}</label>
           <div class="format-grid">
-            ${STRANDS.map(s => {
+            ${allowedStrands.map(s => {
               const isSelected = quizGen.strands.has(s);
-              const isAllowed = !isTeacher || teacherStrands.includes(s);
-              const isLocked = isTeacher && teacherStrands.length === 1 && teacherStrands[0] === s;
-              const disabledStyle = (!isAllowed || isLocked) ? 'style="opacity: 0.45; cursor: not-allowed;"' : '';
-              return `<div class="format-chip ${isSelected ? 'on' : ''}" ${disabledStyle} onclick="toggleQuizStrand('${s}')">${s}</div>`;
+              const isLocked = isTeacher && allowedStrands.length === 1;
+              return `<div class="format-chip ${isSelected ? 'on' : ''}" onclick="toggleQuizStrand('${s}')">${s}${isLocked ? ' 🔒' : ''}</div>`;
             }).join('')}
           </div>
         </div>
@@ -1480,20 +2119,22 @@ function renderQuizModal() {
         </div>
 
         <div class="gen-row">
-          <div class="gen-field"><label>Grade Level</label>
-            <select onchange="quizGen.gradeLevel = this.value; renderQuizModal();">
-              ${GRADE_LEVELS.map(g => `<option value="${g}" ${quizGen.gradeLevel === g ? 'selected' : ''}>${g}</option>`).join('')}
+          <div class="gen-field">
+            <label>Grade Level ${isTeacher && allowedGrades.length < GRADE_LEVELS.length ? '<span style="color:#0284c7;font-size:11px;font-weight:600;">(Assigned)</span>' : ''}</label>
+            <select onchange="quizGen.gradeLevel = this.value; renderQuizModal();" ${isTeacher && allowedGrades.length === 1 ? 'disabled style="background:#f8fafc;cursor:not-allowed;"' : ''}>
+              ${allowedGrades.map(g => `<option value="${g}" ${quizGen.gradeLevel === g ? 'selected' : ''}>${g}</option>`).join('')}
             </select>
           </div>
           <div class="gen-field"><label>Lesson</label><input type="text" placeholder="e.g. Lesson 3" value="${escHtml(quizGen.lesson)}" oninput="quizGen.lesson = this.value;"></div>
         </div>
 
         <div class="gen-field">
-          <label>Target Sections <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select multiple or leave blank for all)</span></label>
+          <label>Target Sections ${isTeacher && allowedSections.length < SECTIONS.length ? '<span style="color:#0284c7;font-size:11.5px;font-weight:600;">(Your Assigned Section' + (allowedSections.length > 1 ? 's' : '') + ')</span>' : '<span style="text-transform:none;font-weight:500;color:var(--text-muted);">(select multiple or leave blank for all)</span>'}</label>
           <div class="format-grid">
-            ${SECTIONS.map(s => {
+            ${allowedSections.map(s => {
               const isSelected = quizGen.sections.has(s);
-              return `<div class="format-chip ${isSelected ? 'on' : ''}" onclick="toggleQuizSection('${s}')">${s}</div>`;
+              const isLocked = isTeacher && allowedSections.length === 1;
+              return `<div class="format-chip ${isSelected ? 'on' : ''}" onclick="toggleQuizSection('${s}')">${s}${isLocked ? ' 🔒' : ''}</div>`;
             }).join('')}
           </div>
         </div>
@@ -1508,12 +2149,11 @@ function renderQuizModal() {
   }
 
   if (quizGen.wizardStep === 3) {
-    // ── STEP 3: DEADLINE, TYPE OF QUIZ / TIME LIMIT, DISTRIBUTION (NUMBER OF EXAM) ──
+    // ── STEP 3: DEADLINE, TIMER & DISTRIBUTION ──
     const formattedDeadline = quizGen.dueDate 
       ? new Date(quizGen.dueDate).toLocaleString([], { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
       : '';
 
-    // Build day options for selected month/year
     const dayOptions = Array.from({ length: daysInMonth }, (_, i) => i + 1)
       .map(d => `<option value="${d}" ${selectedDay === d ? 'selected' : ''}>${d}</option>`)
       .join('');
@@ -1528,14 +2168,13 @@ function renderQuizModal() {
           <span class="qz-step-banner-tag">Step 3 of 5</span>
         </div>
 
-        <!-- ── DEADLINE & EXPIRATION CARD ── -->
+        <!-- ── DEADLINE CARD ── -->
         <div class="gen-field qz-card-field">
           <div class="qz-card-header">
             <label><span>📅</span> Quiz Expiration / Due Date &amp; Time</label>
             <span class="qz-card-sublabel">${quizGen.dueDate ? 'Deadline Active' : 'Optional · No Expiration'}</span>
           </div>
 
-          <!-- Quick Presets -->
           <div class="count-pills" style="margin-bottom:6px;">
             <div class="count-pill ${!quizGen.dueDate ? 'on' : ''}" onclick="setDeadlinePreset('none')">No Deadline</div>
             <div class="count-pill" onclick="setDeadlinePreset('today')">Today 11:59 PM</div>
@@ -1544,7 +2183,6 @@ function renderQuizModal() {
             <div class="count-pill" onclick="setDeadlinePreset('1week')">In 1 Week</div>
           </div>
 
-          <!-- Month / Day / Year + Time Selectors -->
           <div class="qz-datetime-grid-4">
             <div class="qz-dt-item">
               <span class="qz-dt-label">Month</span>
@@ -1585,7 +2223,7 @@ function renderQuizModal() {
           `}
         </div>
 
-        <!-- ── TIMER SETTINGS CARD ── -->
+        <!-- ── TIMER CARD ── -->
         ${quizGen.type === 'standard' ? `
         <div class="gen-field standard-timer-field">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
@@ -1597,7 +2235,6 @@ function renderQuizModal() {
             </span>
           </div>
 
-          <!-- Quick Preset Pills -->
           <div class="count-pills" style="margin-bottom:10px;">
             ${[
               { val: 0, label: 'Untimed' },
@@ -1617,7 +2254,6 @@ function renderQuizModal() {
             `).join('')}
           </div>
 
-          <!-- Adjustable Custom Minutes Stepper -->
           <div class="custom-count-row" style="margin-top:2px;">
             <span class="cc-label">Adjust custom minutes:</span>
             <div style="display:inline-flex;align-items:center;gap:3px;background:#fff;border:1.5px solid var(--blue-light);border-radius:8px;padding:2px 6px;">
@@ -1630,16 +2266,49 @@ function renderQuizModal() {
         </div>
         ` : ''}
 
+        <!-- ── QUESTION FORMATS SELECTION ── -->
         <div class="gen-field">
           <label>Question Formats</label>
           <div class="format-grid">
             <div class="format-chip ${quizGen.formats.has('mc') ? 'on' : ''}" onclick="toggleFormat('mc')">Multiple Choice</div>
+            <div class="format-chip ${quizGen.formats.has('tf') ? 'on' : ''}" onclick="toggleFormat('tf')">True or False</div>
             <div class="format-chip ${quizGen.formats.has('id') ? 'on' : ''}" onclick="toggleFormat('id')">Identification</div>
             <div class="format-chip ${quizGen.formats.has('match') ? 'on' : ''}" onclick="toggleFormat('match')">Matching Type</div>
-            <div class="format-chip ${quizGen.formats.size === 3 ? 'on' : ''}" onclick="setAllFormats()">All Formats</div>
+            <div class="format-chip ${quizGen.formats.size === 4 ? 'on' : ''}" onclick="setAllFormats()">All Formats</div>
           </div>
         </div>
 
+        <!-- ── OPTIONS COUNT SELECTOR (IF MULTIPLE CHOICE SELECTED) ── -->
+        ${quizGen.formats.has('mc') ? `
+        <div class="gen-field" style="background:#f8fbff;border:1.5px solid #dbeafe;border-radius:12px;padding:12px 16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+            <div>
+              <label style="margin-bottom:2px;color:#1e40af;font-weight:700;">Choices per Multiple Choice Question</label>
+              <span style="font-size:11.5px;color:#64748b;">Choose presets or specify custom amount (2 to 8 choices)</span>
+            </div>
+            <div class="count-pills">
+              ${[2, 3, 4, 5, 6].map(num => `
+                <div class="count-pill ${(quizGen.optionsCount || 4) === num ? 'on' : ''}"
+                     style="padding:5px 12px;font-size:12px;font-weight:700;"
+                     onclick="setOptionsCount(${num})">
+                  ${num} Choices
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          <div class="custom-count-row" style="margin-top:4px;">
+            <span class="cc-label">Or custom choice amount:</span>
+            <div style="display:inline-flex;align-items:center;gap:3px;background:#fff;border:1.5px solid var(--blue-light);border-radius:8px;padding:2px 6px;">
+              <button type="button" class="sq-step-btn" onclick="adjustOptionsCount(-1)" title="Decrease choices">−</button>
+              <input type="number" min="2" max="8" class="custom-count-input" style="width:55px !important;text-align:center;padding:3px 4px !important;border:none !important;font-weight:700;color:var(--blue);" value="${quizGen.optionsCount || 4}" oninput="updateCustomOptionsCountInput(this.value)">
+              <button type="button" class="sq-step-btn" onclick="adjustOptionsCount(1)" title="Increase choices">+</button>
+            </div>
+            <span class="cc-hint">choices (2 to 8 supported · Options A through ${String.fromCharCode(64 + Math.min(8, Math.max(2, quizGen.optionsCount || 4)))})</span>
+          </div>
+        </div>
+        ` : ''}
+
+        <!-- ── DISTRIBUTION STYLE ── -->
         ${isMultiFormat ? `
         <div class="gen-field">
           <label>Question Distribution Style</label>
@@ -1650,7 +2319,7 @@ function renderQuizModal() {
             </div>
             <div class="dist-mode-pill ${quizGen.distributionMode === 'custom' ? 'on' : ''}" onclick="setDistributionMode('custom')">
               <div class="dmp-title">🎯 Custom Amount per Type</div>
-              <div class="dmp-desc">Set specific numbers for each question style (e.g. 7 Multiple Choice + 3 Identification)</div>
+              <div class="dmp-desc">Set specific numbers for each question style (e.g. 5 Multiple Choice + 5 True/False)</div>
             </div>
           </div>
         </div>
@@ -1715,43 +2384,78 @@ function renderQuizModal() {
     return;
   }
 
-  // ── STEP 4: UPLOAD & GENERATE ──
+  // ── STEP 4: MULTI-HANDOUT UPLOAD & GENERATE ──
   if (quizGen.wizardStep === 4) {
+    const totalFiles = (quizGen.files || []).length;
+    const totalBytes = quizGen.totalSizeBytes || 0;
+    const totalMb = (totalBytes / (1024 * 1024)).toFixed(1);
+    const capacityPct = Math.min(100, Math.round((totalBytes / MAX_UPLOAD_BYTES) * 100));
+
     body.innerHTML = `
       ${stepperHtml}
       <div class="qz-step-pane">
         <div class="qz-step-banner">
           <div class="qz-step-banner-title">
-            <span>4. Upload Material &amp; Generate Questions</span>
+            <span>4. Upload Handouts &amp; Generate Questions</span>
           </div>
           <span class="qz-step-banner-tag">Step 4 of 5</span>
         </div>
 
         <div class="gen-field">
-          <label>Source Material <span style="color:#ef4444;">*</span></label>
-          ${quizGen.file ? `
-            <div class="file-chip">
-              <div class="fc-icon">${iconDoc().replace('<svg viewBox="0 0 24 24">','<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">')}</div>
-              <div class="fc-info"><h5>${escHtml(quizGen.file.name)}</h5><span>${quizGen.fileText ? 'Text extracted · ready to generate' : 'Reading file…'}</span></div>
-              <button class="fc-remove" onclick="removeFile()">${iconClose()}</button>
-            </div>` : `
-            <label class="dropzone" for="quizFileInput">
-              ${iconUpload()}
-              <div class="dz-title">Click to upload a handout, module, or notes</div>
-              <div class="dz-sub">PDF, DOCX, or TXT (Max 50MB only)</div>
-            </label>
-            <input type="file" id="quizFileInput" accept=".pdf,.docx,.txt" style="display:none" onchange="handleFileInput(this)">
-          `}
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+            <label style="margin-bottom:0;">Source Handouts / Modules <span style="color:#ef4444;">*</span></label>
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);">PDF, DOCX, TXT · Multiple files supported · Max 50MB total</span>
+          </div>
+
+          <label class="dropzone" for="quizFileInput">
+            ${iconUpload()}
+            <div class="dz-title">Click to upload or drag &amp; drop handouts &amp; modules</div>
+            <div class="dz-sub">Select multiple files at once (PDF, DOCX, TXT · Combined limit 50MB only)</div>
+          </label>
+          <input type="file" id="quizFileInput" multiple accept=".pdf,.docx,.txt" style="display:none" onchange="handleFileInput(this)">
+
+          <!-- Live Capacity Tracker -->
+          <div class="qz-upload-capacity-tracker">
+            <span>Combined Upload Size: <strong>${totalMb} MB / 50 MB</strong> (${totalFiles} file${totalFiles === 1 ? '' : 's'})</span>
+            <span>${capacityPct}% Used</span>
+          </div>
+          <div class="qz-capacity-meter">
+            <div class="qz-capacity-fill ${capacityPct > 80 ? 'warning' : ''} ${capacityPct >= 100 ? 'danger' : ''}" style="width: ${capacityPct}%;"></div>
+          </div>
+
+          <!-- Multi-File List -->
+          ${totalFiles > 0 ? `
+          <div class="qz-multi-file-list" style="margin-top:12px;">
+            ${quizGen.files.map(f => {
+              const fMb = (f.size / (1024 * 1024)).toFixed(1);
+              return `
+              <div class="qz-file-item">
+                <div class="qz-file-info">
+                  <div class="qz-file-icon">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  </div>
+                  <div class="qz-file-details">
+                    <h5>${escHtml(f.name)}</h5>
+                    <span>${fMb} MB · Handout ready for citation</span>
+                  </div>
+                </div>
+                <button type="button" class="fc-remove" onclick="removeFile('${escHtml(f.name).replace(/'/g, "\\'")}')" title="Remove this handout">
+                  ${iconClose()}
+                </button>
+              </div>`;
+            }).join('')}
+          </div>
+          ` : ''}
         </div>
 
         ${getQuizConfigSummary()}
 
-        ${quizGen.file ? `
+        ${totalFiles > 0 ? `
         <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;">
           <span style="font-size:22px;">✨</span>
           <div style="flex:1;">
-            <div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:2px;">Ready to Generate!</div>
-            <div style="font-size:11.5px;color:#64748b;">Click the button below to let the system read your material and draft quiz questions. You will review them in the next step.</div>
+            <div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:2px;">${totalFiles} Handout${totalFiles > 1 ? 's' : ''} Ready to Generate!</div>
+            <div style="font-size:11.5px;color:#64748b;">The AI engine will read across all uploaded materials, track document citations and page numbers, and draft structured questions.</div>
           </div>
         </div>
         ` : ''}
@@ -1760,14 +2464,15 @@ function renderQuizModal() {
 
     foot.innerHTML = `
       <button class="foot-btn-secondary" onclick="prevQuizStep()">&larr; Back</button>
-      <button class="gen-btn" ${!quizGen.file ? 'disabled' : ''} onclick="generateQuiz()">${iconChip()} Generate Questions &rarr;</button>
+      <button class="gen-btn" ${totalFiles === 0 ? 'disabled' : ''} onclick="generateQuiz()">${iconChip()} Generate Questions &rarr;</button>
     `;
     return;
   }
 
-  // ── STEP 5: PREVIEW, EDIT & SAVE ──
+  // ── STEP 5: PREVIEW, HOVER PENCIL EDIT & SAVE ──
   const hasQuestions = quizGen.questions && quizGen.questions.length > 0;
   const isDemo = hasQuestions && quizGen.questions.some(q => q._demo);
+  const isInter = quizGen.type === 'interactive';
 
   body.innerHTML = `
     ${stepperHtml}
@@ -1775,6 +2480,7 @@ function renderQuizModal() {
       <div class="qz-step-banner">
         <div class="qz-step-banner-title">
           <span>5. Preview, Edit &amp; Double Check</span>
+          ${isInter ? '<span style="margin-left:8px;padding:3px 10px;background:#e0f2fe;color:#0284c7;border-radius:50px;font-size:11px;font-weight:800;">🎮 Interactive Arena</span>' : '<span style="margin-left:8px;padding:3px 10px;background:#f1f5f9;color:#475569;border-radius:50px;font-size:11px;font-weight:600;">📝 Standard Quiz</span>'}
         </div>
         <span class="qz-step-banner-tag">Step 5 of 5</span>
       </div>
@@ -1783,15 +2489,20 @@ function renderQuizModal() {
       <div class="qz-questions-preview-section">
         <div class="qz-preview-header">
           <div class="qz-preview-title">
-            <span class="qz-preview-icon">📝</span>
-            <div>
-              <h4>Question Items Preview (${quizGen.questions.length} items)</h4>
-              <span>Review and edit questions, options, and answers below before saving</span>
+            <span class="qz-preview-icon">${isInter ? '🎮' : '📝'}</span>
+              <h4>${isInter ? 'Interactive Game Items' : 'Question Items Preview'} (${quizGen.questions.length} items)</h4>
+              <span>${isInter ? `Interactive cards with animated countdown (${quizGen.timerPerQuestion > 0 ? `⏱️ ${quizGen.timerPerQuestion}s per item` : 'Untimed'})` : 'Hover on any question to edit choices, prompts, and answers with the pencil'}</span>
             </div>
           </div>
-          <button type="button" class="foot-btn-secondary" onclick="addNewManualQuestion()" style="font-size:11.5px;padding:5px 12px;border-radius:8px;font-weight:700;">
-            + Add Question
-          </button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            ${isInter ? `
+            <button type="button" class="foot-btn-secondary" onclick="previewGeneratedInteractiveQuiz()" style="font-size:11.5px;padding:5px 12px;border-radius:8px;font-weight:700;background:#e0f2fe;border-color:#bae6fd;color:#0284c7;">
+              🎮 Test Game Arena
+            </button>` : ''}
+            <button type="button" class="foot-btn-secondary" onclick="addNewManualQuestion()" style="font-size:11.5px;padding:6px 14px;border-radius:8px;font-weight:700;">
+              + Add Question
+            </button>
+          </div>
         </div>
 
         ${isDemo ? `
@@ -1818,55 +2529,308 @@ function renderQuizModal() {
     <button class="foot-btn-secondary" onclick="prevQuizStep()">&larr; Back</button>
     <div class="qz-foot-actions">
       <button class="foot-btn-secondary" onclick="quizGen.wizardStep=4;generateQuiz();" title="Re-generate questions using system">🔄 Re-generate</button>
-      <button class="gen-btn" ${!hasQuestions ? 'disabled' : ''} onclick="saveQuiz()">${iconChip()} Save Quiz${hasQuestions ? ` (${quizGen.questions.length} items)` : ''}</button>
+      ${isInter ? `
+      <button class="foot-btn-secondary" onclick="previewGeneratedInteractiveQuiz()" style="background:#e0f2fe;border-color:#bae6fd;color:#0284c7;font-weight:700;">🎮 Test Arena</button>
+      ` : ''}
+      <button class="gen-btn" ${!hasQuestions ? 'disabled' : ''} style="${isInter ? 'background:linear-gradient(135deg,#0284c7,#8b5cf6);' : ''}" onclick="saveQuiz()">${iconChip()} Save ${isInter ? 'Interactive ' : ''}Quiz${hasQuestions ? ` (${quizGen.questions.length} items)` : ''}</button>
+    </div>
+  `;
+}
+
+function renderQuestionCard(q, idx) {
+  const qNum = typeof idx === 'number' ? (idx + 1) : '';
+  const isEditing = quizGen.editingId === q._id;
+
+  const tagClass = q.type === 'multiple_choice' ? 'mc' : q.type === 'true_false' ? 'tf' : q.type === 'identification' ? 'id' : 'match';
+  const tagLabel = q.type === 'multiple_choice' ? 'Multiple Choice' : q.type === 'true_false' ? 'True / False' : q.type === 'identification' ? 'Identification' : 'Matching Type';
+
+  const cardLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  const cardColors = ['#22c55e', '#8b5cf6', '#f97316', '#06b6d4', '#ec4899', '#3b82f6', '#14b8a6', '#6366f1'];
+
+  const sourceName = q.source_file || q.sourceMaterial || (quizGen.files && quizGen.files[0] ? quizGen.files[0].name : 'Handout');
+  const sourcePage = q.source_page || null;
+
+  let body = '';
+
+  if (isEditing) {
+    // ── INLINE ACTIVE EDITOR MODE ──
+    if (q.type === 'multiple_choice') {
+      const opts = q.options || [];
+      body = `
+        <div class="qz-inline-editor">
+          <label class="qr-label">Question Prompt</label>
+          <textarea rows="2" data-field="question" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question || '')}</textarea>
+          
+          <label class="qr-label" style="margin-top:8px;">Choices &amp; Correct Answer (select radio to mark correct)</label>
+          <div class="qr-options">
+            ${opts.map((opt, i) => `
+              <div class="qz-choice-edit-row">
+                <input type="radio" name="ans-${q._id}" ${i === q._answerIdx ? 'checked' : ''} onchange="setAnswerIndex('${q._id}', ${i})" title="Mark as correct answer">
+                <span class="qz-choice-letter" style="background:${cardColors[i] || '#64748b'};">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
+                <input type="text" data-field="opt-${i}" value="${escHtml(opt)}" oninput="editOption('${q._id}', ${i}, this.value)" placeholder="Choice ${cardLetters[i] || (i + 1)}">
+                ${opts.length > 2 ? `<button type="button" class="qr-opt-del-btn" title="Remove choice" onclick="removeOption('${q._id}', ${i})">&times;</button>` : ''}
+              </div>
+            `).join('')}
+          </div>
+          ${opts.length < 8 ? `
+          <div style="margin-top:8px;">
+            <button type="button" class="qz-add-choice-btn" onclick="addOption('${q._id}')">+ Add Choice</button>
+          </div>
+          ` : ''}
+
+          <!-- Handout Citation Editor -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:10px;padding-top:8px;border-top:1px dashed #cbd5e1;">
+            <div>
+              <label class="qr-label" style="font-size:10.5px;">Source Handout / Document</label>
+              <input type="text" value="${escHtml(sourceName)}" oninput="updateSourceFile('${q._id}', this.value)" placeholder="e.g. Chapter1.pdf">
+            </div>
+            <div>
+              <label class="qr-label" style="font-size:10.5px;">Page Number</label>
+              <input type="number" min="1" value="${escHtml(String(sourcePage || ''))}" oninput="updateSourcePage('${q._id}', this.value)" placeholder="e.g. 4">
+            </div>
+          </div>
+
+          <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+            <button type="button" class="gen-btn" style="padding:6px 14px;font-size:12px;" onclick="toggleEditQuestion('${q._id}')">✓ Done Editing</button>
+          </div>
+        </div>
+      `;
+    } else if (q.type === 'true_false') {
+      const isTrue = String(q.answer).toLowerCase() === 'true';
+      body = `
+        <div class="qz-inline-editor">
+          <label class="qr-label">Statement Prompt</label>
+          <textarea rows="2" data-field="question" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question || '')}</textarea>
+          
+          <label class="qr-label" style="margin-top:8px;">Correct Answer</label>
+          <div style="display:flex;gap:10px;">
+            <button type="button" class="qz-tf-btn ${isTrue ? 'active' : ''}" onclick="setTfAnswer('${q._id}', 'True')">✓ True</button>
+            <button type="button" class="qz-tf-btn ${!isTrue ? 'active' : ''}" onclick="setTfAnswer('${q._id}', 'False')">✗ False</button>
+          </div>
+
+          <!-- Handout Citation Editor -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:10px;padding-top:8px;border-top:1px dashed #cbd5e1;">
+            <div>
+              <label class="qr-label" style="font-size:10.5px;">Source Handout / Document</label>
+              <input type="text" value="${escHtml(sourceName)}" oninput="updateSourceFile('${q._id}', this.value)" placeholder="e.g. Chapter1.pdf">
+            </div>
+            <div>
+              <label class="qr-label" style="font-size:10.5px;">Page Number</label>
+              <input type="number" min="1" value="${escHtml(String(sourcePage || ''))}" oninput="updateSourcePage('${q._id}', this.value)" placeholder="e.g. 4">
+            </div>
+          </div>
+
+          <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+            <button type="button" class="gen-btn" style="padding:6px 14px;font-size:12px;" onclick="toggleEditQuestion('${q._id}')">✓ Done Editing</button>
+          </div>
+        </div>
+      `;
+    } else if (q.type === 'identification') {
+      body = `
+        <div class="qz-inline-editor">
+          <label class="qr-label">Question Prompt</label>
+          <textarea rows="2" data-field="question" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question || '')}</textarea>
+          
+          <label class="qr-label" style="margin-top:8px;">Correct Answer</label>
+          <input type="text" data-field="answer" value="${escHtml(q.answer || '')}" oninput="editQuestion('${q._id}','answer',this.value)">
+
+          <!-- Handout Citation Editor -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:10px;padding-top:8px;border-top:1px dashed #cbd5e1;">
+            <div>
+              <label class="qr-label" style="font-size:10.5px;">Source Handout / Document</label>
+              <input type="text" value="${escHtml(sourceName)}" oninput="updateSourceFile('${q._id}', this.value)" placeholder="e.g. Chapter1.pdf">
+            </div>
+            <div>
+              <label class="qr-label" style="font-size:10.5px;">Page Number</label>
+              <input type="number" min="1" value="${escHtml(String(sourcePage || ''))}" oninput="updateSourcePage('${q._id}', this.value)" placeholder="e.g. 4">
+            </div>
+          </div>
+
+          <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+            <button type="button" class="gen-btn" style="padding:6px 14px;font-size:12px;" onclick="toggleEditQuestion('${q._id}')">✓ Done Editing</button>
+          </div>
+        </div>
+      `;
+    } else {
+      // matching
+      body = `
+        <div class="qz-inline-editor">
+          <label class="qr-label">Instructions</label>
+          <input type="text" data-field="instructions" value="${escHtml(q.instructions || '')}" oninput="editQuestion('${q._id}','instructions',this.value)">
+          
+          <label class="qr-label" style="margin-top:8px;">Matching Pairs</label>
+          <div class="qr-pairs">
+            ${(q.pairs || []).map((p, i) => `
+              <div class="qr-pair-row">
+                <span class="qz-choice-letter" style="background:#0284c7;">${i + 1}</span>
+                <input type="text" data-field="pair-${i}" value="${escHtml(p.left)}" oninput="editPair('${q._id}', ${i}, 'left', this.value)" placeholder="Prompt ${i + 1}">
+                <span>&harr;</span>
+                <span class="qz-choice-letter" style="background:#8b5cf6;">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
+                <input type="text" value="${escHtml(p.right)}" oninput="editPair('${q._id}', ${i}, 'right', this.value)" placeholder="Match ${cardLetters[i] || String.fromCharCode(65 + i)}">
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Handout Citation Editor -->
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:10px;padding-top:8px;border-top:1px dashed #cbd5e1;">
+            <div>
+              <label class="qr-label" style="font-size:10.5px;">Source Handout / Document</label>
+              <input type="text" value="${escHtml(sourceName)}" oninput="updateSourceFile('${q._id}', this.value)" placeholder="e.g. Chapter1.pdf">
+            </div>
+            <div>
+              <label class="qr-label" style="font-size:10.5px;">Page Number</label>
+              <input type="number" min="1" value="${escHtml(String(sourcePage || ''))}" oninput="updateSourcePage('${q._id}', this.value)" placeholder="e.g. 4">
+            </div>
+          </div>
+
+          <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+            <button type="button" class="gen-btn" style="padding:6px 14px;font-size:12px;" onclick="toggleEditQuestion('${q._id}')">✓ Done Editing</button>
+          </div>
+        </div>
+      `;
+    }
+  } else {
+    // ── CLEAN DISPLAY VIEW WITH HOVER ELEVATION & CHOICE-LEVEL EDIT PENCIL ──
+    if (q.type === 'multiple_choice') {
+      const opts = q.options || [];
+      body = `
+        <div class="qz-prompt-preview-row" onclick="toggleEditQuestion('${q._id}')" title="Click to edit question prompt">
+          <span style="font-size:13.5px;font-weight:700;color:var(--text-primary);line-height:1.45;">${escHtml(q.question || 'Multiple Choice Question')}</span>
+          <span class="qz-prompt-hover-pencil" title="Edit prompt">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </span>
+        </div>
+        <div class="qz-choices-display-list">
+          ${opts.map((opt, i) => {
+            const isCorrect = (i === q._answerIdx) || (String(opt).trim().toLowerCase() === String(q.answer || '').trim().toLowerCase());
+            return `
+              <div class="qz-choice-preview-row ${isCorrect ? 'is-correct' : ''}" onclick="toggleEditQuestion('${q._id}', ${i})" title="Hover to view · Click or use pencil on right to edit this choice">
+                <span class="qz-choice-letter" style="background:${cardColors[i] || '#64748b'};">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
+                <span class="qz-choice-text">${escHtml(opt)}</span>
+                ${isCorrect ? `<span class="qz-choice-correct-badge">✓ Correct</span>` : ''}
+                <button type="button" class="qz-choice-hover-edit-btn" onclick="event.stopPropagation(); toggleEditQuestion('${q._id}', ${i});" title="Edit this choice">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    } else if (q.type === 'true_false') {
+      const isTrue = String(q.answer).toLowerCase() === 'true';
+      body = `
+        <div class="qz-prompt-preview-row" onclick="toggleEditQuestion('${q._id}')" title="Click to edit statement">
+          <span style="font-size:13.5px;font-weight:700;color:var(--text-primary);line-height:1.45;">${escHtml(q.question || 'True or False Statement')}</span>
+          <span class="qz-prompt-hover-pencil" title="Edit statement">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </span>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:10px;">
+          <div class="qz-statement-preview-row" onclick="toggleEditQuestion('${q._id}')" style="flex:1;padding:8px 14px;border-radius:8px;text-align:center;font-weight:700;font-size:13px;background:${isTrue ? '#ecfdf5' : '#ffffff'};border:1.5px solid ${isTrue ? '#10b981' : '#e2e8f0'};color:${isTrue ? '#047857' : '#64748b'};">
+            ✓ True ${isTrue ? ' (Correct Answer)' : ''}
+          </div>
+          <div class="qz-statement-preview-row" onclick="toggleEditQuestion('${q._id}')" style="flex:1;padding:8px 14px;border-radius:8px;text-align:center;font-weight:700;font-size:13px;background:${!isTrue ? '#ecfdf5' : '#ffffff'};border:1.5px solid ${!isTrue ? '#10b981' : '#e2e8f0'};color:${!isTrue ? '#047857' : '#64748b'};">
+            ✗ False ${!isTrue ? ' (Correct Answer)' : ''}
+          </div>
+        </div>
+      `;
+    } else if (q.type === 'identification') {
+      body = `
+        <div class="qz-prompt-preview-row" onclick="toggleEditQuestion('${q._id}')" title="Click to edit question prompt">
+          <span style="font-size:13.5px;font-weight:700;color:var(--text-primary);line-height:1.45;">${escHtml(q.question || 'Identification Question')}</span>
+          <span class="qz-prompt-hover-pencil" title="Edit prompt">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </span>
+        </div>
+        <div class="qz-id-preview-row" onclick="toggleEditQuestion('${q._id}')" style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:6px 12px;font-size:12.5px;color:#065f46;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
+          <span><strong>Answer:</strong> ${escHtml(q.answer || '—')}</span>
+          <span class="qz-choice-hover-edit-btn" style="opacity:1;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </span>
+        </div>
+      `;
+    } else {
+      // matching
+      body = `
+        <div class="qz-prompt-preview-row" onclick="toggleEditQuestion('${q._id}')" title="Click to edit instructions">
+          <span style="font-size:13px;font-weight:600;color:var(--text-secondary);">${escHtml(q.instructions || 'Match the items on the left with the correct answers on the right.')}</span>
+          <span class="qz-prompt-hover-pencil" title="Edit instructions">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+          ${(q.pairs || []).map((p, i) => `
+            <div class="qz-match-pair-row" onclick="toggleEditQuestion('${q._id}')" style="display:flex;align-items:center;gap:8px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:12px;">
+              <span class="qz-choice-letter" style="background:#0284c7;">${i + 1}</span>
+              <span style="font-weight:600;color:var(--text-primary);">${escHtml(p.left)}</span>
+              <span style="color:#94a3b8;font-weight:700;">&rarr;</span>
+              <span class="qz-choice-letter" style="background:#8b5cf6;">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
+              <span style="font-weight:600;color:#047857;flex:1;">${escHtml(p.right)}</span>
+              <span class="qz-choice-hover-edit-btn">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Source Citation Badge
+    const pageBadgeText = formatPageCitation(sourcePage);
+    body += `
+      <div class="qz-source-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>Handout:</span>
+        <strong>${escHtml(sourceName)}</strong>
+        ${pageBadgeText ? `· <span>${escHtml(pageBadgeText)}</span>` : ''}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="qresult-card qz-review-qcard" id="qcard-${q._id}">
+      <div class="qr-top">
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${qNum ? `<span style="font-size:12px;font-weight:800;color:var(--text-primary);">#${qNum}</span>` : ''}
+          <span class="qr-type-tag ${tagClass}">${tagLabel}</span>
+        </div>
+        <div class="qz-card-header-actions">
+          <button type="button" class="qz-card-action-btn edit-btn ${isEditing ? 'active' : ''}" onclick="toggleEditQuestion('${q._id}')" title="Edit Question Prompt & Details">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <span>${isEditing ? 'Done' : 'Edit Question'}</span>
+          </button>
+          <button type="button" class="qz-card-action-btn delete-btn" onclick="removeQuestion('${q._id}')" title="Delete this question">
+            ${iconTrash()}
+          </button>
+        </div>
+      </div>
+      ${body}
     </div>
   `;
 }
 
 
-function renderQuestionCard(q, idx) {
-  const qNum = typeof idx === 'number' ? (idx + 1) : '';
-  const tagClass = q.type === 'multiple_choice' ? 'mc' : q.type === 'identification' ? 'id' : 'match';
-  const tagLabel = q.type === 'multiple_choice' ? 'Multiple Choice' : q.type === 'identification' ? 'Identification' : 'Matching Type';
-  const cardLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
-  const cardColors = ['#22c55e', '#8b5cf6', '#f97316', '#06b6d4', '#ec4899', '#3b82f6', '#14b8a6', '#6366f1'];
-  let body = '';
-  if (q.type === 'multiple_choice') {
-    body = `<textarea rows="2" data-field="question" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question)}</textarea>
-      <div class="qr-options">${(q.options || []).map((opt, i) => `
-        <div class="qr-opt-row">
-          <input type="radio" name="ans-${q._id}" ${i === q._answerIdx ? 'checked' : ''} onchange="setAnswerIndex('${q._id}', ${i})" title="Mark as correct answer">
-          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${cardColors[i] || '#64748b'};color:#fff;font-size:11px;font-weight:800;flex-shrink:0;">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
-          <input type="text" data-field="opt-${i}" value="${escHtml(opt)}" oninput="editOption('${q._id}', ${i}, this.value)">
-          ${(q.options || []).length > 2 ? `<button class="qr-opt-del-btn" title="Remove this choice" onclick="removeOption('${q._id}', ${i})">&times;</button>` : ''}
-        </div>`).join('')}</div>
-      <div style="margin-top:8px;">
-        <button class="qr-add-opt-btn" onclick="addOption('${q._id}')">+ Add Choice</button>
-      </div>`;
-  } else if (q.type === 'identification') {
-    body = `<textarea rows="2" data-field="question" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question)}</textarea>
-      <div class="qr-label">Correct Answer</div>
-      <input type="text" data-field="answer" value="${escHtml(q.answer)}" oninput="editQuestion('${q._id}','answer',this.value)">`;
-  } else {
-    body = `<div class="qr-label">Instructions</div>
-      <input type="text" data-field="instructions" value="${escHtml(q.instructions || '')}" oninput="editQuestion('${q._id}','instructions',this.value)">
-      <div class="qr-pairs">${(q.pairs || []).map((p, i) => `
-        <div class="qr-pair-row">
-          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#0284c7;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;">${i + 1}</span>
-          <input type="text" data-field="pair-${i}" value="${escHtml(p.left)}" oninput="editPair('${q._id}', ${i}, 'left', this.value)" placeholder="Prompt ${i + 1}">
-          <span>&harr;</span>
-          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#8b5cf6;color:#fff;font-size:11px;font-weight:800;flex-shrink:0;">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
-          <input type="text" value="${escHtml(p.right)}" oninput="editPair('${q._id}', ${i}, 'right', this.value)" placeholder="Match ${cardLetters[i] || String.fromCharCode(65 + i)}">
-        </div>`).join('')}</div>`;
+function previewGeneratedInteractiveQuiz() {
+  if (!quizGen.questions || !quizGen.questions.length) {
+    showToast('No questions to preview yet', 'error');
+    return;
   }
-  return `<div class="qresult-card" id="qcard-${q._id}">
-    <div class="qr-top">
-      <div style="display:flex;align-items:center;gap:8px;">
-        ${qNum ? `<span style="font-size:12px;font-weight:800;color:var(--text-primary);">#${qNum}</span>` : ''}
-        <span class="qr-type-tag ${tagClass}">${tagLabel}</span>
-      </div>
-      <button class="qr-remove" onclick="removeQuestion('${q._id}')" title="Delete this question">${iconTrash()}</button>
-    </div>
-    ${body}
-  </div>`;
+  const previewQuiz = {
+    id: 'preview-' + Date.now(),
+    title: quizGen.title || 'Interactive Quiz Preview',
+    subject: quizGen.subject || 'General Academic',
+    type: 'interactive',
+    quiz_type: 'interactive',
+    timerPerQuestion: typeof quizGen.timerPerQuestion === 'number' ? quizGen.timerPerQuestion : 30,
+    questions: quizGen.questions.map(q => Object.assign({}, q, { _quiz_type: 'interactive' })),
+    is_demo: false,
+    isPreview: true
+  };
+  if (typeof openInteractiveQuiz === 'function') {
+    openInteractiveQuiz(previewQuiz);
+  } else if (typeof openTakeQuizModal === 'function') {
+    openTakeQuizModal(previewQuiz);
+  } else {
+    showToast('Take quiz module is not loaded', 'error');
+  }
 }
