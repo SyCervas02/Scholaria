@@ -238,7 +238,7 @@ body {
 }
 
 .sidebar.closed { transform: translateX(-100%); }
-.sidebar.closed + .main { margin-left: 0; }
+.sidebar.closed ~ .main { margin-left: 0; }
 
 .menu { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 

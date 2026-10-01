@@ -921,7 +921,7 @@ function buildProfilePage(role) {
           <textarea id="pfBio" placeholder="Share a few words about your academic goals, interests, or teaching focus...">${escHtml(p.bio || '')}</textarea>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:12px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;">
           <div class="pf-field">
             <label>Current Status</label>
             <select id="pfOnlineStatus">
@@ -1255,256 +1255,7 @@ function renderStudentDeadlinesWidgetHTML() {
   });
 
   return `
-  <style>
-  .deadline-stream-wrap {
-    margin-top: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    width: 100%;
-  }
-  .deadline-stream-hdr {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 14px;
-  }
-  .deadline-tabs-bar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    background: #f1f5f9;
-    padding: 4px;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-  }
-  .deadline-tab-btn {
-    background: transparent !important;
-    border: none !important;
-    outline: none !important;
-    padding: 7px 14px !important;
-    border-radius: 9px !important;
-    font-size: 12.5px !important;
-    font-weight: 700 !important;
-    color: #64748b !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 6px !important;
-    font-family: inherit !important;
-    box-shadow: none !important;
-  }
-  .deadline-tab-btn:hover {
-    color: #0f172a !important;
-    background: rgba(255, 255, 255, 0.6) !important;
-  }
-  .deadline-tab-btn.active {
-    background: #ffffff !important;
-    color: #2563eb !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
-  }
-  .deadline-tab-count {
-    background: rgba(37, 99, 235, 0.1);
-    color: #2563eb;
-    padding: 1px 7px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 800;
-  }
-  .deadline-tab-btn.active .deadline-tab-count {
-    background: #2563eb;
-    color: #ffffff;
-  }
-  .deadline-filters-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    background: #ffffff;
-    padding: 10px 14px;
-    border: 1.5px solid #e2e8f0;
-    border-radius: 14px;
-  }
-  .deadline-select-pill {
-    border: 1.5px solid #cbd5e1 !important;
-    border-radius: 10px !important;
-    padding: 7px 12px !important;
-    font-size: 12.5px !important;
-    font-weight: 700 !important;
-    color: #334155 !important;
-    background: #f8fafc !important;
-    outline: none !important;
-    font-family: inherit !important;
-    cursor: pointer !important;
-    transition: all 0.2s !important;
-  }
-  .deadline-select-pill:focus,
-  .deadline-select-pill:hover {
-    border-color: #2563eb !important;
-    background: #ffffff !important;
-  }
-  .deadline-cards-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .task-deadline-card {
-    background: #ffffff !important;
-    border: 1.5px solid #e2e8f0 !important;
-    border-radius: 16px !important;
-    padding: 16px 20px !important;
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: flex-start !important;
-    gap: 16px !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    position: relative !important;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03) !important;
-  }
-  .task-deadline-card:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.1) !important;
-    border-color: #93c5fd !important;
-  }
-  .task-deadline-card.overdue {
-    border-left: 5px solid #dc2626 !important;
-    background: #fffdfd !important;
-  }
-  .task-deadline-card.due {
-    border-left: 5px solid #2563eb !important;
-    background: #ffffff !important;
-  }
-  .task-deadline-card.done {
-    border-left: 5px solid #059669 !important;
-    background: #fbfdfc !important;
-  }
-  .task-icon-box {
-    width: 44px !important;
-    height: 44px !important;
-    border-radius: 12px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 20px !important;
-    flex-shrink: 0 !important;
-  }
-  .task-icon-box.due { background: #eff6ff !important; border: 1.5px solid #bfdbfe !important; }
-  .task-icon-box.overdue { background: #fee2e2 !important; border: 1.5px solid #fca5a5 !important; }
-  .task-icon-box.done { background: #dcfce7 !important; border: 1.5px solid #86efac !important; }
 
-  .task-main-col {
-    flex: 1 !important;
-    min-width: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 8px !important;
-  }
-  .task-top-row {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 12px !important;
-    flex-wrap: wrap !important;
-  }
-  .task-title {
-    font-family: 'Syne', sans-serif !important;
-    font-size: 15.5px !important;
-    font-weight: 800 !important;
-    color: #0f172a !important;
-    margin: 0 !important;
-  }
-  .task-due-badge {
-    font-size: 12px !important;
-    font-weight: 800 !important;
-    padding: 3px 10px !important;
-    border-radius: 20px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 5px !important;
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    white-space: nowrap !important;
-  }
-  .task-due-badge.due {
-    background: #eff6ff !important;
-    color: #1d4ed8 !important;
-    border: 1px solid #bfdbfe !important;
-  }
-  .task-due-badge.overdue {
-    background: #fee2e2 !important;
-    color: #b91c1c !important;
-    border: 1px solid #fca5a5 !important;
-  }
-  .task-due-badge.done {
-    background: #dcfce7 !important;
-    color: #15803d !important;
-    border: 1px solid #86efac !important;
-  }
-  .task-tags-row {
-    display: flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-    flex-wrap: wrap !important;
-  }
-  .task-chip {
-    font-size: 11.5px !important;
-    font-weight: 700 !important;
-    padding: 3px 10px !important;
-    border-radius: 8px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 5px !important;
-    white-space: nowrap !important;
-  }
-  .task-chip.subject { background: #f1f5f9 !important; color: #334155 !important; border: 1px solid #e2e8f0 !important; }
-  .task-chip.type-inter { background: #ede9fe !important; color: #6d28d9 !important; border: 1px solid #ddd6fe !important; }
-  .task-chip.type-std { background: #e0f2fe !important; color: #0369a1 !important; border: 1px solid #bae6fd !important; }
-  .task-chip.items { background: #f8fafc !important; border: 1px solid #e2e8f0 !important; color: #64748b !important; }
-  .task-bottom-row {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 12px !important;
-    flex-wrap: wrap !important;
-    margin-top: 4px !important;
-  }
-  .task-action-btn {
-    border: none !important;
-    outline: none !important;
-    border-radius: 8px !important;
-    padding: 7px 16px !important;
-    font-size: 12px !important;
-    font-weight: 700 !important;
-    cursor: pointer !important;
-    transition: all 0.2s ease !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 6px !important;
-    font-family: inherit !important;
-    white-space: nowrap !important;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.06) !important;
-  }
-  .task-action-btn.due { background: #2563eb !important; color: #ffffff !important; }
-  .task-action-btn.due:hover { background: #1d4ed8 !important; transform: translateY(-1px) !important; }
-  .task-action-btn.overdue { background: #dc2626 !important; color: #ffffff !important; }
-  .task-action-btn.overdue:hover { background: #b91c1c !important; transform: translateY(-1px) !important; }
-  .task-action-btn.done { background: #059669 !important; color: #ffffff !important; }
-  .task-action-btn.done:hover { background: #047857 !important; transform: translateY(-1px) !important; }
-  .task-action-btn.inter { background: linear-gradient(135deg, #0284c7, #8b5cf6) !important; color: #ffffff !important; }
-  .task-action-btn.inter:hover { opacity: 0.95 !important; transform: translateY(-1px) !important; }
-  .task-arrow {
-    font-size: 15px !important;
-    font-weight: 800 !important;
-    margin-left: 2px !important;
-    transition: transform 0.2s !important;
-  }
-  .task-deadline-card:hover .task-arrow {
-    transform: translateX(3px) !important;
-  }
-  </style>
 
   <div class="deadline-stream-wrap">
     <!-- Header -->
@@ -1895,7 +1646,7 @@ function studentPage(page) {
 
       <!-- SEARCH, SORT & FILTER TOOLBAR -->
       <div style="background:#f8fafc;padding:14px 18px;border-radius:14px;border:1.5px solid #e2e8f0;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;">
-        <div style="display:flex;gap:8px;flex:1;min-width:240px;align-items:center;">
+        <div style="display:flex;gap:8px;flex:1;min-width:min(100%,240px);align-items:center;">
           <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:10px;padding:9px 14px;font-size:13px;background:#fff;" value="${escHtml(studentQuizSearchQuery)}" oninput="setStudentQuizSearchQuery(this.value)"/>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
@@ -1952,7 +1703,7 @@ function studentPage(page) {
           const isUrgent = !attempt && dueMs && (dueMs - nowMs < 86400000) && (dueMs > nowMs); // Due within 24h
 
           return `<div class="quiz-row" style="${isExpired ? 'opacity:0.75;background:#fcfcfc;' : ''}display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-radius:14px;border:1px solid #e2e8f0;background:#fff;margin-bottom:12px;gap:16px;flex-wrap:wrap;transition:all 0.2s ease;">
-            <div class="qz-info" style="flex:1;min-width:240px;">
+            <div class="qz-info" style="flex:1;min-width:min(100%,240px);">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
                 <span style="display:inline-block;padding:3px 9px;border-radius:6px;background:#eff6ff;color:#2563eb;font-size:11px;font-weight:700;">📚 ${escHtml(q.subject || 'General Academic')}</span>
                 ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10.5px;font-weight:700;">🎮 Interactive</span>' : '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#f1f5f9;color:#475569;font-size:10.5px;font-weight:600;">📝 Standard</span>'}
@@ -2078,8 +1829,8 @@ function studentPage(page) {
       </div>
 
       <!-- QUIZ PROGRESS TABLE -->
-      <div class="score-table">
-        <table>
+      <div class="score-table student-progress-table">
+        <table aria-label="Quiz assessment progress">
           <thead>
             <tr>
               <th>Subject</th>
@@ -2138,24 +1889,24 @@ function studentPage(page) {
 
               return `
               <tr>
-                <td><strong>${escHtml(q.subject || 'General')}</strong></td>
-                <td>${escHtml(q.title || 'Quiz')}</td>
-                <td style="color:var(--text-secondary);font-size:12.5px;white-space:nowrap;">
+                <td data-label="Subject"><div class="progress-cell-value"><strong>${escHtml(q.subject || 'General')}</strong></div></td>
+                <td data-label="Assessment"><div class="progress-cell-value">${escHtml(q.title || 'Quiz')}</div></td>
+                <td style="color:var(--text-secondary);font-size:12.5px;white-space:nowrap;" data-label="Deadline"><div class="progress-cell-value">
                   <span style="display:inline-flex;align-items:center;gap:6px;">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:var(--text-muted);flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     ${escHtml(deadlineDate)}
                   </span>
-                </td>
-                <td>${r.totalItems ? `${r.totalItems} item${r.totalItems === 1 ? '' : 's'}` : '—'}</td>
-                <td>
+                </div></td>
+                <td data-label="Total Items"><div class="progress-cell-value">${r.totalItems ? `${r.totalItems} item${r.totalItems === 1 ? '' : 's'}` : '—'}</div></td>
+                <td data-label="Status"><div class="progress-cell-value">
                   <span class="status-pill ${statusClass}">${statusText}</span>
-                </td>
-                <td class="score-val ${scoreClass}">
+                </div></td>
+                <td class="score-val ${scoreClass}" data-label="Score"><div class="progress-cell-value">
                   ${hasTaken
                     ? `<strong>${r.score} / ${r.totalItems}</strong> <span style="font-size:11px;font-weight:700;margin-left:4px;">(${r.pct !== null ? r.pct + '%' : ''})</span>`
                     : '<span style="color:var(--text-muted);">—</span>'}
-                </td>
-                <td>
+                </div></td>
+                <td data-label="Action"><div class="progress-cell-value">
                   ${hasTaken
                     ? `<button class="table-act-btn review" onclick="openReviewAttempt('${q.id}')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -2165,7 +1916,7 @@ function studentPage(page) {
                         <svg viewBox="0 0 24 24"><polygon points="6 4 18 12 6 20 6 4"/></svg>
                         ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}
                        </button>`}
-                </td>
+                </div></td>
               </tr>`;
             }).join('')
             : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No quizzes assigned to your strand or section yet.</td></tr>`}
@@ -2360,7 +2111,7 @@ function teacherPage(page) {
 
       <!-- SEARCH & FILTER TOOLBAR -->
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;background:#f8fafc;padding:12px 16px;border-radius:14px;border:1px solid #e2e8f0;">
-        <div style="display:flex;gap:8px;flex:1;min-width:240px;align-items:center;">
+        <div style="display:flex;gap:8px;flex:1;min-width:min(100%,240px);align-items:center;">
           <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -2402,7 +2153,7 @@ function teacherPage(page) {
 
           return `
           <div class="quiz-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;gap:16px;flex-wrap:wrap;">
-            <div class="qz-info" style="min-width:240px;flex:1;">
+            <div class="qz-info" style="min-width:min(100%,240px);flex:1;">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
                 <h4 style="font-size:15px;font-weight:700;color:#0f172a;margin:0;">${escHtml(q.title)}</h4>
                 <span class="status-pill ${statusClass}">${statusLabel}</span>
@@ -3006,7 +2757,7 @@ function adminPage(page) {
       </div>
 
       <!-- REPORT GENERATOR TOOLS -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));gap:18px;margin-bottom:28px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 340px), 1fr));gap:18px;margin-bottom:28px;">
         <!-- TOOL 1: SECTION MASTER GRADE SHEET -->
         <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:16px;padding:22px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
           <div>
@@ -3235,6 +2986,34 @@ function renderPage(page) {
 
 /* ── NAVIGATION LISTENERS ── */
 document.addEventListener('DOMContentLoaded', () => {
+  // Wrapped banner text must reserve its actual height above the navigation.
+  const bannerSelectors = ['.demo-mode-banner', '.emergency-top-banner'];
+  const bannerProperties = ['--banner-h', '--anc-banner-h'];
+  const observedBanners = new Set();
+  const bannerResizeObserver = new ResizeObserver(syncBannerHeights);
+  function syncBannerHeights() {
+    const banners = bannerSelectors.map(selector => document.querySelector(selector));
+    for (const banner of observedBanners) {
+      if (!banners.includes(banner)) {
+        bannerResizeObserver.unobserve(banner);
+        observedBanners.delete(banner);
+      }
+    }
+    banners.forEach((banner, index) => {
+      if (banner && !observedBanners.has(banner)) {
+        bannerResizeObserver.observe(banner);
+        observedBanners.add(banner);
+      }
+      const height = banner ? Math.ceil(banner.getBoundingClientRect().height) : 0;
+      document.body.style.setProperty(bannerProperties[index], `${height}px`);
+    });
+  }
+  const bannerMutationObserver = new MutationObserver(syncBannerHeights);
+  bannerMutationObserver.observe(document.body, { childList: true });
+  const bannerContainer = document.getElementById('emergencyBannerContainer');
+  if (bannerContainer) bannerMutationObserver.observe(bannerContainer, { childList: true, subtree: true });
+  syncBannerHeights();
+
   const sidebarMenu = document.getElementById('sidebarMenu');
   const toggleBtn = document.getElementById('hamburger-toggle');
   const sidebar = document.getElementById('sidebar');
@@ -3243,11 +3022,29 @@ document.addEventListener('DOMContentLoaded', () => {
   function openMobileSidebar() {
     if (sidebar) sidebar.classList.add('open');
     if (backdrop) backdrop.classList.add('active');
+    document.body.classList.add('mobile-menu-open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
   }
 
   function closeMobileSidebar() {
     if (sidebar) sidebar.classList.remove('open');
     if (backdrop) backdrop.classList.remove('active');
+    document.body.classList.remove('mobile-menu-open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  const mobileLayout = window.matchMedia('(max-width: 900px)');
+  mobileLayout.addEventListener('change', closeMobileSidebar);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && sidebar?.classList.contains('open')) {
+      closeMobileSidebar();
+      toggleBtn?.focus();
+    }
+  });
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-controls', 'sidebar');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    toggleBtn.setAttribute('aria-label', 'Toggle navigation');
   }
 
   if (toggleBtn && sidebar) {

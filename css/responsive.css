@@ -1,0 +1,205 @@
+/* Load after page and module styles so mobile rules share one cascade. */
+.main, .page-section, .info-card, .ic-head > div, .welcome-text-box {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.demo-mode-banner { height: auto; min-height: 40px; padding-block: 8px; }
+.emergency-top-banner { height: auto; min-height: 46px; padding-block: 8px; }
+.eb-content, .eb-text { min-width: 0; overflow-wrap: anywhere; }
+.search-bar, .search-bar input { min-width: 0; }
+.notif-page-wrap, .notif-subject-cell, .notif-sender-cell { min-width: 0; }
+.notif-msg, .notif-subject-title, .notif-subject-msg { overflow-wrap: anywhere; }
+.notif-select-all {
+  display: flex; align-items: center; gap: 10px; min-height: 44px;
+  padding: 12px 16px; font-size: 12px; color: #475569; cursor: pointer;
+}
+.notif-select-all input { flex-shrink: 0; }
+
+@media screen and (max-width: 640px) {
+  .notif-action-bar { padding: 12px; align-items: stretch; }
+  .notif-tab-group { width: 100%; flex-wrap: wrap; }
+  .notif-tab-btn { flex: 1; justify-content: center; min-height: 44px; padding-inline: 10px; }
+  .notif-actions-right { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .notif-act-btn { min-width: 0; min-height: 44px; padding: 8px; font-size: 12px; }
+  .notif-act-btn svg { flex-shrink: 0; }
+  .notif-page-wrap .notif-table-card { overflow: visible; background: transparent; border: 0; box-shadow: none; }
+  .notif-table, .notif-table tbody { display: block; width: 100%; }
+  .notif-table thead {
+    position: absolute; width: 1px; height: 1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .notif-table tbody tr {
+    display: grid; grid-template-columns: 32px minmax(0, 1fr) 44px; gap: 8px;
+    margin-bottom: 12px; padding: 12px; background: #fff;
+    border: 1px solid #e2e8f0; border-radius: 14px;
+  }
+  .notif-table tbody tr.unread-row { background: #f0f6ff; border-color: #bfdbfe; }
+  .notif-table tbody td { min-width: 0; padding: 0; border: 0; text-align: left !important; }
+  .notif-cell-select { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: center; }
+  .notif-cell-sender { grid-column: 2; grid-row: 1; align-self: center; }
+  .notif-cell-action { grid-column: 3; grid-row: 1; }
+  .notif-cell-subject { grid-column: 1 / -1; grid-row: 2; }
+  .notif-cell-sent { grid-column: 1 / -1; grid-row: 3; }
+  .notif-cell-status { grid-column: 2 / -1; grid-row: 4; justify-self: end; }
+  .notif-cell-number { grid-column: 1; grid-row: 4; align-self: center; }
+  .notif-cell-number::before { content: '#'; }
+  .notif-cell-sent::before { content: 'Sent: '; color: #64748b; font-size: 12px; }
+  .notif-sender-cell { gap: 8px; }
+  .notif-sender-name, .notif-sent-time { white-space: normal; overflow-wrap: anywhere; }
+  .notif-table .notif-del-row-btn { width: 44px; height: 44px; }
+  .notif-select-all input, .notif-cell-select input { width: 20px; height: 20px; }
+  .notif-dropdown.open { display: flex; flex-direction: column; }
+  /* A filtered ancestor would anchor the fixed dropdown to the header. */
+  .top-nav { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .notif-dropdown .notif-list { min-height: 0; flex: 1 1 auto; overscroll-behavior: contain; }
+  .notif-dropdown .notif-header, .notif-dropdown .notif-footer { flex-shrink: 0; }
+  .notif-header { flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+  .notif-mark-all, .notif-view-all { min-height: 44px; }
+  .notif-item { padding: 12px; gap: 8px; }
+}
+
+/* Announcement badges use shared SVG helpers without intrinsic dimensions. */
+.anc-card-header svg { width: 14px; height: 14px; flex: 0 0 14px; }
+.anc-page-wrap, .anc-grid, .anc-sidebar, .anc-card-header > div,
+.anc-author-info, .anc-dir-details { min-width: 0; }
+.anc-card-title, .anc-card-msg, .anc-card-foot, .anc-widget-card,
+#ancDetailTitle, #ancDetailMsg, #ancDetailAudience { overflow-wrap: anywhere; }
+.anc-author-avatar, .anc-dir-icon { flex-shrink: 0; }
+.anc-card-header, .anc-card-foot { flex-wrap: wrap; }
+.anc-card-foot { gap: 12px; }
+.anc-card-foot > div { min-width: 0; max-width: 100%; flex-wrap: wrap; }
+.anc-hotline-chip { max-width: 100%; flex-wrap: wrap; overflow-wrap: anywhere; }
+.anc-archive-toggle-wrap { max-width: 100%; flex-wrap: wrap; }
+
+@media screen and (max-width: 640px) {
+  /* Preserve every column as a labeled field instead of squeezing a wide table. */
+  .student-progress-table { background: transparent; border: 0; box-shadow: none; overflow: visible; }
+  .student-progress-table table, .student-progress-table tbody { display: block; width: 100%; }
+  .student-progress-table thead {
+    position: absolute; width: 1px; height: 1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .student-progress-table tbody tr {
+    display: block; margin-bottom: 14px; padding: 6px 14px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+  }
+  .student-progress-table tbody td[data-label] {
+    display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px;
+    padding: 10px 0; width: auto; text-align: left; white-space: normal !important;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .student-progress-table td[data-label]::before {
+    content: attr(data-label); font-size: 11px; font-weight: 700; color: #64748b;
+  }
+  .student-progress-table .progress-cell-value { min-width: 0; overflow-wrap: anywhere; }
+  .student-progress-table .status-pill { display: inline-block; white-space: normal; }
+  .student-progress-table .table-act-btn { min-height: 44px; white-space: normal; }
+  .student-progress-table td[colspan] { display: block; white-space: normal; }
+  .student-progress-table tbody tr td:last-child { border-bottom: 0; }
+
+  .anc-page-wrap .section-hdr h2 { font-size: 22px; line-height: 1.3; }
+  .anc-filter-bar { padding: 12px; align-items: stretch; }
+  .anc-chip-group { width: 100%; }
+  .anc-chip { max-width: 100%; min-height: 44px; padding: 8px 12px; text-align: left; }
+  .anc-chip-count { flex-shrink: 0; }
+  .anc-archive-toggle-wrap { width: 100%; }
+  .anc-archive-tab { flex: 1 1 100px; justify-content: center; min-height: 44px; padding: 8px; }
+  .anc-card-header { padding: 14px 14px 10px; flex-direction: column; gap: 8px; }
+  .anc-meta { flex-wrap: wrap; }
+  .anc-card-body { padding: 0 14px 14px; }
+  .anc-card-foot { padding: 12px 14px; align-items: flex-start; flex-direction: column; }
+  .anc-hotline-box { padding: 12px; }
+  .anc-hotline-chip { width: 100%; border-radius: 12px; min-height: 44px; }
+  .anc-widget-card { padding: 14px; }
+  #announcementDetailModal .modal-head > div { min-width: 0; flex-wrap: wrap; }
+  #announcementDetailModal .modal-x { flex-shrink: 0; }
+}
+@media screen and (max-width: 900px) {
+  .main, .page-content, .profile-grid-layout > *, .sw-grid > * {
+    min-width: 0;
+  }
+  .main { overflow: visible !important; }
+  .sidebar { overscroll-behavior: contain; }
+  body.mobile-menu-open { overflow: hidden; }
+  .iq-match-container { grid-template-columns: minmax(0, 1fr); }
+  .score-table, .user-table, .classrec-table, .mm-table-card,
+  .ca-table-wrap, .notif-table-card {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media screen and (max-width: 640px) {
+  :root { --nav-h: 58px; }
+  .top-nav .logo { flex: 1; min-width: 0; }
+  .top-nav .logo-svg { width: 100%; min-width: 0; }
+  .top-nav .nav-right { flex-shrink: 0; margin-left: auto; }
+  .emergency-top-banner { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  .eb-content { flex-basis: 100%; flex-wrap: wrap; gap: 4px; }
+  .eb-text { max-height: 3.9em; overflow-y: auto; width: 100%; }
+  .eb-actions { flex-wrap: wrap; gap: 6px; width: 100%; }
+  .eb-btn { font-size: 11px; padding: 6px 8px; }
+  .eb-close-btn { margin-left: auto; }
+  .rainbow-trails { display: none; }
+  .courses-widget { padding: 16px; min-width: 0; }
+  .courses-widget .cw-hdr { gap: 12px; flex-wrap: wrap; }
+  .courses-widget .cw-left-filters, .courses-widget .cw-tab-group { min-width: 0; max-width: 100%; }
+  .courses-widget .cw-tab { padding-inline: 10px; flex-wrap: wrap; }
+  .courses-widget .cw-card { max-width: 100%; }
+  .deadline-tabs-bar { max-width: 100%; }
+  .task-main-col { width: 100%; }
+  .task-top-row > div, .task-bottom-row > div { min-width: 0; max-width: 100%; flex-wrap: wrap; }
+  .task-title { white-space: normal !important; overflow-wrap: anywhere; }
+  .task-due-badge, .task-chip { white-space: normal !important; overflow-wrap: anywhere; }
+  .task-action-btn { white-space: normal !important; min-height: 40px; height: auto !important; }
+  .chat-box { left: 12px; right: 12px; width: auto; max-height: calc(100dvh - 160px); }
+  .chat-input-area input { width: 0; min-width: 0; }
+  .main { padding-bottom: 90px !important; }
+  .portal-header { height: auto; min-height: 72px; }
+  .portal-header-inner { gap: 10px; padding: 12px 14px; }
+  .portal-brand { min-width: 0; gap: 8px; }
+  .portal-brand-logo { width: 38px; height: 38px; flex-shrink: 0; }
+  .portal-brand-title { font-size: 15px; overflow-wrap: anywhere; }
+  .portal-brand-sub { font-size: 9px; }
+  .portal-nav-right { flex-shrink: 0; gap: 8px; }
+  .portal-login-btn { min-height: 44px; padding: 10px 14px; }
+  .portal-section { padding: 32px 16px; }
+  .mission-vision-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .mv-card { padding: 24px 20px; }
+  .section-header-wrap { margin-bottom: 24px; }
+  .section-headline { font-size: 26px; }
+  .footer-brand { min-width: 0; }
+  .footer-brand-logo { flex-shrink: 0; }
+  .login-modal-overlay { align-items: flex-start; }
+  .login-modal-overlay .card-wrap { flex-shrink: 0; margin: auto; min-width: 0; }
+  .card-header { padding: 24px 20px; }
+  .card-body { padding: 24px 20px; }
+
+  /* Keep form controls readable without mobile browser focus zoom. */
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    font-size: 16px !important;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .main .card-grid, .continue-grid, .sections-grid,
+  .gen-row, .type-select, .au-type-select, .dist-mode-pills,
+  .qz-datetime-grid, .qz-confirm-data-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .profile-hero-info { min-width: 0; overflow-wrap: anywhere; }
+  .profile-card { padding: 16px; min-width: 0; }
+  .profile-card-hdr { flex-wrap: wrap; gap: 8px; }
+  .quiz-row, .file-row { flex-wrap: wrap; }
+  .quiz-row .qz-info, .file-row .file-info { min-width: 0; overflow-wrap: anywhere; }
+  .quiz-row .take-btn { min-height: 44px; }
+  .iq-drop-slot { min-width: 0; width: 100%; max-width: 100%; }
+  .iq-term-row { flex-direction: column; align-items: stretch; }
+  .qm-header { padding: 12px 14px; flex-wrap: wrap; gap: 12px; }
+  .qm-header-left { flex-wrap: wrap; gap: 10px; min-width: 0; }
+  .modal-card { max-height: calc(100dvh - 20px) !important; }
+  .modal-body { min-width: 0; overflow-wrap: anywhere; }
+  .notif-dropdown {
+    top: calc(var(--nav-h) + var(--banner-h, 0px) + var(--anc-banner-h, 0px) + 6px) !important;
+    max-height: calc(100dvh - var(--nav-h) - var(--banner-h, 0px) - var(--anc-banner-h, 0px) - 16px) !important;
+  }
+}
