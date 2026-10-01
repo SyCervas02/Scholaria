@@ -882,6 +882,7 @@ Return ONLY raw JSON (no markdown fences, no commentary) matching this exact sch
       "question": "string (a clear factual statement)", 
       "options": ["True", "False"], 
       "answer": "True" or "False",
+      "explanation": "string (clear 1-2 sentence explanation specifying why this statement is True or False, and explaining why the alternate choice is wrong)",
       "source_file": "string (the single exact filename)",
       "source_page": 1
     },
@@ -907,10 +908,15 @@ CRITICAL QUALITY AND ACCURACY RULES:
    - The answer must ALWAYS be the actual technical term, concept, function, tool, or principle (e.g. "Java Virtual Machine", "main method", "Bytecode", "JDK", "Inheritance").
 2. CONCISE, CLEAN, SELF-CONTAINED ANSWERS ONLY:
    - Identification and Multiple Choice answers must be concise terms or short phrases (1 to 5 words).
+   - NEVER append trailing pronouns, filler phrases, or punctuation to answers or options (e.g. NEVER "Programming - It", "Assembly Language - It", "Compiler - it", "Variable - this", or "Function - which"). Strip all trailing dashes and pronouns (" - It", " - This", " - These") so the answer is strictly the clean noun or concept (e.g. "Programming", "Assembly Language", "Compiler").
    - NEVER provide a cut-off sentence fragment or run-on clause ending in conjunctions (e.g. NEVER "The main method is a special method and" or "which is used to").
    - If a sentence says "The main method is a special method and is the entry point of the program execution", the answer is strictly "main method", NOT the sentence fragment.
 3. PROFESSIONAL QUESTION FORMULATION:
    - Formulate natural, well-phrased questions that test understanding (e.g., "What is the primary method that acts as the entry point of program execution in Java?").
+4. TRUE / FALSE EXPLANATION REQUIREMENT:
+   - For every True/False question, you MUST provide an "explanation" property explaining the factual reason why the statement is True or False, and specifying why the opposite choice is wrong.
+   - If the statement is False, clearly state what makes it incorrect and what the true fact or rule is (e.g. "Booleans in Java cannot be converted to numeric types because they are incompatible primitive types").
+   - If the statement is True, succinctly cite the supporting rule or definition from the lesson.
 
 Only include "type" values matching the requested formats. For True/False, options must be ["True", "False"]. For multiple choice, ensure ${numChoices} options. Base every question directly on the source material provided. Always include the specific individual "source_file" and "source_page" attributes.`;
 }
@@ -927,13 +933,20 @@ function cleanAnswerTerm(answer) {
   if (!answer || typeof answer !== 'string') return '';
   let str = answer.trim();
   str = str.replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
+  // Strip trailing pronoun connectors like " - It", " - it", " - These", " - This", " : It", " — It", " - They"
+  str = str.replace(/\s*[-–—:]\s*(it|its|this|these|they|them|that|which)\s*$/i, '').trim();
+  // Strip trailing dashes, colons, or punctuation
+  str = str.replace(/\s*[-–—:]+$/g, '').trim();
   // Strip trailing conjunctions, prepositions, or copulas (e.g. "and", "or", "is", "which")
-  str = str.replace(/\s+(and|or|but|with|to|for|of|in|on|at|by|is|are|was|were|which|that|the|a|an)$/i, '').trim();
+  str = str.replace(/\s+(it|its|this|these|they|them|and|or|but|with|to|for|of|in|on|at|by|is|are|was|were|which|that|the|a|an)$/i, '').trim();
   // If answer starts with "The ... is ... and" or "X is a ...", extract the subject X
   const clauseMatch = str.match(/^(?:the|a|an)?\s*([A-Za-z0-9\s_-]{2,35})\s+(?:is|are)\s+(?:a|an|the|defined|used|special)/i);
   if (clauseMatch && clauseMatch[1] && clauseMatch[1].trim().length >= 2) {
     str = clauseMatch[1].trim();
   }
+  // Strip trailing pronoun connectors again after clause extraction
+  str = str.replace(/\s*[-–—:]\s*(it|its|this|these|they|them|that|which)\s*$/i, '').trim();
+  str = str.replace(/\s*[-–—:]+$/g, '').trim();
   return str;
 }
 
@@ -974,6 +987,14 @@ function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
     if (q.type === 'true_false') {
       if (!Array.isArray(q.options) || q.options.length !== 2) q.options = ['True', 'False'];
       if (typeof q.answer !== 'string') q.answer = 'True';
+      const isTrue = String(q.answer).toLowerCase() === 'true';
+      if (!q.explanation || typeof q.explanation !== 'string' || !q.explanation.trim()) {
+        q.explanation = isTrue
+          ? `This statement is correct based on the learning material.`
+          : `This statement is false because the actual principle states otherwise in the course material.`;
+      } else {
+        q.explanation = q.explanation.trim();
+      }
       return true;
     }
     if (q.type === 'identification') {
@@ -1110,7 +1131,7 @@ function extractQuestionsFromText(params) {
   }
 
   // Extract definition pairs and sentences grouped by document
-  const colonRegex = /^([A-Z][A-Za-z0-9\s-]{2,35})\s*[:–-]\s*(.{15,200})$/;
+  const colonRegex = /^([A-Z][A-Za-z0-9\s-]{2,40})\s*[:–—-]\s*(.{10,240})$/;
   const allItems = [];
   const itemsByDoc = {};
   validFiles.forEach(f => { itemsByDoc[f] = []; });
@@ -1123,9 +1144,26 @@ function extractQuestionsFromText(params) {
     lines.forEach(line => {
       const cMatch = line.match(colonRegex);
       if (cMatch) {
-        const rawTerm = cMatch[1].trim().replace(/^(the|a|an)\s+/i, '').trim();
-        const def = cMatch[2].trim().replace(/[.;]+$/, '');
-        if (isValidAcademicTerm(rawTerm) && def.length >= 10 && !isForbiddenFigureLabel(rawTerm)) {
+        let rawTerm = cMatch[1].trim().replace(/^[•\-*]\s*/, '').replace(/^(the|a|an)\s+/i, '').trim();
+        let def = cMatch[2].trim().replace(/[.;]+$/, '');
+
+        // If def starts with "It is ...", "This is ...", "These are ...", clean def
+        def = def.replace(/^(it|this|these|they)\s+(?:is|are|refers to|means)\s+(?:a|an|the)?/i, '').trim();
+
+        // If rawTerm ends with " - It", " - This", " - These", strip it
+        const dashPronounMatch = rawTerm.match(/^(.+?)\s*[-–—:]\s*(?:it|this|these|they|that)\s*$/i);
+        if (dashPronounMatch && dashPronounMatch[1].trim().length >= 2) {
+          rawTerm = dashPronounMatch[1].trim();
+        }
+
+        // Cut off if definition bled into a subsequent heading/term
+        const nextTermIdx = def.search(/\s+[A-Z][A-Za-z0-9\s-]{2,30}\s*[-–—:]\s*(?:it|this|these|they|is|are)\b/i);
+        if (nextTermIdx > 10) {
+          def = def.slice(0, nextTermIdx).trim();
+        }
+
+        rawTerm = cleanAnswerTerm(rawTerm);
+        if (isValidAcademicTerm(rawTerm) && def.length >= 8 && !isForbiddenFigureLabel(rawTerm)) {
           const itemObj = { doc: sec.doc, page: sec.page, term: rawTerm, def, sentence: line, isDef: true };
           allItems.push(itemObj);
           itemsByDoc[sec.doc].push(itemObj);
@@ -1140,10 +1178,24 @@ function extractQuestionsFromText(params) {
 
     sList.forEach(s => {
       // Find definition verb non-greedily
-      const verbMatch = s.match(/\b(is\s+defined\s+as|is\s+described\s+as|refers\s+to|means|represents|is\s+(?:a|an|the))\b/i);
+      const verbMatch = s.match(/\b(is\s+defined\s+as|is\s+described\s+as|refers\s+to|means|represents|is\s+(?:a|an|the)|are\s+(?:the|defined|used))\b/i);
       if (verbMatch && verbMatch.index > 0) {
-        const rawSubject = s.slice(0, verbMatch.index).trim().replace(/^(the|a|an)\s+/i, '').replace(/^[•\-*]\s*/, '').trim();
-        const rawDef = s.slice(verbMatch.index + verbMatch[0].length).trim().replace(/[.;]+$/, '');
+        let rawSubject = s.slice(0, verbMatch.index).trim().replace(/^(the|a|an)\s+/i, '').replace(/^[•\-*]\s*/, '').trim();
+        let rawDef = s.slice(verbMatch.index + verbMatch[0].length).trim().replace(/[.;]+$/, '');
+
+        // If subject contains " - It", " - This", " - These", e.g. "Programming - It is..."
+        const dashPronounMatch = rawSubject.match(/^(.+?)\s*[-–—:]\s*(?:it|this|these|they|that)\s*$/i);
+        if (dashPronounMatch && dashPronounMatch[1].trim().length >= 2) {
+          rawSubject = dashPronounMatch[1].trim();
+        }
+
+        // Cut off if definition bled into a subsequent heading/term
+        const nextTermIdx = rawDef.search(/\s+[A-Z][A-Za-z0-9\s-]{2,30}\s*[-–—:]\s*(?:it|this|these|they|is|are)\b/i);
+        if (nextTermIdx > 10) {
+          rawDef = rawDef.slice(0, nextTermIdx).trim();
+        }
+
+        rawSubject = cleanAnswerTerm(rawSubject);
         if (isValidAcademicTerm(rawSubject) && rawDef.length > 8 && !isForbiddenFigureLabel(rawSubject)) {
           const itemObj = { doc: sec.doc, page: sec.page, term: rawSubject, def: rawDef, sentence: s, isDef: true };
           allItems.push(itemObj);
@@ -1272,14 +1324,23 @@ function extractQuestionsFromText(params) {
     } else if (fmt === 'true_false') {
       const isTrue = i % 2 === 0;
       let qText = '';
+      let explanation = '';
       if (item.isDef && item.term && item.def && isValidAcademicTerm(item.term)) {
-        qText = isTrue
-          ? `${item.term} is defined as ${item.def.toLowerCase().startsWith('a') || item.def.toLowerCase().startsWith('the') ? item.def : 'the ' + item.def}.`
-          : `${item.term} refers exclusively to external non-academic factors and does not relate to ${item.def.slice(0, 40)}.`;
+        if (isTrue) {
+          qText = `${item.term} is defined as ${item.def.toLowerCase().startsWith('a') || item.def.toLowerCase().startsWith('the') ? item.def : 'the ' + item.def}.`;
+          explanation = `This statement is True. By definition in ${itemDoc}, ${item.term} refers to ${item.def}.`;
+        } else {
+          qText = `${item.term} refers exclusively to external non-academic factors and does not relate to ${item.def.slice(0, 40)}.`;
+          explanation = `This statement is False. In ${itemDoc}, ${item.term} directly relates to ${item.def}.`;
+        }
       } else {
-        qText = isTrue
-          ? `${item.sentence.replace(/[.]+$/, '')}.`
-          : `In the context of ${itemDoc}, ${item.sentence.replace(/[.]+$/, '')} is considered invalid and disregarded.`;
+        if (isTrue) {
+          qText = `${item.sentence.replace(/[.]+$/, '')}.`;
+          explanation = `This statement is True as confirmed in ${itemDoc}.`;
+        } else {
+          qText = `In the context of ${itemDoc}, ${item.sentence.replace(/[.]+$/, '')} is considered invalid and disregarded.`;
+          explanation = `This statement is False. According to ${itemDoc}, this statement is valid and recognized in the curriculum.`;
+        }
       }
 
       const tfKey = (qText + ':' + (isTrue ? 'True' : 'False')).toLowerCase();
@@ -1293,6 +1354,7 @@ function extractQuestionsFromText(params) {
         question: qText,
         options: ['True', 'False'],
         answer: isTrue ? 'True' : 'False',
+        explanation: explanation,
         source_file: itemDoc,
         source_page: itemPage
       });

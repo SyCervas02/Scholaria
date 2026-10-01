@@ -1918,9 +1918,10 @@ function approvalEntries() {
       const isArchived = isEntryArchived('quiz', q.id, q.status);
       let status = isArchived ? 'archived' : (q.status === 'active' ? 'approved' : q.status);
       if (!isArchived && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
-      return { id: q.id, kind: 'quiz', title: q.title, type: 'Quiz', subject: q.subject || 'General', name: users.find(u => u.dbId === q.createdBy)?.name || 'Unknown', date: q.createdAt, status, isArchived };
+      const authorUser = users.find(u => u.dbId === q.createdBy || u.id === q.createdBy || (q.createdBy && String(u.dbId).toLowerCase() === String(q.createdBy).toLowerCase()));
+      return { id: q.id, kind: 'quiz', title: q.title, type: 'Quiz', subject: q.subject || 'General', name: authorUser?.name || 'Unknown', date: q.createdAt, status, isArchived };
     })
-  ];
+  ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 }
 
 function setApprovalView(key, value) {

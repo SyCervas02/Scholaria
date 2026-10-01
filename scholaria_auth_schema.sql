@@ -54,8 +54,11 @@ create table if not exists public.quizzes (
   status text default 'pending' check (status in ('pending','approved','rejected','active','closed')),
   is_demo boolean default false,
   questions jsonb,
+  allow_review_answers boolean default true,
   created_at timestamptz default now()
 );
+
+alter table public.quizzes add column if not exists allow_review_answers boolean default true;
 
 create table if not exists public.materials (
   id uuid primary key default gen_random_uuid(),

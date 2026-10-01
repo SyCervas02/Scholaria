@@ -15,7 +15,8 @@ const interactivePlayerState = {
   matchingSelections: {}, // pairIndex -> choiceKey
   selectedMatchingChoice: null, // For tap-to-pair fallback
   isSubmitted: false,
-  isWaitingFeedback: false
+  isWaitingFeedback: false,
+  usedPowerups: { time: false, handout: false, hint: false }
 };
 
 let interactiveBGM = null;
@@ -332,6 +333,7 @@ function buildInteractiveQuestions(quiz) {
         question: q.question,
         options: q.options || [],
         answer: q.answer,
+        explanation: q.explanation || '',
         sourceMaterial: qSource,
         sourceFile: q.source_file || qSource,
         sourcePage: q.source_page || null,
@@ -344,6 +346,7 @@ function buildInteractiveQuestions(quiz) {
         question: q.question,
         options: ['True', 'False'],
         answer: q.answer || 'True',
+        explanation: q.explanation || '',
         sourceMaterial: qSource,
         sourceFile: q.source_file || qSource,
         sourcePage: q.source_page || null,
@@ -355,6 +358,7 @@ function buildInteractiveQuestions(quiz) {
         type: 'identification',
         question: q.question,
         answer: q.answer,
+        explanation: q.explanation || '',
         sourceMaterial: qSource,
         sourceFile: q.source_file || qSource,
         sourcePage: q.source_page || null,
@@ -419,9 +423,9 @@ function openInteractiveQuiz(quizId) {
     else totalItemsCount += 1;
   });
 
-  const timerVal = typeof quiz.timerPerQuestion === 'number' 
+  const timerVal = typeof quiz.timerPerQuestion === 'number' && quiz.timerPerQuestion > 0
     ? quiz.timerPerQuestion 
-    : (typeof quiz.questions?.[0]?._meta?.timerPerQuestion === 'number' ? quiz.questions[0]._meta.timerPerQuestion : 0);
+    : (typeof quiz.questions?.[0]?._meta?.timerPerQuestion === 'number' && quiz.questions[0]._meta.timerPerQuestion > 0 ? quiz.questions[0]._meta.timerPerQuestion : 30);
 
   lastActiveTimerIndex = -1;
   Object.assign(interactivePlayerState, {
@@ -441,7 +445,8 @@ function openInteractiveQuiz(quizId) {
     isWaitingFeedback: false,
     matchingEvaluated: false,
     matchingFeedback: null,
-    lastMatchingPointsEarned: 0
+    lastMatchingPointsEarned: 0,
+    usedPowerups: { time: false, handout: false, hint: false }
   });
 
   const modal = document.getElementById('interactiveQuizModal');
@@ -493,6 +498,7 @@ function closeInteractiveQuiz(confirmFirst = false) {
 
   stopInteractiveBGM();
   stopConfetti();
+  closeInteractiveHandoutModal();
   clearInterval(interactivePlayerState.timerInterval);
   const modal = document.getElementById('interactiveQuizModal');
   if (modal) {
@@ -526,7 +532,7 @@ function startQuestionTimer() {
   clearInterval(interactivePlayerState.timerInterval);
 
   const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
-  let timerVal = interactivePlayerState.timerPerQuestion;
+  let timerVal = interactivePlayerState.timerPerQuestion || 30;
   if (curQ && curQ.type === 'matching') {
     const pairCount = (curQ.pairs || []).length || 4;
     timerVal = Math.max(45, timerVal * Math.min(2, pairCount));
@@ -597,6 +603,25 @@ function renderCurrentInteractiveQuestion() {
     : 'Student';
   const studentInitial = studentName.charAt(0).toUpperCase();
 
+  const docRef = q.sourceFile || q.sourceMaterial || '';
+  const cleanPageText = q.sourcePage ? String(q.sourcePage).replace(/^(page\s*)+/i, '').trim() : '';
+
+  let qTitle = 'Knowledge Check';
+  let qSubtitle = '';
+  if (q.type === 'matching') {
+    qTitle = 'Match the pairs';
+    qSubtitle = 'Drag each answer to its matching term.';
+  } else if (q.type === 'identification') {
+    qTitle = 'Identification';
+    qSubtitle = 'Type the correct answer and submit.';
+  } else if (q.type === 'true_false' || q.type === 'tf') {
+    qTitle = 'True or False';
+    qSubtitle = 'Choose whether the statement is true or false.';
+  } else {
+    qTitle = 'Multiple Choice';
+    qSubtitle = 'Select the correct option below.';
+  }
+
   let questionBodyHTML = '';
   if (q.type === 'multiple_choice' || q.type === 'true_false' || q.type === 'tf') {
     questionBodyHTML = renderMultipleChoiceView(q);
@@ -642,14 +667,25 @@ function renderCurrentInteractiveQuestion() {
 
     <!-- Arena Body -->
     <div class="iq-body">
-      ${q.type !== 'matching' ? `
-        <div style="text-align: center; margin-bottom: 8px;">
-          <span class="iq-progress-badge">
-            ${currentIndex + 1} / ${questions.length}
-            ${interactivePlayerState.timerPerQuestion > 0 ? `<span class="iq-timer-indicator" id="iqTimerDisplay">⏱️ ${interactivePlayerState.timerSecondsLeft}s</span>` : ''}
-          </span>
+      <div class="iq-match-hero-header">
+        <div class="iq-match-hero-left">
+          <span class="iq-match-kcheck">Knowledge Check</span>
+          <h2 class="iq-match-title">${qTitle}</h2>
+          <p class="iq-match-subtitle">${qSubtitle}</p>
         </div>
-      ` : ''}
+        <div class="iq-match-hero-right">
+          <div class="iq-match-progress-wrap">
+            <span class="iq-match-progress-label">Question ${currentIndex + 1} of ${questions.length}</span>
+            <div class="iq-match-progress-bar">
+              <div class="iq-match-progress-fill" style="width: ${Math.round(((currentIndex + 1) / questions.length) * 100)}%;"></div>
+            </div>
+          </div>
+          <div class="iq-match-timer-pill ${interactivePlayerState.timerSecondsLeft <= 5 ? 'urgent' : ''}" id="iqTimerDisplay">
+            ⏱️ ${interactivePlayerState.timerSecondsLeft}s
+          </div>
+        </div>
+      </div>
+
       ${questionBodyHTML}
     </div>
 
@@ -659,15 +695,30 @@ function renderCurrentInteractiveQuestion() {
       <span>${escHtml(studentName)}</span>
     </div>
 
-    <!-- Arena Controls (Bottom Right) -->
-    <div class="iq-bottom-dock-right">
-      <div class="iq-dock-score-pill" title="Current Score">
-        +${(interactivePlayerState.score || 0) * 10} pts
-      </div>
-      <button class="iq-dock-btn" onclick="openInteractiveHandoutView()" title="Review Handout">
+    <!-- Arena Power-ups Dock (Bottom Right) -->
+    <div class="iq-bottom-dock-right" id="iqBottomDockRight">
+      <button type="button" 
+              class="iq-powerup-btn iq-powerup-time ${interactivePlayerState.usedPowerups?.time ? 'used' : ''}" 
+              id="iqPowerupTime" 
+              onclick="usePowerupTime()" 
+              ${interactivePlayerState.usedPowerups?.time ? 'disabled' : ''}
+              title="${interactivePlayerState.usedPowerups?.time ? 'Time Boost already used' : 'Time Boost (+15s) · 1-time use'}">
+        +15
+      </button>
+      <button type="button" 
+              class="iq-powerup-btn iq-powerup-handout ${interactivePlayerState.usedPowerups?.handout ? 'used' : ''}" 
+              id="iqPowerupHandout" 
+              onclick="usePowerupHandout()" 
+              ${interactivePlayerState.usedPowerups?.handout ? 'disabled' : ''}
+              title="${interactivePlayerState.usedPowerups?.handout ? 'Handout Reference already used' : 'Review Handout Reference · 1-time use'}">
         📖
       </button>
-      <button class="iq-dock-btn" onclick="openInteractiveHint()" title="Hint / Info">
+      <button type="button" 
+              class="iq-powerup-btn iq-powerup-hint ${interactivePlayerState.usedPowerups?.hint ? 'used' : ''}" 
+              id="iqPowerupHint" 
+              onclick="usePowerupHint()" 
+              ${interactivePlayerState.usedPowerups?.hint ? 'disabled' : ''}
+              title="${interactivePlayerState.usedPowerups?.hint ? 'Hint already used' : 'Hint / Clue · 1-time use'}">
         💡
       </button>
     </div>
@@ -705,20 +756,8 @@ function renderCurrentInteractiveQuestion() {
  * View 1: Identification
  */
 function renderIdentificationView(q) {
-  const docRef = q.sourceFile || q.sourceMaterial || '';
   return `
     <div class="iq-id-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-        <div class="iq-id-tag">
-          <span class="iq-id-tag-icon">★</span>
-          <span>Identification</span>
-        </div>
-        ${docRef ? `
-        <div class="iq-q-source-pill" title="Handout Reference">
-          <span>📄 Handout:</span> <strong>${escHtml(docRef)}</strong>
-        </div>` : ''}
-      </div>
-
       <div class="iq-id-question-wrap">
         <svg class="iq-id-burst-left" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="3" y1="12" x2="8" y2="12"></line>
@@ -783,7 +822,8 @@ function submitIdentificationAnswer(val) {
     correctAnswerText: correct,
     sourceMaterialText: q.sourceFile || q.sourceMaterial,
     sourcePageText: q.sourcePage || null,
-    lessonText: q.lesson
+    lessonText: q.lesson,
+    explanationText: q.explanation || null
   });
 }
 
@@ -791,36 +831,7 @@ function submitIdentificationAnswer(val) {
  * View 2: Matching Type (Drag and Drop / Tap to Pair)
  */
 function renderMatchingView(q) {
-  const docRef = q.sourceFile || q.sourceMaterial || '';
-  const cleanPageText = q.sourcePage ? String(q.sourcePage).replace(/^(page\s*)+/i, '').trim() : '';
-
   return `
-    <div class="iq-match-hero-header">
-      <div class="iq-match-hero-left">
-        <span class="iq-match-kcheck">Knowledge Check</span>
-        <h2 class="iq-match-title">Match the pairs</h2>
-        <p class="iq-match-subtitle">Drag each answer to its matching term.</p>
-        ${docRef ? `
-          <div class="iq-q-source-pill" style="margin-top:6px;" title="Handout Reference">
-            <span>📄 Handout:</span> <strong>${escHtml(docRef)}</strong>${cleanPageText ? ` · <span>Page ${escHtml(cleanPageText)}</span>` : ''}
-          </div>
-        ` : ''}
-      </div>
-      <div class="iq-match-hero-right">
-        <div class="iq-match-progress-wrap">
-          <span class="iq-match-progress-label">Question ${interactivePlayerState.currentIndex + 1} of ${interactivePlayerState.questions.length}</span>
-          <div class="iq-match-progress-bar">
-            <div class="iq-match-progress-fill" style="width: ${Math.round(((interactivePlayerState.currentIndex + 1) / interactivePlayerState.questions.length) * 100)}%;"></div>
-          </div>
-        </div>
-        ${interactivePlayerState.timerPerQuestion > 0 ? `
-          <div class="iq-match-timer-pill ${interactivePlayerState.timerSecondsLeft <= 5 ? 'urgent' : ''}" id="iqTimerDisplay">
-            ⏱️ ${interactivePlayerState.timerSecondsLeft}s
-          </div>
-        ` : ''}
-      </div>
-    </div>
-
     <!-- Main Two Column Grid (Board) -->
     <div id="iqMatchingBoardWrap" style="width:100%;">
       ${renderMatchingBoardHTML(q)}
@@ -918,9 +929,9 @@ function renderMatchingBoardHTML(q) {
                        ondrop="${isGraded ? '' : `handleChoiceDrop(event, ${i})`}"
                        onclick="${isGraded ? '' : `handleTargetTap(${i})`}">
                     ${assignedChoice ? `
-                      <div class="iq-slot-filled-card">
-                        <span class="iq-choice-badge" style="width:24px;height:24px;font-size:11px;">${assignedChoice.key}</span>
-                        <span class="iq-choice-text" style="font-size:12px;">${escHtml(assignedChoice.text)}</span>
+                      <div class="iq-slot-filled-card" title="${escHtml(assignedChoice.text)}">
+                        <span class="iq-choice-badge">${assignedChoice.key}</span>
+                        <span class="iq-choice-text">${escHtml(assignedChoice.text)}</span>
                         ${isGraded ? `
                           <span class="iq-slot-result-badge ${isPairRight ? 'correct' : 'wrong'}">
                             ${isPairRight ? '✔ +1 pt' : '✖ Missed'}
@@ -951,13 +962,8 @@ function renderMatchingBoardHTML(q) {
       </div>
     </div>
 
-    <!-- Bottom Row: Rearrange note & Submit button -->
+    <!-- Bottom Row: Submit button & Rearrange note -->
     <div class="iq-match-bottom-bar">
-      <span class="iq-match-bottom-note">
-        ${isGraded 
-          ? `Graded: <strong>${pointsEarned}/${totalPairs}</strong> pairs correct (+${pointsEarned} pt${pointsEarned === 1 ? '' : 's'} added).` 
-          : `You can rearrange your answers before submitting.`}
-      </span>
       <button class="iq-submit-btn ${isGraded ? 'ready' : (matchedCount === totalPairs ? 'ready' : 'incomplete')}" 
               id="iqSubmitMatchesBtn" 
               ${isGraded ? 'disabled style="cursor:default;"' : ''}
@@ -969,6 +975,11 @@ function renderMatchingBoardHTML(q) {
           <polyline points="12 5 19 12 12 19"></polyline>
         </svg>` : ''}
       </button>
+      <span class="iq-match-bottom-note">
+        ${isGraded 
+          ? `Graded: <strong>${pointsEarned}/${totalPairs}</strong> pairs correct (+${pointsEarned} pt${pointsEarned === 1 ? '' : 's'} added).` 
+          : `You can rearrange your answers before submitting.`}
+      </span>
     </div>
   `;
 }
@@ -1116,12 +1127,6 @@ function submitMatchingAnswer() {
   interactivePlayerState.matchingFeedback = feedbackMap;
   interactivePlayerState.lastMatchingPointsEarned = matchesCorrect;
 
-  // Live update bottom dock score pill
-  const scoreEl = document.querySelector('.iq-dock-score-pill');
-  if (scoreEl) {
-    scoreEl.textContent = `+${interactivePlayerState.score * 10} pts`;
-  }
-
   // Render board to show green/red per row
   renderMatchingBoardOnly();
 
@@ -1136,7 +1141,8 @@ function submitMatchingAnswer() {
     correctAnswerText: `${matchesCorrect}/${totalPairs} Pairs Matched. Key: ${pairDetails.slice(0, 3).join(' | ')}${pairDetails.length > 3 ? '...' : ''}`,
     sourceMaterialText: q.sourceFile || q.sourceMaterial,
     sourcePageText: q.sourcePage || null,
-    lessonText: q.lesson
+    lessonText: q.lesson,
+    explanationText: q.explanation || null
   });
 }
 
@@ -1185,11 +1191,6 @@ function forceSubmitMatchingOnTimeout() {
   interactivePlayerState.matchingFeedback = feedbackMap;
   interactivePlayerState.lastMatchingPointsEarned = matchesCorrect;
 
-  const scoreEl = document.querySelector('.iq-dock-score-pill');
-  if (scoreEl) {
-    scoreEl.textContent = `+${interactivePlayerState.score * 10} pts`;
-  }
-
   renderMatchingBoardOnly();
 
   const isAllCorrect = matchesCorrect === totalPairs;
@@ -1203,36 +1204,298 @@ function forceSubmitMatchingOnTimeout() {
     correctAnswerText: `${matchesCorrect}/${totalPairs} Pairs Matched. Key: ${pairDetails.slice(0, 3).join(' | ')}${pairDetails.length > 3 ? '...' : ''}`,
     sourceMaterialText: q.sourceFile || q.sourceMaterial,
     sourcePageText: q.sourcePage || null,
-    lessonText: q.lesson
+    lessonText: q.lesson,
+    explanationText: q.explanation || null
   });
 }
 
-function openInteractiveHandoutView() {
+/**
+ * Power-up 1: Time Boost (+15s)
+ * Adds 15 extra seconds to current timer
+ */
+function usePowerupTime() {
+  if (interactivePlayerState.isWaitingFeedback || interactivePlayerState.isSubmitted) return;
+
+  if (!interactivePlayerState.timerPerQuestion || interactivePlayerState.timerPerQuestion <= 0) {
+    if (typeof showToast === 'function') {
+      showToast('This quiz has no time limit!', 'info');
+    }
+    return;
+  }
+
+  if (interactivePlayerState.usedPowerups?.time) {
+    if (typeof showToast === 'function') {
+      showToast('Time boost (+15s) can only be used once per quiz!', 'warning');
+    }
+    return;
+  }
+
+  if (!interactivePlayerState.usedPowerups) {
+    interactivePlayerState.usedPowerups = {};
+  }
+  interactivePlayerState.usedPowerups.time = true;
+
+  interactivePlayerState.timerSecondsLeft += 15;
+  updateTimerUI();
+
+  const timerEl = document.getElementById('iqTimerDisplay');
+  if (timerEl) {
+    timerEl.classList.remove('iq-timer-boost');
+    void timerEl.offsetWidth;
+    timerEl.classList.add('iq-timer-boost');
+    setTimeout(() => {
+      if (timerEl) timerEl.classList.remove('iq-timer-boost');
+    }, 700);
+  }
+
+  const btn = document.getElementById('iqPowerupTime');
+  if (btn) {
+    btn.classList.add('used');
+    btn.disabled = true;
+    btn.title = 'Time Boost already used';
+  }
+
+  playInteractiveSFX(true);
+  if (typeof showToast === 'function') {
+    showToast('⚡ +15 Seconds Added to Timer!', 'success');
+  }
+}
+
+/**
+ * Power-up 2: Handout Study Reference
+ * Opens a focused reference dialog highlighting the document and relevant page (1-time use)
+ */
+function usePowerupHandout() {
   const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!curQ) return;
-  const docRef = curQ.sourceFile || curQ.sourceMaterial || 'Learning Material';
-  const pageRef = curQ.sourcePage ? ` (Page ${curQ.sourcePage})` : '';
+
+  if (interactivePlayerState.usedPowerups?.handout) {
+    if (typeof showToast === 'function') {
+      showToast('Handout reference power-up can only be used once per quiz!', 'warning');
+    }
+    return;
+  }
+
+  if (!interactivePlayerState.usedPowerups) {
+    interactivePlayerState.usedPowerups = {};
+  }
+  interactivePlayerState.usedPowerups.handout = true;
+
+  const btn = document.getElementById('iqPowerupHandout');
+  if (btn) {
+    btn.classList.add('used');
+    btn.disabled = true;
+    btn.title = 'Handout Reference already used';
+  }
+
+  const docRef = curQ.sourceFile || curQ.sourceMaterial || (interactivePlayerState.quiz?.subject ? `${interactivePlayerState.quiz.subject} Handout` : 'Course Learning Material');
+  const rawPage = curQ.sourcePage ? String(curQ.sourcePage).replace(/^(page\s*)+/i, '').trim() : '';
+  const pageText = rawPage ? `Page ${rawPage}` : '';
+  const lessonText = curQ.lesson ? curQ.lesson.trim() : '';
+
+  closeInteractiveHandoutModal();
+
+  const modal = document.createElement('div');
+  modal.id = 'iqHandoutRefModal';
+  modal.className = 'iq-confirm-overlay';
+  modal.style.display = 'flex';
+  modal.onclick = (e) => {
+    if (e.target === modal) closeInteractiveHandoutModal();
+  };
+
+  modal.innerHTML = `
+    <div class="iq-confirm-card" style="max-width: 480px; text-align: left; animation: iqPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:38px;height:38px;border-radius:12px;background:#f3e8ff;color:#7e22ce;display:flex;align-items:center;justify-content:center;font-size:18px;border:1.5px solid #ddd6fe;">📖</div>
+          <div>
+            <h3 style="margin:0;font-size:16.5px;font-weight:800;color:#0f172a;">Handout Reference</h3>
+            <span style="font-size:12px;color:#64748b;">Study material for this question</span>
+          </div>
+        </div>
+        <button type="button" onclick="closeInteractiveHandoutModal()" style="border:none;background:transparent;cursor:pointer;font-size:22px;color:#94a3b8;line-height:1;padding:4px;" title="Close">&times;</button>
+      </div>
+
+      <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+          <span>📄 Handout:</span>
+          <span style="color:#0284c7;font-weight:800;">${escHtml(docRef)}</span>
+        </div>
+        ${pageText ? `
+          <div style="font-size:12.5px;font-weight:600;color:#475569;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+            <span>📑 Reference:</span>
+            <span style="background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:6px;font-weight:700;">${escHtml(pageText)}</span>
+          </div>
+        ` : ''}
+        ${lessonText ? `
+          <div style="font-size:12px;color:#64748b;margin-top:8px;border-top:1px dashed #e2e8f0;padding-top:8px;">
+            <strong style="color:#334155;">Topic:</strong> <em>${escHtml(lessonText)}</em>
+          </div>
+        ` : ''}
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;">
+        <button type="button" class="iq-confirm-btn-yes" style="padding:8px 20px;font-size:13px;" onclick="closeInteractiveHandoutModal()">Back to Quiz</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
   if (typeof showToast === 'function') {
-    showToast(`Handout Reference: ${docRef}${pageRef}`, 'info');
+    showToast(`Handout: ${docRef}${pageText ? ' · ' + pageText : ''}`, 'info');
+  }
+}
+
+function closeInteractiveHandoutModal() {
+  const modal = document.getElementById('iqHandoutRefModal');
+  if (modal) modal.remove();
+}
+
+function openInteractiveHandoutView() {
+  usePowerupHandout();
+}
+
+/**
+ * Power-up 3: Hint / 50:50 Clue (1-time use)
+ * - Multiple Choice: Eliminates 2 incorrect options
+ * - True/False: Provides contextual topic clue
+ * - Identification: Reveals first letter & word length
+ * - Matching: Auto-pairs 1 unassigned term
+ */
+function usePowerupHint() {
+  if (interactivePlayerState.isWaitingFeedback || interactivePlayerState.isSubmitted) return;
+
+  const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
+  if (!curQ) return;
+
+  if (interactivePlayerState.usedPowerups?.hint) {
+    if (typeof showToast === 'function') {
+      showToast('Hint power-up can only be used once per quiz!', 'warning');
+    }
+    return;
+  }
+
+  let hintActivated = false;
+
+  if (curQ.type === 'multiple_choice') {
+    // 50/50 elimination: Remove up to 2 wrong option cards
+    const opts = curQ.options || [];
+    const correctAns = String(curQ.answer || '').trim().toLowerCase();
+    const wrongIndices = [];
+    opts.forEach((opt, idx) => {
+      if (String(opt).trim().toLowerCase() !== correctAns) {
+        wrongIndices.push(idx);
+      }
+    });
+
+    for (let i = wrongIndices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [wrongIndices[i], wrongIndices[j]] = [wrongIndices[j], wrongIndices[i]];
+    }
+    const toEliminate = wrongIndices.slice(0, Math.min(2, Math.max(1, wrongIndices.length - 1)));
+
+    toEliminate.forEach(idx => {
+      const card = document.getElementById(`mc_card_${idx}`);
+      if (card) {
+        card.classList.add('eliminated');
+      }
+    });
+
+    if (toEliminate.length > 0) {
+      hintActivated = true;
+      playInteractiveSFX(true);
+      if (typeof showToast === 'function') {
+        showToast(`💡 50/50: Removed ${toEliminate.length} incorrect option${toEliminate.length > 1 ? 's' : ''}!`, 'success');
+      }
+    }
+  } else if (curQ.type === 'true_false' || curQ.type === 'tf') {
+    const lesson = curQ.lesson ? curQ.lesson.trim() : '';
+    const msg = lesson 
+      ? `💡 Clue: Focus on the concept of "${lesson}" to verify the statement.`
+      : `💡 Clue: Watch out for absolute terms like "always" or "never".`;
+    if (typeof showToast === 'function') {
+      showToast(msg, 'info');
+    }
+    hintActivated = true;
+    playInteractiveSFX(true);
+  } else if (curQ.type === 'identification') {
+    const ans = String(curQ.answer || '').trim();
+    const cleanAns = ans.replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
+    const firstChar = cleanAns.charAt(0).toUpperCase();
+    const letterCount = cleanAns.replace(/\s+/g, '').length;
+    const lesson = curQ.lesson ? ` · Topic: ${curQ.lesson}` : '';
+
+    const input = document.getElementById('iqIdAnswerInput');
+    if (input) {
+      input.placeholder = `Starts with "${firstChar}" (${letterCount} letters)...`;
+      input.focus();
+    }
+
+    if (typeof showToast === 'function') {
+      showToast(`💡 Hint: Starts with "${firstChar}" (${letterCount} letters)${lesson}`, 'info');
+    }
+    hintActivated = true;
+    playInteractiveSFX(true);
+  } else if (curQ.type === 'matching') {
+    // Auto-match 1 unassigned term
+    const pairs = curQ.pairs || [];
+    const choices = curQ.choices || [];
+    const selections = interactivePlayerState.matchingSelections || {};
+
+    let targetPairIdx = -1;
+    for (let i = 0; i < pairs.length; i++) {
+      if (!selections[i]) {
+        targetPairIdx = i;
+        break;
+      }
+    }
+
+    if (targetPairIdx === -1 && pairs.length > 0) {
+      for (let i = 0; i < pairs.length; i++) {
+        const key = selections[i];
+        const ch = choices.find(c => c.key === key);
+        if (!ch || !compareAnswers(ch.text, pairs[i].right)) {
+          targetPairIdx = i;
+          break;
+        }
+      }
+    }
+
+    if (targetPairIdx !== -1) {
+      const correctText = pairs[targetPairIdx].right;
+      const matchingChoice = choices.find(c => compareAnswers(c.text, correctText));
+      if (matchingChoice) {
+        assignMatchingChoice(targetPairIdx, matchingChoice.key);
+        if (typeof showToast === 'function') {
+          showToast(`💡 Hint: Matched "${pairs[targetPairIdx].left}" for you!`, 'success');
+        }
+        hintActivated = true;
+        playInteractiveSFX(true);
+      }
+    } else {
+      if (typeof showToast === 'function') {
+        showToast('💡 All pairs are already filled!', 'info');
+      }
+    }
+  }
+
+  if (hintActivated) {
+    if (!interactivePlayerState.usedPowerups) {
+      interactivePlayerState.usedPowerups = {};
+    }
+    interactivePlayerState.usedPowerups.hint = true;
+    const btn = document.getElementById('iqPowerupHint');
+    if (btn) {
+      btn.classList.add('used');
+      btn.disabled = true;
+      btn.title = 'Hint already used';
+    }
   }
 }
 
 function openInteractiveHint() {
-  const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
-  if (!curQ) return;
-  if (curQ.type === 'matching') {
-    if (typeof showToast === 'function') {
-      showToast('Tip: Drag cards into drop zones, or tap a card then tap a slot to match!', 'info');
-    }
-  } else if (curQ.type === 'identification') {
-    if (typeof showToast === 'function') {
-      showToast('Tip: Type your answer into the input box and submit.', 'info');
-    }
-  } else {
-    if (typeof showToast === 'function') {
-      showToast('Tip: Click any choice card to lock in your answer.', 'info');
-    }
-  }
+  usePowerupHint();
 }
 
 /**
@@ -1243,16 +1506,8 @@ function renderMultipleChoiceView(q) {
   const cardClasses = ['card-a', 'card-b', 'card-c', 'card-d', 'card-a', 'card-b'];
 
   const isTf = q.type === 'true_false' || q.type === 'tf';
-  const docRef = q.sourceFile || q.sourceMaterial || '';
-
   return `
     <div class="iq-mc-container">
-      ${docRef ? `
-      <div style="text-align:center;margin-bottom:12px;">
-        <div class="iq-q-source-pill" title="Handout Reference">
-          <span>📄 Handout:</span> <strong>${escHtml(docRef)}</strong>
-        </div>
-      </div>` : ''}
       <div class="iq-mc-question-banner">
         ${escHtml(q.question)}
       </div>
@@ -1325,11 +1580,12 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
     correctAnswerText: correct,
     sourceMaterialText: q.sourceFile || q.sourceMaterial,
     sourcePageText: q.sourcePage || null,
-    lessonText: q.lesson
+    lessonText: q.lesson,
+    explanationText: q.explanation || null
   });
 }
 
-function showAnswerFeedback({ isCorrect, feedbackType, matchesCorrect, totalPairs, correctAnswerText, sourceMaterialText, sourcePageText, lessonText }) {
+function showAnswerFeedback({ isCorrect, feedbackType, matchesCorrect, totalPairs, correctAnswerText, sourceMaterialText, sourcePageText, lessonText, explanationText }) {
   const isPartial = feedbackType === 'partial';
   const effectiveSuccess = isCorrect || isPartial;
 
@@ -1371,6 +1627,16 @@ function showAnswerFeedback({ isCorrect, feedbackType, matchesCorrect, totalPair
     `;
   }
 
+  let explanationHtml = '';
+  if (explanationText) {
+    explanationHtml = `
+      <div class="iq-fb-explanation-box" style="margin-top:8px;padding:8px 12px;background:rgba(255, 255, 255, 0.9);border-left:3px solid ${isCorrect ? '#10b981' : '#f59e0b'};border-radius:6px;font-size:12.5px;color:#1e293b;line-height:1.45;text-align:left;">
+        <span style="font-weight:700;color:${isCorrect ? '#047857' : '#b45309'};margin-right:4px;">💡 Why:</span>
+        <span>${escHtml(explanationText)}</span>
+      </div>
+    `;
+  }
+
   const drawer = document.createElement('div');
   drawer.id = 'iqFeedbackDrawer';
   drawer.className = `iq-feedback-drawer ${drawerClass}`;
@@ -1381,6 +1647,7 @@ function showAnswerFeedback({ isCorrect, feedbackType, matchesCorrect, totalPair
           ${badgeText}
         </div>
         ${answerDetailsHtml}
+        ${explanationHtml}
       </div>
 
       <div class="iq-fb-source">
@@ -1432,6 +1699,7 @@ function advanceToNextQuestion() {
   interactivePlayerState.lastMatchingPointsEarned = 0;
   interactivePlayerState.matchingSelections = {};
   interactivePlayerState.selectedMatchingChoice = null;
+  closeInteractiveHandoutModal();
   interactivePlayerState.currentIndex++;
   if (interactivePlayerState.currentIndex >= interactivePlayerState.questions.length) {
     interactivePlayerState.isSubmitted = true;
