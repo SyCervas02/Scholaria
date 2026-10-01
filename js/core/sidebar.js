@@ -1086,6 +1086,545 @@ function resetStudentQuizFilters() {
   if (typeof renderPage === 'function') renderPage('quizzes');
 }
 
+/* ── STUDENT TASK & QUIZ DEADLINES STREAM ENGINE (NEWS DEADLINES) ── */
+let studentDeadlineTab = 'pending'; // 'pending' | 'archive' | 'all' | 'overdue' | 'done'
+let studentDeadlineSubjectFilter = 'all';
+let studentDeadlineMonthFilter = 'all';
+let studentDeadlineSort = 'deadline_desc'; // 'deadline_desc' | 'type_interactive' | 'type_standard'
+
+function setStudentDeadlineTab(tab) {
+  studentDeadlineTab = tab;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineSubject(sub) {
+  studentDeadlineSubjectFilter = sub;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineMonth(m) {
+  studentDeadlineMonthFilter = m;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineSort(s) {
+  studentDeadlineSort = s;
+  updateStudentDeadlinesWidget();
+}
+
+function updateStudentDeadlinesWidget() {
+  const container = document.getElementById('studentDeadlinesWidgetContainer');
+  if (container) {
+    container.innerHTML = renderStudentDeadlinesWidgetHTML();
+  }
+}
+
+function renderStudentDeadlinesWidgetHTML() {
+  const allQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []);
+  const visibleQuizzes = allQuizzes.filter(q =>
+    (q.status === 'active' || q.status === 'approved' || q.status === 'closed' || q.isDemo) &&
+    (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
+  );
+
+  const attemptsByQuiz = new Map(
+    (typeof myQuizAttempts !== 'undefined' ? myQuizAttempts : []).map(a => [String(a.quiz_id), a])
+  );
+
+  const now = Date.now();
+  const items = visibleQuizzes.map((q, idx) => {
+    let rawDue = q.dueDate || q.due_date;
+    let dateObj = rawDue ? new Date(rawDue) : null;
+    if (!dateObj || isNaN(dateObj.getTime())) {
+      // Deterministic fallback based on created date or ID
+      const base = q.createdAt ? new Date(q.createdAt).getTime() : (q.created_at ? new Date(q.created_at).getTime() : (now - 86400000 * 2));
+      dateObj = new Date(base + ((idx % 7) * 2 + 1) * 86400000);
+      dateObj.setHours(19, 0, 0, 0);
+    }
+
+    const dueMs = dateObj.getTime();
+    const isAttempted = attemptsByQuiz.has(String(q.id));
+    const attempt = attemptsByQuiz.get(String(q.id));
+    const isOverdue = !isAttempted && (now > dueMs);
+    const isDueSoon = !isAttempted && !isOverdue;
+
+    // Time ago since the teacher posted it (for pending quizzes)
+    const createdAtRaw = q.createdAt || q.created_at;
+    let postTimeAgo = '';
+    if (createdAtRaw) {
+      const createdMs = new Date(createdAtRaw).getTime();
+      if (!isNaN(createdMs)) {
+        const diffMs = Math.max(0, now - createdMs);
+        const mins = Math.floor(diffMs / 60000);
+        const hrs = Math.floor(diffMs / 3600000);
+        const days = Math.floor(diffMs / 86400000);
+        if (days > 0) postTimeAgo = `${days} day${days > 1 ? 's' : ''} ago`;
+        else if (hrs > 0) postTimeAgo = `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+        else if (mins > 0) postTimeAgo = `${mins} min${mins > 1 ? 's' : ''} ago`;
+        else postTimeAgo = 'Just now';
+      }
+    }
+    if (!postTimeAgo) {
+      const pseudoHours = ((idx % 8) * 3 + 2);
+      postTimeAgo = pseudoHours >= 24 ? `${Math.floor(pseudoHours / 24)} days ago` : `${pseudoHours} hours ago`;
+    }
+
+    const dayNum = dateObj.getDate();
+    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+    const monthShort = dateObj.toLocaleDateString('en-US', { month: 'short' });
+    const monthLong = dateObj.toLocaleDateString('en-US', { month: 'long' });
+    const monthNum = dateObj.getMonth() + 1;
+    const time24 = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const time12 = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    const status = isAttempted ? 'done' : (isOverdue ? 'overdue' : 'due');
+    const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+    const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
+
+    return {
+      quiz: q,
+      id: q.id,
+      title: q.title || 'Academic Assessment',
+      subject: q.subject || 'General Academic',
+      lesson: q.lesson || '',
+      itemCount: (q.questions || []).length || 10,
+      isInter,
+      dueMs,
+      dateObj,
+      dayNum,
+      dayName,
+      monthShort,
+      monthLong,
+      monthNum,
+      time24,
+      time12,
+      dueTag: `(due ${dayNum} ${monthShort}, ${time24})`,
+      fullDateStr: `${dayName}, ${monthShort} ${dayNum} · ${time12}`,
+      postTimeAgo,
+      status,
+      isAttempted,
+      isOverdue,
+      isDueSoon,
+      pct,
+      attempt
+    };
+  });
+
+  const totalCount = items.length;
+  const dueCount = items.filter(i => i.status === 'due').length;
+  const overdueCount = items.filter(i => i.status === 'overdue').length;
+  const doneCount = items.filter(i => i.status === 'done').length;
+  const archiveCount = overdueCount + doneCount;
+
+  const uniqueSubjects = [...new Set(items.map(i => i.subject).filter(Boolean))].sort();
+  const uniqueMonths = [...new Map(items.map(i => [i.monthNum, { num: i.monthNum, name: i.monthLong }])).values()]
+    .sort((a, b) => a.num - b.num);
+
+  let filtered = items;
+  if (studentDeadlineTab === 'pending') {
+    filtered = filtered.filter(i => i.status === 'due');
+  } else if (studentDeadlineTab === 'archive') {
+    filtered = filtered.filter(i => i.status === 'overdue' || i.status === 'done');
+  } else if (studentDeadlineTab === 'overdue') {
+    filtered = filtered.filter(i => i.status === 'overdue');
+  } else if (studentDeadlineTab === 'done') {
+    filtered = filtered.filter(i => i.status === 'done');
+  }
+
+  if (studentDeadlineSubjectFilter !== 'all') {
+    filtered = filtered.filter(i => i.subject === studentDeadlineSubjectFilter);
+  }
+
+  if (studentDeadlineMonthFilter !== 'all') {
+    filtered = filtered.filter(i => String(i.monthNum) === String(studentDeadlineMonthFilter) || i.monthShort.toLowerCase() === String(studentDeadlineMonthFilter).toLowerCase());
+  }
+
+  filtered.sort((a, b) => {
+    if (studentDeadlineSort === 'deadline_desc' || studentDeadlineSort === 'deadline_asc') {
+      const diff = a.dueMs - b.dueMs;
+      return diff !== 0 ? diff : a.title.localeCompare(b.title);
+    }
+    if (studentDeadlineSort === 'type_interactive') {
+      const typeDiff = (b.isInter ? 1 : 0) - (a.isInter ? 1 : 0);
+      return typeDiff !== 0 ? typeDiff : (a.dueMs - b.dueMs);
+    }
+    if (studentDeadlineSort === 'type_standard') {
+      const typeDiff = (a.isInter ? 1 : 0) - (b.isInter ? 1 : 0);
+      return typeDiff !== 0 ? typeDiff : (a.dueMs - b.dueMs);
+    }
+    return 0;
+  });
+
+  return `
+  <style>
+  .deadline-stream-wrap {
+    margin-top: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+  }
+  .deadline-stream-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .deadline-tabs-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+  }
+  .deadline-tab-btn {
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    padding: 7px 14px !important;
+    border-radius: 9px !important;
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
+    color: #64748b !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-family: inherit !important;
+    box-shadow: none !important;
+  }
+  .deadline-tab-btn:hover {
+    color: #0f172a !important;
+    background: rgba(255, 255, 255, 0.6) !important;
+  }
+  .deadline-tab-btn.active {
+    background: #ffffff !important;
+    color: #2563eb !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+  }
+  .deadline-tab-count {
+    background: rgba(37, 99, 235, 0.1);
+    color: #2563eb;
+    padding: 1px 7px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .deadline-tab-btn.active .deadline-tab-count {
+    background: #2563eb;
+    color: #ffffff;
+  }
+  .deadline-filters-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #ffffff;
+    padding: 10px 14px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 14px;
+  }
+  .deadline-select-pill {
+    border: 1.5px solid #cbd5e1 !important;
+    border-radius: 10px !important;
+    padding: 7px 12px !important;
+    font-size: 12.5px !important;
+    font-weight: 700 !important;
+    color: #334155 !important;
+    background: #f8fafc !important;
+    outline: none !important;
+    font-family: inherit !important;
+    cursor: pointer !important;
+    transition: all 0.2s !important;
+  }
+  .deadline-select-pill:focus,
+  .deadline-select-pill:hover {
+    border-color: #2563eb !important;
+    background: #ffffff !important;
+  }
+  .deadline-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .task-deadline-card {
+    background: #ffffff !important;
+    border: 1.5px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+    padding: 16px 20px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 16px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    position: relative !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03) !important;
+  }
+  .task-deadline-card:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.1) !important;
+    border-color: #93c5fd !important;
+  }
+  .task-deadline-card.overdue {
+    border-left: 5px solid #dc2626 !important;
+    background: #fffdfd !important;
+  }
+  .task-deadline-card.due {
+    border-left: 5px solid #2563eb !important;
+    background: #ffffff !important;
+  }
+  .task-deadline-card.done {
+    border-left: 5px solid #059669 !important;
+    background: #fbfdfc !important;
+  }
+  .task-icon-box {
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 12px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 20px !important;
+    flex-shrink: 0 !important;
+  }
+  .task-icon-box.due { background: #eff6ff !important; border: 1.5px solid #bfdbfe !important; }
+  .task-icon-box.overdue { background: #fee2e2 !important; border: 1.5px solid #fca5a5 !important; }
+  .task-icon-box.done { background: #dcfce7 !important; border: 1.5px solid #86efac !important; }
+
+  .task-main-col {
+    flex: 1 !important;
+    min-width: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  .task-top-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    flex-wrap: wrap !important;
+  }
+  .task-title {
+    font-family: 'Syne', sans-serif !important;
+    font-size: 15.5px !important;
+    font-weight: 800 !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+  }
+  .task-due-badge {
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    padding: 3px 10px !important;
+    border-radius: 20px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    white-space: nowrap !important;
+  }
+  .task-due-badge.due {
+    background: #eff6ff !important;
+    color: #1d4ed8 !important;
+    border: 1px solid #bfdbfe !important;
+  }
+  .task-due-badge.overdue {
+    background: #fee2e2 !important;
+    color: #b91c1c !important;
+    border: 1px solid #fca5a5 !important;
+  }
+  .task-due-badge.done {
+    background: #dcfce7 !important;
+    color: #15803d !important;
+    border: 1px solid #86efac !important;
+  }
+  .task-tags-row {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex-wrap: wrap !important;
+  }
+  .task-chip {
+    font-size: 11.5px !important;
+    font-weight: 700 !important;
+    padding: 3px 10px !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    white-space: nowrap !important;
+  }
+  .task-chip.subject { background: #f1f5f9 !important; color: #334155 !important; border: 1px solid #e2e8f0 !important; }
+  .task-chip.type-inter { background: #ede9fe !important; color: #6d28d9 !important; border: 1px solid #ddd6fe !important; }
+  .task-chip.type-std { background: #e0f2fe !important; color: #0369a1 !important; border: 1px solid #bae6fd !important; }
+  .task-chip.items { background: #f8fafc !important; border: 1px solid #e2e8f0 !important; color: #64748b !important; }
+  .task-bottom-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    flex-wrap: wrap !important;
+    margin-top: 4px !important;
+  }
+  .task-action-btn {
+    border: none !important;
+    outline: none !important;
+    border-radius: 8px !important;
+    padding: 7px 16px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-family: inherit !important;
+    white-space: nowrap !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06) !important;
+  }
+  .task-action-btn.due { background: #2563eb !important; color: #ffffff !important; }
+  .task-action-btn.due:hover { background: #1d4ed8 !important; transform: translateY(-1px) !important; }
+  .task-action-btn.overdue { background: #dc2626 !important; color: #ffffff !important; }
+  .task-action-btn.overdue:hover { background: #b91c1c !important; transform: translateY(-1px) !important; }
+  .task-action-btn.done { background: #059669 !important; color: #ffffff !important; }
+  .task-action-btn.done:hover { background: #047857 !important; transform: translateY(-1px) !important; }
+  .task-action-btn.inter { background: linear-gradient(135deg, #0284c7, #8b5cf6) !important; color: #ffffff !important; }
+  .task-action-btn.inter:hover { opacity: 0.95 !important; transform: translateY(-1px) !important; }
+  .task-arrow {
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    margin-left: 2px !important;
+    transition: transform 0.2s !important;
+  }
+  .task-deadline-card:hover .task-arrow {
+    transform: translateX(3px) !important;
+  }
+  </style>
+
+  <div class="deadline-stream-wrap">
+    <!-- Header -->
+    <div class="deadline-stream-hdr">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <h2 style="margin:0;font-size:18px;">📋 Subject Task &amp; Quiz Deadlines</h2>
+          <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;">
+            ${dueCount} Active Due
+          </span>
+        </div>
+        <span style="font-size:12.5px;color:var(--text-muted);">
+          Track upcoming quiz schedules, day/time deadlines, and types for every subject you take
+        </span>
+      </div>
+
+      <!-- Archive / Status Tabs -->
+      <div class="deadline-tabs-bar">
+        <button class="deadline-tab-btn ${studentDeadlineTab === 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
+          Pending Quizzes <span class="deadline-tab-count">${dueCount}</span>
+        </button>
+        <button class="deadline-tab-btn ${studentDeadlineTab === 'all' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
+          All Tasks <span class="deadline-tab-count">${totalCount}</span>
+        </button>
+        <button class="deadline-tab-btn ${studentDeadlineTab === 'archive' ? 'active' : ''}" onclick="setStudentDeadlineTab('archive')">
+          📁 Archive <span class="deadline-tab-count" style="${archiveCount ? 'background:#fee2e2;color:#b91c1c;' : ''}">${archiveCount}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter & Sort Bar -->
+    <div class="deadline-filters-bar">
+      <!-- Subject Filter -->
+      <select class="deadline-select-pill" onchange="setStudentDeadlineSubject(this.value)">
+        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (${uniqueSubjects.length})</option>
+        ${uniqueSubjects.map(s => `
+          <option value="${escHtml(s)}" ${studentDeadlineSubjectFilter === s ? 'selected' : ''}>${escHtml(s)}</option>
+        `).join('')}
+      </select>
+
+      <!-- Month Filter -->
+      <select class="deadline-select-pill" onchange="setStudentDeadlineMonth(this.value)">
+        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
+        ${uniqueMonths.map(m => `
+          <option value="${m.num}" ${String(studentDeadlineMonthFilter) === String(m.num) ? 'selected' : ''}>${m.name}</option>
+        `).join('')}
+      </select>
+
+      <!-- Sort Options -->
+      <select class="deadline-select-pill" onchange="setStudentDeadlineSort(this.value)">
+        <option value="deadline_desc" ${studentDeadlineSort === 'deadline_desc' || studentDeadlineSort === 'deadline_asc' ? 'selected' : ''}>⏰ Latest Deadline (Day &amp; Time)</option>
+        <option value="type_interactive" ${studentDeadlineSort === 'type_interactive' ? 'selected' : ''}>🎮 Interactive Quizzes</option>
+        <option value="type_standard" ${studentDeadlineSort === 'type_standard' ? 'selected' : ''}>📝 Standard Quizzes</option>
+      </select>
+    </div>
+
+    <!-- Cards List -->
+    <div class="deadline-cards-list">
+      ${filtered.length ? filtered.map(i => {
+        const isCompleted = i.isAttempted;
+        const clickHandler = isCompleted
+          ? `openReviewAttempt('${i.id}')`
+          : (i.isInter ? `openInteractiveQuiz('${i.id}')` : `openTakeQuizModal('${i.id}')`);
+
+        return `
+        <div class="task-deadline-card ${i.status}" onclick="${clickHandler}" title="Click to ${isCompleted ? 'review' : 'take'} ${escHtml(i.title)}">
+          <div class="task-icon-box ${i.status}">
+            ${isCompleted ? '✅' : (i.isOverdue ? '⚠️' : (i.isInter ? '🎮' : '📝'))}
+          </div>
+
+          <div class="task-main-col">
+            <div class="task-top-row">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0;">
+                <h4 class="task-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${escHtml(i.title)}</h4>
+                <span class="task-chip subject">📚 ${escHtml(i.subject)}</span>
+                <span class="task-chip ${i.isInter ? 'type-inter' : 'type-std'}">
+                  ${i.isInter ? '🎮 Interactive' : '📝 Standard'}
+                </span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                <span class="task-due-badge ${i.status}">
+                  ${isCompleted ? `✅ Done · ${i.pct}%` : (i.isOverdue ? `⚠️ Overdue ${i.dueTag}` : `🕒 ${i.dueTag}`)}
+                </span>
+                <span class="task-arrow">›</span>
+              </div>
+            </div>
+
+            <div class="task-bottom-row" style="margin-top:2px;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#64748b;">
+                ${i.status === 'due' ? `<span style="font-weight:700;color:#0284c7;background:#e0f2fe;padding:2px 8px;border-radius:12px;font-size:11px;">🕒 Posted ${i.postTimeAgo}</span> · ` : ''}
+                ${i.lesson ? `<span style="font-weight:600;color:#475569;">📄 ${escHtml(i.lesson)}</span> · ` : ''}
+                <span>⏰ ${i.fullDateStr}</span>
+                <span>· ${i.itemCount} items</span>
+              </div>
+
+              <button class="task-action-btn ${isCompleted ? 'done' : (i.isOverdue ? 'overdue' : (i.isInter ? 'inter' : 'due'))}" style="padding:4px 12px;font-size:11.5px;" onclick="event.stopPropagation(); ${clickHandler}">
+                ${isCompleted
+                  ? `Review (${i.pct}%)`
+                  : (i.isOverdue
+                    ? (i.isInter ? 'Play Quiz' : 'Take Quiz')
+                    : (i.isInter ? 'Play Quiz' : 'Take Quiz'))}
+                <span class="task-arrow">›</span>
+              </button>
+            </div>
+          </div>
+        </div>`;
+      }).join('') : `
+        <div style="text-align:center;padding:36px 20px;background:#f8fafc;border-radius:14px;border:1.5px dashed #cbd5e1;">
+          <div style="font-size:32px;margin-bottom:8px;">🎉</div>
+          <div style="font-size:14px;font-weight:700;color:#0f172a;">No tasks found matching this filter</div>
+          <p style="font-size:12.5px;color:#64748b;margin:4px 0 12px;">You're either all caught up or try resetting your subject or month filters.</p>
+          <button class="task-action-btn due" onclick="studentDeadlineTab='all';studentDeadlineSubjectFilter='all';studentDeadlineMonthFilter='all';updateStudentDeadlinesWidget();">
+            Reset Filters
+          </button>
+        </div>
+      `}
+    </div>
+  </div>`;
+}
+
 /* ── STUDENT PAGES ── */
 function studentPage(page) {
   switch(page) {
@@ -1139,30 +1678,88 @@ function studentPage(page) {
       <div id="coursesWidgetContainer">
         ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
       </div>
-      <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;margin-top:20px;">
-        <div>
-          <div class="section-hdr"><h2>Available Quizzes</h2></div>
-          <div class="quiz-list">
-            ${availableQuizzes.length ? availableQuizzes.map(q => {
-              const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
-              return `
-              <div class="quiz-row">
-                <div class="qz-info">
-                  <h4>${escHtml(q.title)} ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;margin-left:6px;">⚡ Interactive</span>' : ''}</h4>
-                  <span>${escHtml(q.meta)}</span>
+      ${(() => {
+        // ── RECENT NEWS & BULLETINS WIDGET ──
+        const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+        const activeNews = allAnc
+          .filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft &&
+            !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()))
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 4);
+
+        if (!activeNews.length) return '';
+
+        const catConfig = {
+          emergency: { label: '🚨 Suspension / Emergency', bg: '#fee2e2', color: '#dc2626', border: '#fca5a5' },
+          academic:  { label: '📚 Academic',               bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc' },
+          event:     { label: '🏫 School Events',           bg: '#dcfce7', color: '#15803d', border: '#86efac' },
+          others:    { label: '📌 Others',                  bg: '#ede9fe', color: '#6d28d9', border: '#c4b5fd' },
+          general:   { label: '📢 General',                 bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
+        };
+
+        const newsCards = activeNews.map(anc => {
+          const cfg = catConfig[anc.category] || catConfig.general;
+          const readIds = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
+          const isUnread = !readIds.has(String(anc.id));
+          const timeAgo = (() => {
+            const diff = Date.now() - new Date(anc.timestamp).getTime();
+            const mins = Math.floor(diff / 60000);
+            const hrs  = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            if (days > 0) return `${days}d ago`;
+            if (hrs > 0)  return `${hrs}h ago`;
+            if (mins > 0) return `${mins}m ago`;
+            return 'Just now';
+          })();
+
+          return `
+            <div onclick="openAnnouncementDetailModal('${anc.id}')" style="
+              display:flex; align-items:flex-start; gap:14px;
+              padding:14px 16px; border-radius:14px; cursor:pointer;
+              background:${isUnread ? '#f8faff' : '#ffffff'};
+              border:1.5px solid ${isUnread ? '#bfdbfe' : '#e8f0fe'};
+              transition:all 0.2s;
+              ${anc.category === 'emergency' ? 'border-left:4px solid #dc2626;' : ''}
+            "
+            onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(37,99,235,0.1)'"
+            onmouseout="this.style.transform='';this.style.boxShadow=''"
+            title="Click to read full announcement">
+              <div style="
+                width:38px; height:38px; border-radius:10px; flex-shrink:0;
+                background:${cfg.bg}; border:1.5px solid ${cfg.border};
+                display:flex; align-items:center; justify-content:center; font-size:18px;
+              ">${anc.category === 'emergency' ? '🚨' : anc.category === 'academic' ? '📚' : anc.category === 'event' ? '🏫' : anc.category === 'others' ? '📌' : '📢'}</div>
+              <div style="flex:1; min-width:0;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
+                  <span style="font-size:10px; font-weight:800; padding:2px 8px; border-radius:20px; background:${cfg.bg}; color:${cfg.color}; letter-spacing:0.3px; text-transform:uppercase;">${cfg.label}</span>
+                  ${isUnread ? '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:#2563eb;color:#fff;">NEW</span>' : ''}
+                  <span style="font-size:11px; color:#94a3b8; margin-left:auto;">${timeAgo}</span>
                 </div>
-                <button class="take-btn" style="${isInter ? 'background:linear-gradient(135deg,#0284c7,#8b5cf6);' : ''}" onclick="${isInter ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${isInter ? 'Play Quiz' : 'Take Quiz'}</button>
-              </div>`;
-            }).join('') : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No pending quizzes right now.</p>`}
+                <div style="font-size:13.5px; font-weight:${isUnread ? '800' : '700'}; color:#0f172a; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(anc.title)}</div>
+                <div style="font-size:12px; color:#64748b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${escHtml(anc.message.replace(/\n/g, ' '))}</div>
+              </div>
+            </div>`;
+        }).join('');
+
+        return `
+        <div style="margin-top:8px;">
+          <div class="section-hdr" style="margin-bottom:12px;">
+            <div>
+              <h2>📰 Recent News &amp; Bulletins</h2>
+              <span style="font-size:12.5px;color:var(--text-muted);">Latest school announcements — suspensions, academic updates, and events</span>
+            </div>
+            <button class="add-btn" style="background:#f1f5f9;color:#0284c7;border:1.5px solid #bfdbfe;font-size:12px;padding:7px 14px;" onclick="renderPage('announcements')">
+              View All →
+            </button>
           </div>
-        </div>
-        <div>
-          <div class="section-hdr" style="margin-bottom:12px;"><h2>Latest News</h2></div>
-          <div style="background:#f8fafc;padding:12px;border-radius:16px;border:1px solid #e2e8f0;">
-            ${typeof renderDashboardNewsWidget === 'function' ? renderDashboardNewsWidget() : ''}
-            <button onclick="renderPage('announcements')" style="width:100%;margin-top:4px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:8px;font-size:12px;font-weight:700;color:#64748b;cursor:pointer;transition:all 0.2s;">View All Announcements →</button>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            ${newsCards}
           </div>
-        </div>
+        </div>`;
+      })()}
+
+      <div id="studentDeadlinesWidgetContainer">
+        ${renderStudentDeadlinesWidgetHTML()}
       </div>`;
     }
 

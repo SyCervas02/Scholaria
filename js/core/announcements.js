@@ -375,13 +375,16 @@ function buildAnnouncementsPage() {
   if (ancArchiveView === 'drafts') currentList = draftAnnouncements;
   else if (ancArchiveView === 'archived') currentList = archivedAnnouncements;
 
-  const filtered = ancCategoryFilter === 'all' 
-    ? currentList 
-    : currentList.filter(a => a.category === ancCategoryFilter);
+  const filtered = ancCategoryFilter === 'all'
+    ? currentList
+    : ancCategoryFilter === 'others'
+      ? currentList.filter(a => a.category === 'others' || a.category === 'general')
+      : currentList.filter(a => a.category === ancCategoryFilter);
 
   const emergencyCount = currentList.filter(a => a.category === 'emergency').length;
   const academicCount = currentList.filter(a => a.category === 'academic').length;
   const eventCount = currentList.filter(a => a.category === 'event').length;
+  const othersCount = currentList.filter(a => a.category === 'others' || a.category === 'general').length;
 
   const canPost = ROLE === 'admin' || ROLE === 'teacher';
 
@@ -414,6 +417,9 @@ function buildAnnouncementsPage() {
         </button>
         <button class="anc-chip ${ancCategoryFilter === 'event' ? 'active' : ''}" onclick="setAncCategoryFilter('event')">
           🏫 School Events <span class="anc-chip-count">${eventCount}</span>
+        </button>
+        <button class="anc-chip ${ancCategoryFilter === 'others' ? 'active' : ''}" onclick="setAncCategoryFilter('others')">
+          📌 Others <span class="anc-chip-count">${othersCount}</span>
         </button>
       </div>
 
@@ -927,13 +933,17 @@ function publishAnnouncementDraft(id) {
   if (typeof renderPage === 'function') renderPage('announcements');
 }
 
+/* ── NEWS ALERT POPUP (Auto-show on student dashboard load) ── */
+
 function closeNewsAlertModal() {
   const modal = document.getElementById('newsAlertModal');
   if (modal) modal.classList.remove('active');
+  // Remember shown for this session
   sessionStorage.setItem('scholaria_news_popup_shown', 'true');
 }
 
 function showNewsAlertIfNeeded() {
+  // Only for students, only once per session
   if (typeof ROLE === 'undefined' || ROLE !== 'student') return;
   if (sessionStorage.getItem('scholaria_news_popup_shown') === 'true') return;
 
@@ -944,25 +954,29 @@ function showNewsAlertIfNeeded() {
   const all = getStoredAnnouncements();
   const readIds = getReadAnnouncementIds();
 
+  // Get active, non-draft announcements
   const active = all.filter(a =>
     !a.isArchived && a.status !== 'draft' && !a.isDraft &&
     !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now())
   ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+  // Priority: unread emergency first, then any unread, then latest 3
   const emergencyUnread = active.filter(a => a.category === 'emergency' && !readIds.has(String(a.id)));
   const otherUnread    = active.filter(a => a.category !== 'emergency' && !readIds.has(String(a.id)));
   const toShow = [...emergencyUnread, ...otherUnread].slice(0, 4);
 
+  // If nothing unread at all — skip popup
   if (!toShow.length) return;
 
   const catConfig = {
-    emergency: { label: '🚨 Suspension', bg: '#fee2e2', color: '#dc2626', icon: '🚨' },
-    academic:  { label: '📚 Academic', bg: '#e0f2fe', color: '#0369a1', icon: '📚' },
-    event:     { label: '🏫 School Event', bg: '#dcfce7', color: '#15803d', icon: '🏫' },
-    others:    { label: '📌 Others', bg: '#ede9fe', color: '#6d28d9', icon: '📌' },
-    general:   { label: '📢 General', bg: '#f1f5f9', color: '#475569', icon: '📢' },
+    emergency: { label: '🚨 Suspension / Emergency', bg: '#fee2e2', color: '#dc2626', icon: '🚨' },
+    academic:  { label: '📚 Academic Update',         bg: '#e0f2fe', color: '#0369a1', icon: '📚' },
+    event:     { label: '🏫 School Event',             bg: '#dcfce7', color: '#15803d', icon: '🏫' },
+    others:    { label: '📌 Others',                   bg: '#ede9fe', color: '#6d28d9', icon: '📌' },
+    general:   { label: '📢 General',                  bg: '#f1f5f9', color: '#475569', icon: '📢' },
   };
 
+  // Update header if there's an emergency
   const hasEmergency = emergencyUnread.length > 0;
   const headerGrad = hasEmergency
     ? 'background:linear-gradient(135deg,#991b1b 0%,#dc2626 100%)'
@@ -1022,6 +1036,7 @@ function showNewsAlertIfNeeded() {
       </div>`;
   }).join('');
 
+  // Show modal after a short delay so dashboard renders first
   setTimeout(() => modal.classList.add('active'), 600);
 }
 
