@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="css/dashboard-overrides.css?v=20005"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css"/>
-  <link rel="stylesheet" href="css/modules/chat.css"/>
+  <link rel="stylesheet" href="css/modules/chat.css?v=20006"/>
   <link rel="stylesheet" href="css/modules/admin.css"/>
   <link rel="stylesheet" href="css/modules/courses.css"/>
   <link rel="stylesheet" href="css/modules/announcements.css"/>
@@ -655,6 +655,30 @@
 
       <div class="modal-foot" style="padding:14px 24px;display:flex;justify-content:flex-end;">
         <button class="pf-save" style="background:var(--blue);border-radius:8px;padding:8px 18px;" onclick="closeAnnouncementDetailModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+    <!-- -- NEWS ALERT POPUP MODAL (Auto-shows on student login) -- -->
+  <div class="modal-overlay" id="newsAlertModal" style="z-index:9999;align-items:flex-start;padding-top:60px;">
+    <div class="modal-card" style="max-width:560px;border-radius:22px;overflow:hidden;box-shadow:0 24px 64px rgba(15,23,42,0.18);">
+      <div style="background:linear-gradient(135deg,#1e40af 0%,#2563eb 100%);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:20px;">??</div>
+          <div>
+            <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:#fff;">Latest School News</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.75);">Recent announcements for you</div>
+          </div>
+        </div>
+        <button onclick="closeNewsAlertModal()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;" title="Close">?</button>
+      </div>
+      <div id="newsAlertList" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px;max-height:400px;overflow-y:auto;"></div>
+      <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fafcff;">
+        <span style="font-size:12px;color:#94a3b8;">Click any item to read full details</span>
+        <div style="display:flex;gap:8px;">
+          <button onclick="renderPage('announcements');closeNewsAlertModal();" style="background:#e0f2fe;color:#0284c7;border:none;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">View All ?</button>
+          <button onclick="closeNewsAlertModal()" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">Got it ?</button>
+        </div>
       </div>
     </div>
   </div>

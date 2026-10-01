@@ -18,32 +18,37 @@ function buildQuizItems(quiz) {
     const srcFile = q.source_file || q.sourceMaterial || q.source_material || '';
     const srcPage = q.source_page || null;
 
+    const correctVal = q.answer || q.correct || q.correctAnswer || q.correct_answer || (typeof q._answerIdx === 'number' && q.options ? q.options[q._answerIdx] : '') || '';
+
     if (q.type === 'multiple_choice') {
       items.push({ 
         itemId: `q${qi}`, 
-        label: q.question || `Question ${qi + 1}`, 
+        label: q.question || q.label || `Question ${qi + 1}`, 
         type: 'multiple_choice', 
         options: Array.isArray(q.options) ? q.options : [], 
-        correct: q.answer,
+        correct: correctVal,
+        explanation: q.explanation || '',
         sourceFile: srcFile,
         sourcePage: srcPage
       });
     } else if (q.type === 'true_false' || q.type === 'tf') {
       items.push({ 
         itemId: `q${qi}`, 
-        label: q.question || `Question ${qi + 1}`, 
+        label: q.question || q.label || `Question ${qi + 1}`, 
         type: 'true_false', 
         options: ['True', 'False'], 
-        correct: q.answer || 'True',
+        correct: correctVal || 'True',
+        explanation: q.explanation || '',
         sourceFile: srcFile,
         sourcePage: srcPage
       });
     } else if (q.type === 'identification') {
       items.push({ 
         itemId: `q${qi}`, 
-        label: q.question || `Question ${qi + 1}`, 
+        label: q.question || q.label || `Question ${qi + 1}`, 
         type: 'identification', 
-        correct: q.answer,
+        correct: correctVal,
+        explanation: q.explanation || '',
         sourceFile: srcFile,
         sourcePage: srcPage
       });
@@ -55,6 +60,7 @@ function buildQuizItems(quiz) {
           type: 'matching',
           options: (q.pairs || []).map(x => x.right).filter(Boolean),
           correct: p.right,
+          explanation: q.explanation || '',
           sourceFile: srcFile,
           sourcePage: srcPage
         });
@@ -98,6 +104,80 @@ function compareAnswers(given, correct) {
   if (cNoParen && cNoParen === gNorm) return true;
 
   return false;
+}
+
+/**
+ * Checks if a given option was selected by the student,
+ * supporting exact option text, letter ('A', 'B'), 'A.', 'A)',
+ * index, and prefixed representations like "B. Mitosis".
+ */
+function isOptionSelected(opt, optIdx, studentGiven) {
+  if (studentGiven == null || studentGiven === '') return false;
+  const s = String(studentGiven).trim();
+  const o = String(opt).trim();
+  if (s.toLowerCase() === o.toLowerCase()) return true;
+
+  const sNorm = normalizeAnswerString(s);
+  const oNorm = normalizeAnswerString(o);
+  if (sNorm && oNorm && sNorm === oNorm) return true;
+
+  const letter = String.fromCharCode(65 + optIdx).toLowerCase(); // 'a', 'b', 'c', ...
+  const sLower = s.toLowerCase();
+
+  // If student given is single letter 'a', 'b', or 'a.', 'a)'
+  if (sLower === letter || sLower === `${letter}.` || sLower === `${letter})`) return true;
+
+  // If student given has letter prefix like "b. mitosis" or "b) mitosis"
+  const prefixRegex = new RegExp(`^${letter}[\\.\\)\\:\\-\\s]+`, 'i');
+  if (prefixRegex.test(sLower)) {
+    const afterPrefix = sLower.replace(prefixRegex, '').trim();
+    if (afterPrefix === o.toLowerCase() || normalizeAnswerString(afterPrefix) === oNorm) {
+      return true;
+    }
+  }
+
+  // If student given was pure index number (e.g. 0, 1)
+  if (/^\d+$/.test(s)) {
+    const num = parseInt(s, 10);
+    if (num === optIdx) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Checks if a given option is the correct answer according to the answer key,
+ * handling option text, letter ('A', 'B'), prefixed, or formatted values.
+ */
+function isOptionCorrect(opt, optIdx, itemCorrect) {
+  if (itemCorrect == null || itemCorrect === '') return false;
+  const c = String(itemCorrect).trim();
+  const o = String(opt).trim();
+  if (c.toLowerCase() === o.toLowerCase()) return true;
+
+  const cNorm = normalizeAnswerString(c);
+  const oNorm = normalizeAnswerString(o);
+  if (cNorm && oNorm && cNorm === oNorm) return true;
+
+  const letter = String.fromCharCode(65 + optIdx).toLowerCase();
+  const cLower = c.toLowerCase();
+
+  if (cLower === letter || cLower === `${letter}.` || cLower === `${letter})`) return true;
+
+  const prefixRegex = new RegExp(`^${letter}[\\.\\)\\:\\-\\s]+`, 'i');
+  if (prefixRegex.test(cLower)) {
+    const afterPrefix = cLower.replace(prefixRegex, '').trim();
+    if (afterPrefix === o.toLowerCase() || normalizeAnswerString(afterPrefix) === oNorm) {
+      return true;
+    }
+  }
+
+  if (/^\d+$/.test(c)) {
+    const num = parseInt(c, 10);
+    if (num === optIdx) return true;
+  }
+
+  return compareAnswers(o, c);
 }
 
 function gradeItem(item, given) {
@@ -194,21 +274,84 @@ function openTakeQuizModal(quizId) {
 
 function openReviewAttempt(quizId) {
   clearInterval(takeQuizState.timerInterval);
-  const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
-  const quiz = quizList.find(q => String(q.id) === String(quizId));
-  const attempt = myQuizAttempts.find(a => String(a.quiz_id) === String(quizId));
+  const quizList = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
+  const qStr = String(quizId || '').toLowerCase().trim();
+  let quiz = quizList.find(q => String(q.id).toLowerCase().trim() === qStr);
+  if (!quiz && typeof allQuizzes !== 'undefined' && Array.isArray(allQuizzes)) {
+    quiz = allQuizzes.find(q => String(q.id).toLowerCase().trim() === qStr);
+  }
+  if (!quiz) {
+    quiz = quizList.find(q => q.title && String(q.title).toLowerCase().trim() === qStr);
+  }
+
+  // Look for attempt in pool
+  let attemptsPool = [];
+  if (typeof getAllRecordedAttempts === 'function') {
+    try { attemptsPool.push(...getAllRecordedAttempts()); } catch(e) {}
+  }
+  if (typeof myQuizAttempts !== 'undefined' && Array.isArray(myQuizAttempts)) {
+    attemptsPool.push(...myQuizAttempts);
+  }
+  try {
+    const raw = localStorage.getItem('scholaria_all_attempts_v1');
+    if (raw) {
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) attemptsPool.push(...list);
+    }
+  } catch(e) {}
+  try {
+    const rawCR = localStorage.getItem('scholaria_class_records_v2');
+    if (rawCR) {
+      const listCR = JSON.parse(rawCR);
+      if (Array.isArray(listCR)) attemptsPool.push(...listCR);
+    }
+  } catch(e) {}
+
+  const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
+  const currentStudentId = String(prof.id || prof.school_id || '').toLowerCase().trim();
+  const currentStudentName = String(prof.full_name || '').toLowerCase().trim();
+
+  // Filter for matching quiz attempts
+  const matchingAttempts = attemptsPool.filter(a => {
+    if (!a) return false;
+    const aQid = String(a.quiz_id || '').toLowerCase().trim();
+    if (aQid && aQid === qStr) return true;
+    if (quiz && a.quiz_title && quiz.title && String(a.quiz_title).trim().toLowerCase() === String(quiz.title).trim().toLowerCase()) return true;
+    return false;
+  });
+
+  // Prioritize attempt belonging to current student
+  let attempt = matchingAttempts.find(a => {
+    const sid = String(a.student_id || a.studentId || a.user_id || '').toLowerCase().trim();
+    const sname = String(a.student_name || a.studentName || '').toLowerCase().trim();
+    if (currentStudentId && sid === currentStudentId) return true;
+    if (currentStudentName && (sname === currentStudentName || sid === currentStudentName)) return true;
+    return false;
+  }) || matchingAttempts[0] || null;
+
   if (!quiz || !attempt) { 
     if (typeof showToast === 'function') showToast('Attempt not found', 'error'); 
     return; 
   }
+
+  let parsedAnswers = attempt.answers || [];
+  if (typeof parsedAnswers === 'string') {
+    try { parsedAnswers = JSON.parse(parsedAnswers); } catch(e) { parsedAnswers = []; }
+  }
+  if (!Array.isArray(parsedAnswers) && parsedAnswers && typeof parsedAnswers === 'object') {
+    parsedAnswers = Object.keys(parsedAnswers).map(k => ({ itemId: k, ...parsedAnswers[k] }));
+  }
+  if (!Array.isArray(parsedAnswers)) parsedAnswers = [];
+
   const items = buildQuizItems(quiz);
   Object.assign(takeQuizState, { 
     quiz, 
     items, 
+    attempt,
     responses: {}, 
     submitting: false, 
     reviewMode: true, 
-    reviewAnswers: attempt.answers || [],
+    reviewAnswers: parsedAnswers,
     timeLimitMinutes: 0,
     secondsLeft: 0
   });
@@ -306,7 +449,18 @@ function renderTakeQuizModal() {
 
   const totalItems = items.length;
   const answeredCount = items.filter(it => responses[it.itemId] != null && String(responses[it.itemId]).trim() !== '').length;
-  const reviewScore = reviewAnswers.filter(a => a.isCorrect).length;
+  const reviewScore = (typeof takeQuizState.attempt?.score === 'number')
+    ? takeQuizState.attempt.score
+    : items.reduce((acc, it, idx) => {
+        let ans = reviewAnswers.find(a => a && (String(a.itemId) === String(it.itemId) || String(a.id) === String(it.itemId))) ||
+                  reviewAnswers.find(a => a && (String(a.itemId) === `q${idx}` || String(a.id) === `q${idx}` || a.questionIndex === idx)) ||
+                  reviewAnswers[idx];
+        if (!ans) return acc;
+        const g = ans.given ?? ans.answer ?? ans.studentAnswer ?? ans.user_answer ?? ans.selected ?? '';
+        const c = it.correct || ans.correct || ans.correctAnswer || '';
+        const ok = ans.isCorrect !== undefined ? Boolean(ans.isCorrect) : compareAnswers(g, c);
+        return acc + (ok ? 1 : 0);
+      }, 0);
 
   // Timer HTML
   const mins = Math.floor(Math.max(0, secondsLeft) / 60);
@@ -318,58 +472,177 @@ function renderTakeQuizModal() {
       </div>`
     : '';
 
+  const allowReviewAnswers = (
+    quiz?.allowReviewAnswers !== false &&
+    quiz?.allow_review_answers !== false &&
+    quiz?._meta?.allowReviewAnswers !== false &&
+    quiz?.questions?.[0]?._meta?.allowReviewAnswers !== false &&
+    quiz?.questions?.[0]?._allowReviewAnswers !== false
+  );
   const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
   function buildQuestionCard(item, idx) {
-    const reviewAns = reviewMode ? (reviewAnswers.find(a => a.itemId === item.itemId) || null) : null;
+    let reviewAns = null;
+    if (reviewMode && Array.isArray(reviewAnswers)) {
+      // 1. Match by itemId
+      reviewAns = reviewAnswers.find(a => a && (String(a.itemId) === String(item.itemId) || String(a.id) === String(item.itemId)));
+      // 2. Match by "q{idx}" or numeric index
+      if (!reviewAns) {
+        reviewAns = reviewAnswers.find(a => a && (String(a.itemId) === `q${idx}` || String(a.id) === `q${idx}` || a.questionIndex === idx || a.itemIndex === idx));
+      }
+      // 3. Match by question label / text
+      if (!reviewAns && item.label) {
+        const itemNormLabel = normalizeAnswerString(item.label);
+        reviewAns = reviewAnswers.find(a => a && a.label && normalizeAnswerString(a.label) === itemNormLabel);
+      }
+      // 4. Positional fallback
+      if (!reviewAns && reviewAnswers[idx]) {
+        reviewAns = reviewAnswers[idx];
+      }
+    }
+
+    const studentGiven = reviewMode 
+      ? (reviewAns ? (reviewAns.given ?? reviewAns.answer ?? reviewAns.studentAnswer ?? reviewAns.user_answer ?? reviewAns.selected ?? responses[item.itemId] ?? '') : (responses[item.itemId] || ''))
+      : (responses[item.itemId] || '');
+
+    const itemCorrect = item.correct || (reviewAns ? (reviewAns.correct ?? reviewAns.correctAnswer ?? reviewAns.answer) : '');
+
+    const isAnsCorrect = reviewMode 
+      ? (reviewAns && reviewAns.isCorrect !== undefined ? Boolean(reviewAns.isCorrect) : (studentGiven ? compareAnswers(studentGiven, itemCorrect) : false))
+      : false;
+
+    // Card review class: green border if correct, red border if incorrect
+    let cardReviewClass = '';
+    let cardHeaderStatusBadge = '';
+    if (reviewMode) {
+      if (isAnsCorrect) {
+        cardReviewClass = ' sq-review-correct';
+        cardHeaderStatusBadge = `<span class="sq-opt-badge correct-badge" style="margin-left:auto;font-size:12px;padding:3px 10px;border-radius:20px;">✔ Correct</span>`;
+      } else {
+        cardReviewClass = ' sq-review-wrong';
+        cardHeaderStatusBadge = `<span class="sq-opt-badge wrong-badge" style="margin-left:auto;font-size:12px;padding:3px 10px;border-radius:20px;">✘ Incorrect</span>`;
+      }
+    }
+
+    const explanationHtml = (reviewMode && item.explanation && allowReviewAnswers)
+      ? `<div style="margin-top:10px;padding:10px 14px;background:#fefce8;border:1px solid #fef08a;border-radius:8px;font-size:12.5px;color:#854d0e;line-height:1.45;display:flex;align-items:flex-start;gap:8px;">
+          <span style="font-size:14px;flex-shrink:0;">💡</span>
+          <div><strong>Why:</strong> ${safeEsc(item.explanation)}</div>
+        </div>` : '';
 
     let inputHtml = '';
 
     if (item.type === 'multiple_choice' || item.type === 'true_false') {
-      const currentVal = reviewMode ? (reviewAns ? reviewAns.given : null) : responses[item.itemId];
       const optionsList = (item.options || []).map((opt, optIdx) => {
-        const isSelected = String(currentVal) === String(opt);
+        const isSelected = reviewMode 
+          ? isOptionSelected(opt, optIdx, studentGiven)
+          : (String(studentGiven) === String(opt));
+
+        const isOptRight = isOptionCorrect(opt, optIdx, itemCorrect);
         const letter = letters[optIdx] || String.fromCharCode(65 + optIdx);
+
         let rowClass = 'sq-opt-row';
-        if (isSelected) rowClass += ' selected';
-        if (reviewMode && reviewAns) {
-          const isThisCorrect = String(opt).trim().toLowerCase() === String(item.correct || '').trim().toLowerCase();
-          if (isThisCorrect) rowClass += ' correct';
-          else if (isSelected && !reviewAns.isCorrect) rowClass += ' wrong';
+        let badgeHtml = '';
+
+        if (reviewMode) {
           rowClass += ' disabled';
+          if (isSelected) {
+            rowClass += ' selected';
+            if (isAnsCorrect) {
+              rowClass += ' correct';
+              badgeHtml = `<span class="sq-opt-badge correct-badge">✔ Your Answer (Correct)</span>`;
+            } else {
+              rowClass += ' wrong';
+              badgeHtml = `<span class="sq-opt-badge wrong-badge">✘ Your Answer</span>`;
+            }
+          } else if (isOptRight && allowReviewAnswers) {
+            // When teacher allows review answers, highlight the actual correct answer in green
+            rowClass += ' correct';
+            badgeHtml = `<span class="sq-opt-badge correct-badge">✔ Correct Answer</span>`;
+          }
+        } else {
+          if (isSelected) rowClass += ' selected';
         }
+
         const clickAttr = reviewMode ? '' : `onclick="setTQAnswer('${item.itemId}', '${safeEsc(opt).replace(/'/g, "\\'")}')"`; 
         return `<div class="${rowClass}" data-item="${safeEsc(item.itemId)}" data-val="${safeEsc(opt)}" ${clickAttr}>
           <div class="sq-opt-radio"></div>
           <div class="sq-opt-text">${letter}. ${safeEsc(opt)}</div>
+          ${badgeHtml}
         </div>`;
       }).join('');
 
-      const feedbackHtml = (reviewMode && reviewAns)
-        ? `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:${reviewAns.isCorrect ? '#dcfce7' : '#fee2e2'};color:${reviewAns.isCorrect ? '#166534' : '#991b1b'};border:1px solid ${reviewAns.isCorrect ? '#86efac' : '#fca5a5'};">
-            ${reviewAns.isCorrect ? '✔ Correct!' : `✘ Incorrect — Correct answer: <strong>${safeEsc(String(item.correct || ''))}</strong>`}
-          </div>` : '';
+      let feedbackHtml = '';
+      if (reviewMode) {
+        if (isAnsCorrect) {
+          feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#dcfce7;color:#166534;border:1px solid #86efac;">
+            ✔ Correct!
+          </div>${explanationHtml}`;
+        } else {
+          if (allowReviewAnswers) {
+            feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
+              ✘ Incorrect — Correct answer: <strong>${safeEsc(String(itemCorrect || ''))}</strong>
+            </div>${explanationHtml}`;
+          } else {
+            feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
+              ✘ Incorrect
+            </div>`;
+          }
+        }
+      }
 
       inputHtml = `<div class="sq-options-list">${optionsList}</div>${feedbackHtml}`;
 
     } else if (item.type === 'identification') {
-      const val = reviewMode ? (reviewAns ? reviewAns.given : '') : (responses[item.itemId] || '');
-      const feedbackHtml = (reviewMode && reviewAns)
-        ? `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:${reviewAns.isCorrect ? '#dcfce7' : '#fee2e2'};color:${reviewAns.isCorrect ? '#166534' : '#991b1b'};border:1px solid ${reviewAns.isCorrect ? '#86efac' : '#fca5a5'};">
-            ${reviewAns.isCorrect ? '✔ Correct!' : `✘ Incorrect — Correct answer: <strong>${safeEsc(String(item.correct || ''))}</strong>`}
-          </div>` : '';
-      inputHtml = `<input type="text" class="sq-id-input" value="${safeEsc(val)}" placeholder="Type your answer here..." ${reviewMode ? 'disabled' : ''} oninput="setTQAnswer('${item.itemId}', this.value)">${feedbackHtml}`;
+      let inputStyle = '';
+      let feedbackHtml = '';
+      if (reviewMode) {
+        if (isAnsCorrect) {
+          inputStyle = 'border:2px solid #22c55e !important;background:#f0fdf4 !important;color:#15803d !important;font-weight:600;';
+          feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#dcfce7;color:#166534;border:1px solid #86efac;">
+            ✔ Correct!
+          </div>${explanationHtml}`;
+        } else {
+          inputStyle = 'border:2px solid #ef4444 !important;background:#fef2f2 !important;color:#b91c1c !important;font-weight:600;';
+          if (allowReviewAnswers) {
+            feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
+              ✘ Incorrect — Correct answer: <strong>${safeEsc(String(itemCorrect || ''))}</strong>
+            </div>${explanationHtml}`;
+          } else {
+            feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
+              ✘ Incorrect
+            </div>`;
+          }
+        }
+      }
+      inputHtml = `<input type="text" class="sq-id-input" value="${safeEsc(studentGiven)}" placeholder="Type your answer here..." ${reviewMode ? 'disabled' : ''} style="${inputStyle}" oninput="setTQAnswer('${item.itemId}', this.value)">${feedbackHtml}`;
 
     } else {
       // matching
-      const val = reviewMode ? (reviewAns ? reviewAns.given : '') : (responses[item.itemId] || '');
-      const feedbackHtml = (reviewMode && reviewAns)
-        ? `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:${reviewAns.isCorrect ? '#dcfce7' : '#fee2e2'};color:${reviewAns.isCorrect ? '#166534' : '#991b1b'};border:1px solid ${reviewAns.isCorrect ? '#86efac' : '#fca5a5'};">
-            ${reviewAns.isCorrect ? '✔ Correct!' : `✘ Incorrect — Correct answer: <strong>${safeEsc(String(item.correct || ''))}</strong>`}
-          </div>` : '';
-      inputHtml = `<select class="sq-match-select" ${reviewMode ? 'disabled' : ''} onchange="setTQAnswer('${item.itemId}', this.value)">
+      let selectStyle = '';
+      let feedbackHtml = '';
+      if (reviewMode) {
+        if (isAnsCorrect) {
+          selectStyle = 'border:2px solid #22c55e !important;background:#f0fdf4 !important;color:#15803d !important;font-weight:600;';
+          feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#dcfce7;color:#166534;border:1px solid #86efac;">
+            ✔ Correct!
+          </div>${explanationHtml}`;
+        } else {
+          selectStyle = 'border:2px solid #ef4444 !important;background:#fef2f2 !important;color:#b91c1c !important;font-weight:600;';
+          if (allowReviewAnswers) {
+            feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
+              ✘ Incorrect — Correct answer: <strong>${safeEsc(String(itemCorrect || ''))}</strong>
+            </div>${explanationHtml}`;
+          } else {
+            feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
+              ✘ Incorrect
+            </div>`;
+          }
+        }
+      }
+      inputHtml = `<select class="sq-match-select" ${reviewMode ? 'disabled' : ''} style="${selectStyle}" onchange="setTQAnswer('${item.itemId}', this.value)">
         <option value="">— select matching item —</option>
-        ${(item.options || []).map(opt => `<option value="${safeEsc(opt)}" ${val === opt ? 'selected' : ''}>${safeEsc(opt)}</option>`).join('')}
+        ${(item.options || []).map(opt => `<option value="${safeEsc(opt)}" ${studentGiven === opt ? 'selected' : ''}>${safeEsc(opt)}</option>`).join('')}
       </select>${feedbackHtml}`;
     }
 
@@ -381,10 +654,11 @@ function renderTakeQuizModal() {
         </div>`
       : '';
 
-    return `<div class="sq-question-card" id="sq-card-${safeEsc(item.itemId)}">
+    return `<div class="sq-question-card${cardReviewClass}" id="sq-card-${safeEsc(item.itemId)}">
       <div class="sq-qcard-header">
         <span class="sq-qnum">${idx + 1}.</span>
         <span class="sq-qlabel">${safeEsc(item.label)}</span>
+        ${cardHeaderStatusBadge}
       </div>
       ${inputHtml}
       ${citationHtml}
@@ -416,13 +690,21 @@ function renderTakeQuizModal() {
           <div class="sq-hero-text">
             <div class="sq-hero-subject">${safeEsc(quizSubject)}</div>
             <h1 class="sq-hero-title">${safeEsc(quizTitle)}</h1>
-            <p class="sq-hero-subtitle">${reviewMode ? 'Reviewing your submitted answers and score.' : `Answer all ${totalItems} questions, then submit your quiz.`}</p>
+            <p class="sq-hero-subtitle">${reviewMode ? (allowReviewAnswers ? 'Reviewing your submitted answers and score.' : 'Reviewing your submitted answers and score (Answer key hidden by teacher).') : `Answer all ${totalItems} questions, then submit your quiz.`}</p>
           </div>
           ${timerHtml}
         </div>
       </div>
 
       <div class="sq-all-questions">
+        ${(reviewMode && !allowReviewAnswers) ? `
+          <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:12px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;color:#92400e;font-size:13px;line-height:1.45;">
+            <span style="font-size:22px;flex-shrink:0;">🔒</span>
+            <div>
+              <strong>Correct Answers Hidden:</strong> Your teacher has configured this assessment so that the answer key and question explanations are hidden. You can review your submitted responses and overall score.
+            </div>
+          </div>
+        ` : ''}
         ${allCardsHtml}
       </div>
     </div>
