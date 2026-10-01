@@ -12,7 +12,10 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Core middleware ---
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: false
+}));
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || origin === 'null' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
@@ -26,6 +29,12 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+
+// Redirect root to login page
+app.get('/', (req, res) => {
+  res.redirect('/login.html');
+});
+
 app.use(express.static(__dirname));
 
 // Basic rate limiting on the API routes (auth routes skipped so rate limits never block logins)
