@@ -1556,7 +1556,9 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
 module.exports = app;
 
 if (require.main === module) {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Scholaria server running on port ${PORT}`);
+    console.log(`Access on desktop: http://localhost:${PORT}`);
+    console.log(`Access on mobile (same Wi-Fi): http://<your-computer-ip>:${PORT}`);
   });
 }
