@@ -960,5 +960,347 @@ button svg {
   flex-shrink: 0 !important;
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   MOBILE & TABLET RESPONSIVENESS OVERRIDES
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── SIDEBAR BACKDROP ── */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 1040;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.sidebar-backdrop.active {
+  display: block !important;
+  opacity: 1 !important;
+}
+
+/* ── SCREENS UNDER 900PX (TABLETS & MOBILE PHONES) ── */
+@media (max-width: 900px) {
+  /* Top Navigation */
+  .top-nav {
+    padding: 0 14px !important;
+    gap: 10px !important;
+  }
+  .hamburger {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 38px !important;
+    height: 38px !important;
+    flex-shrink: 0 !important;
+    border-radius: 10px !important;
+    background: #f1f5f9 !important;
+  }
+  .hamburger:hover {
+    background: #e2e8f0 !important;
+  }
+  .nav-username {
+    display: none !important;
+  }
+
+  /* Sidebar as Mobile Drawer */
+  .sidebar {
+    width: 270px !important;
+    max-width: 82vw !important;
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    padding-top: calc(var(--nav-h) + 16px) !important;
+    background: #ffffff !important;
+    z-index: 1050 !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.28s !important;
+    box-shadow: none !important;
+  }
+  .sidebar.open {
+    transform: translateX(0) !important;
+    box-shadow: 0 0 40px rgba(15, 23, 42, 0.25) !important;
+  }
+  .main {
+    margin-left: 0 !important;
+    padding: 16px 14px 60px 14px !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Layout grids */
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .sw-grid {
+    flex-direction: column !important;
+  }
+  .sw-sidebar {
+    width: 100% !important;
+  }
+}
+
+/* ── SCREENS UNDER 640PX (SMARTPHONES) ── */
+@media (max-width: 640px) {
+  /* Header & Branding */
+  .top-nav {
+    height: 58px !important;
+    padding: 0 10px !important;
+  }
+  .logo-svg {
+    height: 38px !important;
+    max-width: 135px !important;
+  }
+  .search-bar {
+    display: none !important; /* Hide search input on mobile to give space to branding & notifications */
+  }
+  .nav-right {
+    gap: 6px !important;
+  }
+  .icon-btn {
+    width: 34px !important;
+    height: 34px !important;
+  }
+  .avatar {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 11px !important;
+  }
+
+  /* Centered Notification Dropdown on Mobile */
+  .notif-dropdown {
+    position: fixed !important;
+    top: 64px !important;
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: 80vh !important;
+    box-shadow: 0 12px 48px rgba(15, 23, 42, 0.22) !important;
+  }
+
+  /* Welcome Banner */
+  .welcome-banner {
+    padding: 18px 16px !important;
+    border-radius: 16px !important;
+  }
+  .welcome-text-box h1 {
+    font-size: 19px !important;
+    line-height: 1.25 !important;
+    letter-spacing: 0.5px !important;
+  }
+  .welcome-text-box h2 {
+    font-size: 11.5px !important;
+  }
+  .characters {
+    display: none !important;
+  }
+
+  /* Cards & Section Headers */
+  .card-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+  .section-hdr {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+  .section-hdr .add-btn,
+  .section-hdr button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Task & Deadlines Stream Engine */
+  .deadline-nav-pill {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none !important;
+    padding: 4px !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+  .deadline-nav-pill::-webkit-scrollbar {
+    display: none !important;
+  }
+  .deadline-tab-btn {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    font-size: 11.5px !important;
+    padding: 6px 12px !important;
+  }
+  .deadline-filters-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    padding: 10px !important;
+  }
+  .deadline-select-pill {
+    width: 100% !important;
+  }
+  .task-deadline-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px !important;
+    border-radius: 14px !important;
+  }
+  .task-action-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    height: 38px !important;
+  }
+
+  /* Student "My Materials" Design */
+  .subject-chips-bar {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    padding-bottom: 8px !important;
+    scrollbar-width: none !important;
+  }
+  .subject-chips-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+  .subject-chip {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+  .subjects-folder-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .sw-header-card {
+    padding: 16px 14px !important;
+    border-radius: 14px !important;
+  }
+  .sw-header-tags {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .sw-title {
+    font-size: 19px !important;
+    line-height: 1.3 !important;
+  }
+  .sw-ac-header {
+    padding: 14px !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .sw-ac-title-wrap {
+    gap: 10px !important;
+  }
+  .sw-ac-title {
+    font-size: 13.5px !important;
+  }
+  .sw-doc-preview-box {
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 12px !important;
+  }
+  .sw-doc-btn-row {
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .sw-doc-btn-row .sw-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Modals on Mobile */
+  .modal-overlay {
+    padding: 10px !important;
+    align-items: flex-end !important;
+  }
+  .modal-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 94vh !important;
+    border-radius: 20px 20px 0 0 !important;
+  }
+  .modal-head {
+    padding: 16px !important;
+  }
+  .modal-body {
+    padding: 16px !important;
+    gap: 14px !important;
+  }
+  .modal-foot {
+    padding: 12px 16px !important;
+    flex-direction: column-reverse !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .modal-foot button,
+  .modal-foot .foot-btn-secondary,
+  .modal-foot .gen-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    height: 40px !important;
+  }
+
+  /* Interactive Quiz Player on Mobile */
+  .iq-mc-options-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+  .iq-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .iq-question-banner {
+    padding: 16px 14px !important;
+    font-size: 15px !important;
+  }
+  .iq-bottom-bar {
+    padding: 12px 14px !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  .iq-bottom-bar button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Tables across admin and teacher pages */
+  .ca-table-wrap,
+  .user-table,
+  .classrec-table,
+  .mm-table-card {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    display: block !important;
+    width: 100% !important;
+  }
+
+  /* Toast Notification */
+  .toast,
+  #toast {
+    left: 16px !important;
+    right: 16px !important;
+    transform: translateY(80px) !important;
+    width: auto !important;
+    max-width: none !important;
+    text-align: center !important;
+    justify-content: center !important;
+  }
+  .toast.show,
+  #toast.show {
+    transform: translateY(0) !important;
+  }
+}
+
 
 

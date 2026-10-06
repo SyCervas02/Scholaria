@@ -2,9 +2,20 @@
 
 const SUPABASE_URL  = 'https://qxpsbewbgdwkermxeeso.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cHNiZXdiZ2R3a2VybXhlZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDgzMTgsImV4cCI6MjA5ODI4NDMxOH0.cmG-pVotNZ5KI81_8XsUN5AL5vNVYOPFy8oHegz6cvg';
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { storage: window.sessionStorage } });
 
-const API_BASE = 'http://localhost:3001';
+const API_BASE = (function() {
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const proto = window.location.protocol;
+    const host = window.location.hostname;
+    const port = window.location.port;
+    if (port === '3001') {
+      return window.location.origin;
+    }
+    return `${proto}//${host}:3001`;
+  }
+  return 'http://localhost:3001';
+})();
 let ROLE = null;
 let CURRENT_PROFILE = null;
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Haven Of Wisdom Academy – Scholaria Portal</title>
+    <title>Haven Of Wisdom Academy - Scholaria Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -21,7 +21,7 @@
             padding: 0;
         }
 
-        /* ── PORTAL HEADER (STI STYLE) ── */
+        /* â”€â”€ PORTAL HEADER (STI STYLE) â”€â”€ */
         .portal-header {
             position: sticky;
             top: 0;
@@ -109,56 +109,7 @@
             stroke-width: 2.5;
         }
 
-        /* ── ADMIN LOGIN BUTTON (DISTINCT OBSIDIAN/GOLD SCHEME) ── */
-        .portal-admin-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            background: #0f172a;
-            color: #f8fafc;
-            border: 1.5px solid #334155;
-            padding: 9px 20px;
-            border-radius: 50px;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2);
-            transition: all 0.2s ease;
-            text-decoration: none;
-        }
-        .portal-admin-btn:hover {
-            background: #1e293b;
-            border-color: #f59e0b;
-            color: #ffffff;
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.35);
-        }
-        .portal-admin-btn svg {
-            width: 15px;
-            height: 15px;
-            stroke-width: 2.2;
-            color: #f59e0b;
-        }
-
-        @media (max-width: 640px) {
-            .portal-header-inner {
-                padding: 0 16px;
-            }
-            .portal-nav-right {
-                gap: 8px;
-            }
-            .portal-admin-btn, .portal-login-btn {
-                padding: 8px 14px;
-                font-size: 12.5px;
-            }
-            .portal-brand-sub {
-                display: none;
-            }
-        }
-
-        /* ── HERO CAROUSEL ── */
+        /* â”€â”€ HERO CAROUSEL â”€â”€ */
         .portal-hero {
             position: relative;
             width: 100%;
@@ -290,7 +241,7 @@
             background: #ffffff;
         }
 
-        /* ── MISSION & VISION SECTION ── */
+        /* â”€â”€ MISSION & VISION SECTION â”€â”€ */
         .portal-section {
             width: 100%;
             padding: 64px 24px 72px;
@@ -403,7 +354,7 @@
             flex-grow: 1;
         }
 
-        /* ── PORTAL FOOTER ── */
+        /* â”€â”€ PORTAL FOOTER â”€â”€ */
         .portal-footer {
             background: #0f172a;
             color: #94a3b8;
@@ -452,8 +403,28 @@
                 text-align: left;
             }
         }
+        @media (max-width: 480px) {
+            .portal-header-inner {
+                padding: 0 14px !important;
+            }
+            .portal-brand-text h1 {
+                font-size: 14px !important;
+            }
+            .portal-brand-text span {
+                font-size: 10px !important;
+            }
+            .login-modal-overlay {
+                padding: 12px 10px !important;
+            }
+            .card-header {
+                padding: 22px 18px 18px !important;
+            }
+            .card-body {
+                padding: 20px 18px 24px !important;
+            }
+        }
 
-        /* ── MODAL OVERLAY FOR LOGIN PANEL ── */
+        /* â”€â”€ MODAL OVERLAY FOR LOGIN PANEL â”€â”€ */
         .login-modal-overlay {
             position: fixed;
             inset: 0;
@@ -490,7 +461,7 @@
             transform: scale(1) translateY(0);
         }
 
-        /* ── CARD ── */
+        /* â”€â”€ CARD â”€â”€ */
         .card {
             position: relative;
             background: #fff;
@@ -526,7 +497,7 @@
             stroke-width: 2.5;
         }
 
-        /* ── HEADER ── */
+        /* â”€â”€ HEADER â”€â”€ */
         .card-header {
             background: linear-gradient(135deg, #2a4db5 0%, #1e3a8a 100%);
             padding: 28px 28px 24px;
@@ -625,13 +596,13 @@
             border-radius: 2px;
         }
 
-        /* ── BODY ── */
+        /* â”€â”€ BODY â”€â”€ */
         .card-body { padding: 24px 24px 28px; }
 
         .view { display: none; }
         .view.active { display: block; }
 
-        /* ── ROLE LIST ── */
+        /* â”€â”€ ROLE LIST â”€â”€ */
         .role-list {
             display: flex;
             flex-direction: column;
@@ -674,7 +645,7 @@
 
         .role-arrow svg { width: 18px; height: 18px; stroke: #9ca3af; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-        /* ── FIELDS ── */
+        /* â”€â”€ FIELDS â”€â”€ */
         .field { margin-bottom: 16px; }
         .field label {
             display: block;
@@ -758,7 +729,7 @@
         }
         .helper-text strong { color: #1e3a8a; }
 
-        /* ── SUBMIT BUTTON ── */
+        /* â”€â”€ SUBMIT BUTTON â”€â”€ */
         .submit-btn {
             width: 100%;
             background: linear-gradient(135deg, #2a4db5 0%, #1e3a8a 100%);
@@ -776,7 +747,7 @@
         .submit-btn:hover { opacity: 0.92; transform: translateY(-1px); }
         .submit-btn:active { transform: translateY(0); }
 
-        /* ── DIVIDER ── */
+        /* â”€â”€ DIVIDER â”€â”€ */
         .divider {
             text-align: center;
             margin-top: 16px;
@@ -788,7 +759,7 @@
         .divider a.demoLink:hover { color: #a87d0f; text-decoration: underline; }
         .divider a.disabled { pointer-events: none; opacity: 0.5; }
 
-        /* ── TOAST ── */
+        /* â”€â”€ TOAST â”€â”€ */
         .toast {
             position: fixed;
             bottom: 32px;
@@ -819,6 +790,7 @@
         .toast.info    { background: #2563eb; border: 1px solid #3b82f6; }
         .toast-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
     </style>
+  <link rel="stylesheet" href="css/responsive.css?v=4">
 </head>
 <body>
 
@@ -833,10 +805,6 @@
         </div>
       </a>
       <div class="portal-nav-right">
-        <button class="portal-admin-btn" onclick="openAdminKeyModal()" title="Access Administrator Portal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          Admin Login
-        </button>
         <button class="portal-login-btn" onclick="openLoginModal()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
           Log in
@@ -918,7 +886,7 @@
         <img src="assets/logo.png" alt="Haven of Wisdom Academy" class="footer-brand-logo">
         <div>
           <div class="footer-brand-title">Haven Of Wisdom Academy</div>
-          <div class="footer-brand-desc">Scholaria E-Learning Portal · Alapan, Imus, Cavite</div>
+          <div class="footer-brand-desc">Scholaria E-Learning Portal Â· Alapan, Imus, Cavite</div>
         </div>
       </div>
       <div class="footer-meta">
@@ -937,7 +905,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
 
-        <!-- ── HEADER ── -->
+        <!-- â”€â”€ HEADER â”€â”€ -->
         <div class="card-header">
             <div class="header-top">
                 <div class="logo-wrap">
@@ -948,7 +916,7 @@
                     >
                     <div class="logo-text">
                         <h1>Haven Of Wisdom</h1>
-                        <span>Academy · Scholaria Portal</span>
+                        <span>Academy • Scholaria Portal</span>
                     </div>
                 </div>
                 <button class="back-pill" id="backBtn" onclick="goToRoleSelect()" style="display:none;">
@@ -967,7 +935,7 @@
             </div>
         </div>
 
-        <!-- ── BODY ── -->
+        <!-- â”€â”€ BODY â”€â”€ -->
         <div class="card-body">
 
             <!-- STEP 1: ROLE SELECTION (ONLY STUDENT & TEACHER) -->
@@ -1006,15 +974,6 @@
                         </div>
                     </button>
 
-                </div>
-
-                <div style="margin-top: 18px; padding-top: 14px; border-top: 1px dashed #cbd5e1; text-align: center;">
-                    <a href="#" onclick="openAdminKeyModal();return false;" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #0f172a; font-weight: 600; font-size: 13px; text-decoration: none; padding: 4px 8px; border-radius: 6px; transition: color 0.15s ease;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" style="width: 14px; height: 14px;">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                        </svg>
-                        Department Head or Administrator? Enter Key &rarr;
-                    </a>
                 </div>
             </div>
 
@@ -1059,7 +1018,7 @@
                 <div class="field">
                     <label>6-Digit Authenticator Code</label>
                     <div class="input-wrap">
-                        <input type="text" id="totp-code" class="code-field" placeholder="• • • • • •" maxlength="6" inputmode="numeric" onkeydown="if(event.key==='Enter') verifyTotpCode()">
+                        <input type="text" id="totp-code" class="code-field" placeholder="â€¢ â€¢ â€¢ â€¢ â€¢ â€¢" maxlength="6" inputmode="numeric" onkeydown="if(event.key==='Enter') verifyTotpCode()">
                     </div>
                     <div class="field-error" id="totp-code-err"></div>
                 </div>
@@ -1076,80 +1035,29 @@
 </div>
 </div> <!-- /login-modal-overlay -->
 
-<!-- ADMIN KEY GATE MODAL OVERLAY -->
-<div class="login-modal-overlay" id="adminGateModalOverlay" onclick="handleAdminGateBackdrop(event)">
-  <div class="card-wrap" style="max-width: 440px;">
-    <div class="card" style="border-top: 4px solid #f59e0b; box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);">
-      <button class="modal-close-btn" onclick="closeAdminKeyModal()" aria-label="Close modal">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-      </button>
-
-      <div class="card-header" style="text-align: center;">
-        <div style="width: 52px; height: 52px; border-radius: 50%; background: #0f172a; border: 2px solid #f59e0b; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(245, 158, 11, 0.2);">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px;">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            <path d="M12 8v4"/>
-            <path d="M12 16h.01"/>
-          </svg>
-        </div>
-        <div class="tab-label" style="font-size: 18px; color: #0f172a;">Administrator Access Gate</div>
-        <div class="tab-sub" style="font-size: 12px; color: #64748b;">Haven of Wisdom Academy · SHS Department</div>
-        <div class="gold-rule" style="margin: 12px auto 0;"></div>
-      </div>
-
-      <div class="card-body" style="padding-top: 6px;">
-        <p class="helper-text" style="background: #fefce8; border-left-color: #f59e0b; color: #78350f; font-size: 12.5px;">
-          <strong>Security Notice:</strong> Access to the Administrator Portal requires an institutional authorization key.
-        </p>
-
-        <div class="field" style="margin-top: 14px;">
-          <label style="font-size: 12px; font-weight: 600; color: #334155;">Institutional Authorization Key</label>
-          <div class="input-wrap">
-            <input 
-              type="password" 
-              id="adminGateKeyInput" 
-              placeholder="Enter institutional key..." 
-              maxlength="50" 
-              autocomplete="off"
-              oninput="handleAdminGateInput()"
-              onkeydown="if(event.key==='Enter') verifyAdminGateKey()"
-              style="font-family: inherit; font-size: 14px; letter-spacing: 0.05em;"
-            >
-            <button class="eye-btn" type="button" onclick="toggleAdminGateEye(this)" aria-label="Toggle key visibility">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-          <div class="field-error" id="adminGateKeyError" style="font-size: 12px; color: #ef4444; margin-top: 6px; display: none;"></div>
-        </div>
-
-        <div style="display: flex; gap: 10px; margin-top: 20px;">
-          <button type="button" class="submit-btn" onclick="closeAdminKeyModal()" style="background: #f1f5f9; color: #475569; font-weight: 600; flex: 1; margin: 0;">
-            Cancel
-          </button>
-          <button type="button" class="submit-btn" id="adminGateSubmitBtn" onclick="verifyAdminGateKey()" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid #f59e0b; color: #ffffff; flex: 2; margin: 0; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);">
-            Verify &amp; Continue &rarr;
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-    /* ════════════════════════════════════════
+    /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
        SUPABASE + BACKEND INIT
-    ════════════════════════════════════════ */
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
     const SUPABASE_URL  = 'https://qxpsbewbgdwkermxeeso.supabase.co';
     const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cHNiZXdiZ2R3a2VybXhlZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDgzMTgsImV4cCI6MjA5ODI4NDMxOH0.cmG-pVotNZ5KI81_8XsUN5AL5vNVYOPFy8oHegz6cvg';
-    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-    const API_BASE = 'http://localhost:3001';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { storage: window.sessionStorage } });
+    const API_BASE = (function() {
+      if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+        const proto = window.location.protocol;
+        const host = window.location.hostname;
+        const port = window.location.port;
+        if (port === '3001') {
+          return window.location.origin;
+        }
+        return `${proto}//${host}:3001`;
+      }
+      return 'http://localhost:3001';
+    })();
 
     let currentRole = null;
     let currentView = 'roleView';
@@ -1301,7 +1209,7 @@
         const btn = document.getElementById('loginSubmitBtn');
         if (!btn) return;
         btn.disabled = busy;
-        btn.textContent = busy ? 'Logging in…' : 'Login to Portal';
+        btn.textContent = busy ? 'Logging in...' : 'Login to Portal';
     }
 
     let pendingTotpFactorId = null;
@@ -1361,7 +1269,7 @@
                 return;
             }
 
-            showToast('Logging in…', 'success');
+            showToast('Logging in...', 'success');
             window.location.href = 'dashboard.html';
         } catch (err) {
             console.error('Login error:', err);
@@ -1381,7 +1289,7 @@
 
         const btn = document.getElementById('totpSubmitBtn');
         btn.disabled = true;
-        btn.textContent = 'Verifying…';
+        btn.textContent = 'Verifyingâ€¦';
 
         try {
             const { data, error } = await db.auth.mfa.challengeAndVerify({
@@ -1411,7 +1319,7 @@
             return;
         }
         const links = document.querySelectorAll('.demoLink');
-        links.forEach(l => { l.textContent = 'Loading demo…'; l.classList.add('disabled'); });
+        links.forEach(l => { l.textContent = 'Loading demoâ€¦'; l.classList.add('disabled'); });
         try {
             const res = await fetch(`${API_BASE}/api/auth/demo-login`, {
                 method: 'POST',
@@ -1423,7 +1331,7 @@
                 return;
             }
             if (res.status === 429) {
-                showToast('Too many requests — please wait a few seconds', 'error');
+                showToast('Too many requests â€” please wait a few seconds', 'error');
                 return;
             }
             if (!res.ok) { showToast('Demo login is temporarily unavailable', 'error'); return; }
@@ -1434,7 +1342,7 @@
         } catch {
             showToast('Could not reach the server', 'error');
         } finally {
-            links.forEach(l => { l.textContent = 'Skip for now (development mode) →'; l.classList.remove('disabled'); });
+            links.forEach(l => { l.textContent = 'Skip for now (development mode) â†’'; l.classList.remove('disabled'); });
         }
     }
 
@@ -1443,9 +1351,9 @@
         if (data?.session) window.location.href = 'dashboard.html';
     })();
 
-    /* ════════════════════════════════════════
+    /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
        STI-STYLE CAROUSEL & LOGIN MODAL CONTROLS
-    ════════════════════════════════════════ */
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
     let currentSlideIndex = 0;
     let slideTimer = null;
 
@@ -1525,121 +1433,8 @@
         }
     }
 
-    /* ════════════════════════════════════════
-       ADMIN KEY GATE CONTROLS
-    ════════════════════════════════════════ */
-    const ADMIN_ACCESS_CODE = "HWA-ADMIN-2026";
-
-    function openAdminKeyModal() {
-        closeLoginModal();
-        const overlay = document.getElementById('adminGateModalOverlay');
-        const input = document.getElementById('adminGateKeyInput');
-        const err = document.getElementById('adminGateKeyError');
-        const btn = document.getElementById('adminGateSubmitBtn');
-        if (err) {
-            err.textContent = '';
-            err.style.display = 'none';
-        }
-        if (input) {
-            input.value = '';
-            input.classList.remove('invalid', 'valid');
-        }
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Verify & Continue →';
-        }
-        if (overlay) {
-            overlay.classList.add('open');
-            document.body.style.overflow = 'hidden';
-            setTimeout(() => { if (input) input.focus(); }, 150);
-        }
-    }
-
-    function closeAdminKeyModal() {
-        const overlay = document.getElementById('adminGateModalOverlay');
-        if (overlay) {
-            overlay.classList.remove('open');
-            document.body.style.overflow = '';
-        }
-    }
-
-    function handleAdminGateBackdrop(e) {
-        if (e.target.id === 'adminGateModalOverlay') {
-            closeAdminKeyModal();
-        }
-    }
-
-    function toggleAdminGateEye(btn) {
-        const inp = document.getElementById('adminGateKeyInput');
-        if (!inp) return;
-        const show = inp.type === 'password';
-        inp.type = show ? 'text' : 'password';
-        btn.innerHTML = show
-            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
-            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-    }
-
-    function handleAdminGateInput() {
-        const inp = document.getElementById('adminGateKeyInput');
-        const err = document.getElementById('adminGateKeyError');
-        if (inp) inp.classList.remove('invalid');
-        if (err) {
-            err.textContent = '';
-            err.style.display = 'none';
-        }
-    }
-
-    function verifyAdminGateKey() {
-        const inp = document.getElementById('adminGateKeyInput');
-        const err = document.getElementById('adminGateKeyError');
-        const btn = document.getElementById('adminGateSubmitBtn');
-        const key = inp ? inp.value.trim().toUpperCase() : '';
-
-        if (!key) {
-            if (err) {
-                err.textContent = 'Please enter the institutional admin key.';
-                err.style.display = 'block';
-            }
-            if (inp) {
-                inp.classList.add('invalid');
-                inp.focus();
-            }
-            return;
-        }
-
-        // Accepts HWA-ADMIN-2026 or HWA-ADMIN
-        if (key !== ADMIN_ACCESS_CODE && key !== 'HWA-ADMIN') {
-            if (err) {
-                err.textContent = 'Invalid authorization key. Access is restricted to administrators.';
-                err.style.display = 'block';
-            }
-            if (inp) {
-                inp.classList.add('invalid');
-                inp.focus();
-            }
-            showToast('Invalid administrator access key', 'error');
-            return;
-        }
-
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = 'Authorizing…';
-        }
-        showToast('Institutional key verified! Redirecting to Admin Portal…', 'success');
-        try {
-            sessionStorage.setItem('hwa_admin_authorized', 'true');
-        } catch (_) {}
-
-        setTimeout(() => {
-            window.location.href = 'admin-login.html';
-        }, 650);
-    }
-
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closeLoginModal();
-            closeAdminKeyModal();
-        }
+        if (e.key === 'Escape') closeLoginModal();
     });
 
     // Start carousel auto-rotation on page load
@@ -1647,3 +1442,5 @@
 </script>
 </body>
 </html>
+
+

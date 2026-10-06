@@ -72,6 +72,8 @@ function initDashboardShell() {
   renderPage('dashboard');
   refreshNotificationsUI();
   if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
+  if (typeof showNewsAlertIfNeeded === 'function') showNewsAlertIfNeeded();
+  if (typeof resetChatState === 'function') resetChatState();
   loadConversationsFromDB().then(ensureChatRealtimeSubscription);
 }
 
@@ -919,7 +921,7 @@ function buildProfilePage(role) {
           <textarea id="pfBio" placeholder="Share a few words about your academic goals, interests, or teaching focus...">${escHtml(p.bio || '')}</textarea>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:12px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;">
           <div class="pf-field">
             <label>Current Status</label>
             <select id="pfOnlineStatus">
@@ -1050,6 +1052,330 @@ function buildProfilePage(role) {
   </div>`;
 }
 
+/* ── STUDENT QUIZZES SORT & FILTER STATE ── */
+let studentQuizSortBy = 'pending'; // 'pending' | 'subject' | 'deadline' | 'newest' | 'title'
+let studentQuizFilterSubject = '';
+let studentQuizFilterStatus = ''; // '' | 'pending' | 'completed' | 'expired'
+let studentQuizSearchQuery = '';
+
+function setStudentQuizSort(sortBy) {
+  studentQuizSortBy = sortBy;
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+function setStudentQuizFilterSubject(subj) {
+  studentQuizFilterSubject = subj;
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+function setStudentQuizFilterStatus(st) {
+  studentQuizFilterStatus = st;
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+function setStudentQuizSearchQuery(q) {
+  studentQuizSearchQuery = (q || '').trim().toLowerCase();
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+function resetStudentQuizFilters() {
+  studentQuizSortBy = 'pending';
+  studentQuizFilterSubject = '';
+  studentQuizFilterStatus = '';
+  studentQuizSearchQuery = '';
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+/* ── STUDENT TASK & QUIZ DEADLINES STREAM ENGINE (NEWS DEADLINES) ── */
+let studentDeadlineTab = 'pending'; // 'pending' | 'archive' | 'all' | 'overdue' | 'done'
+let studentDeadlineSubjectFilter = 'all';
+let studentDeadlineMonthFilter = 'all';
+let studentDeadlineSort = 'deadline_desc'; // 'deadline_desc' | 'type_interactive' | 'type_standard'
+
+function setStudentDeadlineTab(tab) {
+  studentDeadlineTab = tab;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineSubject(sub) {
+  studentDeadlineSubjectFilter = sub;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineMonth(m) {
+  studentDeadlineMonthFilter = m;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineSort(s) {
+  studentDeadlineSort = s;
+  updateStudentDeadlinesWidget();
+}
+
+function updateStudentDeadlinesWidget() {
+  const container = document.getElementById('studentDeadlinesWidgetContainer');
+  if (container) {
+    container.innerHTML = renderStudentDeadlinesWidgetHTML();
+  }
+}
+
+function renderStudentDeadlinesWidgetHTML() {
+  const allQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []);
+  const visibleQuizzes = allQuizzes.filter(q =>
+    (q.status === 'active' || q.status === 'approved' || q.status === 'closed' || q.isDemo) &&
+    (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
+  );
+
+  const attemptsByQuiz = new Map(
+    (typeof myQuizAttempts !== 'undefined' ? myQuizAttempts : []).map(a => [String(a.quiz_id), a])
+  );
+
+  const now = Date.now();
+  const items = visibleQuizzes.map((q, idx) => {
+    let rawDue = q.dueDate || q.due_date;
+    let dateObj = rawDue ? new Date(rawDue) : null;
+    if (!dateObj || isNaN(dateObj.getTime())) {
+      // Deterministic fallback based on created date or ID
+      const base = q.createdAt ? new Date(q.createdAt).getTime() : (q.created_at ? new Date(q.created_at).getTime() : (now - 86400000 * 2));
+      dateObj = new Date(base + ((idx % 7) * 2 + 1) * 86400000);
+      dateObj.setHours(19, 0, 0, 0);
+    }
+
+    const dueMs = dateObj.getTime();
+    const isAttempted = attemptsByQuiz.has(String(q.id));
+    const attempt = attemptsByQuiz.get(String(q.id));
+    const isOverdue = !isAttempted && (now > dueMs);
+    const isDueSoon = !isAttempted && !isOverdue;
+
+    // Time ago since the teacher posted it (for pending quizzes)
+    const createdAtRaw = q.createdAt || q.created_at;
+    let postTimeAgo = '';
+    if (createdAtRaw) {
+      const createdMs = new Date(createdAtRaw).getTime();
+      if (!isNaN(createdMs)) {
+        const diffMs = Math.max(0, now - createdMs);
+        const mins = Math.floor(diffMs / 60000);
+        const hrs = Math.floor(diffMs / 3600000);
+        const days = Math.floor(diffMs / 86400000);
+        if (days > 0) postTimeAgo = `${days} day${days > 1 ? 's' : ''} ago`;
+        else if (hrs > 0) postTimeAgo = `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+        else if (mins > 0) postTimeAgo = `${mins} min${mins > 1 ? 's' : ''} ago`;
+        else postTimeAgo = 'Just now';
+      }
+    }
+    if (!postTimeAgo) {
+      const pseudoHours = ((idx % 8) * 3 + 2);
+      postTimeAgo = pseudoHours >= 24 ? `${Math.floor(pseudoHours / 24)} days ago` : `${pseudoHours} hours ago`;
+    }
+
+    const dayNum = dateObj.getDate();
+    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+    const monthShort = dateObj.toLocaleDateString('en-US', { month: 'short' });
+    const monthLong = dateObj.toLocaleDateString('en-US', { month: 'long' });
+    const monthNum = dateObj.getMonth() + 1;
+    const time24 = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const time12 = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    const status = isAttempted ? 'done' : (isOverdue ? 'overdue' : 'due');
+    const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+    const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
+
+    return {
+      quiz: q,
+      id: q.id,
+      title: q.title || 'Academic Assessment',
+      subject: q.subject || 'General Academic',
+      lesson: q.lesson || '',
+      itemCount: (q.questions || []).length || 10,
+      isInter,
+      dueMs,
+      dateObj,
+      dayNum,
+      dayName,
+      monthShort,
+      monthLong,
+      monthNum,
+      time24,
+      time12,
+      dueTag: `(due ${dayNum} ${monthShort}, ${time24})`,
+      fullDateStr: `${dayName}, ${monthShort} ${dayNum} · ${time12}`,
+      postTimeAgo,
+      status,
+      isAttempted,
+      isOverdue,
+      isDueSoon,
+      pct,
+      attempt
+    };
+  });
+
+  const totalCount = items.length;
+  const dueCount = items.filter(i => i.status === 'due').length;
+  const overdueCount = items.filter(i => i.status === 'overdue').length;
+  const doneCount = items.filter(i => i.status === 'done').length;
+  const archiveCount = overdueCount + doneCount;
+
+  const uniqueSubjects = [...new Set(items.map(i => i.subject).filter(Boolean))].sort();
+  const uniqueMonths = [...new Map(items.map(i => [i.monthNum, { num: i.monthNum, name: i.monthLong }])).values()]
+    .sort((a, b) => a.num - b.num);
+
+  let filtered = items;
+  if (studentDeadlineTab === 'pending') {
+    filtered = filtered.filter(i => i.status === 'due');
+  } else if (studentDeadlineTab === 'archive') {
+    filtered = filtered.filter(i => i.status === 'overdue' || i.status === 'done');
+  } else if (studentDeadlineTab === 'overdue') {
+    filtered = filtered.filter(i => i.status === 'overdue');
+  } else if (studentDeadlineTab === 'done') {
+    filtered = filtered.filter(i => i.status === 'done');
+  }
+
+  if (studentDeadlineSubjectFilter !== 'all') {
+    filtered = filtered.filter(i => i.subject === studentDeadlineSubjectFilter);
+  }
+
+  if (studentDeadlineMonthFilter !== 'all') {
+    filtered = filtered.filter(i => String(i.monthNum) === String(studentDeadlineMonthFilter) || i.monthShort.toLowerCase() === String(studentDeadlineMonthFilter).toLowerCase());
+  }
+
+  filtered.sort((a, b) => {
+    if (studentDeadlineSort === 'deadline_desc' || studentDeadlineSort === 'deadline_asc') {
+      const diff = a.dueMs - b.dueMs;
+      return diff !== 0 ? diff : a.title.localeCompare(b.title);
+    }
+    if (studentDeadlineSort === 'type_interactive') {
+      const typeDiff = (b.isInter ? 1 : 0) - (a.isInter ? 1 : 0);
+      return typeDiff !== 0 ? typeDiff : (a.dueMs - b.dueMs);
+    }
+    if (studentDeadlineSort === 'type_standard') {
+      const typeDiff = (a.isInter ? 1 : 0) - (b.isInter ? 1 : 0);
+      return typeDiff !== 0 ? typeDiff : (a.dueMs - b.dueMs);
+    }
+    return 0;
+  });
+
+  return `
+
+
+  <div class="deadline-stream-wrap">
+    <!-- Header -->
+    <div class="deadline-stream-hdr">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <h2 style="margin:0;font-size:18px;">📋 Subject Task &amp; Quiz Deadlines</h2>
+          <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;">
+            ${dueCount} Active Due
+          </span>
+        </div>
+        <span style="font-size:12.5px;color:var(--text-muted);">
+          Track upcoming quiz schedules, day/time deadlines, and types for every subject you take
+        </span>
+      </div>
+
+      <!-- Archive / Status Tabs -->
+      <div class="deadline-tabs-bar">
+        <button class="deadline-tab-btn ${studentDeadlineTab === 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
+          Pending Quizzes <span class="deadline-tab-count">${dueCount}</span>
+        </button>
+        <button class="deadline-tab-btn ${studentDeadlineTab === 'all' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
+          All Tasks <span class="deadline-tab-count">${totalCount}</span>
+        </button>
+        <button class="deadline-tab-btn ${studentDeadlineTab === 'archive' ? 'active' : ''}" onclick="setStudentDeadlineTab('archive')">
+          📁 Archive <span class="deadline-tab-count" style="${archiveCount ? 'background:#fee2e2;color:#b91c1c;' : ''}">${archiveCount}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter & Sort Bar -->
+    <div class="deadline-filters-bar">
+      <!-- Subject Filter -->
+      <select class="deadline-select-pill" onchange="setStudentDeadlineSubject(this.value)">
+        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (${uniqueSubjects.length})</option>
+        ${uniqueSubjects.map(s => `
+          <option value="${escHtml(s)}" ${studentDeadlineSubjectFilter === s ? 'selected' : ''}>${escHtml(s)}</option>
+        `).join('')}
+      </select>
+
+      <!-- Month Filter -->
+      <select class="deadline-select-pill" onchange="setStudentDeadlineMonth(this.value)">
+        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
+        ${uniqueMonths.map(m => `
+          <option value="${m.num}" ${String(studentDeadlineMonthFilter) === String(m.num) ? 'selected' : ''}>${m.name}</option>
+        `).join('')}
+      </select>
+
+      <!-- Sort Options -->
+      <select class="deadline-select-pill" onchange="setStudentDeadlineSort(this.value)">
+        <option value="deadline_desc" ${studentDeadlineSort === 'deadline_desc' || studentDeadlineSort === 'deadline_asc' ? 'selected' : ''}>⏰ Latest Deadline (Day &amp; Time)</option>
+        <option value="type_interactive" ${studentDeadlineSort === 'type_interactive' ? 'selected' : ''}>🎮 Interactive Quizzes</option>
+        <option value="type_standard" ${studentDeadlineSort === 'type_standard' ? 'selected' : ''}>📝 Standard Quizzes</option>
+      </select>
+    </div>
+
+    <!-- Cards List -->
+    <div class="deadline-cards-list">
+      ${filtered.length ? filtered.map(i => {
+        const isCompleted = i.isAttempted;
+        const clickHandler = isCompleted
+          ? `openReviewAttempt('${i.id}')`
+          : (i.isInter ? `openInteractiveQuiz('${i.id}')` : `openTakeQuizModal('${i.id}')`);
+
+        return `
+        <div class="task-deadline-card ${i.status}" onclick="${clickHandler}" title="Click to ${isCompleted ? 'review' : 'take'} ${escHtml(i.title)}">
+          <div class="task-icon-box ${i.status}">
+            ${isCompleted ? '✅' : (i.isOverdue ? '⚠️' : (i.isInter ? '🎮' : '📝'))}
+          </div>
+
+          <div class="task-main-col">
+            <div class="task-top-row">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0;">
+                <h4 class="task-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${escHtml(i.title)}</h4>
+                <span class="task-chip subject">📚 ${escHtml(i.subject)}</span>
+                <span class="task-chip ${i.isInter ? 'type-inter' : 'type-std'}">
+                  ${i.isInter ? '🎮 Interactive' : '📝 Standard'}
+                </span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                <span class="task-due-badge ${i.status}">
+                  ${isCompleted ? `✅ Done · ${i.pct}%` : (i.isOverdue ? `⚠️ Overdue ${i.dueTag}` : `🕒 ${i.dueTag}`)}
+                </span>
+                <span class="task-arrow">›</span>
+              </div>
+            </div>
+
+            <div class="task-bottom-row" style="margin-top:2px;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#64748b;">
+                ${i.status === 'due' ? `<span style="font-weight:700;color:#0284c7;background:#e0f2fe;padding:2px 8px;border-radius:12px;font-size:11px;">🕒 Posted ${i.postTimeAgo}</span> · ` : ''}
+                ${i.lesson ? `<span style="font-weight:600;color:#475569;">📄 ${escHtml(i.lesson)}</span> · ` : ''}
+                <span>⏰ ${i.fullDateStr}</span>
+                <span>· ${i.itemCount} items</span>
+              </div>
+
+              <button class="task-action-btn ${isCompleted ? 'done' : (i.isOverdue ? 'overdue' : (i.isInter ? 'inter' : 'due'))}" style="padding:4px 12px;font-size:11.5px;" onclick="event.stopPropagation(); ${clickHandler}">
+                ${isCompleted
+                  ? `Review (${i.pct}%)`
+                  : (i.isOverdue
+                    ? (i.isInter ? 'Play Quiz' : 'Take Quiz')
+                    : (i.isInter ? 'Play Quiz' : 'Take Quiz'))}
+                <span class="task-arrow">›</span>
+              </button>
+            </div>
+          </div>
+        </div>`;
+      }).join('') : `
+        <div style="text-align:center;padding:36px 20px;background:#f8fafc;border-radius:14px;border:1.5px dashed #cbd5e1;">
+          <div style="font-size:32px;margin-bottom:8px;">🎉</div>
+          <div style="font-size:14px;font-weight:700;color:#0f172a;">No tasks found matching this filter</div>
+          <p style="font-size:12.5px;color:#64748b;margin:4px 0 12px;">You're either all caught up or try resetting your subject or month filters.</p>
+          <button class="task-action-btn due" onclick="studentDeadlineTab='all';studentDeadlineSubjectFilter='all';studentDeadlineMonthFilter='all';updateStudentDeadlinesWidget();">
+            Reset Filters
+          </button>
+        </div>
+      `}
+    </div>
+  </div>`;
+}
+
 /* ── STUDENT PAGES ── */
 function studentPage(page) {
   switch(page) {
@@ -1067,6 +1393,10 @@ function studentPage(page) {
       const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function' 
         ? COURSES_DATABASE.filter(c => isCourseOpenForStudent(c)).length 
         : (mySubjects.length || 9);
+
+      const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+      const readAnc = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
+      const unreadCount = Math.max(0, allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft).length - readAnc.size);
 
       return `
       <div class="welcome-banner">
@@ -1091,25 +1421,96 @@ function studentPage(page) {
           <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Latest Score</div><div class="ic-num green">${latestScorePct !== null ? latestScorePct + '%' : '—'}</div></div></div>
           <p>${latestQuizTitle ? 'On ' + escHtml(latestQuizTitle) : 'No quizzes completed yet'}</p>
         </div>
+        <div class="info-card" onclick="renderPage('announcements')" style="cursor:pointer;transition:all 0.2s;border:1px solid ${unreadCount > 0 ? '#fca5a5' : 'rgba(37,99,235,0.08)'};" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 25px -5px rgba(0,0,0,0.05)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+          <div class="ic-head"><div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div><div><div class="ic-sub">Unread News</div><div class="ic-num" style="color:#dc2626;">${unreadCount}</div></div></div>
+          <p>School announcements & events</p>
+        </div>
       </div>
       <div id="coursesWidgetContainer">
         ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
       </div>
-      <div>
-        <div class="section-hdr"><h2>Available Quizzes</h2></div>
-        <div class="quiz-list">
-          ${availableQuizzes.length ? availableQuizzes.map(q => {
-            const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
-            return `
-            <div class="quiz-row">
-              <div class="qz-info">
-                <h4>${escHtml(q.title)} ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;margin-left:6px;">🎮 Interactive</span>' : ''}</h4>
-                <span>${escHtml(q.meta)}</span>
+      ${(() => {
+        // ── RECENT NEWS & BULLETINS WIDGET ──
+        const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+        const activeNews = allAnc
+          .filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft &&
+            !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()))
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 4);
+
+        if (!activeNews.length) return '';
+
+        const catConfig = {
+          emergency: { label: '🚨 Suspension / Emergency', bg: '#fee2e2', color: '#dc2626', border: '#fca5a5' },
+          academic:  { label: '📚 Academic',               bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc' },
+          event:     { label: '🏫 School Events',           bg: '#dcfce7', color: '#15803d', border: '#86efac' },
+          others:    { label: '📌 Others',                  bg: '#ede9fe', color: '#6d28d9', border: '#c4b5fd' },
+          general:   { label: '📢 General',                 bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
+        };
+
+        const newsCards = activeNews.map(anc => {
+          const cfg = catConfig[anc.category] || catConfig.general;
+          const readIds = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
+          const isUnread = !readIds.has(String(anc.id));
+          const timeAgo = (() => {
+            const diff = Date.now() - new Date(anc.timestamp).getTime();
+            const mins = Math.floor(diff / 60000);
+            const hrs  = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            if (days > 0) return `${days}d ago`;
+            if (hrs > 0)  return `${hrs}h ago`;
+            if (mins > 0) return `${mins}m ago`;
+            return 'Just now';
+          })();
+
+          return `
+            <div onclick="openAnnouncementDetailModal('${anc.id}')" style="
+              display:flex; align-items:flex-start; gap:14px;
+              padding:14px 16px; border-radius:14px; cursor:pointer;
+              background:${isUnread ? '#f8faff' : '#ffffff'};
+              border:1.5px solid ${isUnread ? '#bfdbfe' : '#e8f0fe'};
+              transition:all 0.2s;
+              ${anc.category === 'emergency' ? 'border-left:4px solid #dc2626;' : ''}
+            "
+            onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(37,99,235,0.1)'"
+            onmouseout="this.style.transform='';this.style.boxShadow=''"
+            title="Click to read full announcement">
+              <div style="
+                width:38px; height:38px; border-radius:10px; flex-shrink:0;
+                background:${cfg.bg}; border:1.5px solid ${cfg.border};
+                display:flex; align-items:center; justify-content:center; font-size:18px;
+              ">${anc.category === 'emergency' ? '🚨' : anc.category === 'academic' ? '📚' : anc.category === 'event' ? '🏫' : anc.category === 'others' ? '📌' : '📢'}</div>
+              <div style="flex:1; min-width:0;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
+                  <span style="font-size:10px; font-weight:800; padding:2px 8px; border-radius:20px; background:${cfg.bg}; color:${cfg.color}; letter-spacing:0.3px; text-transform:uppercase;">${cfg.label}</span>
+                  ${isUnread ? '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:#2563eb;color:#fff;">NEW</span>' : ''}
+                  <span style="font-size:11px; color:#94a3b8; margin-left:auto;">${timeAgo}</span>
+                </div>
+                <div style="font-size:13.5px; font-weight:${isUnread ? '800' : '700'}; color:#0f172a; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(anc.title)}</div>
+                <div style="font-size:12px; color:#64748b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${escHtml(anc.message.replace(/\n/g, ' '))}</div>
               </div>
-              <button class="take-btn" style="${isInter ? 'background:linear-gradient(135deg,#0284c7,#8b5cf6);' : ''}" onclick="${isInter ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${isInter ? 'Play Quiz' : 'Take Quiz'}</button>
             </div>`;
-          }).join('') : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No pending quizzes right now.</p>`}
-        </div>
+        }).join('');
+
+        return `
+        <div style="margin-top:8px;">
+          <div class="section-hdr" style="margin-bottom:12px;">
+            <div>
+              <h2>📰 Recent News &amp; Bulletins</h2>
+              <span style="font-size:12.5px;color:var(--text-muted);">Latest school announcements — suspensions, academic updates, and events</span>
+            </div>
+            <button class="add-btn" style="background:#f1f5f9;color:#0284c7;border:1.5px solid #bfdbfe;font-size:12px;padding:7px 14px;" onclick="renderPage('announcements')">
+              View All →
+            </button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            ${newsCards}
+          </div>
+        </div>`;
+      })()}
+
+      <div id="studentDeadlinesWidgetContainer">
+        ${renderStudentDeadlinesWidgetHTML()}
       </div>`;
     }
 
@@ -1123,27 +1524,216 @@ function studentPage(page) {
       );
       const nowMs = Date.now();
 
+      // Extract unique subjects across all visible quizzes
+      const availableSubjects = [...new Set(visibleQuizzes.map(q => q.subject).filter(Boolean))].sort();
+
+      // Calculate total metrics across all assigned quizzes
+      const totalCount = visibleQuizzes.length;
+      let completedCount = 0;
+      let pendingCount = 0;
+      let expiredCount = 0;
+
+      visibleQuizzes.forEach(q => {
+        const attempt = attemptsByQuiz.get(q.id);
+        const dueMs = (q.dueDate || q.due_date) ? new Date(q.dueDate || q.due_date).getTime() : null;
+        const isExpired = !attempt && dueMs && nowMs > dueMs;
+        if (attempt) completedCount++;
+        else if (isExpired) expiredCount++;
+        else pendingCount++;
+      });
+
+      // Filter quizzes
+      let filtered = visibleQuizzes.slice();
+
+      // 1. Search Query filter
+      if (studentQuizSearchQuery) {
+        filtered = filtered.filter(q => {
+          const t = (q.title || '').toLowerCase();
+          const s = (q.subject || '').toLowerCase();
+          const l = (q.lesson || '').toLowerCase();
+          return t.includes(studentQuizSearchQuery) || s.includes(studentQuizSearchQuery) || l.includes(studentQuizSearchQuery);
+        });
+      }
+
+      // 2. Subject filter
+      if (studentQuizFilterSubject) {
+        filtered = filtered.filter(q => String(q.subject || '').toLowerCase() === studentQuizFilterSubject.toLowerCase());
+      }
+
+      // 3. Status filter
+      if (studentQuizFilterStatus) {
+        filtered = filtered.filter(q => {
+          const attempt = attemptsByQuiz.get(q.id);
+          const dueMs = (q.dueDate || q.due_date) ? new Date(q.dueDate || q.due_date).getTime() : null;
+          const isExpired = !attempt && dueMs && nowMs > dueMs;
+          if (studentQuizFilterStatus === 'completed') return !!attempt;
+          if (studentQuizFilterStatus === 'pending') return !attempt && !isExpired;
+          if (studentQuizFilterStatus === 'expired') return isExpired;
+          return true;
+        });
+      }
+
+      // 4. Sort quizzes
+      filtered.sort((a, b) => {
+        const attemptA = attemptsByQuiz.get(a.id);
+        const attemptB = attemptsByQuiz.get(b.id);
+        const dueMsA = (a.dueDate || a.due_date) ? new Date(a.dueDate || a.due_date).getTime() : null;
+        const dueMsB = (b.dueDate || b.due_date) ? new Date(b.dueDate || b.due_date).getTime() : null;
+        const isExpiredA = !attemptA && dueMsA && nowMs > dueMsA;
+        const isExpiredB = !attemptB && dueMsB && nowMs > dueMsB;
+
+        if (studentQuizSortBy === 'subject') {
+          const subjA = (a.subject || 'General Academic').toLowerCase();
+          const subjB = (b.subject || 'General Academic').toLowerCase();
+          const subjCmp = subjA.localeCompare(subjB);
+          if (subjCmp !== 0) return subjCmp;
+          return (a.title || '').localeCompare(b.title || '');
+        }
+
+        if (studentQuizSortBy === 'deadline') {
+          if (!dueMsA && !dueMsB) return 0;
+          if (!dueMsA) return 1;
+          if (!dueMsB) return -1;
+          return dueMsA - dueMsB;
+        }
+
+        if (studentQuizSortBy === 'pending') {
+          const rankA = !attemptA ? (isExpiredA ? 2 : 1) : 3;
+          const rankB = !attemptB ? (isExpiredB ? 2 : 1) : 3;
+          if (rankA !== rankB) return rankA - rankB;
+          if (dueMsA && dueMsB) return dueMsA - dueMsB;
+          return 0;
+        }
+
+        if (studentQuizSortBy === 'newest') {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        }
+
+        if (studentQuizSortBy === 'title') {
+          return (a.title || '').localeCompare(b.title || '');
+        }
+
+        return 0;
+      });
+
+      const hasActiveFilters = Boolean(studentQuizSearchQuery || studentQuizFilterSubject || studentQuizFilterStatus || studentQuizSortBy !== 'pending');
+
       return `
-      <div class="section-hdr"><h2>Quizzes</h2></div>
+      <div class="section-hdr">
+        <div>
+          <h2>Quizzes</h2>
+          <span style="font-size:12px;color:var(--text-muted);">View, filter, sort, and complete your assigned subject assessments</span>
+        </div>
+      </div>
+
+      <!-- METRIC HIGHLIGHT CARDS -->
+      <div class="card-grid" style="margin-bottom:20px;">
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon">${iconQuiz()}</div><div><div class="ic-sub">Assigned Quizzes</div><div class="ic-num">${totalCount}</div></div></div>
+          <p>Total assessments for your grade & strand</p>
+        </div>
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon gold">${iconClock()}</div><div><div class="ic-sub">Pending to Take</div><div class="ic-num gold">${pendingCount}</div></div></div>
+          <p>${pendingCount > 0 ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} awaiting your submission` : 'All caught up! 🎉'}</p>
+        </div>
+        <div class="info-card">
+          <div class="ic-head"><div class="ic-icon green">${iconCheck()}</div><div><div class="ic-sub">Completed</div><div class="ic-num green">${completedCount}</div></div></div>
+          <p>${totalCount > 0 ? `${Math.round((completedCount / totalCount) * 100)}% completion rate` : 'No quizzes yet'}</p>
+        </div>
+      </div>
+
+      <!-- SEARCH, SORT & FILTER TOOLBAR -->
+      <div style="background:#f8fafc;padding:14px 18px;border-radius:14px;border:1.5px solid #e2e8f0;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;">
+        <div style="display:flex;gap:8px;flex:1;min-width:min(100%,240px);align-items:center;">
+          <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:10px;padding:9px 14px;font-size:13px;background:#fff;" value="${escHtml(studentQuizSearchQuery)}" oninput="setStudentQuizSearchQuery(this.value)"/>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <!-- SORT SELECT -->
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:12px;font-weight:700;color:#64748b;margin:0;">Sort:</label>
+            <select class="user-filter-select" style="font-weight:600;padding:8px 12px;border-radius:10px;" onchange="setStudentQuizSort(this.value)">
+              <option value="pending" ${studentQuizSortBy === 'pending' ? 'selected' : ''}>⚡ Pending to Take First</option>
+              <option value="subject" ${studentQuizSortBy === 'subject' ? 'selected' : ''}>📚 Subject (A – Z)</option>
+              <option value="deadline" ${studentQuizSortBy === 'deadline' ? 'selected' : ''}>⏰ Due Date (Earliest First)</option>
+              <option value="newest" ${studentQuizSortBy === 'newest' ? 'selected' : ''}>🆕 Newest Added</option>
+              <option value="title" ${studentQuizSortBy === 'title' ? 'selected' : ''}>🔤 Title (A – Z)</option>
+            </select>
+          </div>
+
+          <!-- SUBJECT FILTER -->
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:12px;font-weight:700;color:#64748b;margin:0;">Subject:</label>
+            <select class="user-filter-select" style="font-weight:600;padding:8px 12px;border-radius:10px;" onchange="setStudentQuizFilterSubject(this.value)">
+              <option value="">All Subjects</option>
+              ${availableSubjects.map(s => `<option value="${escHtml(s)}" ${studentQuizFilterSubject.toLowerCase() === s.toLowerCase() ? 'selected' : ''}>${escHtml(s)}</option>`).join('')}
+            </select>
+          </div>
+
+          <!-- STATUS FILTER -->
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:12px;font-weight:700;color:#64748b;margin:0;">Status:</label>
+            <select class="user-filter-select" style="font-weight:600;padding:8px 12px;border-radius:10px;" onchange="setStudentQuizFilterStatus(this.value)">
+              <option value="">All Statuses</option>
+              <option value="pending" ${studentQuizFilterStatus === 'pending' ? 'selected' : ''}>Pending (To Take)</option>
+              <option value="completed" ${studentQuizFilterStatus === 'completed' ? 'selected' : ''}>Completed</option>
+              <option value="expired" ${studentQuizFilterStatus === 'expired' ? 'selected' : ''}>Expired</option>
+            </select>
+          </div>
+
+          ${hasActiveFilters ? `
+            <button onclick="resetStudentQuizFilters()" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s ease;" title="Reset all sorting and filtering">
+              ✕ Clear
+            </button>
+          ` : ''}
+        </div>
+      </div>
+
+      <!-- QUIZ LIST -->
       <div class="quiz-list">
-        ${visibleQuizzes.length ? visibleQuizzes.map(q => {
+        ${filtered.length ? filtered.map(q => {
           const attempt = attemptsByQuiz.get(q.id);
           const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
           const dueMs = (q.dueDate || q.due_date) ? new Date(q.dueDate || q.due_date).getTime() : null;
           const isExpired = !attempt && dueMs && nowMs > dueMs;
           const dueFormatted = dueMs ? new Date(dueMs).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
           const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+          const itemsCount = (q.questions || []).length;
+          const isUrgent = !attempt && dueMs && (dueMs - nowMs < 86400000) && (dueMs > nowMs); // Due within 24h
 
-          return `<div class="quiz-row" style="${isExpired ? 'opacity:0.75;' : ''}">
-            <div class="qz-info">
-              <h4>${escHtml(q.title)} ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;margin-left:6px;">🎮 Interactive</span>' : ''}</h4>
-              <span>${escHtml(q.meta)}${attempt ? ' · Score: ' + pct + '%' : ''}${dueFormatted ? ' · 🕒 Due: ' + escHtml(dueFormatted) : ''}</span>
+          return `<div class="quiz-row" style="${isExpired ? 'opacity:0.75;background:#fcfcfc;' : ''}display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-radius:14px;border:1px solid #e2e8f0;background:#fff;margin-bottom:12px;gap:16px;flex-wrap:wrap;transition:all 0.2s ease;">
+            <div class="qz-info" style="flex:1;min-width:min(100%,240px);">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+                <span style="display:inline-block;padding:3px 9px;border-radius:6px;background:#eff6ff;color:#2563eb;font-size:11px;font-weight:700;">📚 ${escHtml(q.subject || 'General Academic')}</span>
+                ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10.5px;font-weight:700;">🎮 Interactive</span>' : '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#f1f5f9;color:#475569;font-size:10.5px;font-weight:600;">📝 Standard</span>'}
+                ${isUrgent ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#fef2f2;color:#dc2626;font-size:10.5px;font-weight:700;">⚠️ Due Soon</span>' : ''}
+              </div>
+              <h4 style="font-size:15px;font-weight:700;color:#0f172a;margin:2px 0 6px;">${escHtml(q.title)}</h4>
+              <div style="font-size:12.5px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+                <span>📋 ${itemsCount} Question${itemsCount === 1 ? '' : 's'}</span>
+                ${attempt ? `<span style="font-weight:700;color:${pct >= 75 ? '#166534' : '#991b1b'};">🎯 Score: ${attempt.score}/${attempt.total_items} (${pct}%)</span>` : ''}
+                ${dueFormatted ? `<span style="${isUrgent ? 'color:#dc2626;font-weight:700;' : ''}">🕒 Due: ${escHtml(dueFormatted)}</span>` : '<span style="color:#94a3b8;">📅 No Due Date</span>'}
+              </div>
             </div>
-            <span class="status-pill ${attempt ? 'done' : isExpired ? 'low' : 'pending'}" style="${isExpired ? 'background:#fee2e2;color:#991b1b;' : ''}">${attempt ? 'Completed' : isExpired ? 'Expired' : 'Pending'}</span>
-            <button class="take-btn" ${attempt ? 'style="background:#059669;"' : isExpired ? 'disabled style="background:#94a3b8;cursor:not-allowed;opacity:0.65;"' : isInter ? 'style="background:linear-gradient(135deg,#0284c7,#8b5cf6);"' : ''} onclick="${attempt ? `openReviewAttempt('${q.id}')` : isInter ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${attempt ? 'Review' : isExpired ? 'Expired' : isInter ? 'Play Quiz' : 'Take Quiz'}</button>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span class="status-pill ${attempt ? 'done' : isExpired ? 'low' : 'pending'}" style="${isExpired ? 'background:#fee2e2;color:#991b1b;' : ''}">${attempt ? 'Completed' : isExpired ? 'Expired' : 'Pending'}</span>
+              <button class="take-btn" ${attempt ? 'style="background:#059669;display:inline-flex;align-items:center;gap:6px;"' : isExpired ? 'disabled style="background:#94a3b8;cursor:not-allowed;opacity:0.65;"' : isInter ? 'style="background:linear-gradient(135deg,#0284c7,#8b5cf6);"' : ''} onclick="${attempt ? `openReviewAttempt('${q.id}')` : isInter ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">
+                ${attempt ? '👁️ Review' : isExpired ? 'Expired' : isInter ? 'Play Quiz' : 'Take Quiz'}
+              </button>
+            </div>
           </div>`;
         }).join('')
-          : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No quizzes available right now.</p>`}
+          : `
+          <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:14px;border:1px dashed #cbd5e1;">
+            <div style="font-size:36px;margin-bottom:10px;">🔍</div>
+            <h3 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:6px;">No Quizzes Found</h3>
+            <p style="color:var(--text-muted);font-size:13px;max-width:400px;margin:0 auto 16px;">
+              ${hasActiveFilters ? 'No quizzes match your active filters or search keyword. Try clearing filters.' : 'You have no quizzes assigned to your strand and section at this time.'}
+            </p>
+            ${hasActiveFilters ? `<button onclick="resetStudentQuizFilters()" class="add-btn" style="margin:0 auto;">Clear All Filters</button>` : ''}
+          </div>
+          `}
       </div>`;
     }
 
@@ -1239,8 +1829,8 @@ function studentPage(page) {
       </div>
 
       <!-- QUIZ PROGRESS TABLE -->
-      <div class="score-table">
-        <table>
+      <div class="score-table student-progress-table">
+        <table aria-label="Quiz assessment progress">
           <thead>
             <tr>
               <th>Subject</th>
@@ -1299,24 +1889,24 @@ function studentPage(page) {
 
               return `
               <tr>
-                <td><strong>${escHtml(q.subject || 'General')}</strong></td>
-                <td>${escHtml(q.title || 'Quiz')}</td>
-                <td style="color:var(--text-secondary);font-size:12.5px;white-space:nowrap;">
+                <td data-label="Subject"><div class="progress-cell-value"><strong>${escHtml(q.subject || 'General')}</strong></div></td>
+                <td data-label="Assessment"><div class="progress-cell-value">${escHtml(q.title || 'Quiz')}</div></td>
+                <td style="color:var(--text-secondary);font-size:12.5px;white-space:nowrap;" data-label="Deadline"><div class="progress-cell-value">
                   <span style="display:inline-flex;align-items:center;gap:6px;">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:var(--text-muted);flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     ${escHtml(deadlineDate)}
                   </span>
-                </td>
-                <td>${r.totalItems ? `${r.totalItems} item${r.totalItems === 1 ? '' : 's'}` : '—'}</td>
-                <td>
+                </div></td>
+                <td data-label="Total Items"><div class="progress-cell-value">${r.totalItems ? `${r.totalItems} item${r.totalItems === 1 ? '' : 's'}` : '—'}</div></td>
+                <td data-label="Status"><div class="progress-cell-value">
                   <span class="status-pill ${statusClass}">${statusText}</span>
-                </td>
-                <td class="score-val ${scoreClass}">
+                </div></td>
+                <td class="score-val ${scoreClass}" data-label="Score"><div class="progress-cell-value">
                   ${hasTaken
                     ? `<strong>${r.score} / ${r.totalItems}</strong> <span style="font-size:11px;font-weight:700;margin-left:4px;">(${r.pct !== null ? r.pct + '%' : ''})</span>`
                     : '<span style="color:var(--text-muted);">—</span>'}
-                </td>
-                <td>
+                </div></td>
+                <td data-label="Action"><div class="progress-cell-value">
                   ${hasTaken
                     ? `<button class="table-act-btn review" onclick="openReviewAttempt('${q.id}')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -1326,7 +1916,7 @@ function studentPage(page) {
                         <svg viewBox="0 0 24 24"><polygon points="6 4 18 12 6 20 6 4"/></svg>
                         ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}
                        </button>`}
-                </td>
+                </div></td>
               </tr>`;
             }).join('')
             : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No quizzes assigned to your strand or section yet.</td></tr>`}
@@ -1365,6 +1955,9 @@ function teacherPage(page) {
       const myStrands = (CURRENT_PROFILE?.subjects || CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
       const recentMaterials = displayMaterials.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 3);
 
+      const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+      const unreadCount = Math.max(0, allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft).length - (typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds().size : 0));
+
       return `
       <div class="welcome-banner">
         <div class="banner-content">
@@ -1387,6 +1980,10 @@ function teacherPage(page) {
         <div class="info-card">
           <div class="ic-head"><div class="ic-icon green">${iconQuiz()}</div><div><div class="ic-sub">Active Quizzes</div><div class="ic-num green">${myActiveQuizzes.length}</div></div></div>
           <p>${myQuizzes.length} total across all handled subjects</p>
+        </div>
+        <div class="info-card" onclick="renderPage('announcements')" style="cursor:pointer;transition:all 0.2s;border:1px solid ${unreadCount > 0 ? '#fca5a5' : 'rgba(37,99,235,0.08)'};" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 25px -5px rgba(0,0,0,0.05)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+          <div class="ic-head"><div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div><div><div class="ic-sub">Unread News</div><div class="ic-num" style="color:#dc2626;">${unreadCount}</div></div></div>
+          <p>School announcements & events</p>
         </div>
       </div>
       <div id="coursesWidgetContainer">
@@ -1472,6 +2069,13 @@ function teacherPage(page) {
       if (typeof quizManagerFilterSubject !== 'undefined' && quizManagerFilterSubject) {
         filtered = filtered.filter(q => String(q.subject || '').toLowerCase() === quizManagerFilterSubject.toLowerCase());
       }
+      if (typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview) {
+        if (quizManagerFilterReview === 'visible') {
+          filtered = filtered.filter(q => q.allowReviewAnswers !== false);
+        } else if (quizManagerFilterReview === 'hidden') {
+          filtered = filtered.filter(q => q.allowReviewAnswers === false);
+        }
+      }
 
       return `
       <div class="section-hdr">
@@ -1507,7 +2111,7 @@ function teacherPage(page) {
 
       <!-- SEARCH & FILTER TOOLBAR -->
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;background:#f8fafc;padding:12px 16px;border-radius:14px;border:1px solid #e2e8f0;">
-        <div style="display:flex;gap:8px;flex:1;min-width:240px;align-items:center;">
+        <div style="display:flex;gap:8px;flex:1;min-width:min(100%,240px);align-items:center;">
           <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -1520,6 +2124,11 @@ function teacherPage(page) {
             <option value="active" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'active' ? 'selected' : ''}>Active</option>
             <option value="pending" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'pending' ? 'selected' : ''}>Pending</option>
             <option value="closed" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'closed' ? 'selected' : ''}>Closed</option>
+          </select>
+          <select class="user-filter-select" onchange="setQuizManagerFilterReview(this.value)">
+            <option value="">All Review Modes</option>
+            <option value="visible" ${typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview === 'visible' ? 'selected' : ''}>👁️ Answers Visible (Checked)</option>
+            <option value="hidden" ${typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview === 'hidden' ? 'selected' : ''}>🔒 Answers Hidden (Unchecked)</option>
           </select>
           ${availableSubjects.length ? `
           <select class="user-filter-select" onchange="setQuizManagerFilterSubject(this.value)">
@@ -1540,10 +2149,11 @@ function teacherPage(page) {
             ? (q.timerPerQuestion ? `⏱️ ${q.timerPerQuestion}s/item` : 'Untimed')
             : (q.timeLimitMinutes ? `⏱️ ${q.timeLimitMinutes} mins` : 'Untimed');
           const dueText = q.dueDate ? `📅 Due: ${new Date(q.dueDate).toLocaleDateString()}` : '📅 No Expiration';
+          const isReviewAllowed = q.allowReviewAnswers !== false && q.allow_review_answers !== false;
 
           return `
           <div class="quiz-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;gap:16px;flex-wrap:wrap;">
-            <div class="qz-info" style="min-width:240px;flex:1;">
+            <div class="qz-info" style="min-width:min(100%,240px);flex:1;">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
                 <h4 style="font-size:15px;font-weight:700;color:#0f172a;margin:0;">${escHtml(q.title)}</h4>
                 <span class="status-pill ${statusClass}">${statusLabel}</span>
@@ -1558,8 +2168,14 @@ function teacherPage(page) {
               </div>
             </div>
 
-            <!-- ACTION BUTTONS -->
+            <!-- ACTION BUTTONS & REVIEW CHECKBOX -->
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <!-- REVIEW ANSWERS CHECKBOX -->
+              <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
+                <input type="checkbox" ${isReviewAllowed ? 'checked' : ''} onchange="toggleQuizReviewAnswers('${q.id}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
+                <span>${isReviewAllowed ? '👁️ Show Answers on Review' : '🔒 Answers Hidden'}</span>
+              </label>
+
               <button class="table-act-btn take" onclick="openTakeQuizModal('${q.id}')" title="Preview Quiz Questions">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 Preview
@@ -2141,7 +2757,7 @@ function adminPage(page) {
       </div>
 
       <!-- REPORT GENERATOR TOOLS -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));gap:18px;margin-bottom:28px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 340px), 1fr));gap:18px;margin-bottom:28px;">
         <!-- TOOL 1: SECTION MASTER GRADE SHEET -->
         <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:16px;padding:22px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
           <div>
@@ -2285,12 +2901,22 @@ function adminPage(page) {
 /* ── SHARED CHAT PAGE LAYOUT ── */
 function buildChatPage(role) {
   return `
-    <div class="section-hdr"><h2>Chats</h2></div>
+    <section class="scholaria-chat">
+    <div class="chat-page-heading">
+      <div><h2>Chats</h2><p>Connect with your ${role === 'teacher' ? 'students and fellow teachers' : 'teachers and classmates'}.</p></div>
+      <button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button>
+    </div>
     <div class="chat-layout">
       <div class="chat-contacts">
         <div class="chat-contacts-hdr">
           <span>Conversations</span>
-          <button class="new-chat-btn" title="New chat" onclick="openNewChatModal()">${iconPlus()}</button>
+          <button class="new-chat-btn" title="New conversation" aria-label="New conversation" onclick="openNewChatModal()">${iconPlus()}</button>
+        </div>
+        <label class="chat-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/></svg><input type="search" aria-label="Search conversations" placeholder="Search conversations..." oninput="filterChatConversations(this.value)"></label>
+        <div class="chat-filters" aria-label="Filter conversations">
+          <button class="active" aria-pressed="true" data-chat-filter="all" onclick="setChatFilter('all')">All</button>
+          <button aria-pressed="false" data-chat-filter="teacher" onclick="setChatFilter('teacher')">Teachers</button>
+          ${role === 'student' ? '' : '<button aria-pressed="false" data-chat-filter="student" onclick="setChatFilter(\'student\')">Students</button>'}
         </div>
         <div class="contact-list" id="chatContactList">
           <div class="contact-empty">Loading conversations…</div>
@@ -2298,18 +2924,19 @@ function buildChatPage(role) {
       </div>
       <div class="chat-window">
         <div class="cw-header">
-          <div class="contact-avatar" id="cwAvatar" style="width:34px;height:34px;font-size:12px;"></div>
+          <div class="contact-avatar cw-placeholder-avatar" id="cwAvatar">${chatOutlineIcon()}</div>
           <div>
-            <div class="cw-name" id="cwName">Select a conversation</div>
-            <div class="cw-role" id="cwRole"></div>
+            <div class="cw-name" id="cwName">Your conversations</div>
+            <div class="cw-role" id="cwRole">Stay connected, keep learning.</div>
           </div>
         </div>
         <div class="cw-messages" id="cwMessages">
-          <div class="cw-empty">Pick a conversation on the left, or start a new one.</div>
+          <div class="cw-empty chat-welcome">${chatEmptyIllustration()}<h3>Start a conversation</h3><p>${role === 'teacher' ? 'Message a student, connect with fellow teachers,<br>or create a class group.' : 'Message a teacher, connect with classmates,<br>or create a study group.'}</p><button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button></div>
         </div>
         <div class="cw-input-area" id="cwInputArea"></div>
       </div>
-    </div>`;
+    </div>
+    </section>`;
 }
 
 /* ── PAGE ROUTER & POLL TIMER ── */
@@ -2344,13 +2971,101 @@ function renderPage(page) {
   materialsPollTimer = null;
   if (page === 'materials' || page === 'approval') {
     loadMaterialsFromDB();
-    materialsPollTimer = setInterval(loadMaterialsFromDB, 15000);
+    if (page === 'approval') {
+      if (typeof loadQuizzesFromDB === 'function') loadQuizzesFromDB();
+      if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
+    }
+    materialsPollTimer = setInterval(() => {
+      loadMaterialsFromDB();
+      if (currentPage === 'approval' && typeof loadQuizzesFromDB === 'function') {
+        loadQuizzesFromDB();
+      }
+    }, 15000);
   }
 }
 
 /* ── NAVIGATION LISTENERS ── */
 document.addEventListener('DOMContentLoaded', () => {
+  // Wrapped banner text must reserve its actual height above the navigation.
+  const bannerSelectors = ['.demo-mode-banner', '.emergency-top-banner'];
+  const bannerProperties = ['--banner-h', '--anc-banner-h'];
+  const observedBanners = new Set();
+  const bannerResizeObserver = new ResizeObserver(syncBannerHeights);
+  function syncBannerHeights() {
+    const banners = bannerSelectors.map(selector => document.querySelector(selector));
+    for (const banner of observedBanners) {
+      if (!banners.includes(banner)) {
+        bannerResizeObserver.unobserve(banner);
+        observedBanners.delete(banner);
+      }
+    }
+    banners.forEach((banner, index) => {
+      if (banner && !observedBanners.has(banner)) {
+        bannerResizeObserver.observe(banner);
+        observedBanners.add(banner);
+      }
+      const height = banner ? Math.ceil(banner.getBoundingClientRect().height) : 0;
+      document.body.style.setProperty(bannerProperties[index], `${height}px`);
+    });
+  }
+  const bannerMutationObserver = new MutationObserver(syncBannerHeights);
+  bannerMutationObserver.observe(document.body, { childList: true });
+  const bannerContainer = document.getElementById('emergencyBannerContainer');
+  if (bannerContainer) bannerMutationObserver.observe(bannerContainer, { childList: true, subtree: true });
+  syncBannerHeights();
+
   const sidebarMenu = document.getElementById('sidebarMenu');
+  const toggleBtn = document.getElementById('hamburger-toggle');
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+
+  function openMobileSidebar() {
+    if (sidebar) sidebar.classList.add('open');
+    if (backdrop) backdrop.classList.add('active');
+    document.body.classList.add('mobile-menu-open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeMobileSidebar() {
+    if (sidebar) sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('active');
+    document.body.classList.remove('mobile-menu-open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  const mobileLayout = window.matchMedia('(max-width: 900px)');
+  mobileLayout.addEventListener('change', closeMobileSidebar);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && sidebar?.classList.contains('open')) {
+      closeMobileSidebar();
+      toggleBtn?.focus();
+    }
+  });
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-controls', 'sidebar');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    toggleBtn.setAttribute('aria-label', 'Toggle navigation');
+  }
+
+  if (toggleBtn && sidebar) {
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.innerWidth <= 900) {
+        if (sidebar.classList.contains('open')) {
+          closeMobileSidebar();
+        } else {
+          openMobileSidebar();
+        }
+      } else {
+        sidebar.classList.toggle('closed');
+      }
+    });
+  }
+
+  if (backdrop) {
+    backdrop.addEventListener('click', closeMobileSidebar);
+  }
+
   if (sidebarMenu) {
     sidebarMenu.addEventListener('click', e => {
       const item = e.target.closest('.menu-item[data-page]');
@@ -2359,13 +3074,10 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
       item.classList.add('active');
       renderPage(item.dataset.page);
+      if (window.innerWidth <= 900) {
+        closeMobileSidebar();
+      }
     });
-  }
-
-  const toggleBtn = document.getElementById('hamburger-toggle');
-  const sidebar = document.getElementById('sidebar');
-  if (toggleBtn && sidebar) {
-    toggleBtn.addEventListener('click', () => sidebar.classList.toggle('closed'));
   }
 });
 

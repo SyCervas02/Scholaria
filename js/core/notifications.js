@@ -419,12 +419,11 @@ function buildNotificationsPage() {
     <!-- Table Card -->
     <div class="notif-table-card">
       ${filteredList.length ? `
-        <table class="notif-table">
+        <label class="notif-select-all"><input type="checkbox" ${allSelected ? 'checked' : ''} onchange="toggleSelectAllNotifs(this.checked)"/> Select all notifications in this view</label>
+        <table class="notif-table" aria-label="Notifications and activity">
           <thead>
             <tr>
-              <th style="width:36px;text-align:center;">
-                <input type="checkbox" ${allSelected ? 'checked' : ''} onchange="toggleSelectAllNotifs(this.checked)"/>
-              </th>
+              <th style="width:36px;text-align:center;">Select</th>
               <th style="width:36px;">#</th>
               <th style="width:200px;">From</th>
               <th>Subject / Activity</th>
@@ -443,31 +442,31 @@ function buildNotificationsPage() {
 
               return `
                 <tr class="${isUnread ? 'unread-row' : ''}">
-                  <td style="text-align:center;">
-                    <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleNotifSelection('${n.id}')"/>
+                  <td class="notif-cell-select" style="text-align:center;">
+                    <input type="checkbox" aria-label="Select notification ${idx + 1}" ${isSelected ? 'checked' : ''} onchange="toggleNotifSelection('${n.id}')"/>
                   </td>
-                  <td><strong>${idx + 1}</strong></td>
-                  <td>
+                  <td class="notif-cell-number"><strong>${idx + 1}</strong></td>
+                  <td class="notif-cell-sender">
                     <div class="notif-sender-cell">
                       <div class="notif-sender-avatar">${senderAvatar}</div>
                       <span class="notif-sender-name">${escHtml(senderName)}</span>
                     </div>
                   </td>
-                  <td>
+                  <td class="notif-cell-subject">
                     <div class="notif-subject-cell">
                       <span class="notif-subject-title">${iconStr} ${escHtml(n.title)}</span>
                       <span class="notif-subject-msg">${escHtml(n.message)}</span>
                     </div>
                   </td>
-                  <td>
+                  <td class="notif-cell-sent">
                     <span class="notif-sent-time">${formatSentDate(n.timestamp)}</span>
                   </td>
-                  <td style="text-align:center;">
+                  <td class="notif-cell-status" style="text-align:center;">
                     ${isUnread 
                       ? '<span class="notif-status-badge unread">❌ Unread</span>' 
                       : '<span class="notif-status-badge read">✔ Read</span>'}
                   </td>
-                  <td style="text-align:center;">
+                  <td class="notif-cell-action" style="text-align:center;">
                     <button class="notif-del-row-btn" onclick="deleteSingleNotif('${n.id}')" title="Delete notification">
                       <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                     </button>

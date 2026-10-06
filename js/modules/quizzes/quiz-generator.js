@@ -20,6 +20,9 @@ async function loadQuizzesFromDB() {
       const quizType = q.quiz_type || q.type || firstQ._quizType || qMeta.quizType || 'standard';
       const timerPerQuestion = q.timer_per_question || firstQ._timerPerQuestion || qMeta.timerPerQuestion || 0;
       const timeLimitMinutes = q.time_limit_minutes || firstQ._timeLimitMinutes || qMeta.timeLimitMinutes || 0;
+      const allowReviewAnswers = q.allow_review_answers !== undefined 
+        ? Boolean(q.allow_review_answers) 
+        : (qMeta.allowReviewAnswers !== undefined ? Boolean(qMeta.allowReviewAnswers) : (firstQ._allowReviewAnswers !== undefined ? Boolean(firstQ._allowReviewAnswers) : true));
       return {
         id: q.id,
         createdBy: q.created_by,
@@ -37,6 +40,8 @@ async function loadQuizzesFromDB() {
         quiz_type: quizType,
         timerPerQuestion: timerPerQuestion,
         timeLimitMinutes: timeLimitMinutes,
+        allowReviewAnswers: allowReviewAnswers,
+        allow_review_answers: allowReviewAnswers,
         meta: q.is_demo
           ? `${q.subject || 'General'} · ${(q.questions||[]).length} items · Sample data`
           : `${[q.subject || 'General', q.strand].filter(Boolean).join(' · ')} · ${(q.questions||[]).length} items · ${quizType === 'interactive' ? '🎮 Interactive · ' : (timeLimitMinutes > 0 ? `⏱️ ${timeLimitMinutes}m · ` : '')}${q.status || 'active'}`,
@@ -79,10 +84,16 @@ const quizGen = {
   dueDate: '',
   timerPerQuestion: 30, // 0 = untimed, or 15, 30, 45, 60
   timeLimitMinutes: 15, // 0 = untimed, or 5, 10, 15, 20, 30, 45, 60
+  allowReviewAnswers: true,
   questions: [], 
   editingId: null,
   errorMsg: ''
 };
+
+function setQuizGenReviewAnswers(allow) {
+  quizGen.allowReviewAnswers = Boolean(allow);
+  renderQuizModal();
+}
 
 function nextQuizStep() {
   if (validateQuizStep(quizGen.wizardStep)) {
@@ -689,26 +700,32 @@ function handleFileInput(input) {
 async function extractAllFilesText() {
   if (!quizGen.files || quizGen.files.length === 0) {
     quizGen.fileText = '';
+    quizGen.isExtracting = false;
     renderQuizModal();
     return;
   }
-  const fileCount = quizGen.files.length;
-  // Fair allocation of character budget across all files so no handout is left out
-  const budgetPerFile = Math.max(8000, Math.floor(40000 / fileCount));
-  let combined = '';
-  for (const file of quizGen.files) {
-    const ext = '.' + file.name.split('.').pop().toLowerCase();
-    try {
-      const text = await extractSingleFileText(file, ext, budgetPerFile);
-      if (text) {
-        combined += text + '\n\n';
+  quizGen.isExtracting = true;
+  try {
+    const fileCount = quizGen.files.length;
+    // Fair allocation of character budget across all files so no handout is left out
+    const budgetPerFile = Math.max(8000, Math.floor(40000 / fileCount));
+    let combined = '';
+    for (const file of quizGen.files) {
+      const ext = '.' + file.name.split('.').pop().toLowerCase();
+      try {
+        const text = await extractSingleFileText(file, ext, budgetPerFile);
+        if (text) {
+          combined += text + '\n\n';
+        }
+      } catch (e) {
+        console.warn(`Extraction warning for ${file.name}:`, e);
       }
-    } catch (e) {
-      console.warn(`Extraction warning for ${file.name}:`, e);
     }
+    quizGen.fileText = combined.slice(0, 45000);
+  } finally {
+    quizGen.isExtracting = false;
+    renderQuizModal();
   }
-  quizGen.fileText = combined.slice(0, 45000);
-  renderQuizModal();
 }
 
 function extractSingleFileText(file, ext, maxChars = 20000) {
@@ -811,13 +828,19 @@ function isValidQuizTerm(term) {
 function cleanQuizTerm(term) {
   if (!term || typeof term !== 'string') return '';
   let str = term.trim().replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
+  // Strip trailing pronoun connectors like " - It", " - it", " - These", " - This", " : It", " — It", " - They"
+  str = str.replace(/\s*[-–—:]\s*(it|its|this|these|they|them|that|which)\s*$/i, '').trim();
+  // Strip trailing dashes, colons, or punctuation
+  str = str.replace(/\s*[-–—:]+$/g, '').trim();
   // Strip trailing conjunctions, prepositions, or copulas (e.g. "and", "or", "is", "which")
-  str = str.replace(/\s+(and|or|but|with|to|for|of|in|on|at|by|is|are|was|were|which|that|the|a|an)$/i, '').trim();
+  str = str.replace(/\s+(it|its|this|these|they|them|and|or|but|with|to|for|of|in|on|at|by|is|are|was|were|which|that|the|a|an)$/i, '').trim();
   // If answer starts with "The ... is ... and" or "X is a ...", extract the subject X
   const clauseMatch = str.match(/^(?:the|a|an)?\s*([A-Za-z0-9\s_-]{2,35})\s+(?:is|are)\s+(?:a|an|the|defined|used|special)/i);
   if (clauseMatch && clauseMatch[1] && clauseMatch[1].trim().length >= 2) {
     str = clauseMatch[1].trim();
   }
+  str = str.replace(/\s*[-–—:]\s*(it|its|this|these|they|them|that|which)\s*$/i, '').trim();
+  str = str.replace(/\s*[-–—:]+$/g, '').trim();
   return str;
 }
 
@@ -840,10 +863,21 @@ function extractQuestionsFromTextClient(params) {
 
   sentences.forEach(s => {
     // Non-greedily find definition verbs
-    const verbMatch = s.match(/\b(is\s+defined\s+as|is\s+described\s+as|refers\s+to|means|represents|is\s+(?:a|an|the))\b/i);
+    const verbMatch = s.match(/\b(is\s+defined\s+as|is\s+described\s+as|refers\s+to|means|represents|is\s+(?:a|an|the)|are\s+(?:the|defined|used))\b/i);
     if (verbMatch && verbMatch.index > 0) {
       let rawTerm = s.slice(0, verbMatch.index).trim().replace(/^[•\-*]\s*/, '').replace(/^(the|a|an)\s+/i, '').trim();
       let rawDef = s.slice(verbMatch.index + verbMatch[0].length).trim().replace(/[.;]+$/, '');
+
+      const dashPronounMatch = rawTerm.match(/^(.+?)\s*[-–—:]\s*(?:it|this|these|they|that)\s*$/i);
+      if (dashPronounMatch && dashPronounMatch[1].trim().length >= 2) {
+        rawTerm = dashPronounMatch[1].trim();
+      }
+
+      const nextTermIdx = rawDef.search(/\s+[A-Z][A-Za-z0-9\s-]{2,30}\s*[-–—:]\s*(?:it|this|these|they|is|are)\b/i);
+      if (nextTermIdx > 10) {
+        rawDef = rawDef.slice(0, nextTermIdx).trim();
+      }
+
       rawTerm = cleanQuizTerm(rawTerm);
       if (isValidQuizTerm(rawTerm) && rawDef.length > 8 && !isForbiddenQuizLabel(rawTerm)) {
         if (!extractedTerms.some(t => t.toLowerCase() === rawTerm.toLowerCase())) {
@@ -855,13 +889,27 @@ function extractQuestionsFromTextClient(params) {
   });
 
   const colonLines = rawClean.split('\n').map(l => l.trim()).filter(l => l.length > 15);
-  const colonRegex = /^([A-Z][A-Za-z0-9\s-]{2,35})\s*[:–—]\s*(.{15,200})$/;
+  const colonRegex = /^([A-Z][A-Za-z0-9\s-]{2,40})\s*[:–—-]\s*(.{10,240})$/;
   colonLines.forEach(l => {
     const m = l.match(colonRegex);
     if (m && m[1] && m[2]) {
-      let term = cleanQuizTerm(m[1]);
+      let term = m[1].trim().replace(/^[•\-*]\s*/, '').replace(/^(the|a|an)\s+/i, '').trim();
       let def = m[2].trim().replace(/[.;]+$/, '');
-      if (isValidQuizTerm(term) && def.length > 10 && !isForbiddenQuizLabel(term)) {
+
+      def = def.replace(/^(it|this|these|they)\s+(?:is|are|refers to|means)\s+(?:a|an|the)?/i, '').trim();
+
+      const dashPronounMatch = term.match(/^(.+?)\s*[-–—:]\s*(?:it|this|these|they|that)\s*$/i);
+      if (dashPronounMatch && dashPronounMatch[1].trim().length >= 2) {
+        term = dashPronounMatch[1].trim();
+      }
+
+      const nextTermIdx = def.search(/\s+[A-Z][A-Za-z0-9\s-]{2,30}\s*[-–—:]\s*(?:it|this|these|they|is|are)\b/i);
+      if (nextTermIdx > 10) {
+        def = def.slice(0, nextTermIdx).trim();
+      }
+
+      term = cleanQuizTerm(term);
+      if (isValidQuizTerm(term) && def.length > 8 && !isForbiddenQuizLabel(term)) {
         if (!extractedTerms.some(t => t.toLowerCase() === term.toLowerCase())) {
           pairs.push({ term, def });
           extractedTerms.push(term);
@@ -896,6 +944,7 @@ function extractQuestionsFromTextClient(params) {
   for (let i = 0; i < formatSequence.length; i++) {
     const fmt = formatSequence[i];
     const isMc = fmt === 'mc' || fmt === 'multiple_choice';
+    const isTf = fmt === 'tf' || fmt === 'true_false';
     const isId = fmt === 'id' || fmt === 'identification';
     const isMatch = fmt === 'match' || fmt === 'matching';
     const sentence = sentences[i % Math.max(1, sentences.length)] || `Key fundamental principle in ${title || 'this module'}`;
@@ -925,6 +974,35 @@ function extractQuestionsFromTextClient(params) {
         options: options,
         answer: correct,
         _answerIdx: Math.max(0, options.indexOf(correct))
+      });
+    } else if (isTf) {
+      const isTrue = i % 2 === 0;
+      let qText = '';
+      let explanation = '';
+      if (pair) {
+        if (isTrue) {
+          qText = `${pair.term} is defined as ${pair.def.toLowerCase().startsWith('a') || pair.def.toLowerCase().startsWith('the') ? pair.def : 'the ' + pair.def}.`;
+          explanation = `This statement is True. By definition, ${pair.term} refers to ${pair.def}.`;
+        } else {
+          qText = `${pair.term} is exclusively an external non-academic factor and does not relate to ${pair.def.slice(0, 40)}.`;
+          explanation = `This statement is False. ${pair.term} directly relates to ${pair.def}.`;
+        }
+      } else {
+        if (isTrue) {
+          qText = `${sentence.replace(/[.]+$/, '')}.`;
+          explanation = `This statement is True as confirmed in the course materials.`;
+        } else {
+          qText = `In the context of this subject, ${sentence.replace(/[.]+$/, '')} is considered invalid and disregarded.`;
+          explanation = `This statement is False. According to the learning material, this principle is valid and recognized.`;
+        }
+      }
+      questions.push({
+        _id: 'q_' + i + '_' + Date.now(),
+        type: 'true_false',
+        question: qText,
+        options: ['True', 'False'],
+        answer: isTrue ? 'True' : 'False',
+        explanation: explanation
       });
     } else if (isId) {
       if (pair) {
@@ -977,11 +1055,18 @@ async function generateQuiz() {
   const genToken = ++currentQuizGenToken;
   renderQuizModal();
 
-  let waited = 0;
-  while (quizGen.isExtracting && waited < 6000) {
-    if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
-    await new Promise(r => setTimeout(r, 300));
-    waited += 300;
+  // Ensure background text extraction completes before generating
+  if (quizGen.isExtracting || (!quizGen.fileText && quizGen.files && quizGen.files.length > 0)) {
+    if (!quizGen.isExtracting) {
+      await extractAllFilesText();
+    } else {
+      let waited = 0;
+      while (quizGen.isExtracting && waited < 12000) {
+        if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
+        await new Promise(r => setTimeout(r, 200));
+        waited += 200;
+      }
+    }
   }
   if (quizGen.step !== 'loading' || genToken !== currentQuizGenToken) return;
 
@@ -1106,15 +1191,34 @@ function applyGeneratedQuestions(list, isDemo) {
     obj.sourceMaterial = sourceFile;
     obj.source_material = sourceFile;
 
-    if (obj.type === 'matching' && !obj.instructions) {
-      obj.instructions = obj.question || 'Match the items on the left with the correct matches on the right.';
+    if (obj.answer && typeof obj.answer === 'string') {
+      obj.answer = cleanQuizTerm(obj.answer);
+    }
+    if (obj.type === 'matching') {
+      if (!obj.instructions) {
+        obj.instructions = obj.question || 'Match the items on the left with the correct matches on the right.';
+      }
+      if (Array.isArray(obj.pairs)) {
+        obj.pairs.forEach(p => {
+          if (p && p.left) p.left = cleanQuizTerm(p.left);
+          if (p && p.right) p.right = cleanQuizTerm(p.right);
+        });
+      }
     }
     if (obj.type === 'multiple_choice') {
+      if (Array.isArray(obj.options)) {
+        obj.options = obj.options.map(opt => cleanQuizTerm(String(opt)));
+        if (obj.answer && !obj.options.includes(obj.answer)) {
+          const m = obj.options.find(o => o.toLowerCase() === obj.answer.toLowerCase());
+          if (m) obj.answer = m;
+        }
+      }
       obj._answerIdx = Math.max(0, (obj.options || []).indexOf(obj.answer));
     }
     if (obj.type === 'true_false') {
       if (!Array.isArray(obj.options) || obj.options.length === 0) obj.options = ['True', 'False'];
       if (!obj.answer) obj.answer = 'True';
+      if (q.explanation) obj.explanation = String(q.explanation).trim();
     }
     return obj;
   });
@@ -1154,6 +1258,7 @@ function addNewManualQuestion() {
       question: `Statement ${quizGen.questions.length + 1} (True or False)`,
       options: ['True', 'False'],
       answer: 'True',
+      explanation: '',
       source_file: defaultFile,
       source_page: 1
     });
@@ -1212,6 +1317,7 @@ function buildDemoQuestions() {
         question: `Statement ${i + 1} (True or False) — sample statement derived from "${fileForQ}".`,
         options: ['True', 'False'],
         answer: i % 2 === 0 ? 'True' : 'False',
+        explanation: (i % 2 === 0) ? 'This statement aligns directly with the handout concepts.' : 'This statement is incorrect based on the handout principles.',
         source_file: fileForQ,
         source_page: 1 + Math.floor(i / 2)
       };
@@ -1542,6 +1648,7 @@ async function saveQuiz() {
       _quizType: quizGen.type || 'standard',
       _timerPerQuestion: quizGen.timerPerQuestion || 0,
       _timeLimitMinutes: quizGen.timeLimitMinutes || 0,
+      _allowReviewAnswers: quizGen.allowReviewAnswers !== false,
       ...(idx === 0 ? {
         _meta: {
           quizType: quizGen.type || 'standard',
@@ -1550,7 +1657,8 @@ async function saveQuiz() {
           sourceMaterial: fileNames,
           lesson: lessonName,
           sections: targetSectionsStr,
-          dueDate: quizGen.dueDate || null
+          dueDate: quizGen.dueDate || null,
+          allowReviewAnswers: quizGen.allowReviewAnswers !== false
         }
       } : {})
     }));
@@ -1565,10 +1673,16 @@ async function saveQuiz() {
       status: quizStatus,
       is_demo: isDemo,
       sections: targetSectionsStr,
-      lesson: lessonName
+      lesson: lessonName,
+      allow_review_answers: quizGen.allowReviewAnswers !== false
     };
 
     let { error } = await db.from('quizzes').insert(quizRow);
+    if (error && error.message && error.message.includes('allow_review_answers')) {
+      delete quizRow.allow_review_answers;
+      const retry = await db.from('quizzes').insert(quizRow);
+      error = retry.error;
+    }
     if (error && error.message && error.message.includes('time_limit_minutes')) {
       delete quizRow.time_limit_minutes;
       const retry = await db.from('quizzes').insert(quizRow);
@@ -1610,6 +1724,8 @@ async function saveQuiz() {
         quiz_type: quizGen.type || 'standard',
         timerPerQuestion: quizGen.timerPerQuestion || 0,
         timeLimitMinutes: quizGen.timeLimitMinutes || 0,
+        allowReviewAnswers: quizGen.allowReviewAnswers !== false,
+        allow_review_answers: quizGen.allowReviewAnswers !== false,
         meta: `${quizGen.subject || 'General'} · ${questionsToSave.length} items · ${quizStatus}`,
         isDemo: isDemo,
         status: quizStatus,
@@ -1813,6 +1929,67 @@ function setQuizManagerSearchQuery(q) {
   if (typeof renderPage === 'function') renderPage('quiz');
 }
 
+let quizManagerFilterReview = '';
+
+function setQuizManagerFilterReview(val) {
+  quizManagerFilterReview = val;
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
+
+async function toggleQuizReviewAnswers(quizId, isChecked) {
+  const quiz = customQuizzes.find(q => String(q.id) === String(quizId));
+  if (!quiz) return;
+  const newSetting = Boolean(isChecked);
+
+  quiz.allowReviewAnswers = newSetting;
+  quiz.allow_review_answers = newSetting;
+  if (quiz.questions && quiz.questions.length > 0) {
+    if (!quiz.questions[0]._meta) quiz.questions[0]._meta = {};
+    quiz.questions[0]._meta.allowReviewAnswers = newSetting;
+  }
+
+  // Update in Supabase
+  if (typeof db !== 'undefined' && db && db.from) {
+    try {
+      let { error } = await db.from('quizzes').update({
+        allow_review_answers: newSetting,
+        questions: quiz.questions
+      }).eq('id', quizId);
+
+      if (error && error.message && error.message.includes('allow_review_answers')) {
+        await db.from('quizzes').update({
+          questions: quiz.questions
+        }).eq('id', quizId);
+      }
+    } catch(err) {
+      console.warn('Notice syncing quiz review answers to DB:', err);
+    }
+  }
+
+  // Update in localStorage fallback
+  try {
+    const raw = localStorage.getItem('scholaria_quizzes');
+    if (raw) {
+      const list = JSON.parse(raw);
+      const target = list.find(q => String(q.id) === String(quizId));
+      if (target) {
+        target.allowReviewAnswers = newSetting;
+        target.allow_review_answers = newSetting;
+        localStorage.setItem('scholaria_quizzes', JSON.stringify(list));
+      }
+    }
+  } catch(e) {}
+
+  const msg = newSetting
+    ? `Students can now see correct answers on "${quiz.title}".`
+    : `Correct answers are now hidden from students on "${quiz.title}".`;
+  if (typeof showToast === 'function') showToast(msg, newSetting ? 'success' : 'info');
+
+  if (typeof renderPage === 'function' && typeof currentPage !== 'undefined') {
+    renderPage(currentPage);
+  }
+}
+
 
 function renderQuizStepper() {
   const steps = [
@@ -1901,6 +2078,10 @@ function getQuizConfigSummary() {
         <div class="qz-summary-item">
           <span class="qz-summary-label">Deadline</span>
           <span class="qz-summary-val">📅 ${escHtml(deadlineText)}</span>
+        </div>
+        <div class="qz-summary-item">
+          <span class="qz-summary-label">Student Review Key</span>
+          <span class="qz-summary-val">${quizGen.allowReviewAnswers !== false ? '👁️ Answers Visible' : '🔒 Answers Hidden'}</span>
         </div>
       </div>
     </div>
@@ -2372,6 +2553,21 @@ function renderQuizModal() {
         </div>
         `}
 
+        <!-- ── STUDENT REVIEW ANSWER VISIBILITY CHECKBOX ── -->
+        <div class="gen-field qz-card-field" style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:14px;padding:16px 20px;">
+          <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;margin:0;">
+            <input type="checkbox" id="quizGenAllowReviewCheckbox" ${quizGen.allowReviewAnswers !== false ? 'checked' : ''} onchange="setQuizGenReviewAnswers(this.checked)" style="width:19px;height:19px;margin-top:2px;accent-color:#2563eb;cursor:pointer;">
+            <div>
+              <div style="font-weight:700;color:#0f172a;font-size:13.5px;display:flex;align-items:center;gap:6px;">
+                <span>👁️</span> Allow students to see correct answers upon review
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.4;">
+                When checked, students can view the answer key and question explanations after completing the quiz. If unchecked, students only see their score and right/wrong status; correct answers are kept hidden. (You can also change this anytime later in Quiz Manager).
+              </div>
+            </div>
+          </label>
+        </div>
+
         <!-- ── CONFIRM DATA REVIEW BOX ── -->
         ${getQuizConfirmDataCard()}
       </div>
@@ -2608,6 +2804,9 @@ function renderQuestionCard(q, idx) {
             <button type="button" class="qz-tf-btn ${!isTrue ? 'active' : ''}" onclick="setTfAnswer('${q._id}', 'False')">✗ False</button>
           </div>
 
+          <label class="qr-label" style="margin-top:8px;">Explanation / Rationale (Why it's ${isTrue ? 'True' : 'False'})</label>
+          <textarea rows="2" data-field="explanation" placeholder="Explain why this statement is True or False..." oninput="editQuestion('${q._id}','explanation',this.value)">${escHtml(q.explanation || '')}</textarea>
+
           <!-- Handout Citation Editor -->
           <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:10px;padding-top:8px;border-top:1px dashed #cbd5e1;">
             <div>
@@ -2733,6 +2932,12 @@ function renderQuestionCard(q, idx) {
             ✗ False ${!isTrue ? ' (Correct Answer)' : ''}
           </div>
         </div>
+        ${q.explanation ? `
+          <div class="qz-explanation-row" onclick="toggleEditQuestion('${q._id}')" style="background:#fefce8;border:1px solid #fef08a;border-radius:8px;padding:7px 12px;font-size:12px;color:#854d0e;margin-bottom:10px;display:flex;align-items:flex-start;gap:6px;line-height:1.45;cursor:pointer;" title="Click to edit explanation">
+            <span style="font-size:13px;flex-shrink:0;">💡</span>
+            <div><strong>Why it's ${isTrue ? 'True' : 'False'}:</strong> ${escHtml(q.explanation)}</div>
+          </div>
+        ` : ''}
       `;
     } else if (q.type === 'identification') {
       body = `

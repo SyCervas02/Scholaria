@@ -375,13 +375,16 @@ function buildAnnouncementsPage() {
   if (ancArchiveView === 'drafts') currentList = draftAnnouncements;
   else if (ancArchiveView === 'archived') currentList = archivedAnnouncements;
 
-  const filtered = ancCategoryFilter === 'all' 
-    ? currentList 
-    : currentList.filter(a => a.category === ancCategoryFilter);
+  const filtered = ancCategoryFilter === 'all'
+    ? currentList
+    : ancCategoryFilter === 'others'
+      ? currentList.filter(a => a.category === 'others' || a.category === 'general')
+      : currentList.filter(a => a.category === ancCategoryFilter);
 
   const emergencyCount = currentList.filter(a => a.category === 'emergency').length;
   const academicCount = currentList.filter(a => a.category === 'academic').length;
   const eventCount = currentList.filter(a => a.category === 'event').length;
+  const othersCount = currentList.filter(a => a.category === 'others' || a.category === 'general').length;
 
   const canPost = ROLE === 'admin' || ROLE === 'teacher';
 
@@ -414,6 +417,9 @@ function buildAnnouncementsPage() {
         </button>
         <button class="anc-chip ${ancCategoryFilter === 'event' ? 'active' : ''}" onclick="setAncCategoryFilter('event')">
           🏫 School Events <span class="anc-chip-count">${eventCount}</span>
+        </button>
+        <button class="anc-chip ${ancCategoryFilter === 'others' ? 'active' : ''}" onclick="setAncCategoryFilter('others')">
+          📌 Others <span class="anc-chip-count">${othersCount}</span>
         </button>
       </div>
 
@@ -733,6 +739,21 @@ function openCreateAnnouncementModal() {
     }
     if (importantRadio) importantRadio.checked = true;
     resetAncCategorySelect('academic');
+
+    const allTeachersCb = document.querySelector('input[name="ancAudience"][value="All Teachers"]');
+    if (allTeachersCb) {
+      allTeachersCb.checked = false;
+      allTeachersCb.disabled = true;
+      if (allTeachersCb.closest('.anc-checkbox-label')) {
+        allTeachersCb.closest('.anc-checkbox-label').style.opacity = '0.45';
+        allTeachersCb.closest('.anc-checkbox-label').style.cursor = 'not-allowed';
+      }
+    }
+
+    const allStudentsCb = document.querySelector('input[name="ancAudience"][value="All Students"]');
+    if (allStudentsCb) {
+      allStudentsCb.checked = false;
+    }
   } else {
     if (emergencyOpt) {
       emergencyOpt.disabled = false;
@@ -747,6 +768,15 @@ function openCreateAnnouncementModal() {
       }
     }
     resetAncCategorySelect('emergency');
+    
+    const allTeachersCb = document.querySelector('input[name="ancAudience"][value="All Teachers"]');
+    if (allTeachersCb) {
+      allTeachersCb.disabled = false;
+      if (allTeachersCb.closest('.anc-checkbox-label')) {
+        allTeachersCb.closest('.anc-checkbox-label').style.opacity = '1';
+        allTeachersCb.closest('.anc-checkbox-label').style.cursor = 'pointer';
+      }
+    }
   }
 
   setAncExpiryPreset('24h');
@@ -901,4 +931,175 @@ function publishAnnouncementDraft(id) {
   if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
   renderEmergencyTopBanner();
   if (typeof renderPage === 'function') renderPage('announcements');
+}
+
+/* ── NEWS ALERT POPUP (Auto-show on student dashboard load) ── */
+
+function closeNewsAlertModal() {
+  const modal = document.getElementById('newsAlertModal');
+  if (modal) modal.classList.remove('active');
+  // Remember shown for this session
+  sessionStorage.setItem('scholaria_news_popup_shown', 'true');
+}
+
+function showNewsAlertIfNeeded() {
+  // Only for students, only once per session
+  if (typeof ROLE === 'undefined' || ROLE !== 'student') return;
+  if (sessionStorage.getItem('scholaria_news_popup_shown') === 'true') return;
+
+  const modal = document.getElementById('newsAlertModal');
+  const listEl = document.getElementById('newsAlertList');
+  if (!modal || !listEl) return;
+
+  const all = getStoredAnnouncements();
+  const readIds = getReadAnnouncementIds();
+
+  // Get active, non-draft announcements
+  const active = all.filter(a =>
+    !a.isArchived && a.status !== 'draft' && !a.isDraft &&
+    !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now())
+  ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  // Priority: unread emergency first, then any unread, then latest 3
+  const emergencyUnread = active.filter(a => a.category === 'emergency' && !readIds.has(String(a.id)));
+  const otherUnread    = active.filter(a => a.category !== 'emergency' && !readIds.has(String(a.id)));
+  const toShow = [...emergencyUnread, ...otherUnread].slice(0, 4);
+
+  // If nothing unread at all — skip popup
+  if (!toShow.length) return;
+
+  const catConfig = {
+    emergency: { label: '🚨 Suspension / Emergency', bg: '#fee2e2', color: '#dc2626', icon: '🚨' },
+    academic:  { label: '📚 Academic Update',         bg: '#e0f2fe', color: '#0369a1', icon: '📚' },
+    event:     { label: '🏫 School Event',             bg: '#dcfce7', color: '#15803d', icon: '🏫' },
+    others:    { label: '📌 Others',                   bg: '#ede9fe', color: '#6d28d9', icon: '📌' },
+    general:   { label: '📢 General',                  bg: '#f1f5f9', color: '#475569', icon: '📢' },
+  };
+
+  // Update header if there's an emergency
+  const hasEmergency = emergencyUnread.length > 0;
+  const headerGrad = hasEmergency
+    ? 'background:linear-gradient(135deg,#991b1b 0%,#dc2626 100%)'
+    : 'background:linear-gradient(135deg,#1e40af 0%,#2563eb 100%)';
+  const headerIcon = hasEmergency ? '🚨' : '📰';
+  const headerTitle = hasEmergency ? '⚠️ Class Suspension / Emergency Alert' : 'Latest School News';
+  const headerSub = hasEmergency
+    ? 'Important advisory — please read before proceeding'
+    : 'Recent announcements for you';
+
+  const headerEl = modal.querySelector('[style*="linear-gradient"]');
+  if (headerEl) {
+    headerEl.style.cssText = headerEl.style.cssText.replace(/background:[^;]+/, headerGrad);
+    const iconEl = headerEl.querySelector('[style*="font-size:20px"]');
+    if (iconEl) iconEl.textContent = headerIcon;
+    const titleEls = headerEl.querySelectorAll('div > div');
+    if (titleEls[0]) titleEls[0].textContent = headerTitle;
+    if (titleEls[1]) titleEls[1].textContent = headerSub;
+  }
+
+  listEl.innerHTML = toShow.map(anc => {
+    const cfg = catConfig[anc.category] || catConfig.general;
+    const timeAgo = (() => {
+      const diff = Date.now() - new Date(anc.timestamp).getTime();
+      const days = Math.floor(diff / 86400000);
+      const hrs  = Math.floor(diff / 3600000);
+      const mins = Math.floor(diff / 60000);
+      if (days > 0) return `${days}d ago`;
+      if (hrs > 0)  return `${hrs}h ago`;
+      if (mins > 0) return `${mins}m ago`;
+      return 'Just now';
+    })();
+
+    return `
+      <div onclick="openAnnouncementDetailModal('${anc.id}'); closeNewsAlertModal();"
+        style="display:flex;gap:12px;padding:12px 14px;border-radius:12px;cursor:pointer;
+          border:1.5px solid ${anc.category === 'emergency' ? '#fca5a5' : '#e8f0fe'};
+          background:${anc.category === 'emergency' ? '#fff5f5' : '#f8faff'};
+          ${anc.category === 'emergency' ? 'border-left:4px solid #dc2626;' : ''}
+          transition:all 0.15s;"
+        onmouseover="this.style.transform='translateX(4px)'"
+        onmouseout="this.style.transform=''"
+        title="Click to read full announcement">
+        <div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;
+          background:${cfg.bg};display:flex;align-items:center;justify-content:center;font-size:17px;">${cfg.icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
+            <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;
+              background:${cfg.bg};color:${cfg.color};text-transform:uppercase;letter-spacing:0.3px;">${cfg.label}</span>
+            <span style="font-size:11px;color:#94a3b8;margin-left:auto;">${timeAgo}</span>
+          </div>
+          <div style="font-size:13px;font-weight:800;color:#0f172a;margin-bottom:2px;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${typeof escHtml === 'function' ? escHtml(anc.title) : anc.title}</div>
+          <div style="font-size:12px;color:#64748b;line-height:1.4;
+            display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${typeof escHtml === 'function' ? escHtml(anc.message.replace(/\n/g, ' ')) : anc.message}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Show modal after a short delay so dashboard renders first
+  setTimeout(() => modal.classList.add('active'), 600);
+}
+
+function renderDashboardNewsWidget() {
+  const all = typeof getStoredAnnouncements === "function" ? getStoredAnnouncements() : [];
+  const readIds = typeof getReadAnnouncementIds === "function" ? getReadAnnouncementIds() : new Set();
+  
+  const active = all.filter(a =>
+    !a.isArchived && a.status !== "draft" && !a.isDraft &&
+    !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now())
+  ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 3);
+
+  if (!active.length) {
+    return `<div style="padding:20px;text-align:center;color:var(--text-muted);background:#fff;border-radius:12px;border:1px dashed #cbd5e1;font-size:13px;">No recent news or announcements.</div>`;
+  }
+
+  const catConfig = {
+    emergency: { label: "Suspension", bg: "#fee2e2", color: "#dc2626", icon: "🚨" },
+    academic:  { label: "Academic", bg: "#e0f2fe", color: "#0369a1", icon: "📚" },
+    event:     { label: "Event", bg: "#dcfce7", color: "#15803d", icon: "🏫" },
+    others:    { label: "Others", bg: "#ede9fe", color: "#6d28d9", icon: "📌" },
+    general:   { label: "General", bg: "#f1f5f9", color: "#475569", icon: "📢" },
+  };
+
+  return active.map(anc => {
+    const cfg = catConfig[anc.category] || catConfig.general;
+    const isUnread = !readIds.has(String(anc.id));
+    const timeAgo = (() => {
+      const diff = Date.now() - new Date(anc.timestamp).getTime();
+      const days = Math.floor(diff / 86400000);
+      const hrs  = Math.floor(diff / 3600000);
+      const mins = Math.floor(diff / 60000);
+      if (days > 0) return `${days}d ago`;
+      if (hrs > 0)  return `${hrs}h ago`;
+      if (mins > 0) return `${mins}m ago`;
+      return "Just now";
+    })();
+
+    return `
+      <div onclick="openAnnouncementDetailModal('${anc.id}')"
+        style="display:flex;gap:12px;padding:12px;border-radius:12px;cursor:pointer;margin-bottom:8px;
+          border:1px solid ${anc.category === 'emergency' ? '#fca5a5' : '#e8f0fe'};
+          background:${anc.category === 'emergency' ? '#fff5f5' : '#fff'};
+          ${anc.category === 'emergency' ? 'border-left:4px solid #dc2626;' : ''}
+          ${isUnread ? 'box-shadow:0 2px 8px rgba(37,99,235,0.08);' : ''}
+          transition:all 0.15s;"
+        onmouseover="this.style.transform='translateX(4px)'"
+        onmouseout="this.style.transform=''"
+        title="Click to read full announcement">
+        <div style="width:32px;height:32px;border-radius:10px;flex-shrink:0;
+          background:${cfg.bg};display:flex;align-items:center;justify-content:center;font-size:16px;">${cfg.icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
+            <span style="font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:20px;
+              background:${cfg.bg};color:${cfg.color};text-transform:uppercase;letter-spacing:0.3px;">${cfg.label}</span>
+            <span style="font-size:10px;color:#94a3b8;margin-left:auto;">${timeAgo}</span>
+          </div>
+          <div style="font-size:12.5px;font-weight:${isUnread ? '800' : '600'};color:#0f172a;margin-bottom:2px;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            ${isUnread ? '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ef4444;margin-right:4px;vertical-align:middle;"></span>' : ''}
+            ${typeof escHtml === 'function' ? escHtml(anc.title) : anc.title}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
 }
