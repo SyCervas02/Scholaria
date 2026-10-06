@@ -39,6 +39,9 @@ async function guardSessionAndInit() {
 
   ROLE = profile.role;
   CURRENT_PROFILE = profile;
+  try {
+    db.from('users').update({ last_active_at: new Date().toISOString() }).eq('id', profile.id).then();
+  } catch (_) {}
   initDashboardShell();
 }
 
