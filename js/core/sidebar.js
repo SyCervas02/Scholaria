@@ -2237,7 +2237,7 @@ function teacherPage(page) {
       <div id="coursesWidgetContainer">
         ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
       </div>
-      <div>
+      <div style="margin-top:28px;">
         <div class="section-hdr">
           <h2>Active Quizzes & Assessments</h2>
           <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
@@ -2259,6 +2259,7 @@ function teacherPage(page) {
                 <button class="take-btn" style="padding:6px 12px;font-size:12px;" onclick="openTakeQuizModal('${q.id}')">Preview</button>
                 ${isInter ? `<button class="take-btn" style="padding:6px 12px;font-size:12px;background:linear-gradient(135deg,#0284c7,#8b5cf6);" onclick="openInteractiveQuiz('${q.id}')">🎮 Play</button>` : ''}
                 <button class="foot-btn-secondary" style="padding:6px 12px;font-size:12px;border-color:var(--blue);color:var(--blue);" onclick="setAnalysisQuiz('${q.id}')">📊 Analysis</button>
+                <button class="foot-btn-secondary" style="padding:6px 12px;font-size:12px;border-color:#f59e0b;color:#d97706;background:#fef3c7;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">🏆 Leaderboard</button>
               </div>
             </div>`;
           }).join('')
@@ -2435,6 +2436,9 @@ function teacherPage(page) {
               </button>` : ''}
               <button class="table-act-btn review" onclick="setAnalysisQuiz('${q.id}')" title="View Question Accuracy & Psychometrics">
                 📊 Item Analysis
+              </button>
+              <button class="table-act-btn" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">
+                🏆 Leaderboard
               </button>
 
               ${q.status === 'active' ? `
@@ -3212,7 +3216,11 @@ function renderPage(page) {
   if (page === 'analysis') loadQuizzesFromDB();
   if (page === 'chats') loadChatsPage();
   if (page === 'dashboard') {
-    if (ROLE === 'teacher' || ROLE === 'admin') { loadMaterialsFromDB(); loadQuizzesFromDB(); }
+    if (ROLE === 'teacher' || ROLE === 'admin') {
+      loadMaterialsFromDB();
+      loadQuizzesFromDB();
+      if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
+    }
     if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
     if (ROLE === 'student') { loadMaterialsFromDB(); loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
   }
