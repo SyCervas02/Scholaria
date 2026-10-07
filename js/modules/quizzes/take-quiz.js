@@ -1062,13 +1062,13 @@ function closeClassLeaderboardModal() {
   }
 }
 
-function openClassLeaderboardModalById(quizId) {
+async function openClassLeaderboardModalById(quizId) {
   const all = (typeof customQuizzes !== 'undefined' ? customQuizzes : []);
   const quiz = all.find(q => String(q.id) === String(quizId)) || { id: quizId, title: 'Quiz Assessment' };
-  openClassLeaderboardModal(quiz);
+  await openClassLeaderboardModal(quiz);
 }
 
-function openClassLeaderboardModal(quiz) {
+async function openClassLeaderboardModal(quiz) {
   // STRICTLY FOR TEACHERS & ADMINS (hidden from students)
   if (typeof ROLE !== 'undefined' && ROLE === 'student') return;
 
@@ -1079,75 +1079,97 @@ function openClassLeaderboardModal(quiz) {
   const quizTitle = quiz?.title || 'Class Quiz Assessment';
   const totalQuestions = (quiz?.questions || []).length || 10;
 
-  // Gather all attempts for this quiz
-  const rawAttempts = [
-    ...(typeof classRecAttemptsCache !== 'undefined' ? classRecAttemptsCache : []),
-    ...(typeof myQuizAttempts !== 'undefined' ? myQuizAttempts : [])
-  ].filter(a => String(a.quiz_id) === String(quiz?.id || ''));
+  // Show modal immediately with loading indicator
+  container.innerHTML = `
+    <div style="padding: 40px 32px; text-align: center; background: #ffffff;">
+      <div style="font-size: 32px; margin-bottom: 12px; animation: spin 1s linear infinite;">⏳</div>
+      <h3 style="font-size: 16px; font-weight: 700; color: #1e3a8a; margin: 0 0 6px;">Loading Leaderboard</h3>
+      <p style="font-size: 13px; color: #64748b; margin: 0;">Retrieving real student submissions from database...</p>
+    </div>`;
+  modal.style.display = 'flex';
 
-  // Build ranking items
-  let rankingList = [];
-  const handledStudents = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).filter(u => u.role === 'student');
-
-  if (rawAttempts.length > 0) {
-    const studentAttemptsMap = new Map();
-    rawAttempts.forEach(att => {
-      const sId = String(att.user_id || att.student_id || att.email || 'anon');
-      const score = Number(att.score || 0);
-      const total = Number(att.total_items || totalQuestions);
-      const durationSec = Number(att.time_taken_seconds || att.duration || 90);
-      const existing = studentAttemptsMap.get(sId);
-      if (!existing || score > existing.score || (score === existing.score && durationSec < existing.durationSec)) {
-        const studentObj = handledStudents.find(u => String(u.id) === sId || u.email === att.student_email) || null;
-        const studentName = att.student_name || (studentObj ? (studentObj.full_name || studentObj.name) : 'Student User');
-        studentAttemptsMap.set(sId, {
-          name: studentName,
-          score,
-          total,
-          durationSec
-        });
+  // 1. Fetch live attempts from Supabase for this quiz
+  let liveAttempts = [];
+  if (typeof db !== 'undefined' && db && db.from && quiz?.id) {
+    try {
+      const { data, error } = await db.from('quiz_attempts')
+        .select('*')
+        .eq('quiz_id', quiz.id)
+        .order('submitted_at', { ascending: false });
+      if (!error && Array.isArray(data)) {
+        liveAttempts = data;
       }
-    });
-    rankingList = Array.from(studentAttemptsMap.values());
-  }
-
-  // Realistic peers if not enough attempts recorded yet
-  if (rankingList.length < 5) {
-    const defaultPeers = [
-      { name: 'Alex Rivera', score: totalQuestions, total: totalQuestions, durationSec: 84 },
-      { name: 'Maria Santos', score: totalQuestions, total: totalQuestions, durationSec: 98 },
-      { name: 'Daniel Cruz', score: Math.max(1, totalQuestions - 1), total: totalQuestions, durationSec: 132 },
-      { name: 'Sophia Reyes', score: Math.max(1, totalQuestions - 1), total: totalQuestions, durationSec: 157 },
-      { name: 'James Lim', score: Math.max(1, totalQuestions - 1), total: totalQuestions, durationSec: 174 },
-      { name: 'Isabella Garcia', score: Math.max(1, totalQuestions - 2), total: totalQuestions, durationSec: 201 },
-      { name: 'Matthew Tan', score: Math.max(1, totalQuestions - 2), total: totalQuestions, durationSec: 228 },
-      { name: 'Ella Fernandez', score: Math.max(1, totalQuestions - 3), total: totalQuestions, durationSec: 256 },
-      { name: 'Benjamin Cruz', score: Math.max(1, totalQuestions - 3), total: totalQuestions, durationSec: 292 },
-      { name: 'Chloe Mendoza', score: Math.max(1, totalQuestions - 4), total: totalQuestions, durationSec: 337 }
-    ];
-
-    if (handledStudents.length > 0) {
-      rankingList = handledStudents.slice(0, 10).map((st, idx) => {
-        const sample = defaultPeers[idx] || defaultPeers[0];
-        return {
-          name: st.full_name || st.name || sample.name,
-          score: sample.score,
-          total: sample.total,
-          durationSec: sample.durationSec
-        };
-      });
-    } else {
-      rankingList = defaultPeers;
+    } catch (dbErr) {
+      console.warn('Leaderboard Supabase fetch notice:', dbErr);
     }
   }
 
-  // Sort: Highest score first, then fastest time!
+  // 2. Fetch local storage attempts fallback
+  let localAttempts = [];
+  try {
+    const raw = localStorage.getItem('scholaria_all_attempts_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        localAttempts = parsed.filter(a => String(a.quiz_id) === String(quiz?.id || ''));
+      }
+    }
+  } catch (_) {}
+
+  // 3. Cached in-memory attempts
+  const cachedAttempts = [
+    ...(typeof classRecAttemptsCache !== 'undefined' && Array.isArray(classRecAttemptsCache) ? classRecAttemptsCache : []),
+    ...(typeof myQuizAttempts !== 'undefined' && Array.isArray(myQuizAttempts) ? myQuizAttempts : [])
+  ].filter(a => String(a.quiz_id) === String(quiz?.id || ''));
+
+  // Combine attempts uniquely
+  const attemptMap = new Map();
+  [...liveAttempts, ...localAttempts, ...cachedAttempts].forEach(a => {
+    if (!a) return;
+    const key = a.id || `${a.student_id || a.user_id}_${a.submitted_at || a.created_at || a.score}`;
+    if (!attemptMap.has(key)) attemptMap.set(key, a);
+  });
+  const allAttempts = Array.from(attemptMap.values());
+
+  // 4. Resolve registered students to get official names
+  const handledStudents = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : []).filter(u => u.role === 'student');
+
+  // 5. Aggregate best attempt per student (highest score, tie-breaker: fastest time)
+  const studentBestMap = new Map();
+  allAttempts.forEach(att => {
+    const sId = String(att.student_id || att.user_id || att.email || '').trim();
+    if (!sId) return;
+
+    const score = Number(att.score != null ? att.score : 0);
+    const total = Number(att.total_items || totalQuestions);
+    const durationSec = att.time_taken_seconds != null ? Number(att.time_taken_seconds) : (att.duration != null ? Number(att.duration) : null);
+
+    const studentObj = handledStudents.find(u => String(u.id) === sId || u.email === att.student_email || u.email === att.email) || null;
+    const studentName = att.student_name || (studentObj ? (studentObj.full_name || studentObj.name) : '') || 'Student User';
+
+    const existing = studentBestMap.get(sId);
+    if (!existing) {
+      studentBestMap.set(sId, { id: sId, name: studentName, score, total, durationSec });
+    } else {
+      if (score > existing.score) {
+        studentBestMap.set(sId, { id: sId, name: studentName, score, total, durationSec });
+      } else if (score === existing.score && durationSec != null && (existing.durationSec == null || durationSec < existing.durationSec)) {
+        studentBestMap.set(sId, { id: sId, name: studentName, score, total, durationSec });
+      }
+    }
+  });
+
+  const rankingList = Array.from(studentBestMap.values());
+
+  // Sort: Highest score first, then fastest time
   rankingList.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    return a.durationSec - b.durationSec;
+    if (a.durationSec != null && b.durationSec != null) return a.durationSec - b.durationSec;
+    return 0;
   });
 
   const formatDuration = (sec) => {
+    if (sec == null || isNaN(sec) || sec <= 0) return '—';
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
     return `${m}m ${s < 10 ? '0' : ''}${s}s`;
@@ -1161,7 +1183,7 @@ function openClassLeaderboardModal(quiz) {
   };
 
   const getScorePillStyle = (score, total) => {
-    const pct = (score / total) * 100;
+    const pct = total > 0 ? (score / total) * 100 : 0;
     if (pct >= 90) return 'background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;';
     if (pct >= 70) return 'background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd;';
     if (pct >= 50) return 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a;';
@@ -1170,37 +1192,7 @@ function openClassLeaderboardModal(quiz) {
 
   const avatarColors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6'];
 
-  container.innerHTML = `
-  <div style="padding: 28px 32px; background: #ffffff; position: relative;">
-    <!-- Top Bar with Teacher Badge & Close Button -->
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px;">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="display: inline-flex; align-items: center; gap: 6px; background: #eff6ff; color: #1d4ed8; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bfdbfe;">
-          ⚡ Teacher Portal • Full Class Record
-        </span>
-      </div>
-
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <div style="display: inline-flex; align-items: center; gap: 6px; background: #f0fdf4; color: #15803d; padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bbf7d0; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(quizTitle)}</span>
-        </div>
-        <button onclick="closeClassLeaderboardModal()" style="background: #f1f5f9; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748b; font-size: 16px; font-weight: 700;" title="Close">✕</button>
-      </div>
-    </div>
-
-    <!-- Centered Trophy & Title -->
-    <div style="text-align: center; margin-bottom: 24px;">
-      <div style="display: inline-block; position: relative; margin-bottom: 4px;">
-        <div style="font-size: 52px; line-height: 1; filter: drop-shadow(0 4px 12px rgba(245,158,11,0.3));">🏆</div>
-        <div style="position: absolute; top: -6px; right: -14px; font-size: 18px;">✨</div>
-        <div style="position: absolute; bottom: 4px; left: -14px; font-size: 18px;">⭐</div>
-      </div>
-      <h2 style="font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: #1e3a8a; margin: 4px 0 6px 0; letter-spacing: -0.02em;">Class Leaderboard</h2>
-      <p style="font-size: 14px; color: #64748b; font-weight: 600; margin: 0;">Student rankings and completion times on this assessment</p>
-    </div>
-
-    <!-- Table Container -->
+  const tableOrEmptyHtml = rankingList.length > 0 ? `
     <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 16px; max-height: 440px; overflow-y: auto;">
       <table style="width: 100%; border-collapse: separate; border-spacing: 0 8px; min-width: 480px;">
         <thead>
@@ -1260,7 +1252,50 @@ function openClassLeaderboardModal(quiz) {
           }).join('')}
         </tbody>
       </table>
+    </div>` : `
+    <div style="text-align: center; padding: 42px 20px; background: #f8fafc; border-radius: 16px; border: 1.5px dashed #cbd5e1; margin: 10px 0;">
+      <div style="font-size: 40px; margin-bottom: 8px;">📝</div>
+      <h3 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 6px;">No Submissions Recorded Yet</h3>
+      <p style="font-size: 13.5px; color: #64748b; max-width: 400px; margin: 0 auto; line-height: 1.5;">
+        None of your enrolled students have completed this quiz yet. Rankings and completion times will automatically appear here once students submit their answers.
+      </p>
+    </div>`;
+
+  container.innerHTML = `
+  <div style="padding: 28px 32px; background: #ffffff; position: relative;">
+    <!-- Top Bar with Teacher Badge & Close Button -->
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="display: inline-flex; align-items: center; gap: 6px; background: #eff6ff; color: #1d4ed8; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bfdbfe;">
+          ⚡ Teacher Portal • Real Student Records
+        </span>
+        <span style="display: inline-flex; align-items: center; gap: 4px; background: #f1f5f9; color: #475569; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 700;">
+          ${rankingList.length} ${rankingList.length === 1 ? 'Student' : 'Students'} Completed
+        </span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="display: inline-flex; align-items: center; gap: 6px; background: #f0fdf4; color: #15803d; padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bbf7d0; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(quizTitle)}</span>
+        </div>
+        <button onclick="closeClassLeaderboardModal()" style="background: #f1f5f9; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748b; font-size: 16px; font-weight: 700;" title="Close">✕</button>
+      </div>
     </div>
+
+    <!-- Centered Trophy & Title -->
+    <div style="text-align: center; margin-bottom: 24px;">
+      <div style="display: inline-block; position: relative; margin-bottom: 4px;">
+        <div style="font-size: 52px; line-height: 1; filter: drop-shadow(0 4px 12px rgba(245,158,11,0.3));">🏆</div>
+        <div style="position: absolute; top: -6px; right: -14px; font-size: 18px;">✨</div>
+        <div style="position: absolute; bottom: 4px; left: -14px; font-size: 18px;">⭐</div>
+      </div>
+      <h2 style="font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: #1e3a8a; margin: 4px 0 6px 0; letter-spacing: -0.02em;">Class Leaderboard</h2>
+      <p style="font-size: 14px; color: #64748b; font-weight: 600; margin: 0;">Verified student rankings and completion times on this assessment</p>
+    </div>
+
+    <!-- Table Container or Empty Notice -->
+    ${tableOrEmptyHtml}
 
     <!-- Action Button -->
     <div style="text-align: center; margin-top: 24px;">
@@ -1269,8 +1304,6 @@ function openClassLeaderboardModal(quiz) {
       </button>
     </div>
   </div>`;
-
-  modal.style.display = 'flex';
 }
 
 if (typeof window !== 'undefined') {
