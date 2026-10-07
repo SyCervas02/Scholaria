@@ -933,26 +933,48 @@ function publishAnnouncementDraft(id) {
   if (typeof renderPage === 'function') renderPage('announcements');
 }
 
-/* ── NEWS ALERT POPUP (Auto-show on student dashboard load) ── */
+/* ── NEWS ALERT POPUP (Persistent single-view until a NEW announcement is posted) ── */
+
+function getSeenNewsAlertIds() {
+  try {
+    const raw = localStorage.getItem('scholaria_news_popup_seen_ids_v1');
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function markNewsAlertsAsSeen(ids) {
+  try {
+    const set = getSeenNewsAlertIds();
+    ids.forEach(id => set.add(String(id)));
+    localStorage.setItem('scholaria_news_popup_seen_ids_v1', JSON.stringify([...set]));
+  } catch (e) {}
+}
 
 function closeNewsAlertModal() {
   const modal = document.getElementById('newsAlertModal');
   if (modal) modal.classList.remove('active');
-  // Remember shown for this session
-  sessionStorage.setItem('scholaria_news_popup_shown', 'true');
+
+  // Mark all active announcements as seen so it will NEVER pop up again until a BRAND NEW announcement is posted!
+  const all = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+  const active = all.filter(a =>
+    !a.isArchived && a.status !== 'draft' && !a.isDraft &&
+    !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now())
+  );
+  markNewsAlertsAsSeen(active.map(a => a.id));
 }
 
 function showNewsAlertIfNeeded() {
-  // Only for students, only once per session
+  // Only for students
   if (typeof ROLE === 'undefined' || ROLE !== 'student') return;
-  if (sessionStorage.getItem('scholaria_news_popup_shown') === 'true') return;
 
   const modal = document.getElementById('newsAlertModal');
   const listEl = document.getElementById('newsAlertList');
   if (!modal || !listEl) return;
 
-  const all = getStoredAnnouncements();
-  const readIds = getReadAnnouncementIds();
+  const all = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+  const seenIds = getSeenNewsAlertIds();
 
   // Get active, non-draft announcements
   const active = all.filter(a =>
@@ -960,12 +982,21 @@ function showNewsAlertIfNeeded() {
     !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now())
   ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-  // Priority: unread emergency first, then any unread, then latest 3
-  const emergencyUnread = active.filter(a => a.category === 'emergency' && !readIds.has(String(a.id)));
-  const otherUnread    = active.filter(a => a.category !== 'emergency' && !readIds.has(String(a.id)));
-  const toShow = [...emergencyUnread, ...otherUnread].slice(0, 4);
+  // If no active announcements exist, never show popup
+  if (!active.length) return;
 
-  // If nothing unread at all — skip popup
+  // Filter for brand-new announcements that the student has NOT seen in the pop-up yet
+  const unseenNew = active.filter(a => !seenIds.has(String(a.id)));
+
+  // If there are NO new announcements, DO NOT SHOW POPUP!
+  // The popup will ONLY trigger if a teacher/admin posted a brand new announcement!
+  if (!unseenNew.length) return;
+
+  // Priority: unseen emergency first, then other unseen announcements
+  const emergencyUnseen = unseenNew.filter(a => a.category === 'emergency');
+  const otherUnseen = unseenNew.filter(a => a.category !== 'emergency');
+  const toShow = [...emergencyUnseen, ...otherUnseen].slice(0, 4);
+
   if (!toShow.length) return;
 
   const catConfig = {
@@ -1037,7 +1068,10 @@ function showNewsAlertIfNeeded() {
   }).join('');
 
   // Show modal after a short delay so dashboard renders first
-  setTimeout(() => modal.classList.add('active'), 600);
+  setTimeout(() => {
+    modal.classList.add('active');
+    markNewsAlertsAsSeen(toShow.map(a => a.id));
+  }, 600);
 }
 
 function renderDashboardNewsWidget() {

@@ -1285,6 +1285,108 @@ button svg {
     width: 100% !important;
   }
 
+  /* ── TEACHER CLASS LEADERBOARD ON MOBILE ── */
+  .leaderboard-card-wrap {
+    padding: 18px 14px !important;
+    border-radius: 18px !important;
+    margin-top: 18px !important;
+  }
+  .leaderboard-card-wrap > div:first-child {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .leaderboard-quiz-select {
+    width: 100% !important;
+    max-width: none !important;
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+  }
+  .leaderboard-card-wrap h2 {
+    font-size: 21px !important;
+  }
+  .leaderboard-card-wrap p {
+    font-size: 12px !important;
+  }
+  .leaderboard-card-wrap table th,
+  .leaderboard-card-wrap table td {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* ── TAKE QUIZ & STANDARD QUIZ MODALS ON MOBILE ── */
+  #takeQuizModal .modal-card,
+  #quizModal .modal-card,
+  .take-quiz-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 96dvh !important;
+    height: 96dvh !important;
+    border-radius: 20px 20px 0 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 0 !important;
+  }
+  #takeQuizModal .modal-body,
+  .take-quiz-body {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 16px 14px 20px 14px !important;
+  }
+  .quiz-option-item,
+  .question-option,
+  .opt-btn {
+    min-height: 48px !important;
+    padding: 12px 14px !important;
+    font-size: 14px !important;
+    border-radius: 12px !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* ── ANNOUNCEMENTS & NEWS ALERT MODAL ON MOBILE ── */
+  #announcementDetailModal .modal-card,
+  #newsAlertModal .modal-card,
+  #createAnnouncementModal .modal-card {
+    max-height: 92dvh !important;
+    border-radius: 20px 20px 0 0 !important;
+    width: 100% !important;
+  }
+  .anc-filter-chips,
+  .chips-scroll-wrap {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 6px !important;
+    padding-bottom: 6px !important;
+  }
+  .anc-filter-chips::-webkit-scrollbar,
+  .chips-scroll-wrap::-webkit-scrollbar {
+    display: none !important;
+  }
+  .anc-filter-chip {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* ── CHAT MESSENGER ON MOBILE ── */
+  .chat-page-wrap,
+  .chat-layout {
+    flex-direction: column !important;
+    height: calc(100dvh - 120px) !important;
+  }
+  .chat-sidebar {
+    width: 100% !important;
+    max-height: 38% !important;
+    border-right: none !important;
+    border-bottom: 1.5px solid var(--blue-light) !important;
+  }
+  .chat-main {
+    flex: 1 !important;
+    width: 100% !important;
+  }
+
   /* Toast Notification */
   .toast,
   #toast {
@@ -1302,5 +1404,11 @@ button svg {
   }
 }
 
-
-
+/* ── FLUID DYNAMIC VIEWPORT HEIGHT SUPPORT FOR ALL PHONES ── */
+@supports (height: 100dvh) {
+  @media (max-width: 900px) {
+    .sidebar {
+      height: 100dvh !important;
+    }
+  }
+}
