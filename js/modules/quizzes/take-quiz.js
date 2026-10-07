@@ -14,7 +14,14 @@ const takeQuizState = {
 
 function buildQuizItems(quiz) {
   const items = [];
-  (quiz?.questions || []).forEach((q, qi) => {
+  let rawQuestions = quiz?.questions || [];
+  if (typeof rawQuestions === 'string') {
+    try { rawQuestions = JSON.parse(rawQuestions); } catch(e) { rawQuestions = []; }
+  }
+  if (!Array.isArray(rawQuestions)) rawQuestions = [];
+
+  rawQuestions.forEach((q, qi) => {
+    if (!q) return;
     const srcFile = q.source_file || q.sourceMaterial || q.source_material || '';
     const srcPage = q.source_page || null;
 
@@ -64,6 +71,17 @@ function buildQuizItems(quiz) {
           sourceFile: srcFile,
           sourcePage: srcPage
         });
+      });
+    } else {
+      items.push({
+        itemId: `q${qi}`,
+        label: q.question || q.label || `Question ${qi + 1}`,
+        type: q.options && q.options.length ? 'multiple_choice' : 'identification',
+        options: Array.isArray(q.options) ? q.options : [],
+        correct: correctVal,
+        explanation: q.explanation || '',
+        sourceFile: srcFile,
+        sourcePage: srcPage
       });
     }
   });
@@ -234,6 +252,22 @@ function openTakeQuizModal(quizId) {
     return; 
   }
 
+  // Prevent students from taking overdue quizzes
+  if (typeof ROLE !== 'undefined' && ROLE === 'student') {
+    const rawDue = quiz.dueDate || quiz.due_date;
+    if (rawDue) {
+      const dueTime = new Date(rawDue).getTime();
+      if (!isNaN(dueTime) && dueTime < Date.now()) {
+        if (typeof showToast === 'function') {
+          showToast('This assessment deadline has passed and is closed for submissions.', 'error');
+        } else {
+          alert('This assessment deadline has passed and is closed for submissions.');
+        }
+        return;
+      }
+    }
+  }
+
   if (quiz.type === 'interactive' || quiz.quiz_type === 'interactive') {
     if (typeof openInteractiveQuiz === 'function') {
       openInteractiveQuiz(quizId);
@@ -272,19 +306,13 @@ function openTakeQuizModal(quizId) {
   }
 }
 
-function openReviewAttempt(quizId) {
+async function openReviewAttempt(quizIdOrAttemptId, optionalAttemptId) {
   clearInterval(takeQuizState.timerInterval);
   const quizList = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
-  const qStr = String(quizId || '').toLowerCase().trim();
-  let quiz = quizList.find(q => String(q.id).toLowerCase().trim() === qStr);
-  if (!quiz && typeof allQuizzes !== 'undefined' && Array.isArray(allQuizzes)) {
-    quiz = allQuizzes.find(q => String(q.id).toLowerCase().trim() === qStr);
-  }
-  if (!quiz) {
-    quiz = quizList.find(q => q.title && String(q.title).toLowerCase().trim() === qStr);
-  }
+  const targetId = String(quizIdOrAttemptId || '').toLowerCase().trim();
+  const targetAttemptId = String(optionalAttemptId || '').toLowerCase().trim();
 
-  // Look for attempt in pool
+  // 1. Gather all attempts in memory & storage
   let attemptsPool = [];
   if (typeof getAllRecordedAttempts === 'function') {
     try { attemptsPool.push(...getAllRecordedAttempts()); } catch(e) {}
@@ -311,29 +339,97 @@ function openReviewAttempt(quizId) {
   const currentStudentId = String(prof.id || prof.school_id || '').toLowerCase().trim();
   const currentStudentName = String(prof.full_name || '').toLowerCase().trim();
 
-  // Filter for matching quiz attempts
-  const matchingAttempts = attemptsPool.filter(a => {
-    if (!a) return false;
-    const aQid = String(a.quiz_id || '').toLowerCase().trim();
-    if (aQid && aQid === qStr) return true;
-    if (quiz && a.quiz_title && quiz.title && String(a.quiz_title).trim().toLowerCase() === String(quiz.title).trim().toLowerCase()) return true;
-    return false;
-  });
+  // 2. Identify the attempt
+  let attempt = null;
 
-  // Prioritize attempt belonging to current student
-  let attempt = matchingAttempts.find(a => {
-    const sid = String(a.student_id || a.studentId || a.user_id || '').toLowerCase().trim();
-    const sname = String(a.student_name || a.studentName || '').toLowerCase().trim();
-    if (currentStudentId && sid === currentStudentId) return true;
-    if (currentStudentName && (sname === currentStudentName || sid === currentStudentName)) return true;
-    return false;
-  }) || matchingAttempts[0] || null;
+  // Case A: specific attemptId was passed
+  if (targetAttemptId) {
+    attempt = attemptsPool.find(a => a && String(a.id || '').toLowerCase().trim() === targetAttemptId);
+  }
 
-  if (!quiz || !attempt) { 
-    if (typeof showToast === 'function') showToast('Attempt not found', 'error'); 
+  // Case B: targetId is itself an attempt ID (e.g. from sidebar recent attempts)
+  if (!attempt && targetId) {
+    attempt = attemptsPool.find(a => a && String(a.id || '').toLowerCase().trim() === targetId);
+  }
+
+  // Case C: targetId is a quiz ID
+  if (!attempt && targetId) {
+    const matching = attemptsPool.filter(a => {
+      if (!a) return false;
+      const aQid = String(a.quiz_id || '').toLowerCase().trim();
+      return aQid && aQid === targetId;
+    });
+    if (matching.length) {
+      attempt = matching.find(a => {
+        const sid = String(a.student_id || a.studentId || a.user_id || '').toLowerCase().trim();
+        const sname = String(a.student_name || a.studentName || '').toLowerCase().trim();
+        if (currentStudentId && sid === currentStudentId) return true;
+        if (currentStudentName && (sname === currentStudentName || sid === currentStudentName)) return true;
+        return false;
+      }) || matching[0];
+    }
+  }
+
+  // Case D: targetId matches quiz title
+  if (!attempt && targetId) {
+    const matchingByTitle = attemptsPool.filter(a => {
+      if (!a || !a.quiz_title) return false;
+      return String(a.quiz_title).toLowerCase().trim() === targetId;
+    });
+    if (matchingByTitle.length) attempt = matchingByTitle[0];
+  }
+
+  // Case E: Try fetching from Supabase directly if still not found
+  if (!attempt && typeof db !== 'undefined' && db && db.from && targetId) {
+    try {
+      const { data } = await db.from('quiz_attempts').select('*').or(`id.eq.${targetId},quiz_id.eq.${targetId}`);
+      if (data && data.length) {
+        attempt = data[0];
+        attemptsPool.push(attempt);
+      }
+    } catch(dbErr) {}
+  }
+
+  // 3. Identify the quiz
+  let quiz = null;
+  const quizTargetId = attempt ? String(attempt.quiz_id || '').toLowerCase().trim() : targetId;
+
+  if (quizTargetId) {
+    quiz = quizList.find(q => String(q.id).toLowerCase().trim() === quizTargetId);
+    if (!quiz && typeof allQuizzes !== 'undefined' && Array.isArray(allQuizzes)) {
+      quiz = allQuizzes.find(q => String(q.id).toLowerCase().trim() === quizTargetId);
+    }
+  }
+  if (!quiz && attempt && attempt.quiz_title) {
+    const tLower = String(attempt.quiz_title).toLowerCase().trim();
+    quiz = quizList.find(q => q.title && String(q.title).toLowerCase().trim() === tLower);
+  }
+
+  // Try fetching quiz from Supabase if not in memory
+  if (!quiz && typeof db !== 'undefined' && db && db.from && quizTargetId) {
+    try {
+      const { data } = await db.from('quizzes').select('*').eq('id', quizTargetId).single();
+      if (data) quiz = data;
+    } catch(qDbErr) {}
+  }
+
+  // Fallback: Reconstruct minimal quiz object from attempt metadata
+  if (!quiz && attempt) {
+    quiz = {
+      id: attempt.quiz_id || targetId,
+      title: attempt.quiz_title || 'Quiz Review',
+      subject: attempt.subject || 'General',
+      strand: attempt.strand || 'General',
+      questions: []
+    };
+  }
+
+  if (!attempt) { 
+    if (typeof showToast === 'function') showToast('Quiz attempt record not found', 'error'); 
     return; 
   }
 
+  // 4. Parse answers safely
   let parsedAnswers = attempt.answers || [];
   if (typeof parsedAnswers === 'string') {
     try { parsedAnswers = JSON.parse(parsedAnswers); } catch(e) { parsedAnswers = []; }
@@ -343,7 +439,23 @@ function openReviewAttempt(quizId) {
   }
   if (!Array.isArray(parsedAnswers)) parsedAnswers = [];
 
-  const items = buildQuizItems(quiz);
+  // 5. Build items and populate from parsed answers if quiz questions are missing
+  let items = buildQuizItems(quiz);
+  if (!items.length && parsedAnswers.length) {
+    parsedAnswers.forEach((ans, idx) => {
+      items.push({
+        itemId: ans.itemId || `q${idx}`,
+        label: ans.label || ans.question || `Question ${idx + 1}`,
+        type: ans.type || (Array.isArray(ans.options) && ans.options.length ? 'multiple_choice' : 'identification'),
+        options: Array.isArray(ans.options) ? ans.options : (ans.given && ans.correct && ans.given !== ans.correct ? [ans.given, ans.correct] : [ans.correct || 'Option A']),
+        correct: ans.correct ?? ans.correctAnswer ?? '',
+        explanation: ans.explanation || '',
+        sourceFile: ans.sourceFile || ans.sourceMaterial || '',
+        sourcePage: ans.sourcePage || null
+      });
+    });
+  }
+
   Object.assign(takeQuizState, { 
     quiz, 
     items, 
@@ -361,6 +473,8 @@ function openReviewAttempt(quizId) {
   }
   renderTakeQuizModal();
 }
+
+window.openReviewAttempt = openReviewAttempt;
 
 function requestCloseTakeQuizModal() {
   if (takeQuizState.reviewMode) {

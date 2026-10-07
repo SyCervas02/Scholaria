@@ -1,17 +1,8 @@
-/* ── SCHOLARIA ANNOUNCEMENTS & EMERGENCY BULLETIN ENGINE ── */
+﻿/* ── SCHOLARIA ANNOUNCEMENTS & EMERGENCY BULLETIN ENGINE ── */
 
 const ANNOUNCEMENTS_STORAGE_KEY = 'scholaria_announcements_v1';
 
-const DEFAULT_HOTLINES = [
-  { id: 'hl_imus_cdrrmo', name: 'Imus Disaster Risk (CDRRMO)', number: '(046) 515-1358', icon: '🚨' },
-  { id: 'hl_imus_bfp', name: 'Imus Bureau of Fire (BFP)', number: '(046) 970-5161', icon: '🚒' },
-  { id: 'hl_imus_pnp', name: 'Imus Police (PNP)', number: '(046) 471-3993', icon: '🚓' },
-  { id: 'hl_imus_hospital', name: 'Medical Center Imus', number: '(046) 471-9487', icon: '🏥' },
-  { id: 'hl_imus_mayor', name: 'Imus City Hall (Mayor)', number: '(046) 471-2732', icon: '🏛️' },
-  { id: 'hl_imus_health', name: 'Imus City Health Center', number: '(046) 471-5560', icon: '🩺' },
-  { id: 'hl_national_911', name: 'National Emergency', number: '911', icon: '🆘' },
-  { id: 'hl_red_cross', name: 'Philippine Red Cross', number: '143', icon: '⛑️' }
-];
+
 
 const DEFAULT_SEED_ANNOUNCEMENTS = [
   {
@@ -396,10 +387,13 @@ function buildAnnouncementsPage() {
         <span style="font-size:12.5px;color:var(--text-muted);">Official advisories, class suspension notices, and City of Imus emergency hotlines</span>
       </div>
       ${canPost ? `
-        <button class="add-btn" onclick="openCreateAnnouncementModal()">
-          ${typeof iconPlus === 'function' ? iconPlus() : ''}
-          Broadcast Announcement
-        </button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          ${ROLE === 'admin' ? `<button class="add-btn" style="background:#475569;border-color:#334155;" onclick="openManageHotlinesModal()">⚙️ Manage Hotlines</button>` : ''}
+          <button class="add-btn" onclick="openCreateAnnouncementModal()">
+            ${typeof iconPlus === 'function' ? iconPlus() : ''}
+            Broadcast Announcement
+          </button>
+        </div>
       ` : ''}
     </div>
 
@@ -836,7 +830,7 @@ function submitCreateAnnouncement(isDraft = false) {
   const selectedHotlines = [];
   const hlCheckboxes = document.querySelectorAll('input[name="ancHotline"]:checked');
   hlCheckboxes.forEach(cb => {
-    const hl = DEFAULT_HOTLINES.find(h => h.id === cb.value);
+    const hl = (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).find(h => h.id === cb.value);
     if (hl) selectedHotlines.push(hl);
   });
 
@@ -868,7 +862,7 @@ function submitCreateAnnouncement(isDraft = false) {
     isArchived: false,
     isDraft: !!isDraft,
     status: isDraft ? 'draft' : 'active',
-    hotlines: selectedHotlines.length ? selectedHotlines : DEFAULT_HOTLINES.slice(0, 4)
+    hotlines: selectedHotlines.length ? selectedHotlines : (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).slice(0, 4)
   };
 
   const all = getStoredAnnouncements();
@@ -1103,3 +1097,13 @@ function renderDashboardNewsWidget() {
       </div>`;
   }).join('');
 }
+
+
+
+
+
+
+
+
+
+

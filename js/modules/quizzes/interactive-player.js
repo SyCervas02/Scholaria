@@ -410,6 +410,22 @@ function openInteractiveQuiz(quizId) {
     return;
   }
 
+  // Prevent students from taking overdue quizzes
+  if (typeof ROLE !== 'undefined' && ROLE === 'student') {
+    const rawDue = quiz.dueDate || quiz.due_date;
+    if (rawDue) {
+      const dueTime = new Date(rawDue).getTime();
+      if (!isNaN(dueTime) && dueTime < Date.now()) {
+        if (typeof showToast === 'function') {
+          showToast('This assessment deadline has passed and is closed for submissions.', 'error');
+        } else {
+          alert('This assessment deadline has passed and is closed for submissions.');
+        }
+        return;
+      }
+    }
+  }
+
   const questions = buildInteractiveQuestions(quiz);
   if (!questions.length) {
     showToast('This quiz has no interactive items available', 'warning');

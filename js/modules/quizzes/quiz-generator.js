@@ -1808,6 +1808,8 @@ async function approveQuiz(id) {
   await loadQuizzesFromDB();
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap && typeof renderApprovalMaterialRows === 'function') wrap.innerHTML = renderApprovalMaterialRows();
 }
 
 async function rejectQuiz(id) {
@@ -1818,6 +1820,8 @@ async function rejectQuiz(id) {
   customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id));
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap && typeof renderApprovalMaterialRows === 'function') wrap.innerHTML = renderApprovalMaterialRows();
 
   if (session && typeof API_BASE !== 'undefined') {
     try {

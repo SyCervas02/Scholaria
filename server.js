@@ -640,6 +640,7 @@ app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
       .upload(storagePath, f.buffer, { contentType: f.mimetype });
     if (uploadErr) {
       console.warn('Storage upload error for file:', safeName, uploadErr.message);
+      continue;
     }
 
     const itemTitle = files.length === 1 ? title.trim() : (f.originalname.replace(/\.[^.]+$/, '') || title.trim());
@@ -723,6 +724,10 @@ app.get('/api/materials/:id/download', async (req, res) => {
     .from('learning-materials')
     .createSignedUrl(material.file_url, 60 * 10);
   if (error) return res.status(500).json({ error: error.message });
+
+  if (req.query.redirect === '1') {
+    return res.redirect(data.signedUrl);
+  }
 
   res.json({ url: data.signedUrl, title: material.title, file_type: material.file_type });
 });
