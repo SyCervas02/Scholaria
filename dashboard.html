@@ -6,20 +6,22 @@
   <title>Scholaria • Dashboard</title>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20005"/>
+  <link rel="stylesheet" href="css/modules/deadlines.css?v=1"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20007"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css"/>
   <link rel="stylesheet" href="css/modules/chat.css?v=20006"/>
   <link rel="stylesheet" href="css/modules/admin.css"/>
   <link rel="stylesheet" href="css/modules/courses.css"/>
   <link rel="stylesheet" href="css/modules/announcements.css"/>
-  <link rel="stylesheet" href="css/modules/interactive-quiz.css"/>
+  <link rel="stylesheet" href="css/modules/interactive-quiz.css?v=20009"/>
 
   <!-- CDN Dependencies -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="css/responsive.css?v=4">
 </head>
 
 <body>
@@ -124,6 +126,7 @@
         </button>
       </div>
     </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
     <main class="main" id="mainContent">
     </main>
@@ -146,6 +149,13 @@
   </div>
 
   <div class="interactive-quiz-overlay" id="interactiveQuizModal"></div>
+
+  <!-- Class Leaderboard Modal (Strictly for Teachers & Admins in Quiz Manager) -->
+  <div class="modal-overlay" id="classLeaderboardModal" style="display: none; z-index: 2500; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(5px); align-items: center; justify-content: center;">
+    <div class="modal-card" style="max-width: 780px; width: 95%; max-height: 94vh; border-radius: 28px; padding: 0; overflow-y: auto; background: #ffffff; border: 1.5px solid #e0f2fe; box-shadow: 0 25px 70px rgba(15, 23, 42, 0.25);">
+      <div id="classLeaderboardModalContent"></div>
+    </div>
+  </div>
 
   <div class="modal-overlay" id="addUserModal">
     <div class="modal-card">
@@ -397,19 +407,8 @@
               <span>📎 Attach Hotlines</span>
             </div>
 
-            <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
-              <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:4px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;">
-                <input type="checkbox" name="ancHotline" value="hl_imus_cdrrmo" checked/> 🚨 CDRRMO (046) 515-1358
-              </label>
-              <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:4px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;">
-                <input type="checkbox" name="ancHotline" value="hl_imus_bfp" checked/> 🚒 BFP (046) 970-5161
-              </label>
-              <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:4px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;">
-                <input type="checkbox" name="ancHotline" value="hl_imus_pnp" checked/> 🚓 PNP (046) 471-3993
-              </label>
-              <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:4px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;">
-                <input type="checkbox" name="ancHotline" value="hl_imus_hospital" checked/> 🏥 Med Center (046) 471-9487
-              </label>
+            <div id="createAncHotlinesContainer" style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
+              <!-- Populated dynamically by hotlines.js -->
             </div>
           </div>
         </div>
@@ -441,43 +440,40 @@
         </button>
       </div>
 
-      <div class="modal-body" style="display:flex;flex-direction:column;gap:10px;padding:20px;max-height:420px;overflow-y:auto;">
-        <a href="tel:0465151358" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
-          <span>🚨 <strong>City Disaster Risk Reduction (CDRRMO Imus)</strong></span>
-          <span class="anc-hotline-num">(046) 515-1358</span>
-        </a>
-        <a href="tel:0469705161" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
-          <span>🚒 <strong>Bureau of Fire Department (BFP Imus)</strong></span>
-          <span class="anc-hotline-num">(046) 970-5161</span>
-        </a>
-        <a href="tel:0464713993" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
-          <span>🚓 <strong>Imus PNP Police Station</strong></span>
-          <span class="anc-hotline-num">(046) 471-3993</span>
-        </a>
-        <a href="tel:0464719487" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
-          <span>🏥 <strong>Medical Center Imus</strong></span>
-          <span class="anc-hotline-num">(046) 471-9487</span>
-        </a>
-        <a href="tel:0464712732" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
-          <span>🏛️ <strong>Imus City Hall (Office of the Mayor)</strong></span>
-          <span class="anc-hotline-num">(046) 471-2732</span>
-        </a>
-        <a href="tel:0464715560" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
-          <span>🩺 <strong>Imus City Health Center</strong></span>
-          <span class="anc-hotline-num">(046) 471-5560</span>
-        </a>
-        <a href="tel:911" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
-          <span>🆘 <strong>National Emergency Hotline</strong></span>
-          <span class="anc-hotline-num">911</span>
-        </a>
-        <a href="tel:143" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;">
-          <span>⛑️ <strong>Philippine Red Cross</strong></span>
-          <span class="anc-hotline-num">143</span>
-        </a>
+      <div id="directoryHotlinesContainer" class="modal-body" style="display:flex;flex-direction:column;gap:10px;padding:20px;max-height:420px;overflow-y:auto;"></div><div class="modal-foot">
+        <button class="pf-save" style="background:#dc2626;" onclick="closeEmergencyHotlinesModal()">Close Directory</button>
+      </div>
+    </div>
+  </div>
+
+    <!-- MANAGE HOTLINES MODAL -->
+  <div class="modal-overlay" id="manageHotlinesModal">
+    <div class="modal-card" style="max-width:540px;">
+      <div class="modal-head" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+        <div>
+          <h3 style="color:#0f172a;display:flex;align-items:center;gap:8px;">⚙️ Manage Hotlines</h3>
+          <span style="font-size:12px;color:#64748b;">Add or remove emergency hotlines attached to announcements</span>
+        </div>
+        <button class="modal-x" onclick="closeManageHotlinesModal()">✕</button>
       </div>
 
-      <div class="modal-foot">
-        <button class="pf-save" style="background:#dc2626;" onclick="closeEmergencyHotlinesModal()">Close Directory</button>
+      <div class="modal-body" style="padding:20px;">
+        <div style="margin-bottom:16px;">
+          <h4 style="font-size:13px;color:#0f172a;margin-bottom:12px;">Add New Hotline</h4>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <input type="text" id="newHlName" class="anc-form-input" placeholder="Full Name (e.g. Med Center)" style="font-size:12px;"/>
+            <input type="text" id="newHlShort" class="anc-form-input" placeholder="Short Name (e.g. Med)" style="font-size:12px;"/>
+            <input type="text" id="newHlNum" class="anc-form-input" placeholder="Display Number (e.g. (046) 123-4567)" style="font-size:12px;"/>
+            <input type="text" id="newHlTel" class="anc-form-input" placeholder="Callable Number (e.g. 0461234567)" style="font-size:12px;"/>
+            <input type="text" id="newHlIcon" class="anc-form-input" placeholder="Icon (e.g. 🚨)" style="font-size:12px;grid-column: span 2;"/>
+          </div>
+          <button onclick="addNewHotline()" style="background:#0284c7;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%;">Add Hotline</button>
+        </div>
+
+        <h4 style="font-size:13px;color:#0f172a;margin-bottom:12px;border-top:1px solid #e2e8f0;padding-top:16px;">Current Hotlines</h4>
+        <div id="adminHotlinesList" style="max-height:240px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:4px;">
+          <!-- Populated by JS -->
+        </div>
       </div>
     </div>
   </div>
@@ -659,25 +655,31 @@
     </div>
   </div>
 
-    <!-- -- NEWS ALERT POPUP MODAL (Auto-shows on student login) -- -->
+  <!-- ── NEWS ALERT POPUP MODAL (Auto-shows on student login) ── -->
   <div class="modal-overlay" id="newsAlertModal" style="z-index:9999;align-items:flex-start;padding-top:60px;">
     <div class="modal-card" style="max-width:560px;border-radius:22px;overflow:hidden;box-shadow:0 24px 64px rgba(15,23,42,0.18);">
+
+      <!-- Header -->
       <div style="background:linear-gradient(135deg,#1e40af 0%,#2563eb 100%);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
         <div style="display:flex;align-items:center;gap:12px;">
-          <div style="width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:20px;">??</div>
+          <div style="width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:20px;">📰</div>
           <div>
             <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:#fff;">Latest School News</div>
             <div style="font-size:12px;color:rgba(255,255,255,0.75);">Recent announcements for you</div>
           </div>
         </div>
-        <button onclick="closeNewsAlertModal()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;" title="Close">?</button>
+        <button onclick="closeNewsAlertModal()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:10px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;" title="Close">✕</button>
       </div>
+
+      <!-- Body: news list -->
       <div id="newsAlertList" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px;max-height:400px;overflow-y:auto;"></div>
+
+      <!-- Footer -->
       <div style="padding:14px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fafcff;">
         <span style="font-size:12px;color:#94a3b8;">Click any item to read full details</span>
         <div style="display:flex;gap:8px;">
-          <button onclick="renderPage('announcements');closeNewsAlertModal();" style="background:#e0f2fe;color:#0284c7;border:none;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">View All ?</button>
-          <button onclick="closeNewsAlertModal()" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">Got it ?</button>
+          <button onclick="renderPage('announcements');closeNewsAlertModal();" style="background:#e0f2fe;color:#0284c7;border:none;border-radius:8px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">View All →</button>
+          <button onclick="closeNewsAlertModal()" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">Got it ✓</button>
         </div>
       </div>
     </div>
@@ -685,18 +687,22 @@
 
   <!-- Modular Scripts -->
   <script src="js/core/ui-helpers.js?v=20005"></script>
-  <script src="js/core/notifications.js?v=20005"></script>
-  <script src="js/core/announcements.js?v=20005"></script>
+  <script src="js/core/notifications.js?v=20010"></script>
+  <script src="js/core/hotlines.js"></script>
+  <script src="js/core/announcements.js?v=20010"></script>
   <script src="js/modules/repository/materials.js?v=20005"></script>
-  <script src="js/modules/quizzes/take-quiz.js?v=20005"></script>
-  <script src="js/modules/quizzes/interactive-player.js?v=20005"></script>
+  <script src="js/modules/quizzes/take-quiz.js?v=20010"></script>
+  <script src="js/modules/quizzes/interactive-player.js?v=20012"></script>
   <script src="js/modules/quizzes/item-analysis.js?v=20005"></script>
   <script src="js/modules/quizzes/quiz-generator.js?v=20005"></script>
   <script src="js/modules/chat/chat.js?v=20005"></script>
-  <script src="js/modules/admin/user-management.js?v=20005"></script>
+  <script src="js/modules/admin/user-management.js?v=20007"></script>
   <script src="js/modules/admin/report-generator.js?v=20005"></script>
   <script src="js/modules/courses.js?v=20005"></script>
-  <script src="js/core/sidebar.js?v=20005"></script>
+  <script src="js/core/sidebar.js?v=20010"></script>
   <script src="js/core/auth.js?v=20005"></script>
 </body>
 </html>
+
+
+

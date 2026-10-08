@@ -1208,12 +1208,28 @@ function applyGeneratedQuestions(list, isDemo) {
     if (obj.type === 'multiple_choice') {
       if (Array.isArray(obj.options)) {
         obj.options = obj.options.map(opt => cleanQuizTerm(String(opt)));
+      }
+      if (obj.multipleAnswers === true || (Array.isArray(obj.answers) && obj.answers.length > 1)) {
+        obj.multipleAnswers = true;
+        const rawAnswers = Array.isArray(obj.answers) ? obj.answers : (typeof obj.answer === 'string' ? obj.answer.split(',').map(s => s.trim()) : []);
+        obj.answers = rawAnswers.map(a => cleanQuizTerm(String(a))).filter(Boolean);
+        const indices = [];
+        obj.answers.forEach(a => {
+          const idx = (obj.options || []).findIndex(o => o.toLowerCase() === a.toLowerCase());
+          if (idx !== -1) indices.push(idx);
+        });
+        obj._answerIndices = indices.length ? indices : [0];
+        obj._answerIdx = obj._answerIndices[0];
+        obj.answer = obj.answers.join(', ');
+      } else {
         if (obj.answer && !obj.options.includes(obj.answer)) {
           const m = obj.options.find(o => o.toLowerCase() === obj.answer.toLowerCase());
           if (m) obj.answer = m;
         }
+        obj._answerIdx = Math.max(0, (obj.options || []).indexOf(obj.answer));
+        obj._answerIndices = [obj._answerIdx];
+        obj.answers = [obj.options[obj._answerIdx] || obj.answer];
       }
-      obj._answerIdx = Math.max(0, (obj.options || []).indexOf(obj.answer));
     }
     if (obj.type === 'true_false') {
       if (!Array.isArray(obj.options) || obj.options.length === 0) obj.options = ['True', 'False'];
@@ -1410,6 +1426,53 @@ function toggleEditQuestion(id, optIdx) {
   }
 }
 
+function isMultiSelectQuestion(q) {
+  if (!q) return false;
+  if (q.multipleAnswers === true) return true;
+  if (Array.isArray(q.answers) && q.answers.length > 1) return true;
+  if (Array.isArray(q._answerIndices) && q._answerIndices.length > 1) return true;
+  return false;
+}
+
+function getQuestionAnswers(q) {
+  if (!q) return [];
+  if (Array.isArray(q.answers) && q.answers.length > 0) {
+    return q.answers.map(a => String(a).trim()).filter(Boolean);
+  }
+  if (Array.isArray(q.answer) && q.answer.length > 0) {
+    return q.answer.map(a => String(a).trim()).filter(Boolean);
+  }
+  if (Array.isArray(q._answerIndices) && q._answerIndices.length > 0 && Array.isArray(q.options)) {
+    return q._answerIndices.map(i => q.options[i]).filter(Boolean).map(a => String(a).trim());
+  }
+  if (typeof q.answer === 'string' && q.answer.trim()) {
+    return [q.answer.trim()];
+  }
+  if (typeof q._answerIdx === 'number' && q.options && q.options[q._answerIdx]) {
+    return [String(q.options[q._answerIdx]).trim()];
+  }
+  return [];
+}
+
+function getQuestionAnswerIndices(q) {
+  if (!q || !Array.isArray(q.options)) return [];
+  if (Array.isArray(q._answerIndices) && q._answerIndices.length > 0) {
+    return [...q._answerIndices];
+  }
+  const ans = getQuestionAnswers(q).map(a => a.toLowerCase());
+  if (ans.length > 0) {
+    const indices = [];
+    q.options.forEach((opt, idx) => {
+      if (ans.includes(String(opt).trim().toLowerCase())) indices.push(idx);
+    });
+    if (indices.length > 0) return indices;
+  }
+  if (typeof q._answerIdx === 'number' && q._answerIdx >= 0 && q._answerIdx < q.options.length) {
+    return [q._answerIdx];
+  }
+  return [0];
+}
+
 function editQuestion(id, field, value) { 
   const q = quizGen.questions.find(q => q._id === id); 
   if (q) q[field] = value; 
@@ -1419,14 +1482,79 @@ function editOption(id, idx, value) {
   const q = quizGen.questions.find(q => q._id === id);
   if (!q || !q.options) return;
   q.options[idx] = value;
-  if (q._answerIdx === idx) q.answer = value;
+  if (isMultiSelectQuestion(q)) {
+    q.answers = (q._answerIndices || []).map(i => q.options[i]).filter(Boolean);
+    q.answer = q.answers.join(', ');
+  } else {
+    if (q._answerIdx === idx) {
+      q.answer = value;
+      q.answers = [value];
+    }
+  }
+}
+
+function toggleMultiSelectMode(qId, isMulti) {
+  const q = quizGen.questions.find(item => item._id === qId);
+  if (!q || q.type !== 'multiple_choice') return;
+  q.multipleAnswers = Boolean(isMulti);
+  if (q.multipleAnswers) {
+    const currentIdxs = getQuestionAnswerIndices(q);
+    q._answerIndices = currentIdxs.length ? currentIdxs : [0];
+    q.answers = q._answerIndices.map(i => q.options[i]).filter(Boolean);
+    q.answer = q.answers.join(', ');
+  } else {
+    const currentIdxs = getQuestionAnswerIndices(q);
+    q._answerIdx = currentIdxs.length ? currentIdxs[0] : 0;
+    q.answer = q.options[q._answerIdx] || '';
+    q.answers = [q.answer];
+    q._answerIndices = [q._answerIdx];
+  }
+  renderQuizModal();
+}
+
+function enableAndEditMultiSelect(qId) {
+  const q = quizGen.questions.find(item => item._id === qId);
+  if (!q || q.type !== 'multiple_choice') return;
+  quizGen.editingId = qId;
+  if (!q.multipleAnswers) {
+    q.multipleAnswers = true;
+    const currentIdxs = getQuestionAnswerIndices(q);
+    q._answerIndices = currentIdxs.length ? currentIdxs : [0];
+    q.answers = q._answerIndices.map(i => q.options[i]).filter(Boolean);
+    q.answer = q.answers.join(', ');
+  }
+  renderQuizModal();
+}
+
+function toggleAnswerIndex(qId, optIdx) {
+  const q = quizGen.questions.find(item => item._id === qId);
+  if (!q || q.type !== 'multiple_choice' || !q.options) return;
+  let indices = getQuestionAnswerIndices(q);
+  if (indices.includes(optIdx)) {
+    if (indices.length <= 1) {
+      showToast('A question must have at least one correct answer', 'warning');
+      return;
+    }
+    indices = indices.filter(i => i !== optIdx);
+  } else {
+    indices.push(optIdx);
+    indices.sort((a, b) => a - b);
+  }
+  q._answerIndices = indices;
+  q._answerIdx = indices[0] || 0;
+  q.answers = indices.map(i => q.options[i]).filter(Boolean);
+  q.answer = q.answers.join(', ');
+  renderQuizModal();
 }
 
 function setAnswerIndex(id, idx) {
   const q = quizGen.questions.find(q => q._id === id);
   if (q && q.options) { 
-    q._answerIdx = idx; 
-    q.answer = q.options[idx]; 
+    q.multipleAnswers = false;
+    q._answerIdx = idx;
+    q._answerIndices = [idx];
+    q.answer = q.options[idx];
+    q.answers = [q.options[idx]];
     renderQuizModal();
   }
 }
@@ -1454,11 +1582,24 @@ function removeOption(qId, optIdx) {
   if (!q || q.type !== 'multiple_choice') return;
   if (q.options.length <= 2) { showToast('Multiple choice items require at least 2 options', 'warning'); return; }
   q.options.splice(optIdx, 1);
-  if (q._answerIdx === optIdx) {
-    q._answerIdx = 0;
-    q.answer = q.options[0];
-  } else if (q._answerIdx > optIdx) {
-    q._answerIdx--;
+  if (isMultiSelectQuestion(q)) {
+    let indices = getQuestionAnswerIndices(q);
+    indices = indices
+      .filter(i => i !== optIdx)
+      .map(i => (i > optIdx ? i - 1 : i));
+    if (indices.length === 0) indices = [0];
+    q._answerIndices = indices;
+    q._answerIdx = indices[0];
+    q.answers = indices.map(i => q.options[i]).filter(Boolean);
+    q.answer = q.answers.join(', ');
+  } else {
+    if (q._answerIdx === optIdx) {
+      q._answerIdx = 0;
+      q.answer = q.options[0];
+      q.answers = [q.options[0]];
+    } else if (q._answerIdx > optIdx) {
+      q._answerIdx--;
+    }
   }
   renderQuizModal();
 }
@@ -1535,9 +1676,19 @@ function validateAllQuizQuestionsBeforeSave() {
           return false;
         }
       }
-      if (!q.answer) {
-        q._answerIdx = 0;
-        q.answer = q.options[0];
+      if (isMultiSelectQuestion(q)) {
+        const correctAnswers = getQuestionAnswers(q);
+        if (correctAnswers.length < 2) {
+          showToast(`Question #${qNum} is set to multi-select: please mark at least 2 choices as correct, or uncheck multi-select`, 'warning');
+          highlightInvalidQuestionCard(q._id, 'question');
+          return false;
+        }
+      } else {
+        if (!q.answer) {
+          q._answerIdx = 0;
+          q.answer = q.options[0];
+          q.answers = [q.options[0]];
+        }
       }
     } else if (q.type === 'true_false') {
       if (!q.question || !q.question.trim()) {
@@ -1808,6 +1959,8 @@ async function approveQuiz(id) {
   await loadQuizzesFromDB();
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap && typeof renderApprovalMaterialRows === 'function') wrap.innerHTML = renderApprovalMaterialRows();
 }
 
 async function rejectQuiz(id) {
@@ -1818,6 +1971,8 @@ async function rejectQuiz(id) {
   customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id));
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap && typeof renderApprovalMaterialRows === 'function') wrap.innerHTML = renderApprovalMaterialRows();
 
   if (session && typeof API_BASE !== 'undefined') {
     try {
@@ -2486,6 +2641,10 @@ function renderQuizModal() {
             </div>
             <span class="cc-hint">choices (2 to 8 supported · Options A through ${String.fromCharCode(64 + Math.min(8, Math.max(2, quizGen.optionsCount || 4)))})</span>
           </div>
+          <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #bfdbfe;display:flex;align-items:center;gap:8px;font-size:12px;color:#1e3a8a;">
+            <span>💡</span>
+            <span><strong>Multiple Correct Answers (Multi-Select):</strong> You can select 2 or more correct answers on any Multiple Choice question in Step 5 (Preview &amp; Edit) by clicking the <strong>☑️ Make Multi-Select</strong> button or toggle!</span>
+          </div>
         </div>
         ` : ''}
 
@@ -2737,8 +2896,9 @@ function renderQuestionCard(q, idx) {
   const qNum = typeof idx === 'number' ? (idx + 1) : '';
   const isEditing = quizGen.editingId === q._id;
 
+  const isMulti = isMultiSelectQuestion(q);
   const tagClass = q.type === 'multiple_choice' ? 'mc' : q.type === 'true_false' ? 'tf' : q.type === 'identification' ? 'id' : 'match';
-  const tagLabel = q.type === 'multiple_choice' ? 'Multiple Choice' : q.type === 'true_false' ? 'True / False' : q.type === 'identification' ? 'Identification' : 'Matching Type';
+  let tagLabel = q.type === 'multiple_choice' ? (isMulti ? 'Multiple Choice · Multi-Select' : 'Multiple Choice') : q.type === 'true_false' ? 'True / False' : q.type === 'identification' ? 'Identification' : 'Matching Type';
 
   const cardLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   const cardColors = ['#22c55e', '#8b5cf6', '#f97316', '#06b6d4', '#ec4899', '#3b82f6', '#14b8a6', '#6366f1'];
@@ -2752,21 +2912,39 @@ function renderQuestionCard(q, idx) {
     // ── INLINE ACTIVE EDITOR MODE ──
     if (q.type === 'multiple_choice') {
       const opts = q.options || [];
+      const correctIndices = getQuestionAnswerIndices(q);
       body = `
         <div class="qz-inline-editor">
           <label class="qr-label">Question Prompt</label>
           <textarea rows="2" data-field="question" oninput="editQuestion('${q._id}','question',this.value)">${escHtml(q.question || '')}</textarea>
           
-          <label class="qr-label" style="margin-top:8px;">Choices &amp; Correct Answer (select radio to mark correct)</label>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
+            <label class="qr-label" style="margin:0;">Choices &amp; Correct Answer ${isMulti ? '(check all that apply)' : '(select radio to mark correct)'}</label>
+            <label class="qz-multiselect-toggle ${isMulti ? 'active' : ''}" title="Enable if question has 2 or more correct answers">
+              <input type="checkbox" ${isMulti ? 'checked' : ''} onchange="toggleMultiSelectMode('${q._id}', this.checked)" style="accent-color:#4338ca;cursor:pointer;">
+              <span>☑️ Multiple Correct Answers</span>
+            </label>
+          </div>
+          ${isMulti ? `
+          <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:6px 12px;margin-bottom:8px;font-size:11.5px;color:#3730a3;display:flex;align-items:center;gap:6px;">
+            <span>ℹ️</span>
+            <span><strong>Multi-select mode is ON:</strong> Check 2 or more green checkboxes below to select the correct answers for this question.</span>
+          </div>
+          ` : ''}
           <div class="qr-options">
-            ${opts.map((opt, i) => `
+            ${opts.map((opt, i) => {
+              const isChecked = correctIndices.includes(i);
+              return `
               <div class="qz-choice-edit-row">
-                <input type="radio" name="ans-${q._id}" ${i === q._answerIdx ? 'checked' : ''} onchange="setAnswerIndex('${q._id}', ${i})" title="Mark as correct answer">
+                ${isMulti
+                  ? `<input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleAnswerIndex('${q._id}', ${i})" title="Mark as correct answer" style="accent-color:#16a34a;width:18px;height:18px;cursor:pointer;flex-shrink:0;">`
+                  : `<input type="radio" name="ans-${q._id}" ${i === q._answerIdx ? 'checked' : ''} onchange="setAnswerIndex('${q._id}', ${i})" title="Mark as correct answer" style="accent-color:#16a34a;cursor:pointer;flex-shrink:0;">`
+                }
                 <span class="qz-choice-letter" style="background:${cardColors[i] || '#64748b'};">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
                 <input type="text" data-field="opt-${i}" value="${escHtml(opt)}" oninput="editOption('${q._id}', ${i}, this.value)" placeholder="Choice ${cardLetters[i] || (i + 1)}">
                 ${opts.length > 2 ? `<button type="button" class="qr-opt-del-btn" title="Remove choice" onclick="removeOption('${q._id}', ${i})">&times;</button>` : ''}
               </div>
-            `).join('')}
+            `;}).join('')}
           </div>
           ${opts.length < 8 ? `
           <div style="margin-top:8px;">
@@ -2892,16 +3070,21 @@ function renderQuestionCard(q, idx) {
     // ── CLEAN DISPLAY VIEW WITH HOVER ELEVATION & CHOICE-LEVEL EDIT PENCIL ──
     if (q.type === 'multiple_choice') {
       const opts = q.options || [];
+      const correctIndices = getQuestionAnswerIndices(q);
+      const correctAnswers = getQuestionAnswers(q).map(a => a.toLowerCase());
       body = `
         <div class="qz-prompt-preview-row" onclick="toggleEditQuestion('${q._id}')" title="Click to edit question prompt">
-          <span style="font-size:13.5px;font-weight:700;color:var(--text-primary);line-height:1.45;">${escHtml(q.question || 'Multiple Choice Question')}</span>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:13.5px;font-weight:700;color:var(--text-primary);line-height:1.45;">${escHtml(q.question || 'Multiple Choice Question')}</span>
+            ${isMulti ? `<span class="sq-multi-badge">☑️ Multi-Select (${correctIndices.length} correct)</span>` : ''}
+          </div>
           <span class="qz-prompt-hover-pencil" title="Edit prompt">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </span>
         </div>
         <div class="qz-choices-display-list">
           ${opts.map((opt, i) => {
-            const isCorrect = (i === q._answerIdx) || (String(opt).trim().toLowerCase() === String(q.answer || '').trim().toLowerCase());
+            const isCorrect = correctIndices.includes(i) || correctAnswers.includes(String(opt).trim().toLowerCase());
             return `
               <div class="qz-choice-preview-row ${isCorrect ? 'is-correct' : ''}" onclick="toggleEditQuestion('${q._id}', ${i})" title="Hover to view · Click or use pencil on right to edit this choice">
                 <span class="qz-choice-letter" style="background:${cardColors[i] || '#64748b'};">${cardLetters[i] || String.fromCharCode(65 + i)}</span>
@@ -3000,6 +3183,11 @@ function renderQuestionCard(q, idx) {
           <span class="qr-type-tag ${tagClass}">${tagLabel}</span>
         </div>
         <div class="qz-card-header-actions">
+          ${q.type === 'multiple_choice' && !isEditing ? `
+          <button type="button" class="qz-card-action-btn" onclick="enableAndEditMultiSelect('${q._id}')" style="background:${isMulti ? '#eef2ff' : '#ffffff'};border-color:${isMulti ? '#a5b4fc' : '#cbd5e1'};color:${isMulti ? '#4338ca' : '#334155'};font-weight:700;" title="Configure 2 or more correct answers">
+            ☑️ ${isMulti ? 'Multi-Select (Active)' : 'Make Multi-Select'}
+          </button>
+          ` : ''}
           <button type="button" class="qz-card-action-btn edit-btn ${isEditing ? 'active' : ''}" onclick="toggleEditQuestion('${q._id}')" title="Edit Question Prompt & Details">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             <span>${isEditing ? 'Done' : 'Edit Question'}</span>

@@ -513,8 +513,11 @@ body {
 .toast.info    { background: var(--blue); }
 
 @media (max-width: 520px) {
-    .card-header { padding: 26px 24px 22px; }
-    .card-body   { padding: 26px 24px 30px; }
+    body { padding: 16px 10px; }
+    .card-wrap { max-width: 100%; }
+    .card { border-radius: 20px; }
+    .card-header { padding: 22px 18px 18px; }
+    .card-body   { padding: 20px 18px 24px; }
     .logo-text h1 { font-size: 15px; }
     .toast { white-space: normal; text-align: center; }
 }

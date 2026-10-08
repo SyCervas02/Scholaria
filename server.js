@@ -6,13 +6,17 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Core middleware ---
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: false
+}));
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || origin === 'null' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
@@ -26,6 +30,12 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+
+// Redirect root to login page
+app.get('/', (req, res) => {
+  res.redirect('/login.html');
+});
+
 app.use(express.static(__dirname));
 
 // Basic rate limiting on the API routes (auth routes skipped so rate limits never block logins)
@@ -165,6 +175,32 @@ function generateTempPassword() {
   let pw = '';
   for (let i = 0; i < 12; i++) pw += chars[Math.floor(Math.random() * chars.length)];
   return pw;
+}
+
+function generateComplexPassword(length = 14) {
+  const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lowercase = 'abcdefghijkmnpqrstuvwxyz';
+  const digits = '23456789';
+  const symbols = '!@#$%^&*()-_=+';
+  const allChars = uppercase + lowercase + digits + symbols;
+
+  let pw = [
+    uppercase[crypto.randomInt(0, uppercase.length)],
+    lowercase[crypto.randomInt(0, lowercase.length)],
+    digits[crypto.randomInt(0, digits.length)],
+    symbols[crypto.randomInt(0, symbols.length)],
+  ];
+
+  for (let i = 4; i < length; i++) {
+    pw.push(allChars[crypto.randomInt(0, allChars.length)]);
+  }
+
+  for (let i = pw.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(0, i + 1);
+    [pw[i], pw[j]] = [pw[j], pw[i]];
+  }
+
+  return pw.join('');
 }
 
 // --- Routes ---
@@ -315,11 +351,17 @@ app.post('/api/admin/create-account', async (req, res) => {
   if (!profile) return;
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can create accounts' });
 
-  const { full_name, role, email, strand, grade_level, section, subjects } = req.body;
+  const { full_name, role, email, strand, grade_level, section, subjects, custom_password } = req.body;
 
   if (!full_name || !full_name.trim()) return res.status(400).json({ error: 'Missing full name' });
   if (!['student', 'teacher', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
-  if (!email || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Missing or invalid email' });
+  
+  if (role !== 'admin' && (!email || !/^\S+@\S+\.\S+$/.test(email))) {
+    return res.status(400).json({ error: 'Missing or invalid email' });
+  }
+  if (role === 'admin' && email && !/^\S+@\S+\.\S+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid recovery email format' });
+  }
 
   let school_id;
   try {
@@ -328,13 +370,26 @@ app.post('/api/admin/create-account', async (req, res) => {
     return res.status(500).json({ error: 'Could not generate School ID: ' + err.message });
   }
 
-  const temp_password = generateTempPassword();
+  // Account login email: if email is provided, use it. If admin without email, generate institutional email:
+  const accountEmail = (email && email.trim())
+    ? email.trim().toLowerCase()
+    : `${school_id.toLowerCase()}@admin.hwa.edu.ph`;
+
+  // Password: use custom_password if provided and strong, otherwise generate strong complex password
+  const temp_password = (custom_password && custom_password.length >= 8)
+    ? custom_password
+    : (role === 'admin' ? generateComplexPassword(14) : generateTempPassword());
 
   const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-    email,
+    email: accountEmail,
     password: temp_password,
     email_confirm: true,
-    user_metadata: { must_reset_password: true }
+    user_metadata: { 
+      full_name: full_name.trim(),
+      role,
+      must_reset_password: true,
+      recovery_email: (email && email.trim()) ? email.trim() : null
+    }
   });
   if (authErr) {
     const msg = /already.*regist/i.test(authErr.message)
@@ -350,7 +405,7 @@ app.post('/api/admin/create-account', async (req, res) => {
       full_name: full_name.trim(),
       school_id,
       role,
-      email,
+      email: accountEmail,
       strand: strand || null,
       grade_level: grade_level || null,
       section: section || null,
@@ -364,7 +419,41 @@ app.post('/api/admin/create-account', async (req, res) => {
     return res.status(500).json({ error: insertErr.message });
   }
 
-  res.json({ school_id, email, temp_password });
+  res.json({ 
+    school_id, 
+    email: accountEmail, 
+    recovery_email: (email && email.trim()) ? email.trim() : null,
+    temp_password,
+    name: full_name.trim()
+  });
+});
+
+app.post('/api/admin/reset-user-password', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can reset passwords' });
+
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'Missing user ID' });
+
+  const { data: targetUser, error: findErr } = await supabaseAdmin
+    .from('users').select('*').eq('id', user_id).single();
+  if (findErr || !targetUser) return res.status(404).json({ error: 'Target user not found' });
+
+  const newTempPassword = generateComplexPassword(14);
+
+  const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
+    password: newTempPassword,
+    user_metadata: { must_reset_password: true }
+  });
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  res.json({
+    success: true,
+    school_id: targetUser.school_id,
+    name: targetUser.full_name,
+    temp_password: newTempPassword
+  });
 });
 
 app.post('/api/auth/demo-login', async (req, res) => {
@@ -551,6 +640,7 @@ app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
       .upload(storagePath, f.buffer, { contentType: f.mimetype });
     if (uploadErr) {
       console.warn('Storage upload error for file:', safeName, uploadErr.message);
+      continue;
     }
 
     const itemTitle = files.length === 1 ? title.trim() : (f.originalname.replace(/\.[^.]+$/, '') || title.trim());
@@ -634,6 +724,10 @@ app.get('/api/materials/:id/download', async (req, res) => {
     .from('learning-materials')
     .createSignedUrl(material.file_url, 60 * 10);
   if (error) return res.status(500).json({ error: error.message });
+
+  if (req.query.redirect === '1') {
+    return res.redirect(data.signedUrl);
+  }
 
   res.json({ url: data.signedUrl, title: material.title, file_type: material.file_type });
 });
@@ -977,10 +1071,29 @@ function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
       if (!Array.isArray(q.options) || q.options.length < 2) return false;
       q.options = q.options.map(o => cleanAnswerTerm(String(o))).filter(o => !isForbiddenFigureLabel(o));
       if (q.options.length < 2) return false;
-      if (!q.options.includes(q.answer)) {
-        const match = q.options.find(o => String(o).trim().toLowerCase() === String(q.answer || '').trim().toLowerCase());
-        if (match) q.answer = match;
-        else q.answer = q.options[0];
+
+      if (q.multipleAnswers === true || (Array.isArray(q.answers) && q.answers.length > 1)) {
+        const rawAnswers = Array.isArray(q.answers) ? q.answers : (typeof q.answer === 'string' ? q.answer.split(',').map(s => s.trim()) : []);
+        const validAnswers = [];
+        rawAnswers.forEach(rawA => {
+          const match = q.options.find(o => o.toLowerCase() === String(rawA).toLowerCase());
+          if (match && !validAnswers.includes(match)) validAnswers.push(match);
+        });
+        if (validAnswers.length >= 2) {
+          q.multipleAnswers = true;
+          q.answers = validAnswers;
+          q.answer = validAnswers.join(', ');
+        } else {
+          q.multipleAnswers = false;
+          q.answer = validAnswers[0] || q.options[0];
+          q.answers = [q.answer];
+        }
+      } else {
+        if (!q.options.includes(q.answer)) {
+          const match = q.options.find(o => String(o).trim().toLowerCase() === String(q.answer || '').trim().toLowerCase());
+          if (match) q.answer = match;
+          else q.answer = q.options[0];
+        }
       }
       return true;
     }
@@ -1556,7 +1669,9 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
 module.exports = app;
 
 if (require.main === module) {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Scholaria server running on port ${PORT}`);
+    console.log(`Access on desktop: http://localhost:${PORT}`);
+    console.log(`Access on mobile (same Wi-Fi): http://<your-computer-ip>:${PORT}`);
   });
 }

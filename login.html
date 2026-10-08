@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -79,7 +79,37 @@
         .portal-nav-right {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
+        }
+        .portal-admin-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: #0f172a;
+            color: #f59e0b;
+            border: 1.5px solid #d97706;
+            padding: 10px 22px;
+            border-radius: 50px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            text-decoration: none;
+        }
+        .portal-admin-btn:hover {
+            background: #1e293b;
+            color: #fbbf24;
+            border-color: #f59e0b;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(217, 119, 6, 0.25);
+        }
+        .portal-admin-btn svg {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
         }
         .portal-login-btn {
             display: inline-flex;
@@ -107,6 +137,23 @@
             width: 16px;
             height: 16px;
             stroke-width: 2.5;
+            flex-shrink: 0;
+        }
+        @media (max-width: 640px) {
+            .portal-header-inner {
+                padding: 0 16px;
+            }
+            .portal-nav-right {
+                gap: 8px;
+            }
+            .portal-admin-btn {
+                padding: 8px 14px;
+                font-size: 12px;
+            }
+            .portal-login-btn {
+                padding: 8px 16px;
+                font-size: 12px;
+            }
         }
 
         /* â”€â”€ HERO CAROUSEL â”€â”€ */
@@ -401,6 +448,26 @@
         @media (max-width: 640px) {
             .footer-meta {
                 text-align: left;
+            }
+        }
+        @media (max-width: 480px) {
+            .portal-header-inner {
+                padding: 0 14px !important;
+            }
+            .portal-brand-text h1 {
+                font-size: 14px !important;
+            }
+            .portal-brand-text span {
+                font-size: 10px !important;
+            }
+            .login-modal-overlay {
+                padding: 12px 10px !important;
+            }
+            .card-header {
+                padding: 22px 18px 18px !important;
+            }
+            .card-body {
+                padding: 20px 18px 24px !important;
             }
         }
 
@@ -770,6 +837,7 @@
         .toast.info    { background: #2563eb; border: 1px solid #3b82f6; }
         .toast-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
     </style>
+  <link rel="stylesheet" href="css/responsive.css?v=4">
 </head>
 <body>
 
@@ -784,6 +852,12 @@
         </div>
       </a>
       <div class="portal-nav-right">
+        <a href="admin-login.html" class="portal-admin-btn" title="Access School Administrator Portal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          Admin Login
+        </a>
         <button class="portal-login-btn" onclick="openLoginModal()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
           Log in
@@ -954,6 +1028,12 @@
                     </button>
 
                 </div>
+                <div style="margin-top:14px;padding:12px;text-align:center;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
+                    <a href="admin-login.html" style="color:#0f172a;font-weight:700;font-size:12.5px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" style="width:14px;height:14px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        School Administrator? Go to Admin Portal &rarr;
+                    </a>
+                </div>
             </div>
 
             <!-- STEP 2: LOGIN FORM -->
@@ -1025,7 +1105,18 @@
     const SUPABASE_URL  = 'https://qxpsbewbgdwkermxeeso.supabase.co';
     const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cHNiZXdiZ2R3a2VybXhlZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDgzMTgsImV4cCI6MjA5ODI4NDMxOH0.cmG-pVotNZ5KI81_8XsUN5AL5vNVYOPFy8oHegz6cvg';
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { storage: window.sessionStorage } });
-    const API_BASE = 'http://localhost:3001';
+    const API_BASE = (function() {
+      if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+        const proto = window.location.protocol;
+        const host = window.location.hostname;
+        const port = window.location.port;
+        if (port === '3001') {
+          return window.location.origin;
+        }
+        return `${proto}//${host}:3001`;
+      }
+      return 'http://localhost:3001';
+    })();
 
     let currentRole = null;
     let currentView = 'roleView';
