@@ -1,4 +1,4 @@
-﻿/* ── SCHOLARIA ANNOUNCEMENTS & EMERGENCY BULLETIN ENGINE ── */
+/* ── SCHOLARIA ANNOUNCEMENTS & EMERGENCY BULLETIN ENGINE ── */
 
 const ANNOUNCEMENTS_STORAGE_KEY = 'scholaria_announcements_v1';
 
@@ -149,7 +149,12 @@ function reuseAnnouncement(id) {
 
   if (anc.priority) {
     const prioRadio = document.querySelector(`input[name="ancPriority"][value="${anc.priority}"]`);
-    if (prioRadio && !prioRadio.disabled) prioRadio.checked = true;
+    if (prioRadio && !prioRadio.disabled && (ROLE !== 'teacher' || anc.priority !== 'critical')) {
+      prioRadio.checked = true;
+    } else {
+      const fallbackRadio = document.querySelector('input[name="ancPriority"][value="important"]');
+      if (fallbackRadio) fallbackRadio.checked = true;
+    }
   }
 
   const audCheckboxes = document.querySelectorAll('input[name="ancAudience"]');
@@ -726,9 +731,9 @@ function openCreateAnnouncementModal() {
     }
     if (criticalRadio) {
       criticalRadio.disabled = true;
+      criticalRadio.checked = false;
       if (criticalRadio.closest('.anc-radio-label')) {
-        criticalRadio.closest('.anc-radio-label').style.opacity = '0.45';
-        criticalRadio.closest('.anc-radio-label').style.cursor = 'not-allowed';
+        criticalRadio.closest('.anc-radio-label').style.display = 'none';
       }
     }
     if (importantRadio) importantRadio.checked = true;
@@ -757,6 +762,7 @@ function openCreateAnnouncementModal() {
       criticalRadio.disabled = false;
       criticalRadio.checked = true;
       if (criticalRadio.closest('.anc-radio-label')) {
+        criticalRadio.closest('.anc-radio-label').style.display = '';
         criticalRadio.closest('.anc-radio-label').style.opacity = '1';
         criticalRadio.closest('.anc-radio-label').style.cursor = 'pointer';
       }
@@ -852,7 +858,9 @@ function submitCreateAnnouncement(isDraft = false) {
     title: titleInput.value.trim(),
     category: categoryValue,
     customCategory: customCategoryName,
-    priority: priorityInput ? priorityInput.value : 'normal',
+    priority: (ROLE === 'teacher' && priorityInput && priorityInput.value === 'critical')
+      ? 'important'
+      : (priorityInput ? priorityInput.value : 'normal'),
     audience: selectedAudience.length ? selectedAudience : ['All Students', 'All Teachers'],
     message: msgInput.value.trim(),
     authorName: CURRENT_PROFILE ? CURRENT_PROFILE.full_name : 'School Administration',

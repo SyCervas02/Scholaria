@@ -236,39 +236,44 @@
 .notif-view-all:hover { color: var(--gold); }
 
 /* ── NOTIFICATIONS MODULE & ACTIVITY LOG PAGE STYLES ── */
-.notif-page-wrap { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.notif-page-wrap { display: flex; flex-direction: column; gap: 14px; width: 100%; }
 
 .notif-action-bar {
-  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
-  background: #ffffff; border: 1.5px solid #e8f0fe; border-radius: 10px; padding: 8px 14px;
-  box-shadow: 0 1px 4px rgba(15,23,42,0.02);
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+  background: #ffffff; border: 1.5px solid #eef2f6; border-radius: 12px; padding: 10px 16px;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.03);
 }
 
-.notif-tab-group { display: flex; gap: 6px; }
+.notif-tab-group { display: flex; gap: 8px; align-items: center; }
 .notif-tab-btn {
-  background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 16px;
-  padding: 4px 12px; font-size: 12px; font-weight: 700; color: #475569;
+  background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 20px;
+  padding: 5px 14px; font-size: 12px; font-weight: 700; color: #475569;
   cursor: pointer; transition: all 0.2s; font-family: inherit;
-  display: flex; align-items: center; gap: 5px;
+  display: flex; align-items: center; gap: 6px;
 }
-.notif-tab-btn:hover { border-color: #0284c7; color: #0284c7; }
-.notif-tab-btn.active { background: #0284c7; border-color: #0284c7; color: #ffffff; }
+.notif-tab-btn:hover { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+.notif-tab-btn.active { background: #2563eb; border-color: #2563eb; color: #ffffff; box-shadow: 0 2px 6px rgba(37,99,235,0.22); }
 
-.notif-btn-count { background: rgba(0,0,0,0.1); padding: 1px 6px; border-radius: 10px; font-size: 10.5px; }
+.notif-btn-count { background: rgba(0,0,0,0.08); padding: 2px 7px; border-radius: 12px; font-size: 10.5px; }
 .notif-tab-btn.active .notif-btn-count { background: rgba(255,255,255,0.25); color: #fff; }
 
-.notif-actions-right { display: flex; gap: 6px; flex-wrap: wrap; }
+.notif-actions-right { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.notif-selected-badge {
+  background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
+  padding: 4px 10px; border-radius: 12px; font-size: 11.5px; font-weight: 700;
+}
 .notif-act-btn {
-  background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 6px;
-  padding: 4px 10px; font-size: 12px; font-weight: 600; color: #334155;
-  cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 5px; font-family: inherit;
+  background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 8px;
+  padding: 6px 12px; font-size: 12px; font-weight: 600; color: #334155;
+  cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; font-family: inherit;
+  white-space: nowrap;
 }
 .notif-act-btn:hover { background: #f0f9ff; border-color: #0284c7; color: #0284c7; }
-.notif-act-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+.notif-act-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
 .notif-act-btn.danger { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
 .notif-act-btn.danger:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
-.notif-act-btn.danger-outline { background: #fff; border-color: #fca5a5; color: #b91c1c; }
-.notif-act-btn.danger-outline:hover { background: #fef2f2; }
+.notif-act-btn.danger-outline { background: #fff; border-color: #e2e8f0; color: #64748b; }
+.notif-act-btn.danger-outline:hover { background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
 
 /* Notifications Table */
 .notif-select-all {
@@ -276,25 +281,34 @@
   padding: 8px 14px; font-size: 12px; color: #475569; cursor: pointer;
   background: #fafcff; border-bottom: 1px solid #f1f5f9; font-weight: 500;
 }
+
 .notif-table-card {
   background: #ffffff; border: 1.5px solid #e8f0fe; border-radius: 12px;
   overflow: hidden; box-shadow: 0 1px 6px rgba(15,23,42,0.03);
 }
+.notif-table-responsive { width: 100%; overflow-x: auto; }
 .notif-table { width: 100%; border-collapse: collapse; text-align: left; }
 .notif-table th {
   background: #0f172a; color: #f8fafc; font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.4px; padding: 8px 12px;
-  border-bottom: 1px solid #1e293b;
+  text-transform: uppercase; letter-spacing: 0.4px; padding: 10px 14px;
+  border-bottom: 1px solid #1e293b; white-space: nowrap;
 }
 .notif-table td {
-  padding: 8px 12px; border-bottom: 1px solid #f1f5f9; font-size: 12.5px; color: #334155; vertical-align: middle;
+  padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 12.5px; color: #334155; vertical-align: middle;
 }
 .notif-table tr:last-child td { border-bottom: none; }
+.notif-table tbody tr { transition: background-color 0.15s ease; }
+.notif-table tbody tr:hover td { background-color: #eef5ff; }
 .notif-table tr.unread-row { background: #f0f6ff; font-weight: 600; }
 .notif-table tr.unread-row td { color: #0f172a; }
-.notif-table tr:hover td { background: #eef5ff; }
 
 /* Table Elements */
+.notif-cell-select { text-align: center; width: 70px; white-space: nowrap; }
+.notif-cell-select input {
+  cursor: pointer; width: 16px; height: 16px; vertical-align: middle;
+}
+.notif-cell-number { font-size: 12px; text-align: center; width: 40px; }
+
 .notif-sender-cell { display: flex; align-items: center; gap: 8px; }
 .notif-sender-avatar {
   width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg, #0284c7, #38bdf8);
@@ -310,13 +324,14 @@
 
 .notif-status-badge {
   display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 10px;
-  font-size: 10.5px; font-weight: 600;
+  font-size: 10.5px; font-weight: 600; white-space: nowrap;
 }
 .notif-status-badge.read { background: #dcfce7; color: #15803d; }
 .notif-status-badge.unread { background: #fee2e2; color: #dc2626; }
 
 .notif-del-row-btn {
   background: none; border: none; cursor: pointer; color: #94a3b8; padding: 3px; border-radius: 4px; transition: 0.2s;
+  display: inline-flex; align-items: center; justify-content: center;
 }
 .notif-del-row-btn:hover { color: #dc2626; background: #fee2e2; }
 .notif-del-row-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }

@@ -398,6 +398,9 @@ function buildNotificationsPage() {
       </div>
 
       <div class="notif-actions-right">
+        ${selectedNotifIds.size > 0 ? `
+          <span class="notif-selected-badge">${selectedNotifIds.size} selected</span>
+        ` : ''}
         <button class="notif-act-btn" onclick="markSelectedNotifsRead()" title="Mark selected as read">
           <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
           Mark as read
@@ -420,62 +423,64 @@ function buildNotificationsPage() {
     <div class="notif-table-card">
       ${filteredList.length ? `
         <label class="notif-select-all"><input type="checkbox" ${allSelected ? 'checked' : ''} onchange="toggleSelectAllNotifs(this.checked)"/> Select all notifications in this view</label>
-        <table class="notif-table" aria-label="Notifications and activity">
-          <thead>
-            <tr>
-              <th style="width:36px;text-align:center;">Select</th>
-              <th style="width:32px;">#</th>
-              <th style="width:160px;">From</th>
-              <th>Subject / Activity</th>
-              <th style="width:130px;">Sent</th>
-              <th style="width:90px;text-align:center;">Read?</th>
-              <th style="width:50px;text-align:center;">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filteredList.map((n, idx) => {
-              const isUnread = !(n.readBy || []).includes(myId);
-              const isSelected = selectedNotifIds.has(n.id);
-              const iconStr = n.type === 'approval' ? '📌' : n.type === 'material' ? '📄' : n.type === 'quiz' ? '🎉' : '📢';
-              const senderAvatar = n.senderAvatar || (n.senderName ? n.senderName.split(' ').map(w => w[0]).join('').slice(0,2) : 'SY');
-              const senderName = n.senderName || 'Academic Instructor';
+        <div class="notif-table-responsive">
+          <table class="notif-table" aria-label="Notifications and activity">
+            <thead>
+              <tr>
+                <th style="width:70px;text-align:center;white-space:nowrap;">Select</th>
+                <th style="width:40px;text-align:center;white-space:nowrap;">#</th>
+                <th style="width:170px;white-space:nowrap;">From</th>
+                <th style="white-space:nowrap;">Subject / Activity</th>
+                <th style="width:140px;white-space:nowrap;">Sent</th>
+                <th style="width:95px;text-align:center;white-space:nowrap;">Read?</th>
+                <th style="width:75px;text-align:center;white-space:nowrap;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredList.map((n, idx) => {
+                const isUnread = !(n.readBy || []).includes(myId);
+                const isSelected = selectedNotifIds.has(n.id);
+                const iconStr = n.type === 'approval' ? '📌' : n.type === 'material' ? '📄' : n.type === 'quiz' ? '🎉' : '📢';
+                const senderAvatar = n.senderAvatar || (n.senderName ? n.senderName.split(' ').map(w => w[0]).join('').slice(0,2) : 'SY');
+                const senderName = n.senderName || 'Academic Instructor';
 
-              return `
-                <tr class="${isUnread ? 'unread-row' : ''}">
-                  <td class="notif-cell-select" style="text-align:center;">
-                    <input type="checkbox" aria-label="Select notification ${idx + 1}" ${isSelected ? 'checked' : ''} onchange="toggleNotifSelection('${n.id}')"/>
-                  </td>
-                  <td class="notif-cell-number"><strong>${idx + 1}</strong></td>
-                  <td class="notif-cell-sender">
-                    <div class="notif-sender-cell">
-                      <div class="notif-sender-avatar">${senderAvatar}</div>
-                      <span class="notif-sender-name">${escHtml(senderName)}</span>
-                    </div>
-                  </td>
-                  <td class="notif-cell-subject">
-                    <div class="notif-subject-cell">
-                      <span class="notif-subject-title">${iconStr} ${escHtml(n.title)}</span>
-                      <span class="notif-subject-msg">${escHtml(n.message)}</span>
-                    </div>
-                  </td>
-                  <td class="notif-cell-sent">
-                    <span class="notif-sent-time">${formatSentDate(n.timestamp)}</span>
-                  </td>
-                  <td class="notif-cell-status" style="text-align:center;">
-                    ${isUnread 
-                      ? '<span class="notif-status-badge unread">❌ Unread</span>' 
-                      : '<span class="notif-status-badge read">✔ Read</span>'}
-                  </td>
-                  <td class="notif-cell-action" style="text-align:center;">
-                    <button class="notif-del-row-btn" onclick="deleteSingleNotif('${n.id}')" title="Delete notification">
-                      <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                    </button>
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
+                return `
+                  <tr class="${isUnread ? 'unread-row' : ''}">
+                    <td class="notif-cell-select" style="text-align:center;">
+                      <input type="checkbox" aria-label="Select notification ${idx + 1}" ${isSelected ? 'checked' : ''} onchange="toggleNotifSelection('${n.id}')"/>
+                    </td>
+                    <td class="notif-cell-number"><strong>${idx + 1}</strong></td>
+                    <td class="notif-cell-sender">
+                      <div class="notif-sender-cell">
+                        <div class="notif-sender-avatar">${senderAvatar}</div>
+                        <span class="notif-sender-name">${escHtml(senderName)}</span>
+                      </div>
+                    </td>
+                    <td class="notif-cell-subject">
+                      <div class="notif-subject-cell">
+                        <span class="notif-subject-title">${iconStr} ${escHtml(n.title)}</span>
+                        <span class="notif-subject-msg">${escHtml(n.message)}</span>
+                      </div>
+                    </td>
+                    <td class="notif-cell-sent">
+                      <span class="notif-sent-time">${formatSentDate(n.timestamp)}</span>
+                    </td>
+                    <td class="notif-cell-status" style="text-align:center;">
+                      ${isUnread 
+                        ? '<span class="notif-status-badge unread">❌ Unread</span>' 
+                        : '<span class="notif-status-badge read">✔ Read</span>'}
+                    </td>
+                    <td class="notif-cell-action" style="text-align:center;">
+                      <button class="notif-del-row-btn" onclick="deleteSingleNotif('${n.id}')" title="Delete notification">
+                        <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
       ` : `
         <div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13.5px;">
           No notifications found in this view.
