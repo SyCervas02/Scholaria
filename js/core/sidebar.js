@@ -299,13 +299,22 @@ async function loadClassRecAttempts(force = true) {
     const combined = [];
     [...crData, ...qaData, ...localCR, ...localAttempts].forEach(item => {
       if (!item || isArtificialSeedAttempt(item)) return;
-      const isDup = combined.some(existing =>
+      const existingIdx = combined.findIndex(existing =>
         (existing.id && item.id && existing.id === item.id) ||
         (String(existing.quiz_id || '').toLowerCase() === String(item.quiz_id || '').toLowerCase() &&
          String(existing.student_id || '').toLowerCase() === String(item.student_id || '').toLowerCase() &&
          String(existing.submitted_at || '') === String(item.submitted_at || ''))
       );
-      if (!isDup) combined.push(item);
+      if (existingIdx === -1) {
+        combined.push(item);
+      } else {
+        const existing = combined[existingIdx];
+        if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
+          combined[existingIdx] = Object.assign({}, existing, item);
+        } else if (!existing.section && item.section) {
+          existing.section = item.section;
+        }
+      }
     });
 
     classRecAttemptsCache = combined;
@@ -347,7 +356,7 @@ function deduplicateQuizAttempts(attemptsList) {
     const sKey = String(item.student_id || item.student_name || '').toLowerCase().trim();
     const scoreVal = Number(item.score !== undefined ? item.score : item.score_percentage || 0);
 
-    const isDuplicate = result.some(existing => {
+    const existingIdx = result.findIndex(existing => {
       if (existing.id && item.id && existing.id === item.id) return true;
 
       const exQKey = String(existing.quiz_id || existing.quiz_title || '').toLowerCase().trim();
@@ -360,8 +369,15 @@ function deduplicateQuizAttempts(attemptsList) {
       return false;
     });
 
-    if (!isDuplicate) {
+    if (existingIdx === -1) {
       result.push(item);
+    } else {
+      const existing = result[existingIdx];
+      if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
+        result[existingIdx] = Object.assign({}, existing, item);
+      } else if (!existing.section && item.section) {
+        existing.section = item.section;
+      }
     }
   });
   return result;
@@ -3178,6 +3194,7 @@ function buildChatPage(role) {
       </div>
       <div class="chat-window">
         <div class="cw-header">
+          <button class="cw-back-btn" id="cwBackBtn" title="Back to conversations" aria-label="Back to conversations" onclick="closeConversation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
           <div class="contact-avatar cw-placeholder-avatar" id="cwAvatar">${chatOutlineIcon()}</div>
           <div>
             <div class="cw-name" id="cwName">Your conversations</div>

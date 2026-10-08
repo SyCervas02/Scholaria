@@ -328,12 +328,18 @@ function buildInteractiveQuestions(quiz) {
     const qLesson = q.lesson || defaultLesson;
 
     if (q.type === 'multiple_choice') {
+      const isMulti = q.multipleAnswers === true || (Array.isArray(q.answers) && q.answers.length > 1);
+      const correctAnswers = Array.isArray(q.answers) && q.answers.length > 0
+        ? q.answers
+        : (Array.isArray(q.answer) ? q.answer : [q.answer]);
       items.push({
         id: `mc_${qi}`,
         type: 'multiple_choice',
+        multipleAnswers: isMulti,
         question: q.question,
         options: q.options || [],
         answer: q.answer,
+        answers: correctAnswers,
         explanation: q.explanation || '',
         sourceMaterial: qSource,
         sourceFile: q.source_file || qSource,
@@ -589,7 +595,11 @@ function handleQuestionTimeout() {
   if (!curQ) return;
 
   if (curQ.type === 'multiple_choice' || curQ.type === 'true_false' || curQ.type === 'tf') {
-    submitMultipleChoiceAnswer(null);
+    if (curQ.multipleAnswers) {
+      submitInteractiveMultiChoiceAnswer(true);
+    } else {
+      submitMultipleChoiceAnswer(null);
+    }
   } else if (curQ.type === 'identification') {
     submitIdentificationAnswer('', true);
   } else if (curQ.type === 'matching') {
@@ -688,6 +698,9 @@ function renderCurrentInteractiveQuestion() {
   } else if (q.type === 'true_false' || q.type === 'tf') {
     qTitle = 'True or False';
     qSubtitle = 'Choose whether the statement is true or false.';
+  } else if (q.multipleAnswers) {
+    qTitle = 'Multiple Choice · Select All That Apply';
+    qSubtitle = 'Select all correct options, then click "Submit Selections" below.';
   } else {
     qTitle = 'Multiple Choice';
     qSubtitle = 'Select the correct option below.';
@@ -919,7 +932,7 @@ function submitIdentificationAnswer(val, isTimeout = false) {
   const isCorrect = compareAnswers(given, correct);
 
   if (isCorrect) interactivePlayerState.score++;
-  interactivePlayerState.userResponses[q.id] = { given, correct, isCorrect };
+  interactivePlayerState.userResponses[q.id] = { label: q.question || '', given, correct, isCorrect };
 
   const inputBox = document.querySelector('.iq-id-input-box');
   const inputField = document.getElementById('iqIdAnswerInput');
@@ -1716,10 +1729,12 @@ function usePowerupHint() {
   if (curQ.type === 'multiple_choice') {
     // 50/50 elimination: Remove up to 2 wrong option cards
     const opts = curQ.options || [];
-    const correctAns = String(curQ.answer || '').trim().toLowerCase();
+    const correctAnswers = (Array.isArray(curQ.answers) && curQ.answers.length > 0)
+      ? curQ.answers.map(a => String(a).trim().toLowerCase())
+      : [String(curQ.answer || '').trim().toLowerCase()];
     const wrongIndices = [];
     opts.forEach((opt, idx) => {
-      if (String(opt).trim().toLowerCase() !== correctAns) {
+      if (!correctAnswers.includes(String(opt).trim().toLowerCase())) {
         wrongIndices.push(idx);
       }
     });
@@ -1827,6 +1842,12 @@ function renderMultipleChoiceView(q) {
   const cardClasses = ['card-a', 'card-b', 'card-c', 'card-d', 'card-a', 'card-b'];
 
   const isTf = q.type === 'true_false' || q.type === 'tf';
+  const isMulti = Boolean(q.multipleAnswers || (Array.isArray(q.answers) && q.answers.length > 1));
+
+  if (isMulti) {
+    interactivePlayerState.multiChoiceSelectedIndices = [];
+  }
+
   return `
     <div class="iq-mc-container">
       <div class="iq-mc-question-banner">
@@ -1838,9 +1859,9 @@ function renderMultipleChoiceView(q) {
           const letter = cardLetters[i] || String.fromCharCode(65 + i);
           const cardClass = cardClasses[i % cardClasses.length];
           return `
-            <div class="iq-mc-card ${cardClass}" id="mc_card_${i}" onclick="selectMultipleChoiceCard(${i}, '${escHtml(opt).replace(/'/g, "\\'")}')">
+            <div class="iq-mc-card ${cardClass} ${isMulti ? 'multi-mode' : ''}" id="mc_card_${i}" onclick="${isMulti ? `toggleInteractiveMultiChoiceCard(${i})` : `selectMultipleChoiceCard(${i}, '${escHtml(opt).replace(/'/g, "\\'")}')`}">
               <div class="iq-mc-card-head">
-                <span>${letter}</span>
+                <span id="mc_card_letter_${i}">${letter}</span>
               </div>
               <div class="iq-mc-card-body">
                 ${escHtml(opt)}
@@ -1849,8 +1870,133 @@ function renderMultipleChoiceView(q) {
           `;
         }).join('')}
       </div>
+
+      ${isMulti ? `
+      <div class="iq-multi-submit-wrap" style="margin-top:26px;display:flex;justify-content:center;">
+        <button type="button" class="iq-submit-btn incomplete" id="iqSubmitMultiBtn" onclick="submitInteractiveMultiChoiceAnswer()" style="padding:14px 40px;font-size:16px;font-weight:800;border-radius:50px;display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:0 8px 24px rgba(2,132,199,0.35);transition:all 0.2s cubic-bezier(0.16,1,0.3,1);">
+          <span>✓ Submit Selections</span>
+          <span id="iqMultiSelectedBadge" style="background:rgba(255,255,255,0.25);padding:3px 10px;border-radius:20px;font-size:13px;font-weight:700;">0 selected</span>
+        </button>
+      </div>
+      ` : ''}
     </div>
   `;
+}
+
+function toggleInteractiveMultiChoiceCard(cardIdx) {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  if (!Array.isArray(interactivePlayerState.multiChoiceSelectedIndices)) {
+    interactivePlayerState.multiChoiceSelectedIndices = [];
+  }
+  const idxList = interactivePlayerState.multiChoiceSelectedIndices;
+  const existingPos = idxList.indexOf(cardIdx);
+  const card = document.getElementById(`mc_card_${cardIdx}`);
+  const letterEl = document.getElementById(`mc_card_letter_${cardIdx}`);
+  const cardLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  const baseLetter = cardLetters[cardIdx] || String.fromCharCode(65 + cardIdx);
+
+  if (existingPos >= 0) {
+    idxList.splice(existingPos, 1);
+    if (card) card.classList.remove('selected');
+    if (letterEl) letterEl.innerHTML = baseLetter;
+  } else {
+    idxList.push(cardIdx);
+    if (card) card.classList.add('selected');
+    if (letterEl) letterEl.innerHTML = `✓ ${baseLetter}`;
+  }
+
+  const badge = document.getElementById('iqMultiSelectedBadge');
+  if (badge) {
+    badge.innerText = `${idxList.length} selected`;
+  }
+
+  const btn = document.getElementById('iqSubmitMultiBtn');
+  if (btn) {
+    if (idxList.length > 0) {
+      btn.classList.remove('incomplete');
+      btn.classList.add('ready');
+    } else {
+      btn.classList.remove('ready');
+      btn.classList.add('incomplete');
+    }
+  }
+}
+
+function submitInteractiveMultiChoiceAnswer(isTimeout = false) {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
+  if (!q) return;
+
+  const selectedIndices = interactivePlayerState.multiChoiceSelectedIndices || [];
+  if (selectedIndices.length === 0 && !isTimeout) {
+    if (typeof showToast === 'function') {
+      showToast('Please select at least one choice before submitting.', 'warning');
+    }
+    return;
+  }
+
+  interactivePlayerState.isWaitingFeedback = true;
+  clearInterval(interactivePlayerState.timerInterval);
+
+  const selectedOpts = selectedIndices.map(i => q.options[i]).filter(Boolean);
+  const given = selectedOpts.join(', ');
+
+  const correctList = Array.isArray(q.answers) && q.answers.length > 0
+    ? q.answers
+    : (Array.isArray(q.answer) ? q.answer : [q.answer || '']);
+
+  const normSelected = selectedOpts.map(s => String(s).trim().toLowerCase()).sort();
+  const normCorrect = correctList.map(s => String(s).trim().toLowerCase()).sort();
+
+  const isCorrect = normSelected.length === normCorrect.length &&
+    normSelected.every((v, i) => v === normCorrect[i]);
+
+  const correct = correctList.filter(Boolean).join(', ');
+
+  if (isCorrect) interactivePlayerState.score++;
+  interactivePlayerState.userResponses[q.id] = {
+    label: q.question || '',
+    given,
+    correct,
+    isCorrect,
+    multipleAnswers: true
+  };
+
+  // Color code cards
+  const cards = document.querySelectorAll('.iq-mc-card');
+  cards.forEach(c => c.classList.add('disabled'));
+
+  const correctIndices = (q.options || [])
+    .map((opt, idx) => correctList.some(c => String(c).trim().toLowerCase() === String(opt).trim().toLowerCase()) ? idx : -1)
+    .filter(idx => idx !== -1);
+
+  selectedIndices.forEach(idx => {
+    if (cards[idx]) {
+      if (correctIndices.includes(idx)) {
+        cards[idx].classList.add('mc-correct');
+      } else {
+        cards[idx].classList.add('mc-incorrect');
+      }
+    }
+  });
+
+  correctIndices.forEach(idx => {
+    if (cards[idx] && !cards[idx].classList.contains('mc-correct')) {
+      cards[idx].classList.add('mc-correct');
+    }
+  });
+
+  const submitBtn = document.getElementById('iqSubmitMultiBtn');
+  if (submitBtn) submitBtn.disabled = true;
+
+  showAnswerFeedback({
+    isCorrect,
+    correctAnswerText: correct,
+    sourceMaterialText: q.sourceFile || q.sourceMaterial,
+    sourcePageText: q.sourcePage || null,
+    lessonText: q.lesson,
+    explanationText: q.explanation || null
+  });
 }
 
 function selectMultipleChoiceCard(cardIdx, optValue) {
@@ -1872,13 +2018,17 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
   if ((q.type === 'true_false' || q.type === 'tf') && interactivePlayerState.userResponses[q.id]) return;
 
   const given = (val || '').trim();
-  const correct = (q.answer || '').trim();
-  const isCorrect = given.toLowerCase() === correct.toLowerCase();
+  const correctList = Array.isArray(q.answers) && q.answers.length > 0
+    ? q.answers
+    : (Array.isArray(q.answer) ? q.answer : [q.answer || '']);
+  const isCorrect = correctList.some(c => String(c).trim().toLowerCase() === given.toLowerCase());
+  const correct = correctList.filter(Boolean).join(', ');
 
   if (isCorrect) interactivePlayerState.score++;
   const isTf = q.type === 'true_false' || q.type === 'tf';
   const multiplier = isTf && interactivePlayerState.doubleScoreQuestionIndex === interactivePlayerState.currentIndex ? 2 : 1;
   interactivePlayerState.userResponses[q.id] = {
+    label: q.question || '',
     given, correct, isCorrect,
     ...(isTf ? { scoreMultiplier: multiplier, leaderboardPoints: isCorrect ? multiplier : 0 } : {})
   };
@@ -1888,7 +2038,9 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
   const cards = document.querySelectorAll('.iq-mc-card');
   cards.forEach(c => c.classList.add('disabled'));
 
-  const correctIdx = (q.options || []).findIndex(opt => opt.trim().toLowerCase() === correct.toLowerCase());
+  const correctIndices = (q.options || [])
+    .map((opt, idx) => correctList.some(c => String(c).trim().toLowerCase() === String(opt).trim().toLowerCase()) ? idx : -1)
+    .filter(idx => idx !== -1);
 
   if (isCorrect) {
     if (clickedCardIdx != null && cards[clickedCardIdx]) {
@@ -1898,9 +2050,9 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
     if (clickedCardIdx != null && cards[clickedCardIdx]) {
       cards[clickedCardIdx].classList.add('mc-incorrect');
     }
-    if (correctIdx !== -1 && cards[correctIdx]) {
-      cards[correctIdx].classList.add('mc-correct');
-    }
+    correctIndices.forEach(cIdx => {
+      if (cards[cIdx]) cards[cIdx].classList.add('mc-correct');
+    });
   }
 
   showAnswerFeedback({
@@ -2107,15 +2259,17 @@ async function finishInteractiveQuiz() {
           score_percentage: totalItems ? Math.round((score / totalItems) * 100) : 0
         });
 
-        await db.from('quiz_attempts').insert({
-          quiz_id: quiz.id,
-          quiz_title: quiz.title || 'Interactive Quiz',
-          student_id: CURRENT_PROFILE.id,
-          student_name: CURRENT_PROFILE.full_name,
-          score,
-          total_items: totalItems,
-          answers: gradedAnswers
-        });
+        const studentUUID = CURRENT_PROFILE.id || CURRENT_PROFILE.school_id;
+        const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(studentUUID);
+        if (isValidUUID) {
+          await db.from('quiz_attempts').insert({
+            quiz_id: quiz.id,
+            student_id: studentUUID,
+            score,
+            total_items: totalItems,
+            answers: gradedAnswers
+          });
+        }
       }
     } catch (err) {
       console.warn('Interactive quiz attempt sync notice:', err);

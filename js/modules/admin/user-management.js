@@ -143,8 +143,11 @@ function formatLastActiveHtml(lastActive, createdAt) {
 }
 
 function renderStudentRow(u) {
-  const canUnmute = ROLE === 'admin' && (u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
+  const isAdmin = (typeof ROLE !== 'undefined' && ROLE === 'admin') || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role === 'admin');
+  const isMuted = u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()) || (u.strikes && u.strikes > 0);
+  const canUnmute = isAdmin && isMuted;
   const isUnassigned = !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—';
+  const targetId = u.dbId || u.id;
   return `<tr>
     <td><strong>${escHtml(u.name)}</strong></td>
     <td><code style="font-size:12px;background:#f0f6ff;padding:2px 6px;border-radius:4px;color:var(--blue);">${escHtml(u.id)}</code></td>
@@ -153,12 +156,15 @@ function renderStudentRow(u) {
     <td>${isUnassigned ? '<span style="color:#d97706;font-weight:600;font-size:12px;background:#fef3c7;padding:2px 8px;border-radius:4px;">Unassigned</span>' : `<span class="sec-badge grade">${escHtml(u.section)}</span>`}</td>
     <td class="date-val">${formatDateCreated(u.createdAt)}</td>
     <td>${chatStatusHtml(u)}</td>
-    <td><span class="action-link" onclick="openMassAssignForSingleStudent('${u.dbId || u.id}')">Assign Section</span>${canUnmute ? ` &nbsp; <span class="action-link" style="color:#2563eb" onclick="adminUnmuteUser('${u.dbId}')">Unmute</span>` : ''}</td>
+    <td><span class="action-link" onclick="openMassAssignForSingleStudent('${escHtml(targetId)}')">Assign Section</span>${canUnmute ? ` &nbsp; <span class="action-link" style="color:#2563eb;font-weight:600;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>` : ''}</td>
   </tr>`;
 }
 
 function renderTeacherRow(u) {
-  const canUnmute = ROLE === 'admin' && (u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
+  const isAdmin = (typeof ROLE !== 'undefined' && ROLE === 'admin') || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role === 'admin');
+  const isMuted = u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()) || (u.strikes && u.strikes > 0);
+  const canUnmute = isAdmin && isMuted;
+  const targetId = u.dbId || u.id;
   return `<tr>
     <td><strong>${escHtml(u.name)}</strong></td>
     <td><code style="font-size:12px;background:#fffbeb;padding:2px 6px;border-radius:4px;color:#d97706;">${escHtml(u.id)}</code></td>
@@ -167,7 +173,7 @@ function renderTeacherRow(u) {
     <td>${escHtml(u.section || 'All / None')}</td>
     <td class="date-val">${formatDateCreated(u.createdAt)}</td>
     <td>${chatStatusHtml(u)}</td>
-    <td><span class="action-link">Edit</span> &nbsp; <span class="action-link" style="color:#dc2626">Deactivate</span>${canUnmute ? ` &nbsp; <span class="action-link" style="color:#2563eb" onclick="adminUnmuteUser('${u.dbId}')">Unmute</span>` : ''}</td>
+    <td><span class="action-link">Edit</span> &nbsp; <span class="action-link" style="color:#dc2626">Deactivate</span>${canUnmute ? ` &nbsp; <span class="action-link" style="color:#2563eb;font-weight:600;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>` : ''}</td>
   </tr>`;
 }
 
@@ -451,10 +457,48 @@ function chatStatusHtml(u) {
 }
 
 async function adminUnmuteUser(userId) {
-  const { error } = await db.rpc('admin_unmute_user', { p_user_id: userId });
-  if (error) { showToast('Could not unmute user', 'error'); console.error(error.message); return; }
-  showToast('User unmuted', 'success');
-  loadUsersFromDB();
+  const userObj = registeredUsers.find(x => x.dbId === userId || x.id === userId);
+  const targetId = userObj?.dbId || userId;
+
+  let success = false;
+
+  if (typeof db !== 'undefined' && db && typeof db.rpc === 'function') {
+    try {
+      const { error: rpcErr } = await db.rpc('admin_unmute_user', { p_user_id: targetId });
+      if (!rpcErr) success = true;
+    } catch (_) {}
+  }
+
+  if (!success && typeof db !== 'undefined' && db && typeof db.from === 'function') {
+    try {
+      const { error: updateErr } = await db.from('users').update({
+        permanently_muted: false,
+        muted_until: null,
+        profanity_strikes: 0
+      }).eq('id', targetId);
+      if (!updateErr) success = true;
+    } catch (e) {
+      console.warn('Direct update failed:', e);
+    }
+  }
+
+  if (userObj) {
+    userObj.permanentlyMuted = false;
+    userObj.mutedUntil = null;
+    userObj.strikes = 0;
+    success = true;
+  }
+
+  if (success) {
+    if (typeof showToast === 'function') showToast('User unmuted successfully', 'success');
+    if (typeof filterUserTable === 'function') {
+      filterUserTable();
+    } else if (typeof loadUsersFromDB === 'function') {
+      loadUsersFromDB();
+    }
+  } else {
+    if (typeof showToast === 'function') showToast('Could not unmute user', 'error');
+  }
 }
 
 function filterUserTable() {

@@ -424,12 +424,12 @@ function buildNotificationsPage() {
           <thead>
             <tr>
               <th style="width:36px;text-align:center;">Select</th>
-              <th style="width:36px;">#</th>
-              <th style="width:200px;">From</th>
+              <th style="width:32px;">#</th>
+              <th style="width:160px;">From</th>
               <th>Subject / Activity</th>
-              <th style="width:140px;">Sent</th>
-              <th style="width:100px;text-align:center;">Read?</th>
-              <th style="width:60px;text-align:center;">Action</th>
+              <th style="width:130px;">Sent</th>
+              <th style="width:90px;text-align:center;">Read?</th>
+              <th style="width:50px;text-align:center;">Action</th>
             </tr>
           </thead>
           <tbody>

@@ -27,13 +27,29 @@ function buildQuizItems(quiz) {
 
     const correctVal = q.answer || q.correct || q.correctAnswer || q.correct_answer || (typeof q._answerIdx === 'number' && q.options ? q.options[q._answerIdx] : '') || '';
 
+    const isMulti = q.multipleAnswers === true || (Array.isArray(q.answers) && q.answers.length > 1) || (Array.isArray(q.answer) && q.answer.length > 1);
+    let correctAnswersList = [];
+    if (Array.isArray(q.answers) && q.answers.length > 0) {
+      correctAnswersList = q.answers.map(a => String(a).trim()).filter(Boolean);
+    } else if (Array.isArray(q.answer) && q.answer.length > 0) {
+      correctAnswersList = q.answer.map(a => String(a).trim()).filter(Boolean);
+    } else if (Array.isArray(q._answerIndices) && q._answerIndices.length > 0 && Array.isArray(q.options)) {
+      correctAnswersList = q._answerIndices.map(i => q.options[i]).filter(Boolean).map(a => String(a).trim());
+    } else if (typeof q.answer === 'string' && q.answer.includes(',') && isMulti) {
+      correctAnswersList = q.answer.split(',').map(s => s.trim()).filter(Boolean);
+    } else if (correctVal) {
+      correctAnswersList = [String(correctVal).trim()];
+    }
+
     if (q.type === 'multiple_choice') {
       items.push({ 
         itemId: `q${qi}`, 
         label: q.question || q.label || `Question ${qi + 1}`, 
         type: 'multiple_choice', 
+        multipleAnswers: isMulti,
         options: Array.isArray(q.options) ? q.options : [], 
-        correct: correctVal,
+        correct: isMulti ? correctAnswersList : correctVal,
+        correctAnswers: correctAnswersList,
         explanation: q.explanation || '',
         sourceFile: srcFile,
         sourcePage: srcPage
@@ -131,6 +147,9 @@ function compareAnswers(given, correct) {
  */
 function isOptionSelected(opt, optIdx, studentGiven) {
   if (studentGiven == null || studentGiven === '') return false;
+  if (Array.isArray(studentGiven)) {
+    return studentGiven.some(g => isOptionSelected(opt, optIdx, g));
+  }
   const s = String(studentGiven).trim();
   const o = String(opt).trim();
   if (s.toLowerCase() === o.toLowerCase()) return true;
@@ -165,10 +184,13 @@ function isOptionSelected(opt, optIdx, studentGiven) {
 
 /**
  * Checks if a given option is the correct answer according to the answer key,
- * handling option text, letter ('A', 'B'), prefixed, or formatted values.
+ * handling option text, letter ('A', 'B'), prefixed, formatted values, or arrays.
  */
 function isOptionCorrect(opt, optIdx, itemCorrect) {
   if (itemCorrect == null || itemCorrect === '') return false;
+  if (Array.isArray(itemCorrect)) {
+    return itemCorrect.some(c => isOptionCorrect(opt, optIdx, c));
+  }
   const c = String(itemCorrect).trim();
   const o = String(opt).trim();
   if (c.toLowerCase() === o.toLowerCase()) return true;
@@ -199,7 +221,34 @@ function isOptionCorrect(opt, optIdx, itemCorrect) {
 }
 
 function gradeItem(item, given) {
-  if (given == null || given === '') return false;
+  if (given == null || given === '' || (Array.isArray(given) && given.length === 0)) return false;
+
+  const isMulti = item.multipleAnswers || (Array.isArray(item.correct) && item.correct.length > 1) || (Array.isArray(item.correctAnswers) && item.correctAnswers.length > 1);
+
+  if (isMulti) {
+    const correctList = Array.isArray(item.correct) 
+      ? item.correct 
+      : (Array.isArray(item.correctAnswers) ? item.correctAnswers : [item.correct]);
+    
+    const givenList = Array.isArray(given)
+      ? given
+      : (typeof given === 'string' ? given.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+    if (givenList.length !== correctList.length || givenList.length === 0) return false;
+
+    // Every given answer must match one of the correct answers
+    const allGivenAreCorrect = givenList.every(g => 
+      correctList.some(c => compareAnswers(g, c))
+    );
+    if (!allGivenAreCorrect) return false;
+
+    // Every correct answer must be matched by one of the given answers
+    const allCorrectAreSelected = correctList.every(c => 
+      givenList.some(g => compareAnswers(g, c))
+    );
+    return allCorrectAreSelected;
+  }
+
   return compareAnswers(given, item.correct || '');
 }
 
@@ -510,6 +559,12 @@ function closeTakeQuizModal() {
   }
 }
 
+function isItemResponseAnswered(val) {
+  if (val == null) return false;
+  if (Array.isArray(val)) return val.length > 0;
+  return String(val).trim() !== '';
+}
+
 function setTQAnswer(itemId, value) {
   takeQuizState.responses[itemId] = value;
   // Update selected state visually without full re-render
@@ -532,11 +587,53 @@ function setTQAnswer(itemId, value) {
   });
 
   // Update answered count
-  const answeredCount = items.filter(it => responses[it.itemId] != null && String(responses[it.itemId]).trim() !== '').length;
+  const answeredCount = items.filter(it => isItemResponseAnswered(responses[it.itemId])).length;
   const countEl = document.querySelector('.sq-footer-count strong');
   if (countEl) countEl.textContent = `${answeredCount} of ${items.length} answered`;
 
   // Hide warning box immediately when student starts/continues answering
+  const warningBox = document.getElementById('sqWarningBox');
+  if (warningBox) {
+    warningBox.style.display = 'none';
+  }
+}
+
+function toggleTQMultiAnswer(itemId, value) {
+  let current = takeQuizState.responses[itemId];
+  let list = Array.isArray(current) ? [...current] : (current ? [String(current)] : []);
+  const valStr = String(value);
+
+  const existingIdx = list.findIndex(item => String(item).toLowerCase() === valStr.toLowerCase());
+  if (existingIdx !== -1) {
+    list.splice(existingIdx, 1);
+  } else {
+    list.push(valStr);
+  }
+  takeQuizState.responses[itemId] = list;
+
+  const { items, responses } = takeQuizState;
+
+  // Remove unanswered highlight from this card if present
+  const cardEl = document.getElementById(`sq-card-${itemId}`);
+  if (cardEl) {
+    cardEl.classList.remove('sq-card-unanswered');
+  }
+
+  // Update checkbox rows visually for this item
+  document.querySelectorAll(`.sq-opt-row[data-item="${itemId}"]`).forEach(row => {
+    const rowVal = row.getAttribute('data-val');
+    if (list.some(ans => String(ans).toLowerCase() === String(rowVal).toLowerCase())) {
+      row.classList.add('selected');
+    } else {
+      row.classList.remove('selected');
+    }
+  });
+
+  // Update answered count
+  const answeredCount = items.filter(it => isItemResponseAnswered(responses[it.itemId])).length;
+  const countEl = document.querySelector('.sq-footer-count strong');
+  if (countEl) countEl.textContent = `${answeredCount} of ${items.length} answered`;
+
   const warningBox = document.getElementById('sqWarningBox');
   if (warningBox) {
     warningBox.style.display = 'none';
@@ -563,7 +660,7 @@ function renderTakeQuizModal() {
     : `<div class="sq-user-avatar-init">${userInitials}</div>`;
 
   const totalItems = items.length;
-  const answeredCount = items.filter(it => responses[it.itemId] != null && String(responses[it.itemId]).trim() !== '').length;
+  const answeredCount = items.filter(it => isItemResponseAnswered(responses[it.itemId])).length;
   const reviewScore = (typeof takeQuizState.attempt?.score === 'number')
     ? takeQuizState.attempt.score
     : items.reduce((acc, it, idx) => {
@@ -572,8 +669,7 @@ function renderTakeQuizModal() {
                   reviewAnswers[idx];
         if (!ans) return acc;
         const g = ans.given ?? ans.answer ?? ans.studentAnswer ?? ans.user_answer ?? ans.selected ?? '';
-        const c = it.correct || ans.correct || ans.correctAnswer || '';
-        const ok = ans.isCorrect !== undefined ? Boolean(ans.isCorrect) : compareAnswers(g, c);
+        const ok = ans.isCorrect !== undefined ? Boolean(ans.isCorrect) : gradeItem(it, g);
         return acc + (ok ? 1 : 0);
       }, 0);
 
@@ -648,10 +744,13 @@ function renderTakeQuizModal() {
     let inputHtml = '';
 
     if (item.type === 'multiple_choice' || item.type === 'true_false') {
+      const isMulti = Boolean(item.multipleAnswers);
       const optionsList = (item.options || []).map((opt, optIdx) => {
         const isSelected = reviewMode 
           ? isOptionSelected(opt, optIdx, studentGiven)
-          : (String(studentGiven) === String(opt));
+          : (isMulti
+              ? (Array.isArray(studentGiven) && studentGiven.some(g => String(g).toLowerCase() === String(opt).toLowerCase()))
+              : (String(studentGiven) === String(opt)));
 
         const isOptRight = isOptionCorrect(opt, optIdx, itemCorrect);
         const letter = letters[optIdx] || String.fromCharCode(65 + optIdx);
@@ -663,12 +762,12 @@ function renderTakeQuizModal() {
           rowClass += ' disabled';
           if (isSelected) {
             rowClass += ' selected';
-            if (isAnsCorrect) {
+            if (isOptRight) {
               rowClass += ' correct';
               badgeHtml = `<span class="sq-opt-badge correct-badge">✔ Your Answer (Correct)</span>`;
             } else {
               rowClass += ' wrong';
-              badgeHtml = `<span class="sq-opt-badge wrong-badge">✘ Your Answer</span>`;
+              badgeHtml = `<span class="sq-opt-badge wrong-badge">✘ Your Answer (Incorrect)</span>`;
             }
           } else if (isOptRight && allowReviewAnswers) {
             // When teacher allows review answers, highlight the actual correct answer in green
@@ -679,9 +778,18 @@ function renderTakeQuizModal() {
           if (isSelected) rowClass += ' selected';
         }
 
-        const clickAttr = reviewMode ? '' : `onclick="setTQAnswer('${item.itemId}', '${safeEsc(opt).replace(/'/g, "\\'")}')"`; 
+        const clickAttr = reviewMode ? '' : (
+          isMulti
+            ? `onclick="toggleTQMultiAnswer('${item.itemId}', '${safeEsc(opt).replace(/'/g, "\\'")}')"`
+            : `onclick="setTQAnswer('${item.itemId}', '${safeEsc(opt).replace(/'/g, "\\'")}')"`
+        );
+
+        const indicatorHtml = isMulti
+          ? `<div class="sq-opt-checkbox"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>`
+          : `<div class="sq-opt-radio"></div>`;
+
         return `<div class="${rowClass}" data-item="${safeEsc(item.itemId)}" data-val="${safeEsc(opt)}" ${clickAttr}>
-          <div class="sq-opt-radio"></div>
+          ${indicatorHtml}
           <div class="sq-opt-text">${letter}. ${safeEsc(opt)}</div>
           ${badgeHtml}
         </div>`;
@@ -689,14 +797,18 @@ function renderTakeQuizModal() {
 
       let feedbackHtml = '';
       if (reviewMode) {
+        const correctText = Array.isArray(itemCorrect)
+          ? itemCorrect.join(', ')
+          : (Array.isArray(item.correctAnswers) ? item.correctAnswers.join(', ') : String(itemCorrect || ''));
+
         if (isAnsCorrect) {
           feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#dcfce7;color:#166534;border:1px solid #86efac;">
-            ✔ Correct!
+            ✔ Correct!${isMulti ? ' All matching choices selected.' : ''}
           </div>${explanationHtml}`;
         } else {
           if (allowReviewAnswers) {
             feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
-              ✘ Incorrect — Correct answer: <strong>${safeEsc(String(itemCorrect || ''))}</strong>
+              ✘ Incorrect — Correct answer${isMulti ? 's' : ''}: <strong>${safeEsc(correctText)}</strong>
             </div>${explanationHtml}`;
           } else {
             feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
@@ -773,6 +885,7 @@ function renderTakeQuizModal() {
       <div class="sq-qcard-header">
         <span class="sq-qnum">${idx + 1}.</span>
         <span class="sq-qlabel">${safeEsc(item.label)}</span>
+        ${item.multipleAnswers ? `<span class="sq-multi-badge">☑️ Select all that apply</span>` : ''}
         ${cardHeaderStatusBadge}
       </div>
       ${inputHtml}
@@ -866,7 +979,7 @@ async function submitQuizAttempt(isAutoSubmit = false) {
   if (submitting) return;
 
   if (!isAutoSubmit) {
-    const unansweredItems = items.filter(it => responses[it.itemId] == null || String(responses[it.itemId]).trim() === '');
+    const unansweredItems = items.filter(it => !isItemResponseAnswered(responses[it.itemId]));
     if (unansweredItems.length > 0) { 
       // Highlight unanswered question cards
       unansweredItems.forEach(it => {
@@ -903,8 +1016,18 @@ async function submitQuizAttempt(isAutoSubmit = false) {
   renderTakeQuizModal();
 
   const gradedAnswers = items.map(it => {
-    const given = responses[it.itemId] || '';
-    return { itemId: it.itemId, label: it.label, type: it.type, given, correct: it.correct, isCorrect: gradeItem(it, given) };
+    const rawGiven = responses[it.itemId];
+    const given = Array.isArray(rawGiven) ? rawGiven : (rawGiven || '');
+    return { 
+      itemId: it.itemId, 
+      label: it.label, 
+      type: it.type, 
+      multipleAnswers: !!it.multipleAnswers,
+      options: it.options || [],
+      given, 
+      correct: it.correct, 
+      isCorrect: gradeItem(it, given) 
+    };
   });
   const score = gradedAnswers.filter(a => a.isCorrect).length;
   const total = gradedAnswers.length;
@@ -967,20 +1090,12 @@ async function submitQuizAttempt(isAutoSubmit = false) {
       }
 
       try {
-        let { error } = await db.from('quiz_attempts').insert({
-          quiz_id: quiz?.id || '',
-          quiz_title: quiz?.title || 'Quiz',
-          student_id: prof.id || studentId,
-          student_name: studentName,
-          score,
-          total_items: total,
-          answers: gradedAnswers
-        });
-
-        if (error) {
+        const studentUUID = prof.id || studentId;
+        const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(studentUUID);
+        if (isValidUUID) {
           await db.from('quiz_attempts').insert({
             quiz_id: quiz?.id || '',
-            student_id: prof.id || studentId,
+            student_id: studentUUID,
             score,
             total_items: total,
             answers: gradedAnswers
