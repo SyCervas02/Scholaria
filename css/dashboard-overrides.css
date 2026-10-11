@@ -95,7 +95,7 @@
   border: 3.5px solid #fff; box-shadow: 0 4px 14px rgba(0,0,0,0.15);
   background: linear-gradient(135deg, #d97706, #f59e0b);
   display: flex; align-items: center; justify-content: center;
-  font-size: 32px; font-weight: 800; color: #fff; font-family: 'Syne', sans-serif;
+  font-size: 32px; font-weight: 800; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif;
 }
 .profile-avatar-upload-btn {
   position: absolute; bottom: -2px; right: -2px; width: 30px; height: 30px;
@@ -107,7 +107,7 @@
 .profile-avatar-upload-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; }
 
 .profile-hero-info { flex: 1; min-width: 220px; z-index: 1; }
-.profile-hero-name { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 6px; letter-spacing: -0.3px; }
+.profile-hero-name { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 6px; letter-spacing: -0.3px; }
 .profile-hero-tags { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .profile-tag-pill { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 50px; background: rgba(255,255,255,0.2); color: #fff; backdrop-filter: blur(4px); }
 .profile-tag-pill.gold { background: #fef3c7; color: #b45309; }
@@ -129,7 +129,7 @@
   padding: 24px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 16px;
 }
 .profile-card-hdr { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; margin-bottom: 4px; }
-.profile-card-hdr h3 { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px; }
+.profile-card-hdr h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 16px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px; }
 .profile-card-hdr span { font-size: 12px; color: var(--text-muted); }
 
 .pf-field { display: flex; flex-direction: column; gap: 6px; }
@@ -151,7 +151,7 @@
 
 
 .section-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-.section-hdr h2 { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; color: var(--text-primary); }
+.section-hdr h2 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 18px; font-weight: 700; color: var(--text-primary); }
 .add-btn { background: var(--blue); color: #fff; border: none; border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Plus Jakarta Sans', sans-serif; transition: 0.2s; display: flex; align-items: center; gap: 7px; }
 .add-btn svg { width: 14px; height: 14px; stroke: #fff; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .add-btn:hover { background: #d97706; }
@@ -193,7 +193,7 @@
   display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(15,23,42,.35); overflow: hidden;
 }
 .modal-head { padding: 20px 24px; border-bottom: 1.5px solid var(--blue-light); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-shrink: 0; }
-.modal-head h3 { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 700; color: var(--text-primary); }
+.modal-head h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 17px; font-weight: 700; color: var(--text-primary); }
 .modal-head span { font-size: 12px; color: var(--text-muted); margin-top: 3px; display: block; }
 .modal-x { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 6px; border-radius: 8px; transition: .2s; flex-shrink: 0; }
 .modal-x:hover { background: var(--blue-light); color: var(--blue); }

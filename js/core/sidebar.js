@@ -1,3 +1,21 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * SCHOLARIA UNIFIED DASHBOARD SYSTEM (js/core/sidebar.js)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * Encapsulated under the `Dashboard` namespace across 4 distinct domains:
+ *   [SECTION 1] Dashboard.Core    ── Shared Shell, Router, Navigation & Core Modals
+ *   [SECTION 2] Dashboard.Student ── Student / User Portal UI, Progress & Tasks
+ *   [SECTION 3] Dashboard.Teacher ── Teacher Portal UI, Quiz Manager & Class Records
+ *   [SECTION 4] Dashboard.Admin   ── Admin Portal UI, Approvals & DepEd Reports
+ * ═══════════════════════════════════════════════════════════════════════════════
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════════════ */
+/* SECTION 1: MAIN UNIFIED CORE (SHARED SHELL, ROUTER & COMMON MODULES)           */
+/* Encapsulation: Dashboard.Core                                                   */
+/* Contains: Nav Router, Shell Initialization, Profile, Security & Chat Layout    */
+/* ═══════════════════════════════════════════════════════════════════════════════ */
+
 /* ── SIDEBAR, NAVIGATION ROUTER & SHELL INIT ── */
 
 const SIDEBAR = {
@@ -86,581 +104,216 @@ function getPageContent(role, page) {
   return '';
 }
 
-/* ── REAL DATA CLASS RECORD ENGINE ── */
-let classRecSectionFilter = '';
-let classRecStudentFilter = '';
-let classRecExpandedSection = ''; // '' (Section list view) or 'Section A' (Expanded section view)
-let classRecSubView = 'combined'; // 'combined' | 'matrix'
-let classRecAttemptsCache = [];
-let isFetchingClassRecAttempts = false;
+/* ── PAGE ROUTER & POLL TIMER ── */
+let currentPage = 'dashboard';
+let materialsPollTimer = null;
 
-function setClassRecSectionFilter(sec) {
-  classRecSectionFilter = sec;
-  if (typeof renderPage === 'function') renderPage('classrec');
-}
-
-function openExpandedSectionView(sec) {
-  classRecExpandedSection = sec;
-  classRecSectionFilter = sec;
-  if (typeof renderPage === 'function') renderPage('classrec');
-}
-
-function closeExpandedSectionView() {
-  classRecExpandedSection = '';
-  classRecSectionFilter = '';
-  if (typeof renderPage === 'function') renderPage('classrec');
-}
-
-function setClassRecStudentFilter(studKey) {
-  classRecStudentFilter = studKey;
-  if (typeof renderPage === 'function') renderPage('classrec');
-}
-
-function setClassRecSubView(sub) {
-  classRecSubView = sub;
-  if (typeof renderPage === 'function') renderPage('classrec');
-}
-
-let selectedStudentForPanelKey = null;
-
-function openStudentGradePanel(studentKey) {
-  selectedStudentForPanelKey = studentKey;
-  const modal = document.getElementById('studentGradePanel');
-  if (!modal) return;
-
-  const entries = buildRealClassRecordEntries();
-  const studentData = entries.find(e => e.key === studentKey) || {
-    name: studentKey,
-    section: 'Unassigned',
-    strand: 'General',
-    avg: null,
-    quizScores: {},
-    quizzesTakenCount: 0
-  };
-
-  const nameEl = document.getElementById('sgpStudentName');
-  const metaEl = document.getElementById('sgpStudentMeta');
-  const takenEl = document.getElementById('sgpQuizzesTaken');
-  const gradeEl = document.getElementById('sgpOverallGrade');
-  const statusEl = document.getElementById('sgpStatusBadge');
-
-  if (nameEl) nameEl.textContent = studentData.name + "'s Academic Record";
-  if (metaEl) metaEl.textContent = `${studentData.strand} · ${studentData.section} · ${studentData.subject}`;
-
-  const allAttempts = getAllRecordedAttempts();
-  const registeredStud = registeredUsers.find(u => (u.dbId || u.id || u.name) === studentKey) || { name: studentData.name, id: studentKey };
-  const studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, registeredStud)));
-
-  if (takenEl) takenEl.textContent = `${studAttempts.length} quiz${studAttempts.length === 1 ? '' : 'zes'}`;
-  if (gradeEl) gradeEl.textContent = studentData.avg !== null ? `${studentData.avg.toFixed(2)}%` : '—';
-  if (statusEl) {
-    if (studentData.avg === null) {
-      statusEl.textContent = 'No Submissions';
-      statusEl.style.color = 'var(--text-muted)';
-    } else if (studentData.avg >= 88) {
-      statusEl.textContent = 'Excellent Standing';
-      statusEl.style.color = '#059669';
-    } else if (studentData.avg >= 75) {
-      statusEl.textContent = 'Satisfactory';
-      statusEl.style.color = '#2563eb';
-    } else {
-      statusEl.textContent = 'Needs Improvement';
-      statusEl.style.color = '#dc2626';
-    }
-  }
-
-  renderStudentGradePanelContent();
-  modal.classList.add('active');
-}
-
-function closeStudentGradePanel() {
-  const modal = document.getElementById('studentGradePanel');
-  if (modal) modal.classList.remove('active');
-}
-
-function renderStudentGradePanelContent() {
-  const listEl = document.getElementById('sgpQuizzesList');
-  const sortVal = document.getElementById('sgpSortSelect')?.value || 'newest';
-  if (!listEl || !selectedStudentForPanelKey) return;
-
-  const allAttempts = getAllRecordedAttempts();
-  const registeredStud = registeredUsers.find(u => (u.dbId || u.id || u.name) === selectedStudentForPanelKey) || { name: selectedStudentForPanelKey, id: selectedStudentForPanelKey };
-  let studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, registeredStud)));
-
-  if (!studAttempts.length) {
-    listEl.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:30px;font-size:13px;">No quiz submissions recorded yet for this student.</div>`;
-    return;
-  }
-
-  const customQList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
-
-  let formatted = studAttempts.map(a => {
-    const qMatch = customQList.find(cq => String(cq.id).toLowerCase() === String(a.quiz_id).toLowerCase() || String(cq.title || '').toLowerCase() === String(a.quiz_title || '').toLowerCase());
-    const title = qMatch ? qMatch.title : (a.quiz_title || a.quiz_id || 'Quiz Assessment');
-    const score = a.score || 0;
-    const total = a.total_items || 10;
-    const pct = total ? Math.round((score / total) * 100) : 0;
-    const dateStr = a.submitted_at ? new Date(a.submitted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently submitted';
-    return { title, score, total, pct, dateStr, submittedAt: a.submitted_at ? new Date(a.submitted_at).getTime() : Date.now() };
+function renderPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.menu-item').forEach(i => {
+    if (i.dataset.page === page) i.classList.add('active');
+    else i.classList.remove('active');
   });
+  const mainContent = document.getElementById('mainContent');
+  if (!mainContent) return;
+  mainContent.innerHTML = getPageContent(ROLE, page);
+  const fab = document.getElementById('chatFab');
+  if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
 
-  if (sortVal === 'newest') {
-    formatted.sort((a, b) => b.submittedAt - a.submittedAt);
-  } else if (sortVal === 'highest') {
-    formatted.sort((a, b) => b.pct - a.pct);
-  } else if (sortVal === 'lowest') {
-    formatted.sort((a, b) => a.pct - b.pct);
-  } else if (sortVal === 'title') {
-    formatted.sort((a, b) => a.title.localeCompare(b.title));
+  if (page === 'users' || page === 'classrec') loadUsersFromDB();
+  if (page === 'classrec') loadClassRecAttempts();
+  if (page === 'quiz') loadQuizzesFromDB();
+  if (page === 'quizzes' || page === 'progress') { loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
+  if (page === 'analysis') loadQuizzesFromDB();
+  if (page === 'chats') loadChatsPage();
+  if (page === 'dashboard') {
+    if (ROLE === 'teacher' || ROLE === 'admin') {
+      loadMaterialsFromDB();
+      loadQuizzesFromDB();
+      if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
+    }
+    if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
+    if (ROLE === 'student') { loadMaterialsFromDB(); loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
   }
 
-  listEl.innerHTML = formatted.map(item => `
-    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-      <div>
-        <div style="font-weight:700;font-size:14px;color:#0f172a;">${escHtml(item.title)}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Submitted: ${escHtml(item.dateStr)} · Score: <strong>${item.score}/${item.total}</strong></div>
+  clearInterval(materialsPollTimer);
+  materialsPollTimer = null;
+  if (page === 'materials' || page === 'approval') {
+    loadMaterialsFromDB();
+    if (page === 'approval') {
+      if (typeof loadQuizzesFromDB === 'function') loadQuizzesFromDB();
+      if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
+    }
+    materialsPollTimer = setInterval(() => {
+      loadMaterialsFromDB();
+      if (currentPage === 'approval' && typeof loadQuizzesFromDB === 'function') {
+        loadQuizzesFromDB();
+      }
+    }, 15000);
+  }
+}
+
+/* ── NAVIGATION LISTENERS ── */
+document.addEventListener('DOMContentLoaded', () => {
+  // Wrapped banner text must reserve its actual height above the navigation.
+  const bannerSelectors = ['.demo-mode-banner', '.emergency-top-banner'];
+  const bannerProperties = ['--banner-h', '--anc-banner-h'];
+  const observedBanners = new Set();
+  const bannerResizeObserver = new ResizeObserver(syncBannerHeights);
+  function syncBannerHeights() {
+    const banners = bannerSelectors.map(selector => document.querySelector(selector));
+    for (const banner of observedBanners) {
+      if (!banners.includes(banner)) {
+        bannerResizeObserver.unobserve(banner);
+        observedBanners.delete(banner);
+      }
+    }
+    banners.forEach((banner, index) => {
+      if (banner && !observedBanners.has(banner)) {
+        bannerResizeObserver.observe(banner);
+        observedBanners.add(banner);
+      }
+      const height = banner ? Math.ceil(banner.getBoundingClientRect().height) : 0;
+      document.body.style.setProperty(bannerProperties[index], `${height}px`);
+    });
+  }
+  const bannerMutationObserver = new MutationObserver(syncBannerHeights);
+  bannerMutationObserver.observe(document.body, { childList: true });
+  const bannerContainer = document.getElementById('emergencyBannerContainer');
+  if (bannerContainer) bannerMutationObserver.observe(bannerContainer, { childList: true, subtree: true });
+  syncBannerHeights();
+
+  const sidebarMenu = document.getElementById('sidebarMenu');
+  const toggleBtn = document.getElementById('hamburger-toggle');
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+
+  function openMobileSidebar() {
+    if (sidebar) sidebar.classList.add('open');
+    if (backdrop) backdrop.classList.add('active');
+    document.body.classList.add('mobile-menu-open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeMobileSidebar() {
+    if (sidebar) sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('active');
+    document.body.classList.remove('mobile-menu-open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  const mobileLayout = window.matchMedia('(max-width: 900px)');
+  mobileLayout.addEventListener('change', closeMobileSidebar);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && sidebar?.classList.contains('open')) {
+      closeMobileSidebar();
+      toggleBtn?.focus();
+    }
+  });
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-controls', 'sidebar');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    toggleBtn.setAttribute('aria-label', 'Toggle navigation');
+  }
+
+  if (toggleBtn && sidebar) {
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.innerWidth <= 900) {
+        if (sidebar.classList.contains('open')) {
+          closeMobileSidebar();
+        } else {
+          openMobileSidebar();
+        }
+      } else {
+        sidebar.classList.toggle('closed');
+      }
+    });
+  }
+
+  if (backdrop) {
+    backdrop.addEventListener('click', closeMobileSidebar);
+  }
+
+  if (sidebarMenu) {
+    sidebarMenu.addEventListener('click', e => {
+      const item = e.target.closest('.menu-item[data-page]');
+      if (!item) return;
+      e.preventDefault();
+      document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      renderPage(item.dataset.page);
+      if (window.innerWidth <= 900) {
+        closeMobileSidebar();
+      }
+    });
+  }
+});
+
+function goToChat() {
+  const chatItem = document.querySelector('.menu-item[data-page="chats"]');
+  if (chatItem) chatItem.click();
+}
+
+function sizeBrandUnderlines() {
+  const schol = document.getElementById('wm-schol');
+  const aria = document.getElementById('wm-aria');
+  const ulSchol = document.getElementById('ul-schol');
+  const ulAria = document.getElementById('ul-aria');
+  if (!schol || !aria || !ulSchol || !ulAria) return;
+  try {
+    const b1 = schol.getBBox();
+    const b2 = aria.getBBox();
+    ulSchol.setAttribute('x', b1.x);
+    ulSchol.setAttribute('width', b1.width);
+    ulAria.setAttribute('x', b2.x);
+    ulAria.setAttribute('width', b2.width);
+  } catch(e) {}
+}
+
+window.addEventListener('load', sizeBrandUnderlines);
+window.addEventListener('resize', sizeBrandUnderlines);
+
+/* ── SHARED CHAT PAGE LAYOUT ── */
+function buildChatPage(role) {
+  return `
+    <section class="scholaria-chat">
+    <div class="chat-page-heading">
+      <div><h2>Chats</h2><p>Connect with your ${role === 'teacher' ? 'students and fellow teachers' : 'teachers and classmates'}.</p></div>
+      <button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button>
+    </div>
+    <div class="chat-layout">
+      <div class="chat-contacts">
+        <div class="chat-contacts-hdr">
+          <span>Conversations</span>
+          <button class="new-chat-btn" title="New conversation" aria-label="New conversation" onclick="openNewChatModal()">${iconPlus()}</button>
+        </div>
+        <label class="chat-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/></svg><input type="search" aria-label="Search conversations" placeholder="Search conversations..." oninput="filterChatConversations(this.value)"></label>
+        <div class="chat-filters" aria-label="Filter conversations">
+          <button class="active" aria-pressed="true" data-chat-filter="all" onclick="setChatFilter('all')">All</button>
+          <button aria-pressed="false" data-chat-filter="teacher" onclick="setChatFilter('teacher')">Teachers</button>
+          ${role === 'student' ? '' : '<button aria-pressed="false" data-chat-filter="student" onclick="setChatFilter(\'student\')">Students</button>'}
+        </div>
+        <div class="contact-list" id="chatContactList">
+          <div class="contact-empty">Loading conversations…</div>
+        </div>
       </div>
-      <div style="text-align:right;">
-        <div style="font-size:16px;font-weight:800;color:${item.pct >= 88 ? '#059669' : item.pct < 75 ? '#dc2626' : '#2563eb'};">${item.pct}%</div>
-        <span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;background:${item.pct >= 75 ? '#dcfce7' : '#fee2e2'};color:${item.pct >= 75 ? '#15803d' : '#991b1b'};">${item.pct >= 75 ? 'PASSED' : 'NEEDS IMPROVEMENT'}</span>
+      <div class="chat-window">
+        <div class="cw-header">
+          <button class="cw-back-btn" id="cwBackBtn" title="Back to conversations" aria-label="Back to conversations" onclick="closeConversation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+          <div class="contact-avatar cw-placeholder-avatar" id="cwAvatar">${chatOutlineIcon()}</div>
+          <div>
+            <div class="cw-name" id="cwName">Your conversations</div>
+            <div class="cw-role" id="cwRole">Stay connected, keep learning.</div>
+          </div>
+        </div>
+        <div class="cw-messages" id="cwMessages">
+          <div class="cw-empty chat-welcome">${chatEmptyIllustration()}<h3>Start a conversation</h3><p>${role === 'teacher' ? 'Message a student, connect with fellow teachers,<br>or create a class group.' : 'Message a teacher, connect with classmates,<br>or create a study group.'}</p><button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button></div>
+        </div>
+        <div class="cw-input-area" id="cwInputArea"></div>
       </div>
     </div>
-  `).join('');
-}
-
-function isArtificialSeedAttempt(item) {
-  if (!item) return true;
-  const id = String(item.id || '').toLowerCase();
-  const sid = String(item.student_id || '').toLowerCase();
-  const qid = String(item.quiz_id || '').toLowerCase();
-
-  if (id === 'cr_seed_1' || id === 'cr_seed_2') return true;
-  if (sid === 'seed_stud_1') return true;
-  if (qid === 'quiz_testing_1' || qid === 'quiz_try_1') return true;
-  return false;
-}
-
-async function loadClassRecAttempts(force = true) {
-  if (isFetchingClassRecAttempts && !force) return;
-  isFetchingClassRecAttempts = true;
-  try {
-    // 1. Query dedicated class_records table from Supabase
-    let crData = [];
-    try {
-      const { data } = await db.from('class_records').select('*').order('submitted_at', { ascending: false });
-      if (data && data.length) crData = data.filter(item => !isArtificialSeedAttempt(item));
-    } catch(err) {}
-
-    // 2. Query quiz_attempts table from Supabase
-    let qaData = [];
-    try {
-      const { data } = await db.from('quiz_attempts').select('*').order('submitted_at', { ascending: false });
-      if (data && data.length) qaData = data.filter(item => !isArtificialSeedAttempt(item));
-    } catch(err) {}
-
-    // 3. Query per quiz ID for customQuizzes (same method as Item Analysis)
-    if (typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes)) {
-      for (const q of customQuizzes) {
-        try {
-          const { data: qData } = await db.from('quiz_attempts').select('*').eq('quiz_id', q.id);
-          if (qData && qData.length) {
-            qData.forEach(qa => {
-              if (!isArtificialSeedAttempt(qa) && !qaData.some(existing => existing.id === qa.id)) {
-                qaData.push(qa);
-              }
-            });
-          }
-        } catch(err) {}
-      }
-    }
-
-    // 4. Purge artificial seeds from local storage & merge authentic submissions
-    let localCR = [];
-    try {
-      const rawCR = localStorage.getItem('scholaria_class_records_v2');
-      if (rawCR) {
-        const parsed = JSON.parse(rawCR);
-        localCR = parsed.filter(item => !isArtificialSeedAttempt(item));
-        localStorage.setItem('scholaria_class_records_v2', JSON.stringify(localCR));
-      }
-    } catch(e) {}
-
-    let localAttempts = [];
-    try {
-      const raw = localStorage.getItem('scholaria_all_attempts_v1');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        localAttempts = parsed.filter(item => !isArtificialSeedAttempt(item));
-        localStorage.setItem('scholaria_all_attempts_v1', JSON.stringify(localAttempts));
-      }
-    } catch(e) {}
-
-    // Combine authentic DB attempts and authentic local attempt submissions
-    const combined = [];
-    [...crData, ...qaData, ...localCR, ...localAttempts].forEach(item => {
-      if (!item || isArtificialSeedAttempt(item)) return;
-      const existingIdx = combined.findIndex(existing =>
-        (existing.id && item.id && existing.id === item.id) ||
-        (String(existing.quiz_id || '').toLowerCase() === String(item.quiz_id || '').toLowerCase() &&
-         String(existing.student_id || '').toLowerCase() === String(item.student_id || '').toLowerCase() &&
-         String(existing.submitted_at || '') === String(item.submitted_at || ''))
-      );
-      if (existingIdx === -1) {
-        combined.push(item);
-      } else {
-        const existing = combined[existingIdx];
-        if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
-          combined[existingIdx] = Object.assign({}, existing, item);
-        } else if (!existing.section && item.section) {
-          existing.section = item.section;
-        }
-      }
-    });
-
-    classRecAttemptsCache = combined;
-  } catch(e) {
-    console.error('Error loading class record attempts:', e);
-  } finally {
-    isFetchingClassRecAttempts = false;
-  }
-}
-
-function getCustomClassRecEntries() {
-  try {
-    const raw = localStorage.getItem('scholaria_classrec_custom_v1');
-    return raw ? JSON.parse(raw) : {};
-  } catch(e) {
-    return {};
-  }
-}
-
-function saveCustomClassRecEntry(studentKey, data) {
-  const custom = getCustomClassRecEntries();
-  custom[studentKey] = Object.assign({}, custom[studentKey] || {}, data);
-  localStorage.setItem('scholaria_classrec_custom_v1', JSON.stringify(custom));
-  showToast('Class Record entry saved', 'success');
-  if (typeof renderPage === 'function') renderPage('classrec');
-}
-
-function isStudentHandledByTeacher(student, teacherProfile) {
-  // Teachers and Admins are permitted to view and inspect all students' progress specification and academic records
-  return true;
-}
-
-function deduplicateQuizAttempts(attemptsList) {
-  const result = [];
-  (attemptsList || []).forEach(item => {
-    if (!item || isArtificialSeedAttempt(item)) return;
-
-    const qKey = String(item.quiz_id || item.quiz_title || '').toLowerCase().trim();
-    const sKey = String(item.student_id || item.student_name || '').toLowerCase().trim();
-    const scoreVal = Number(item.score !== undefined ? item.score : item.score_percentage || 0);
-
-    const existingIdx = result.findIndex(existing => {
-      if (existing.id && item.id && existing.id === item.id) return true;
-
-      const exQKey = String(existing.quiz_id || existing.quiz_title || '').toLowerCase().trim();
-      const exSKey = String(existing.student_id || existing.student_name || '').toLowerCase().trim();
-      const exScore = Number(existing.score !== undefined ? existing.score : existing.score_percentage || 0);
-
-      if (qKey && exQKey && qKey === exQKey && sKey && exSKey && sKey === exSKey && scoreVal === exScore) {
-        return true;
-      }
-      return false;
-    });
-
-    if (existingIdx === -1) {
-      result.push(item);
-    } else {
-      const existing = result[existingIdx];
-      if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
-        result[existingIdx] = Object.assign({}, existing, item);
-      } else if (!existing.section && item.section) {
-        existing.section = item.section;
-      }
-    }
-  });
-  return result;
-}
-
-function getAllRecordedAttempts() {
-  const pool = [...classRecAttemptsCache];
-
-  if (typeof analysisAttemptsCache !== 'undefined') {
-    Object.values(analysisAttemptsCache).forEach(arr => {
-      if (Array.isArray(arr)) {
-        arr.forEach(a => pool.push(a));
-      }
-    });
-  }
-
-  if (typeof myQuizAttempts !== 'undefined' && Array.isArray(myQuizAttempts)) {
-    myQuizAttempts.forEach(a => pool.push(a));
-  }
-
-  try {
-    const raw = localStorage.getItem('scholaria_all_attempts_v1');
-    if (raw) {
-      const local = JSON.parse(raw);
-      local.forEach(a => pool.push(a));
-    }
-  } catch(e) {}
-
-  return deduplicateQuizAttempts(pool);
-}
-
-function isAttemptBelongingToStudent(a, u) {
-  if (!a || !u) return false;
-  const sid = String(a.student_id || a.studentId || a.user_id || '').toLowerCase().trim();
-  const sname = String(a.student_name || a.studentName || '').toLowerCase().trim();
-
-  const uDbId = String(u.dbId || '').toLowerCase().trim();
-  const uId = String(u.id || '').toLowerCase().trim();
-  const uName = String(u.name || '').toLowerCase().trim();
-
-  if (uDbId && sid === uDbId) return true;
-  if (uId && sid === uId) return true;
-  if (uName && (sid === uName || sname === uName || sid.includes(uName) || uName.includes(sid))) return true;
-
-  const matchInRegistered = registeredUsers.find(ru =>
-    (ru.dbId && String(ru.dbId).toLowerCase().trim() === sid) ||
-    (ru.id && String(ru.id).toLowerCase().trim() === sid) ||
-    (ru.name && String(ru.name).toLowerCase().trim() === sid)
-  );
-  if (matchInRegistered && matchInRegistered.name.toLowerCase().trim() === uName) {
-    return true;
-  }
-
-  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) {
-    const myId = String(CURRENT_PROFILE.id || '').toLowerCase().trim();
-    const mySchoolId = String(CURRENT_PROFILE.school_id || '').toLowerCase().trim();
-    const myName = String(CURRENT_PROFILE.full_name || '').toLowerCase().trim();
-    if ((sid === myId || sid === mySchoolId) && uName === myName) {
-      return true;
-    }
-  }
-
-  if (uName.includes('john doe') && (sid.includes('john') || sid.includes('hwa-2026-002'))) {
-    return true;
-  }
-
-  return false;
-}
-
-function getClassRecordQuizzes() {
-  const attempts = getAllRecordedAttempts();
-  const custom = getCustomClassRecEntries();
-
-  const attemptedQuizIds = new Set();
-  attempts.forEach(a => {
-    if (a.quiz_id) attemptedQuizIds.add(String(a.quiz_id).toLowerCase());
-    if (a.quiz_title) attemptedQuizIds.add(String(a.quiz_title).toLowerCase());
-  });
-
-  Object.values(custom).forEach(studCustom => {
-    Object.keys(studCustom).forEach(k => {
-      if (k !== 'subject') attemptedQuizIds.add(String(k).toLowerCase());
-    });
-  });
-
-  const pool = typeof customQuizzes !== 'undefined' ? [...customQuizzes] : [];
-
-  attempts.forEach(a => {
-    const title = a.quiz_title || a.quiz_id;
-    const id = a.quiz_id || a.quiz_title;
-    if (id && !pool.some(q => String(q.id).toLowerCase() === String(id).toLowerCase() || String(q.title || '').toLowerCase() === String(title).toLowerCase())) {
-      pool.push({ id, title: title || 'Quiz' });
-    }
-  });
-
-  if (pool.length) {
-    const takenQuizzes = pool.filter(q =>
-      attemptedQuizIds.has(String(q.id).toLowerCase()) ||
-      attemptedQuizIds.has(String(q.title || '').toLowerCase()) ||
-      attempts.some(a => String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() || String(a.quiz_title || '').toLowerCase() === String(q.title || '').toLowerCase())
-    );
-    if (takenQuizzes.length) return takenQuizzes;
-  }
-
-  return [
-    { id: 'quiz_1', title: 'Quiz 1' },
-    { id: 'quiz_2', title: 'Quiz 2' }
-  ];
-}
-
-function openAddClassRecordModal() {
-  const modal = document.getElementById('classRecModal');
-  if (!modal) return;
-  const select = document.getElementById('crStudentSelect');
-  if (select) {
-    const students = registeredUsers.filter(u => u.role === 'student');
-    select.innerHTML = students.map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('');
-  }
-  const quizSelect = document.getElementById('crQuizSelect');
-  if (quizSelect) {
-    const quizzes = getClassRecordQuizzes();
-    quizSelect.innerHTML = quizzes.map(q => `<option value="${q.id}">${escHtml(q.title)}</option>`).join('');
-  }
-  modal.classList.add('active');
-}
-
-function closeAddClassRecordModal() {
-  const modal = document.getElementById('classRecModal');
-  if (modal) modal.classList.remove('active');
-}
-
-function submitAddClassRecord() {
-  const studentKey = document.getElementById('crStudentSelect')?.value;
-  const quizId = document.getElementById('crQuizSelect')?.value || 'quiz_1';
-  const score = Number(document.getElementById('crScoreInput')?.value || 85);
-  const subj = document.getElementById('crSubjInput')?.value || 'Web Systems';
-
-  if (!studentKey) { showToast('Please select a student', 'error'); return; }
-
-  const custom = getCustomClassRecEntries();
-  if (!custom[studentKey]) custom[studentKey] = {};
-  custom[studentKey][quizId] = score;
-  custom[studentKey].subject = subj;
-
-  localStorage.setItem('scholaria_classrec_custom_v1', JSON.stringify(custom));
-  showToast('Quiz grade updated in Class Record', 'success');
-  closeAddClassRecordModal();
-  if (typeof renderPage === 'function') renderPage('classrec');
-}
-
-function buildRealClassRecordEntries() {
-  if (!registeredUsers.length && typeof loadUsersFromDB === 'function') {
-    loadUsersFromDB();
-  }
-
-  const students = registeredUsers.filter(u => u.role === 'student');
-  const custom = getCustomClassRecEntries();
-  const quizzes = getClassRecordQuizzes();
-  const allAttempts = getAllRecordedAttempts();
-
-  return students.filter(u => {
-    if (classRecSectionFilter && u.section !== classRecSectionFilter) return false;
-    if (classRecStudentFilter) {
-      const uKey = u.dbId || u.id || u.name;
-      if (uKey !== classRecStudentFilter) return false;
-    }
-    return true;
-  }).map(u => {
-    const key = u.dbId || u.id || u.name;
-    const customData = custom[key] || {};
-
-    const studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, u)));
-
-    const quizScores = {};
-    let validScoresSum = 0;
-    let validScoresCount = 0;
-    let hasRealData = false;
-
-    quizzes.forEach(q => {
-      let scorePct = null;
-      let isLive = false;
-
-      const attempt = studAttempts.find(a =>
-        String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() ||
-        (a.quiz_title && String(a.quiz_title).toLowerCase() === String(q.title || '').toLowerCase())
-      );
-
-      if (attempt) {
-        if (attempt.score_percentage !== undefined && attempt.score_percentage !== null) {
-          scorePct = Math.round(Number(attempt.score_percentage));
-        } else if (attempt.score !== undefined && attempt.total_items) {
-          scorePct = Math.round((attempt.score / attempt.total_items) * 100);
-        } else if (attempt.score !== undefined) {
-          scorePct = Math.round(Number(attempt.score));
-        }
-        isLive = true;
-        hasRealData = true;
-      } else if (customData[q.id] !== undefined) {
-        scorePct = Number(customData[q.id]);
-        hasRealData = true;
-      }
-
-      if (scorePct !== null) {
-        validScoresSum += scorePct;
-        validScoresCount++;
-      }
-
-      quizScores[q.id] = { scorePct, isLive };
-    });
-
-    let avg = validScoresCount > 0 ? Number((validScoresSum / validScoresCount).toFixed(2)) : null;
-
-    if (studAttempts.length > 0) {
-      hasRealData = true;
-      let attSum = 0;
-      let attCnt = 0;
-      studAttempts.forEach(sa => {
-        let p = null;
-        if (sa.score_percentage !== undefined && sa.score_percentage !== null) {
-          p = Number(sa.score_percentage);
-        } else if (sa.score !== undefined && sa.total_items) {
-          p = (sa.score / sa.total_items) * 100;
-        } else if (sa.score !== undefined) {
-          p = Number(sa.score);
-        }
-        if (p !== null && !isNaN(p)) {
-          attSum += p;
-          attCnt++;
-        }
-      });
-      if (attCnt > 0) {
-        avg = Number((attSum / attCnt).toFixed(2));
-      }
-    }
-
-    return {
-      key,
-      name: u.name,
-      section: u.section || 'Unassigned',
-      strand: u.strand || 'General',
-      subject: customData.subject || (ROLE === 'teacher' ? (CURRENT_PROFILE?.subjects || 'STEM, HUMSS') : 'STEM, HUMSS'),
-      quizScores,
-      quizzesTakenCount: studAttempts.length,
-      avg,
-      hasRealData
-    };
-  });
-}
-
-function buildSectionSummaryEntries() {
-  const allStudentEntries = buildRealClassRecordEntries();
-  const sectionMap = new Map();
-
-  allStudentEntries.forEach(st => {
-    const sec = st.section || 'Unassigned';
-    if (!sectionMap.has(sec)) {
-      sectionMap.set(sec, {
-        section: sec,
-        subject: st.subject,
-        studentsCount: 0,
-        scoresSum: 0,
-        scoresCount: 0,
-        passingCount: 0
-      });
-    }
-    const secData = sectionMap.get(sec);
-    secData.studentsCount++;
-    if (st.avg !== null) {
-      secData.scoresSum += st.avg;
-      secData.scoresCount++;
-      if (st.avg >= 75) secData.passingCount++;
-    }
-  });
-
-  return Array.from(sectionMap.values()).map(sec => {
-    const classAvg = sec.scoresCount > 0 ? Number((sec.scoresSum / sec.scoresCount).toFixed(2)) : null;
-    const passRate = sec.scoresCount > 0 ? Math.round((sec.passingCount / sec.scoresCount) * 100) : null;
-    return {
-      ...sec,
-      classAvg,
-      passRate
-    };
-  });
+    </section>`;
 }
 
 function isQuizTargetedForStudent(q, studentProfile) {
@@ -767,7 +420,7 @@ async function saveUserProfile() {
     const statusMessage = (document.getElementById('pfStatusMsg')?.value || '').trim();
     const contactNumber = (document.getElementById('pfContact')?.value || '').trim();
     const avatarUrl = document.getElementById('pfAvatarDataUrl')?.value || CURRENT_PROFILE.avatar_url || null;
-    const newPassword = document.getElementById('pfNewPassword')?.value;
+    const newPassword = (document.getElementById('pfNewPassword')?.value || '').trim();
 
     if (!fullName) {
       showToast('Full name cannot be empty', 'error');
@@ -775,8 +428,13 @@ async function saveUserProfile() {
       return;
     }
 
-    // 1. If password provided, update Supabase auth
-    if (newPassword && newPassword.length >= 6) {
+    // 1. If password provided, update Supabase auth directly
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        showToast('New password must be at least 6 characters', 'error');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = 'Save Changes'; }
+        return;
+      }
       try {
         const { error: pwdErr } = await db.auth.updateUser({ password: newPassword });
         if (pwdErr) {
@@ -784,9 +442,12 @@ async function saveUserProfile() {
           showToast('Could not update password: ' + pwdErr.message, 'error');
         } else {
           showToast('Password updated successfully', 'success');
+          const pwdInput = document.getElementById('pfNewPassword');
+          if (pwdInput) pwdInput.value = '';
         }
       } catch (pe) {
         console.warn('Password error:', pe);
+        showToast('Password update error: ' + (pe.message || 'Failed'), 'error');
       }
     }
 
@@ -1037,7 +698,7 @@ function buildProfilePage(role) {
           </div>
         </div>
 
-        <!-- SECURITY & 2FA CARD -->
+        <!-- SECURITY CARD -->
         <div class="profile-card">
           <div class="profile-card-hdr">
             <h3>
@@ -1051,22 +712,17 @@ function buildProfilePage(role) {
             <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
             <span style="font-size:11px;color:var(--text-muted);">Leave empty to keep your existing login password</span>
           </div>
-
-          <div style="padding-top:12px;border-top:1px solid #f1f5f9;margin-top:4px;">
-            <label style="font-size:11.5px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Two-Factor Authentication (2FA)</label>
-            <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:12px;line-height:1.4;">
-              Secure your account using time-based one-time passwords (TOTP) from <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong>.
-            </p>
-            <button type="button" class="foot-btn-secondary" style="border-color:var(--blue);color:var(--blue);display:inline-flex;align-items:center;gap:6px;width:100%;justify-content:center;height:38px;" onclick="openTwoFactorModal()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              Configure Authenticator 2FA
-            </button>
-          </div>
         </div>
       </div>
     </div>
   </div>`;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════ */
+/* SECTION 2: STUDENT / USER PORTAL UI & LOGIC                                    */
+/* Encapsulation: Dashboard.Student                                               */
+/* Contains: Quiz Filters, Progress Tracker, Deadlines Stream & Student Pages    */
+/* ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* ── STUDENT QUIZZES SORT & FILTER STATE ── */
 let studentQuizSortBy = 'pending'; // 'pending' | 'subject' | 'deadline' | 'newest' | 'title'
@@ -2200,7 +1856,590 @@ function studentPage(page) {
   }
 }
 
-/* ── TEACHER PAGES ── */
+/* ═══════════════════════════════════════════════════════════════════════════════ */
+/* SECTION 3: TEACHER PORTAL UI & LOGIC                                           */
+/* Encapsulation: Dashboard.Teacher                                               */
+/* Contains: Class Record Engine, Matrix Analyzers, Quiz Management & Teacher UI  */
+/* ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── REAL DATA CLASS RECORD ENGINE ── */
+let classRecSectionFilter = '';
+let classRecStudentFilter = '';
+let classRecExpandedSection = ''; // '' (Section list view) or 'Section A' (Expanded section view)
+let classRecSubView = 'combined'; // 'combined' | 'matrix'
+let classRecAttemptsCache = [];
+let isFetchingClassRecAttempts = false;
+
+function setClassRecSectionFilter(sec) {
+  classRecSectionFilter = sec;
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function openExpandedSectionView(sec) {
+  classRecExpandedSection = sec;
+  classRecSectionFilter = sec;
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function closeExpandedSectionView() {
+  classRecExpandedSection = '';
+  classRecSectionFilter = '';
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function setClassRecStudentFilter(studKey) {
+  classRecStudentFilter = studKey;
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function setClassRecSubView(sub) {
+  classRecSubView = sub;
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+let selectedStudentForPanelKey = null;
+
+function openStudentGradePanel(studentKey) {
+  selectedStudentForPanelKey = studentKey;
+  const modal = document.getElementById('studentGradePanel');
+  if (!modal) return;
+
+  const entries = buildRealClassRecordEntries();
+  const studentData = entries.find(e => e.key === studentKey) || {
+    name: studentKey,
+    section: 'Unassigned',
+    strand: 'General',
+    avg: null,
+    quizScores: {},
+    quizzesTakenCount: 0
+  };
+
+  const nameEl = document.getElementById('sgpStudentName');
+  const metaEl = document.getElementById('sgpStudentMeta');
+  const takenEl = document.getElementById('sgpQuizzesTaken');
+  const gradeEl = document.getElementById('sgpOverallGrade');
+  const statusEl = document.getElementById('sgpStatusBadge');
+
+  if (nameEl) nameEl.textContent = studentData.name + "'s Academic Record";
+  if (metaEl) metaEl.textContent = `${studentData.strand} · ${studentData.section} · ${studentData.subject}`;
+
+  const allAttempts = getAllRecordedAttempts();
+  const registeredStud = registeredUsers.find(u => (u.dbId || u.id || u.name) === studentKey) || { name: studentData.name, id: studentKey };
+  const studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, registeredStud)));
+
+  if (takenEl) takenEl.textContent = `${studAttempts.length} quiz${studAttempts.length === 1 ? '' : 'zes'}`;
+  if (gradeEl) gradeEl.textContent = studentData.avg !== null ? `${studentData.avg.toFixed(2)}%` : '—';
+  if (statusEl) {
+    if (studentData.avg === null) {
+      statusEl.textContent = 'No Submissions';
+      statusEl.style.color = 'var(--text-muted)';
+    } else if (studentData.avg >= 88) {
+      statusEl.textContent = 'Excellent Standing';
+      statusEl.style.color = '#059669';
+    } else if (studentData.avg >= 75) {
+      statusEl.textContent = 'Satisfactory';
+      statusEl.style.color = '#2563eb';
+    } else {
+      statusEl.textContent = 'Needs Improvement';
+      statusEl.style.color = '#dc2626';
+    }
+  }
+
+  renderStudentGradePanelContent();
+  modal.classList.add('active');
+}
+
+function closeStudentGradePanel() {
+  const modal = document.getElementById('studentGradePanel');
+  if (modal) modal.classList.remove('active');
+}
+
+function renderStudentGradePanelContent() {
+  const listEl = document.getElementById('sgpQuizzesList');
+  const sortVal = document.getElementById('sgpSortSelect')?.value || 'newest';
+  if (!listEl || !selectedStudentForPanelKey) return;
+
+  const allAttempts = getAllRecordedAttempts();
+  const registeredStud = registeredUsers.find(u => (u.dbId || u.id || u.name) === selectedStudentForPanelKey) || { name: selectedStudentForPanelKey, id: selectedStudentForPanelKey };
+  let studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, registeredStud)));
+
+  if (!studAttempts.length) {
+    listEl.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:30px;font-size:13px;">No quiz submissions recorded yet for this student.</div>`;
+    return;
+  }
+
+  const customQList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+
+  let formatted = studAttempts.map(a => {
+    const qMatch = customQList.find(cq => String(cq.id).toLowerCase() === String(a.quiz_id).toLowerCase() || String(cq.title || '').toLowerCase() === String(a.quiz_title || '').toLowerCase());
+    const title = qMatch ? qMatch.title : (a.quiz_title || a.quiz_id || 'Quiz Assessment');
+    const score = a.score || 0;
+    const total = a.total_items || 10;
+    const pct = total ? Math.round((score / total) * 100) : 0;
+    const dateStr = a.submitted_at ? new Date(a.submitted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently submitted';
+    return { title, score, total, pct, dateStr, submittedAt: a.submitted_at ? new Date(a.submitted_at).getTime() : Date.now() };
+  });
+
+  if (sortVal === 'newest') {
+    formatted.sort((a, b) => b.submittedAt - a.submittedAt);
+  } else if (sortVal === 'highest') {
+    formatted.sort((a, b) => b.pct - a.pct);
+  } else if (sortVal === 'lowest') {
+    formatted.sort((a, b) => a.pct - b.pct);
+  } else if (sortVal === 'title') {
+    formatted.sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  listEl.innerHTML = formatted.map(item => `
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+      <div>
+        <div style="font-weight:700;font-size:14px;color:#0f172a;">${escHtml(item.title)}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Submitted: ${escHtml(item.dateStr)} · Score: <strong>${item.score}/${item.total}</strong></div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:16px;font-weight:800;color:${item.pct >= 88 ? '#059669' : item.pct < 75 ? '#dc2626' : '#2563eb'};">${item.pct}%</div>
+        <span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;background:${item.pct >= 75 ? '#dcfce7' : '#fee2e2'};color:${item.pct >= 75 ? '#15803d' : '#991b1b'};">${item.pct >= 75 ? 'PASSED' : 'NEEDS IMPROVEMENT'}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function isArtificialSeedAttempt(item) {
+  if (!item) return true;
+  const id = String(item.id || '').toLowerCase();
+  const sid = String(item.student_id || '').toLowerCase();
+  const qid = String(item.quiz_id || '').toLowerCase();
+
+  if (id === 'cr_seed_1' || id === 'cr_seed_2') return true;
+  if (sid === 'seed_stud_1') return true;
+  if (qid === 'quiz_testing_1' || qid === 'quiz_try_1') return true;
+  return false;
+}
+
+async function loadClassRecAttempts(force = true) {
+  if (isFetchingClassRecAttempts && !force) return;
+  isFetchingClassRecAttempts = true;
+  try {
+    // 1. Query dedicated class_records table from Supabase
+    let crData = [];
+    try {
+      const { data } = await db.from('class_records').select('*').order('submitted_at', { ascending: false });
+      if (data && data.length) crData = data.filter(item => !isArtificialSeedAttempt(item));
+    } catch(err) {}
+
+    // 2. Query quiz_attempts table from Supabase
+    let qaData = [];
+    try {
+      const { data } = await db.from('quiz_attempts').select('*').order('submitted_at', { ascending: false });
+      if (data && data.length) qaData = data.filter(item => !isArtificialSeedAttempt(item));
+    } catch(err) {}
+
+    // 3. Query per quiz ID for customQuizzes (same method as Item Analysis)
+    if (typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes)) {
+      for (const q of customQuizzes) {
+        try {
+          const { data: qData } = await db.from('quiz_attempts').select('*').eq('quiz_id', q.id);
+          if (qData && qData.length) {
+            qData.forEach(qa => {
+              if (!isArtificialSeedAttempt(qa) && !qaData.some(existing => existing.id === qa.id)) {
+                qaData.push(qa);
+              }
+            });
+          }
+        } catch(err) {}
+      }
+    }
+
+    // 4. Purge artificial seeds from local storage & merge authentic submissions
+    let localCR = [];
+    try {
+      const rawCR = localStorage.getItem('scholaria_class_records_v2');
+      if (rawCR) {
+        const parsed = JSON.parse(rawCR);
+        localCR = parsed.filter(item => !isArtificialSeedAttempt(item));
+        localStorage.setItem('scholaria_class_records_v2', JSON.stringify(localCR));
+      }
+    } catch(e) {}
+
+    let localAttempts = [];
+    try {
+      const raw = localStorage.getItem('scholaria_all_attempts_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        localAttempts = parsed.filter(item => !isArtificialSeedAttempt(item));
+        localStorage.setItem('scholaria_all_attempts_v1', JSON.stringify(localAttempts));
+      }
+    } catch(e) {}
+
+    // Combine authentic DB attempts and authentic local attempt submissions
+    const combined = [];
+    [...crData, ...qaData, ...localCR, ...localAttempts].forEach(item => {
+      if (!item || isArtificialSeedAttempt(item)) return;
+      const existingIdx = combined.findIndex(existing =>
+        (existing.id && item.id && existing.id === item.id) ||
+        (String(existing.quiz_id || '').toLowerCase() === String(item.quiz_id || '').toLowerCase() &&
+         String(existing.student_id || '').toLowerCase() === String(item.student_id || '').toLowerCase() &&
+         String(existing.submitted_at || '') === String(item.submitted_at || ''))
+      );
+      if (existingIdx === -1) {
+        combined.push(item);
+      } else {
+        const existing = combined[existingIdx];
+        if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
+          combined[existingIdx] = Object.assign({}, existing, item);
+        } else if (!existing.section && item.section) {
+          existing.section = item.section;
+        }
+      }
+    });
+
+    classRecAttemptsCache = combined;
+  } catch(e) {
+    console.error('Error loading class record attempts:', e);
+  } finally {
+    isFetchingClassRecAttempts = false;
+  }
+}
+
+function getCustomClassRecEntries() {
+  try {
+    const raw = localStorage.getItem('scholaria_classrec_custom_v1');
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) {
+    return {};
+  }
+}
+
+function saveCustomClassRecEntry(studentKey, data) {
+  const custom = getCustomClassRecEntries();
+  custom[studentKey] = Object.assign({}, custom[studentKey] || {}, data);
+  localStorage.setItem('scholaria_classrec_custom_v1', JSON.stringify(custom));
+  showToast('Class Record entry saved', 'success');
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function isStudentHandledByTeacher(student, teacherProfile) {
+  // Teachers and Admins are permitted to view and inspect all students' progress specification and academic records
+  return true;
+}
+
+function deduplicateQuizAttempts(attemptsList) {
+  const result = [];
+  (attemptsList || []).forEach(item => {
+    if (!item || isArtificialSeedAttempt(item)) return;
+
+    const qKey = String(item.quiz_id || item.quiz_title || '').toLowerCase().trim();
+    const sKey = String(item.student_id || item.student_name || '').toLowerCase().trim();
+    const scoreVal = Number(item.score !== undefined ? item.score : item.score_percentage || 0);
+
+    const existingIdx = result.findIndex(existing => {
+      if (existing.id && item.id && existing.id === item.id) return true;
+
+      const exQKey = String(existing.quiz_id || existing.quiz_title || '').toLowerCase().trim();
+      const exSKey = String(existing.student_id || existing.student_name || '').toLowerCase().trim();
+      const exScore = Number(existing.score !== undefined ? existing.score : existing.score_percentage || 0);
+
+      if (qKey && exQKey && qKey === exQKey && sKey && exSKey && sKey === exSKey && scoreVal === exScore) {
+        return true;
+      }
+      return false;
+    });
+
+    if (existingIdx === -1) {
+      result.push(item);
+    } else {
+      const existing = result[existingIdx];
+      if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
+        result[existingIdx] = Object.assign({}, existing, item);
+      } else if (!existing.section && item.section) {
+        existing.section = item.section;
+      }
+    }
+  });
+  return result;
+}
+
+function getAllRecordedAttempts() {
+  const pool = [...classRecAttemptsCache];
+
+  if (typeof analysisAttemptsCache !== 'undefined') {
+    Object.values(analysisAttemptsCache).forEach(arr => {
+      if (Array.isArray(arr)) {
+        arr.forEach(a => pool.push(a));
+      }
+    });
+  }
+
+  if (typeof myQuizAttempts !== 'undefined' && Array.isArray(myQuizAttempts)) {
+    myQuizAttempts.forEach(a => pool.push(a));
+  }
+
+  try {
+    const raw = localStorage.getItem('scholaria_all_attempts_v1');
+    if (raw) {
+      const local = JSON.parse(raw);
+      local.forEach(a => pool.push(a));
+    }
+  } catch(e) {}
+
+  return deduplicateQuizAttempts(pool);
+}
+
+function isAttemptBelongingToStudent(a, u) {
+  if (!a || !u) return false;
+  const sid = String(a.student_id || a.studentId || a.user_id || '').toLowerCase().trim();
+  const sname = String(a.student_name || a.studentName || '').toLowerCase().trim();
+
+  const uDbId = String(u.dbId || '').toLowerCase().trim();
+  const uId = String(u.id || '').toLowerCase().trim();
+  const uName = String(u.name || '').toLowerCase().trim();
+
+  if (uDbId && sid === uDbId) return true;
+  if (uId && sid === uId) return true;
+  if (uName && (sid === uName || sname === uName || sid.includes(uName) || uName.includes(sid))) return true;
+
+  const matchInRegistered = registeredUsers.find(ru =>
+    (ru.dbId && String(ru.dbId).toLowerCase().trim() === sid) ||
+    (ru.id && String(ru.id).toLowerCase().trim() === sid) ||
+    (ru.name && String(ru.name).toLowerCase().trim() === sid)
+  );
+  if (matchInRegistered && matchInRegistered.name.toLowerCase().trim() === uName) {
+    return true;
+  }
+
+  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) {
+    const myId = String(CURRENT_PROFILE.id || '').toLowerCase().trim();
+    const mySchoolId = String(CURRENT_PROFILE.school_id || '').toLowerCase().trim();
+    const myName = String(CURRENT_PROFILE.full_name || '').toLowerCase().trim();
+    if ((sid === myId || sid === mySchoolId) && uName === myName) {
+      return true;
+    }
+  }
+
+  if (uName.includes('john doe') && (sid.includes('john') || sid.includes('hwa-2026-002'))) {
+    return true;
+  }
+
+  return false;
+}
+
+function getClassRecordQuizzes() {
+  const attempts = getAllRecordedAttempts();
+  const custom = getCustomClassRecEntries();
+
+  const attemptedQuizIds = new Set();
+  attempts.forEach(a => {
+    if (a.quiz_id) attemptedQuizIds.add(String(a.quiz_id).toLowerCase());
+    if (a.quiz_title) attemptedQuizIds.add(String(a.quiz_title).toLowerCase());
+  });
+
+  Object.values(custom).forEach(studCustom => {
+    Object.keys(studCustom).forEach(k => {
+      if (k !== 'subject') attemptedQuizIds.add(String(k).toLowerCase());
+    });
+  });
+
+  const pool = typeof customQuizzes !== 'undefined' ? [...customQuizzes] : [];
+
+  attempts.forEach(a => {
+    const title = a.quiz_title || a.quiz_id;
+    const id = a.quiz_id || a.quiz_title;
+    if (id && !pool.some(q => String(q.id).toLowerCase() === String(id).toLowerCase() || String(q.title || '').toLowerCase() === String(title).toLowerCase())) {
+      pool.push({ id, title: title || 'Quiz' });
+    }
+  });
+
+  if (pool.length) {
+    const takenQuizzes = pool.filter(q =>
+      attemptedQuizIds.has(String(q.id).toLowerCase()) ||
+      attemptedQuizIds.has(String(q.title || '').toLowerCase()) ||
+      attempts.some(a => String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() || String(a.quiz_title || '').toLowerCase() === String(q.title || '').toLowerCase())
+    );
+    if (takenQuizzes.length) return takenQuizzes;
+  }
+
+  return [
+    { id: 'quiz_1', title: 'Quiz 1' },
+    { id: 'quiz_2', title: 'Quiz 2' }
+  ];
+}
+
+function openAddClassRecordModal() {
+  const modal = document.getElementById('classRecModal');
+  if (!modal) return;
+  const select = document.getElementById('crStudentSelect');
+  if (select) {
+    const students = registeredUsers.filter(u => u.role === 'student');
+    select.innerHTML = students.map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('');
+  }
+  const quizSelect = document.getElementById('crQuizSelect');
+  if (quizSelect) {
+    const quizzes = getClassRecordQuizzes();
+    quizSelect.innerHTML = quizzes.map(q => `<option value="${q.id}">${escHtml(q.title)}</option>`).join('');
+  }
+  modal.classList.add('active');
+}
+
+function closeAddClassRecordModal() {
+  const modal = document.getElementById('classRecModal');
+  if (modal) modal.classList.remove('active');
+}
+
+function submitAddClassRecord() {
+  const studentKey = document.getElementById('crStudentSelect')?.value;
+  const quizId = document.getElementById('crQuizSelect')?.value || 'quiz_1';
+  const score = Number(document.getElementById('crScoreInput')?.value || 85);
+  const subj = document.getElementById('crSubjInput')?.value || 'Web Systems';
+
+  if (!studentKey) { showToast('Please select a student', 'error'); return; }
+
+  const custom = getCustomClassRecEntries();
+  if (!custom[studentKey]) custom[studentKey] = {};
+  custom[studentKey][quizId] = score;
+  custom[studentKey].subject = subj;
+
+  localStorage.setItem('scholaria_classrec_custom_v1', JSON.stringify(custom));
+  showToast('Quiz grade updated in Class Record', 'success');
+  closeAddClassRecordModal();
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function buildRealClassRecordEntries() {
+  if (!registeredUsers.length && typeof loadUsersFromDB === 'function') {
+    loadUsersFromDB();
+  }
+
+  const students = registeredUsers.filter(u => u.role === 'student');
+  const custom = getCustomClassRecEntries();
+  const quizzes = getClassRecordQuizzes();
+  const allAttempts = getAllRecordedAttempts();
+
+  return students.filter(u => {
+    if (classRecSectionFilter && u.section !== classRecSectionFilter) return false;
+    if (classRecStudentFilter) {
+      const uKey = u.dbId || u.id || u.name;
+      if (uKey !== classRecStudentFilter) return false;
+    }
+    return true;
+  }).map(u => {
+    const key = u.dbId || u.id || u.name;
+    const customData = custom[key] || {};
+
+    const studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, u)));
+
+    const quizScores = {};
+    let validScoresSum = 0;
+    let validScoresCount = 0;
+    let hasRealData = false;
+
+    quizzes.forEach(q => {
+      let scorePct = null;
+      let isLive = false;
+
+      const attempt = studAttempts.find(a =>
+        String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() ||
+        (a.quiz_title && String(a.quiz_title).toLowerCase() === String(q.title || '').toLowerCase())
+      );
+
+      if (attempt) {
+        if (attempt.score_percentage !== undefined && attempt.score_percentage !== null) {
+          scorePct = Math.round(Number(attempt.score_percentage));
+        } else if (attempt.score !== undefined && attempt.total_items) {
+          scorePct = Math.round((attempt.score / attempt.total_items) * 100);
+        } else if (attempt.score !== undefined) {
+          scorePct = Math.round(Number(attempt.score));
+        }
+        isLive = true;
+        hasRealData = true;
+      } else if (customData[q.id] !== undefined) {
+        scorePct = Number(customData[q.id]);
+        hasRealData = true;
+      }
+
+      if (scorePct !== null) {
+        validScoresSum += scorePct;
+        validScoresCount++;
+      }
+
+      quizScores[q.id] = { scorePct, isLive };
+    });
+
+    let avg = validScoresCount > 0 ? Number((validScoresSum / validScoresCount).toFixed(2)) : null;
+
+    if (studAttempts.length > 0) {
+      hasRealData = true;
+      let attSum = 0;
+      let attCnt = 0;
+      studAttempts.forEach(sa => {
+        let p = null;
+        if (sa.score_percentage !== undefined && sa.score_percentage !== null) {
+          p = Number(sa.score_percentage);
+        } else if (sa.score !== undefined && sa.total_items) {
+          p = (sa.score / sa.total_items) * 100;
+        } else if (sa.score !== undefined) {
+          p = Number(sa.score);
+        }
+        if (p !== null && !isNaN(p)) {
+          attSum += p;
+          attCnt++;
+        }
+      });
+      if (attCnt > 0) {
+        avg = Number((attSum / attCnt).toFixed(2));
+      }
+    }
+
+    return {
+      key,
+      name: u.name,
+      section: u.section || 'Unassigned',
+      strand: u.strand || 'General',
+      subject: customData.subject || (ROLE === 'teacher' ? (CURRENT_PROFILE?.subjects || 'STEM, HUMSS') : 'STEM, HUMSS'),
+      quizScores,
+      quizzesTakenCount: studAttempts.length,
+      avg,
+      hasRealData
+    };
+  });
+}
+
+function buildSectionSummaryEntries() {
+  const allStudentEntries = buildRealClassRecordEntries();
+  const sectionMap = new Map();
+
+  allStudentEntries.forEach(st => {
+    const sec = st.section || 'Unassigned';
+    if (!sectionMap.has(sec)) {
+      sectionMap.set(sec, {
+        section: sec,
+        subject: st.subject,
+        studentsCount: 0,
+        scoresSum: 0,
+        scoresCount: 0,
+        passingCount: 0
+      });
+    }
+    const secData = sectionMap.get(sec);
+    secData.studentsCount++;
+    if (st.avg !== null) {
+      secData.scoresSum += st.avg;
+      secData.scoresCount++;
+      if (st.avg >= 75) secData.passingCount++;
+    }
+  });
+
+  return Array.from(sectionMap.values()).map(sec => {
+    const classAvg = sec.scoresCount > 0 ? Number((sec.scoresSum / sec.scoresCount).toFixed(2)) : null;
+    const passRate = sec.scoresCount > 0 ? Math.round((sec.passingCount / sec.scoresCount) * 100) : null;
+    return {
+      ...sec,
+      classAvg,
+      passRate
+    };
+  });
+}
+
+/* ── TEACHER PAGES ROUTER & VIEWS ── */
 function teacherPage(page) {
   switch(page) {
     case 'dashboard': {
@@ -2880,7 +3119,13 @@ function teacherPage(page) {
   }
 }
 
-/* ── ADMIN PAGES ── */
+/* ═══════════════════════════════════════════════════════════════════════════════ */
+/* SECTION 4: ADMIN PORTAL UI & LOGIC                                             */
+/* Encapsulation: Dashboard.Admin                                                 */
+/* Contains: Content Approvals, User Mgmt, Sections, DepEd Reports & Admin UI     */
+/* ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── ADMIN PAGES ROUTER & VIEWS ── */
 function adminPage(page) {
   switch(page) {
     case 'dashboard': {
@@ -3168,298 +3413,88 @@ function adminPage(page) {
   }
 }
 
-/* ── SHARED CHAT PAGE LAYOUT ── */
-function buildChatPage(role) {
-  return `
-    <section class="scholaria-chat">
-    <div class="chat-page-heading">
-      <div><h2>Chats</h2><p>Connect with your ${role === 'teacher' ? 'students and fellow teachers' : 'teachers and classmates'}.</p></div>
-      <button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button>
-    </div>
-    <div class="chat-layout">
-      <div class="chat-contacts">
-        <div class="chat-contacts-hdr">
-          <span>Conversations</span>
-          <button class="new-chat-btn" title="New conversation" aria-label="New conversation" onclick="openNewChatModal()">${iconPlus()}</button>
-        </div>
-        <label class="chat-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/></svg><input type="search" aria-label="Search conversations" placeholder="Search conversations..." oninput="filterChatConversations(this.value)"></label>
-        <div class="chat-filters" aria-label="Filter conversations">
-          <button class="active" aria-pressed="true" data-chat-filter="all" onclick="setChatFilter('all')">All</button>
-          <button aria-pressed="false" data-chat-filter="teacher" onclick="setChatFilter('teacher')">Teachers</button>
-          ${role === 'student' ? '' : '<button aria-pressed="false" data-chat-filter="student" onclick="setChatFilter(\'student\')">Students</button>'}
-        </div>
-        <div class="contact-list" id="chatContactList">
-          <div class="contact-empty">Loading conversations…</div>
-        </div>
-      </div>
-      <div class="chat-window">
-        <div class="cw-header">
-          <button class="cw-back-btn" id="cwBackBtn" title="Back to conversations" aria-label="Back to conversations" onclick="closeConversation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
-          <div class="contact-avatar cw-placeholder-avatar" id="cwAvatar">${chatOutlineIcon()}</div>
-          <div>
-            <div class="cw-name" id="cwName">Your conversations</div>
-            <div class="cw-role" id="cwRole">Stay connected, keep learning.</div>
-          </div>
-        </div>
-        <div class="cw-messages" id="cwMessages">
-          <div class="cw-empty chat-welcome">${chatEmptyIllustration()}<h3>Start a conversation</h3><p>${role === 'teacher' ? 'Message a student, connect with fellow teachers,<br>or create a class group.' : 'Message a teacher, connect with classmates,<br>or create a study group.'}</p><button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button></div>
-        </div>
-        <div class="cw-input-area" id="cwInputArea"></div>
-      </div>
-    </div>
-    </section>`;
-}
+/* ═══════════════════════════════════════════════════════════════════════════════ */
+/* DASHBOARD NAMESPACE ENCAPSULATION                                              */
+/* ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* ── PAGE ROUTER & POLL TIMER ── */
-let currentPage = 'dashboard';
-let materialsPollTimer = null;
+window.Dashboard = {
+  // SECTION 1: Unified Core Foundations & Shell
+  Core: {
+    SIDEBAR,
+    ROLE_LABEL,
+    initDashboardShell,
+    getPageContent,
+    renderPage,
+    formatJoinDate,
+    updateNavAvatarUI,
+    handleAvatarFileSelect,
+    saveUserProfile,
+    buildProfilePage,
+    buildChatPage,
+    goToChat,
+    sizeBrandUnderlines,
+    isQuizTargetedForStudent
+  },
 
-function renderPage(page) {
-  currentPage = page;
-  document.querySelectorAll('.menu-item').forEach(i => {
-    if (i.dataset.page === page) i.classList.add('active');
-    else i.classList.remove('active');
-  });
-  const mainContent = document.getElementById('mainContent');
-  if (!mainContent) return;
-  mainContent.innerHTML = getPageContent(ROLE, page);
-  const fab = document.getElementById('chatFab');
-  if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
+  // SECTION 2: Student / User Portal
+  Student: {
+    studentPage,
+    setStudentQuizSort,
+    setStudentQuizFilterSubject,
+    setStudentQuizFilterStatus,
+    setStudentQuizSearchQuery,
+    resetStudentQuizFilters,
+    setStudentProgressTab,
+    setStudentProgressSubject,
+    setStudentProgressSort,
+    handleStudentProgressSearch,
+    clearStudentProgressSearch,
+    resetStudentProgressFilters,
+    setStudentDeadlineTab,
+    setStudentDeadlineSubject,
+    setStudentDeadlineMonth,
+    setStudentDeadlineSort,
+    updateStudentDeadlinesWidget,
+    renderStudentDeadlinesWidgetHTML
+  },
 
-  if (page === 'users' || page === 'classrec') loadUsersFromDB();
-  if (page === 'classrec') loadClassRecAttempts();
-  if (page === 'quiz') loadQuizzesFromDB();
-  if (page === 'quizzes' || page === 'progress') { loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
-  if (page === 'analysis') loadQuizzesFromDB();
-  if (page === 'chats') loadChatsPage();
-  if (page === 'dashboard') {
-    if (ROLE === 'teacher' || ROLE === 'admin') {
-      loadMaterialsFromDB();
-      loadQuizzesFromDB();
-      if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
-    }
-    if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
-    if (ROLE === 'student') { loadMaterialsFromDB(); loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
+  // SECTION 3: Teacher Portal
+  Teacher: {
+    teacherPage,
+    setClassRecSectionFilter,
+    openExpandedSectionView,
+    closeExpandedSectionView,
+    setClassRecStudentFilter,
+    setClassRecSubView,
+    openStudentGradePanel,
+    closeStudentGradePanel,
+    renderStudentGradePanelContent,
+    loadClassRecAttempts,
+    getCustomClassRecEntries,
+    saveCustomClassRecEntry,
+    isStudentHandledByTeacher,
+    deduplicateQuizAttempts,
+    getAllRecordedAttempts,
+    isAttemptBelongingToStudent,
+    getClassRecordQuizzes,
+    openAddClassRecordModal,
+    closeAddClassRecordModal,
+    submitAddClassRecord,
+    buildRealClassRecordEntries,
+    buildSectionSummaryEntries
+  },
+
+  // SECTION 4: Admin Portal
+  Admin: {
+    adminPage
   }
+};
 
-  clearInterval(materialsPollTimer);
-  materialsPollTimer = null;
-  if (page === 'materials' || page === 'approval') {
-    loadMaterialsFromDB();
-    if (page === 'approval') {
-      if (typeof loadQuizzesFromDB === 'function') loadQuizzesFromDB();
-      if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
-    }
-    materialsPollTimer = setInterval(() => {
-      loadMaterialsFromDB();
-      if (currentPage === 'approval' && typeof loadQuizzesFromDB === 'function') {
-        loadQuizzesFromDB();
-      }
-    }, 15000);
-  }
-}
-
-/* ── NAVIGATION LISTENERS ── */
-document.addEventListener('DOMContentLoaded', () => {
-  // Wrapped banner text must reserve its actual height above the navigation.
-  const bannerSelectors = ['.demo-mode-banner', '.emergency-top-banner'];
-  const bannerProperties = ['--banner-h', '--anc-banner-h'];
-  const observedBanners = new Set();
-  const bannerResizeObserver = new ResizeObserver(syncBannerHeights);
-  function syncBannerHeights() {
-    const banners = bannerSelectors.map(selector => document.querySelector(selector));
-    for (const banner of observedBanners) {
-      if (!banners.includes(banner)) {
-        bannerResizeObserver.unobserve(banner);
-        observedBanners.delete(banner);
-      }
-    }
-    banners.forEach((banner, index) => {
-      if (banner && !observedBanners.has(banner)) {
-        bannerResizeObserver.observe(banner);
-        observedBanners.add(banner);
-      }
-      const height = banner ? Math.ceil(banner.getBoundingClientRect().height) : 0;
-      document.body.style.setProperty(bannerProperties[index], `${height}px`);
-    });
-  }
-  const bannerMutationObserver = new MutationObserver(syncBannerHeights);
-  bannerMutationObserver.observe(document.body, { childList: true });
-  const bannerContainer = document.getElementById('emergencyBannerContainer');
-  if (bannerContainer) bannerMutationObserver.observe(bannerContainer, { childList: true, subtree: true });
-  syncBannerHeights();
-
-  const sidebarMenu = document.getElementById('sidebarMenu');
-  const toggleBtn = document.getElementById('hamburger-toggle');
-  const sidebar = document.getElementById('sidebar');
-  const backdrop = document.getElementById('sidebarBackdrop');
-
-  function openMobileSidebar() {
-    if (sidebar) sidebar.classList.add('open');
-    if (backdrop) backdrop.classList.add('active');
-    document.body.classList.add('mobile-menu-open');
-    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
-  }
-
-  function closeMobileSidebar() {
-    if (sidebar) sidebar.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('active');
-    document.body.classList.remove('mobile-menu-open');
-    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
-  }
-
-  const mobileLayout = window.matchMedia('(max-width: 900px)');
-  mobileLayout.addEventListener('change', closeMobileSidebar);
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && sidebar?.classList.contains('open')) {
-      closeMobileSidebar();
-      toggleBtn?.focus();
-    }
-  });
-  if (toggleBtn) {
-    toggleBtn.setAttribute('aria-controls', 'sidebar');
-    toggleBtn.setAttribute('aria-expanded', 'false');
-    toggleBtn.setAttribute('aria-label', 'Toggle navigation');
-  }
-
-  if (toggleBtn && sidebar) {
-    toggleBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (window.innerWidth <= 900) {
-        if (sidebar.classList.contains('open')) {
-          closeMobileSidebar();
-        } else {
-          openMobileSidebar();
-        }
-      } else {
-        sidebar.classList.toggle('closed');
-      }
-    });
-  }
-
-  if (backdrop) {
-    backdrop.addEventListener('click', closeMobileSidebar);
-  }
-
-  if (sidebarMenu) {
-    sidebarMenu.addEventListener('click', e => {
-      const item = e.target.closest('.menu-item[data-page]');
-      if (!item) return;
-      e.preventDefault();
-      document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
-      item.classList.add('active');
-      renderPage(item.dataset.page);
-      if (window.innerWidth <= 900) {
-        closeMobileSidebar();
-      }
-    });
-  }
-});
-
-function goToChat() {
-  const chatItem = document.querySelector('.menu-item[data-page="chats"]');
-  if (chatItem) chatItem.click();
-}
-
-function sizeBrandUnderlines() {
-  const schol = document.getElementById('wm-schol');
-  const aria = document.getElementById('wm-aria');
-  const ulSchol = document.getElementById('ul-schol');
-  const ulAria = document.getElementById('ul-aria');
-  if (!schol || !aria || !ulSchol || !ulAria) return;
-  try {
-    const b1 = schol.getBBox();
-    const b2 = aria.getBBox();
-    ulSchol.setAttribute('x', b1.x);
-    ulSchol.setAttribute('width', b1.width);
-    ulAria.setAttribute('x', b2.x);
-    ulAria.setAttribute('width', b2.width);
-  } catch(e) {}
-}
-
-window.addEventListener('load', sizeBrandUnderlines);
-window.addEventListener('resize', sizeBrandUnderlines);
-
-/* ── TWO-FACTOR AUTHENTICATION (2FA) HELPERS ── */
-let currentEnrollmentFactorId = null;
-
-async function openTwoFactorModal() {
-  const modal = document.getElementById('twoFactorModal');
-  const loading = document.getElementById('twoFactorLoading');
-  const content = document.getElementById('twoFactorContent');
-  const qrWrap = document.getElementById('twoFactorQrWrap');
-  const secretCode = document.getElementById('twoFactorSecretCode');
-  const confirmInput = document.getElementById('twoFactorConfirmCode');
-
-  if (!modal) return;
-  modal.classList.add('active');
-  loading.style.display = 'block';
-  content.style.display = 'none';
-  if (confirmInput) confirmInput.value = '';
-
-  try {
-    const { data, error } = await db.auth.mfa.enroll({
-      factorType: 'totp',
-      issuer: 'Scholaria'
-    });
-
-    if (error) {
-      loading.innerHTML = `<p style="color:#dc2626;font-size:13px;">${escHtml(error.message || 'Could not initiate 2FA setup')}</p>`;
-      return;
-    }
-
-    currentEnrollmentFactorId = data.id;
-    if (qrWrap) {
-      qrWrap.innerHTML = data.totp?.qr_code
-        ? (data.totp.qr_code.startsWith('<svg') ? data.totp.qr_code : `<img src="${data.totp.qr_code}" alt="2FA QR Code" style="width:180px;height:180px;"/>`)
-        : `<p style="font-size:12px;color:var(--text-muted);">QR Code not available, use the manual code below</p>`;
-    }
-    if (secretCode) secretCode.textContent = data.totp?.secret || '—';
-
-    loading.style.display = 'none';
-    content.style.display = 'flex';
-  } catch (err) {
-    loading.innerHTML = `<p style="color:#dc2626;font-size:13px;">Failed to connect to authentication server</p>`;
-  }
-}
-
-function closeTwoFactorModal() {
-  const modal = document.getElementById('twoFactorModal');
-  if (modal) modal.classList.remove('active');
-  currentEnrollmentFactorId = null;
-}
-
-async function confirmTwoFactorEnrollment() {
-  const code = (document.getElementById('twoFactorConfirmCode')?.value || '').trim();
-  if (!code || code.length < 6) {
-    showToast('Please enter the 6-digit code from your app', 'error');
-    return;
-  }
-  if (!currentEnrollmentFactorId) {
-    showToast('No active 2FA enrollment session', 'error');
-    return;
-  }
-
-  const btn = document.getElementById('twoFactorActivateBtn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
-
-  try {
-    const { data, error } = await db.auth.mfa.challengeAndVerify({
-      factorId: currentEnrollmentFactorId,
-      code: code
-    });
-
-    if (error) {
-      showToast('Invalid verification code. Check your app and try again.', 'error');
-      return;
-    }
-
-    showToast('2FA successfully enabled!', 'success');
-    closeTwoFactorModal();
-  } catch (err) {
-    showToast('Verification failed', 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Activate 2FA'; }
-  }
-}
+// Global top-level safety bindings
+window.initDashboardShell = initDashboardShell;
+window.getPageContent = getPageContent;
+window.renderPage = renderPage;
+window.studentPage = studentPage;
+window.teacherPage = teacherPage;
+window.adminPage = adminPage;
 
