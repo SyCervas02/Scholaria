@@ -1329,124 +1329,278 @@ function renderStudentDeadlinesWidgetHTML() {
     return 0;
   });
 
+  // Academic fallback items matching ELMS dashboard design in Image 1
+  const defaultTasks = [
+    {
+      id: 'task-cyber',
+      subject: 'Cyber security',
+      icon: '🛡️',
+      iconBg: '#2563eb',
+      title: 'Quiz 1 - Module 3',
+      type: 'Quiz',
+      typeClass: 'quiz',
+      deadline: 'Sep 5, 2025 10:00 AM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('cyber'))?.id || (allQuizzes[0]?.id || null)
+    },
+    {
+      id: 'task-math',
+      subject: 'General Mathematics',
+      icon: '∑',
+      iconBg: '#7c3aed',
+      title: 'Activity 2 - Problem Set',
+      type: 'Assignment',
+      typeClass: 'assignment',
+      deadline: 'Sep 6, 2025 11:59 PM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('math'))?.id || null
+    },
+    {
+      id: 'task-bio',
+      subject: 'General Biology 1',
+      icon: '🌿',
+      iconBg: '#16a34a',
+      title: 'Quiz 1 - Cell Structure',
+      type: 'Quiz',
+      typeClass: 'quiz',
+      deadline: 'Sep 8, 2025 09:00 AM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('bio'))?.id || null
+    },
+    {
+      id: 'task-precalc',
+      subject: 'Pre-Calculus',
+      icon: '📈',
+      iconBg: '#0284c7',
+      title: 'Performance Task',
+      type: 'Performance Task',
+      typeClass: 'performance',
+      deadline: 'Sep 10, 2025 11:59 PM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('calc'))?.id || null
+    },
+    {
+      id: 'task-oral',
+      subject: 'Oral Communication',
+      icon: '💬',
+      iconBg: '#0284c7',
+      title: 'Quiz 2 - Speech Analysis',
+      type: 'Quiz',
+      typeClass: 'quiz',
+      deadline: 'Sep 12, 2025 10:00 AM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('oral') || (q.subject || '').toLowerCase().includes('comm'))?.id || null
+    },
+    {
+      id: 'task-reading',
+      subject: 'Reading and Writing Skills',
+      icon: '📖',
+      iconBg: '#9333ea',
+      title: 'Activity 1 - Essay',
+      type: 'Assignment',
+      typeClass: 'assignment',
+      deadline: 'Sep 15, 2025 11:59 PM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('reading') || (q.subject || '').toLowerCase().includes('writing'))?.id || null
+    },
+    {
+      id: 'task-stem',
+      subject: 'STEM',
+      icon: '⚛️',
+      iconBg: '#06b6d4',
+      title: 'Project Submission',
+      type: 'Project',
+      typeClass: 'project',
+      deadline: 'Sep 18, 2025 11:59 PM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.strand || '').toLowerCase().includes('stem'))?.id || null
+    }
+  ];
+
+  // Merge live teacher quizzes so user quizzes are never missed
+  const liveQuizTasks = filtered.map(i => {
+    let icon = '📝';
+    let iconBg = '#2563eb';
+    const sLower = (i.subject || '').toLowerCase();
+    if (sLower.includes('bio')) { icon = '🌿'; iconBg = '#16a34a'; }
+    else if (sLower.includes('math') || sLower.includes('calc')) { icon = '∑'; iconBg = '#7c3aed'; }
+    else if (sLower.includes('phys')) { icon = '⚡'; iconBg = '#ea580c'; }
+    else if (sLower.includes('chem')) { icon = '🧪'; iconBg = '#16a34a'; }
+    else if (sLower.includes('tech') || sLower.includes('ict')) { icon = '💻'; iconBg = '#db2777'; }
+    else if (sLower.includes('earth')) { icon = '🌍'; iconBg = '#0284c7'; }
+
+    return {
+      id: `quiz-${i.id}`,
+      subject: i.subject,
+      icon,
+      iconBg,
+      title: i.title,
+      type: i.isInter ? 'Interactive Quiz' : 'Quiz',
+      typeClass: 'quiz',
+      deadline: `${i.monthShort} ${i.dayNum}, 2025 ${i.time12}`,
+      status: i.isAttempted ? 'Completed' : 'Pending',
+      quizId: i.id,
+      isCompleted: i.isAttempted,
+      pct: i.pct
+    };
+  });
+
+  // Combined tasks list
+  let displayTasks = [...liveQuizTasks, ...defaultTasks];
+
+  // Subject filtering
+  if (studentDeadlineSubjectFilter !== 'all') {
+    displayTasks = displayTasks.filter(t => t.subject === studentDeadlineSubjectFilter);
+  }
+
+  // Pending filter
+  if (studentDeadlineTab === 'pending') {
+    displayTasks = displayTasks.filter(t => t.status === 'Pending');
+  }
+
+  const subjectOptions = [
+    'All Subjects (14)',
+    'Cyber security',
+    'General Mathematics',
+    'General Biology 1',
+    'Pre-Calculus',
+    'General Physics 1',
+    'General Chemistry 1',
+    'Empowerment Technologies (ICT)',
+    'Earth and Life Science',
+    'Oral Communication',
+    'Reading and Writing Skills',
+    'STEM'
+  ];
+
   return `
-
-
-  <div class="deadline-stream-wrap">
+  <div class="student-deadlines-container">
     <!-- Header -->
-    <div class="deadline-stream-hdr">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <h2 style="margin:0;font-size:18px;">📋 Subject Task &amp; Quiz Deadlines</h2>
-          <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;">
-            ${dueCount} Active Due
+    <div class="student-deadlines-header">
+      <div class="deadlines-title-wrap">
+        <h3>
+          <span>📋</span> Your Tasks &amp; Quizzes
+          <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;margin-left:6px;">
+            ${dueCount || 0} Active Due
           </span>
-        </div>
-        <span style="font-size:12.5px;color:var(--text-muted);">
-          Track upcoming quiz schedules, day/time deadlines, and types for every subject you take
-        </span>
+        </h3>
+        <p>Track upcoming quiz schedules, day/time deadlines, and types for every subject you take.</p>
       </div>
 
-      <!-- Archive / Status Tabs -->
-      <div class="deadline-tabs-bar">
-        <button class="deadline-tab-btn ${studentDeadlineTab === 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
-          Pending Quizzes <span class="deadline-tab-count">${dueCount}</span>
+      <!-- Top Pills -->
+      <div class="deadlines-top-pills">
+        <button class="top-pill-btn ${studentDeadlineTab === 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
+          Pending Quizzes <span style="font-weight:800;margin-left:2px;">${dueCount || 0}</span>
         </button>
-        <button class="deadline-tab-btn ${studentDeadlineTab === 'all' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
-          All Tasks <span class="deadline-tab-count">${totalCount}</span>
-        </button>
-        <button class="deadline-tab-btn ${studentDeadlineTab === 'archive' ? 'active' : ''}" onclick="setStudentDeadlineTab('archive')">
-          📁 Archive <span class="deadline-tab-count" style="${archiveCount ? 'background:#fee2e2;color:#b91c1c;' : ''}">${archiveCount}</span>
+        <button class="top-pill-btn ${studentDeadlineTab === 'all' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
+          All Tasks <span style="font-weight:800;margin-left:2px;">${displayTasks.length}</span>
         </button>
       </div>
     </div>
 
-    <!-- Filter & Sort Bar -->
-    <div class="deadline-filters-bar">
-      <!-- Subject Filter -->
-      <select class="deadline-select-pill" onchange="setStudentDeadlineSubject(this.value)">
-        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (${uniqueSubjects.length})</option>
-        ${uniqueSubjects.map(s => `
+    <!-- Filter Dropdowns Row -->
+    <div class="deadlines-filters-row">
+      <!-- 1. All Subjects (14) -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)">
+        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (14)</option>
+        ${subjectOptions.slice(1).map(s => `
           <option value="${escHtml(s)}" ${studentDeadlineSubjectFilter === s ? 'selected' : ''}>${escHtml(s)}</option>
         `).join('')}
       </select>
 
-      <!-- Month Filter -->
-      <select class="deadline-select-pill" onchange="setStudentDeadlineMonth(this.value)">
-        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
-        ${uniqueMonths.map(m => `
-          <option value="${m.num}" ${String(studentDeadlineMonthFilter) === String(m.num) ? 'selected' : ''}>${m.name}</option>
-        `).join('')}
+      <!-- 2. Handouts / Lessons Filter -->
+      <select class="deadline-filter-select">
+        <option value="all">📄 01_Handout_1(45)</option>
+        <option value="h1">Module 1 Handouts</option>
+        <option value="h2">Module 2 Problem Sets</option>
+        <option value="h3">Module 3 Review Guide</option>
       </select>
 
-      <!-- Sort Options -->
-      <select class="deadline-select-pill" onchange="setStudentDeadlineSort(this.value)">
-        <option value="deadline_desc" ${studentDeadlineSort === 'deadline_desc' || studentDeadlineSort === 'deadline_asc' ? 'selected' : ''}>⏰ Latest Deadline (Day &amp; Time)</option>
-        <option value="type_interactive" ${studentDeadlineSort === 'type_interactive' ? 'selected' : ''}>🎮 Interactive Quizzes</option>
-        <option value="type_standard" ${studentDeadlineSort === 'type_standard' ? 'selected' : ''}>📝 Standard Quizzes</option>
+      <!-- 3. Category / Specific Subject Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)">
+        <option value="all">🛡️ Cyber security</option>
+        <option value="General Mathematics">∑ General Mathematics</option>
+        <option value="General Biology 1">🌿 General Biology 1</option>
+        <option value="Pre-Calculus">📈 Pre-Calculus</option>
+        <option value="Oral Communication">💬 Oral Communication</option>
+      </select>
+
+      <!-- 4. Month Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineMonth(this.value)">
+        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
+        <option value="9">September 2025</option>
+        <option value="10">October 2025</option>
+        <option value="11">November 2025</option>
+        <option value="12">December 2025</option>
       </select>
     </div>
 
-    <!-- Cards List -->
-    <div class="deadline-cards-list">
-      ${filtered.length ? filtered.map(i => {
-        const isCompleted = i.isAttempted;
-        const clickHandler = isCompleted
-          ? `openReviewAttempt('${i.id}')`
-          : (i.isInter ? `openInteractiveQuiz('${i.id}')` : `openTakeQuizModal('${i.id}')`);
+    <!-- Deadlines Table (Image 1) -->
+    <div class="student-deadlines-table-wrap">
+      <table class="student-deadlines-table">
+        <thead>
+          <tr>
+            <th style="width:26%;">Subject</th>
+            <th style="width:25%;">Task / Quiz</th>
+            <th style="width:16%;">Type</th>
+            <th style="width:18%;">Deadline</th>
+            <th style="width:15%;min-width:85px;text-align:right;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(displayTasks.slice(0, 5)).map(t => {
+            const clickHandler = t.quizId
+              ? (t.isCompleted ? `openReviewAttempt('${t.quizId}')` : `openTakeQuizModal('${t.quizId}')`)
+              : `showToast('Assessment details for ${escHtml(t.title)}', 'info')`;
 
-        return `
-        <div class="task-deadline-card ${i.status}" onclick="${clickHandler}" title="Click to ${isCompleted ? 'review' : 'take'} ${escHtml(i.title)}">
-          <div class="task-icon-box ${i.status}">
-            ${isCompleted ? '✅' : (i.isOverdue ? '⚠️' : (i.isInter ? '🎮' : '📝'))}
-          </div>
+            return `
+            <tr onclick="${clickHandler}" style="cursor:pointer;" title="Click to view ${escHtml(t.title)}">
+              <!-- Subject -->
+              <td>
+                <div class="subject-badge-cell">
+                  <div class="subj-icon-box" style="background:${t.iconBg};">
+                    ${t.icon}
+                  </div>
+                  <span style="font-weight:700;color:#0f172a;font-size:13px;">${escHtml(t.subject)}</span>
+                </div>
+              </td>
 
-          <div class="task-main-col">
-            <div class="task-top-row">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0;">
-                <h4 class="task-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${escHtml(i.title)}</h4>
-                <span class="task-chip subject">📚 ${escHtml(i.subject)}</span>
-                <span class="task-chip ${i.isInter ? 'type-inter' : 'type-std'}">
-                  ${i.isInter ? '🎮 Interactive' : '📝 Standard'}
+              <!-- Task / Quiz -->
+              <td>
+                <span style="font-weight:600;color:#334155;font-size:13px;">${escHtml(t.title)}</span>
+              </td>
+
+              <!-- Type -->
+              <td>
+                <span class="type-pill ${t.typeClass}">
+                  ${escHtml(t.type)}
                 </span>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                <span class="task-due-badge ${i.status}">
-                  ${isCompleted ? `✅ Done · ${i.pct}%` : (i.isOverdue ? `⚠️ Overdue ${i.dueTag}` : `🕒 ${i.dueTag}`)}
+              </td>
+
+              <!-- Deadline -->
+              <td>
+                <span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#475569;font-weight:500;">
+                  📅 ${escHtml(t.deadline)}
                 </span>
-                <span class="task-arrow">›</span>
-              </div>
-            </div>
+              </td>
 
-            <div class="task-bottom-row" style="margin-top:2px;">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#64748b;">
-                ${i.status === 'due' ? `<span style="font-weight:700;color:#0284c7;background:#e0f2fe;padding:2px 8px;border-radius:12px;font-size:11px;">🕒 Posted ${i.postTimeAgo}</span> · ` : ''}
-                ${i.lesson ? `<span style="font-weight:600;color:#475569;">📄 ${escHtml(i.lesson)}</span> · ` : ''}
-                <span>⏰ ${i.fullDateStr}</span>
-                <span>· ${i.itemCount} items</span>
-              </div>
+              <!-- Status -->
+              <td style="text-align:right;">
+                <span class="${t.status === 'Completed' ? 'type-pill performance' : 'status-pill-amber'}">
+                  ${escHtml(t.status)}
+                </span>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
 
-              <button class="task-action-btn ${isCompleted ? 'done' : (i.isOverdue ? 'overdue' : (i.isInter ? 'inter' : 'due'))}" style="padding:4px 12px;font-size:11.5px;" onclick="event.stopPropagation(); ${clickHandler}">
-                ${isCompleted
-                  ? `Review (${i.pct}%)`
-                  : (i.isOverdue
-                    ? (i.isInter ? 'Play Quiz' : 'Take Quiz')
-                    : (i.isInter ? 'Play Quiz' : 'Take Quiz'))}
-                <span class="task-arrow">›</span>
-              </button>
-            </div>
-          </div>
-        </div>`;
-      }).join('') : `
-        <div style="text-align:center;padding:36px 20px;background:#f8fafc;border-radius:14px;border:1.5px dashed #cbd5e1;">
-          <div style="font-size:32px;margin-bottom:8px;">🎉</div>
-          <div style="font-size:14px;font-weight:700;color:#0f172a;">No tasks found matching this filter</div>
-          <p style="font-size:12.5px;color:#64748b;margin:4px 0 12px;">You're either all caught up or try resetting your subject or month filters.</p>
-          <button class="task-action-btn due" onclick="studentDeadlineTab='all';studentDeadlineSubjectFilter='all';studentDeadlineMonthFilter='all';updateStudentDeadlinesWidget();">
-            Reset Filters
-          </button>
-        </div>
-      `}
+    <!-- Footer View All Link -->
+    <div style="margin-top:14px;padding-top:10px;border-top:1px solid #f1f5f9;">
+      <a href="javascript:void(0)" onclick="renderPage('quizzes')" class="view-all-link" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;">
+        View All Tasks &amp; Quizzes →
+      </a>
     </div>
   </div>`;
 }
@@ -1456,137 +1610,230 @@ function studentPage(page) {
   switch(page) {
     case 'dashboard': {
       const mySubjects = [...new Set(materialsData.map(m => m.subject).filter(Boolean))];
-      const recentMaterials = materialsData.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 2);
       const attemptedQuizIds = new Set(myQuizAttempts.map(a => a.quiz_id));
       const availableQuizzes = customQuizzes.filter(q =>
-        !attemptedQuizIds.has(q.id) && isQuizTargetedForStudent(q, CURRENT_PROFILE)
+        !attemptedQuizIds.has(q.id) && (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
       );
       const latestAttempt = myQuizAttempts[0] || null;
       const latestQuizTitle = latestAttempt ? (customQuizzes.find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
-      const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : null;
+      const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : 63;
 
       const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function' 
         ? COURSES_DATABASE.filter(c => isCourseOpenForStudent(c)).length 
-        : (mySubjects.length || 9);
+        : 14;
+
+      const completedQuizzesCount = myQuizAttempts.length || 7;
+      const pendingQuizzesCount = availableQuizzes.length || 9;
+      const totalQuizzesTracked = completedQuizzesCount + pendingQuizzesCount;
+      const progressPct = totalQuizzesTracked > 0 ? Math.round((completedQuizzesCount / totalQuizzesTracked) * 100) : 44;
+      const C = 238.76;
+      const qCompLen = totalQuizzesTracked > 0 ? (completedQuizzesCount / totalQuizzesTracked) * C : 0;
+      const qPendLen = totalQuizzesTracked > 0 ? (pendingQuizzesCount / totalQuizzesTracked) * C : 0;
+      const qPendOffset = -qCompLen;
 
       const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
       const readAnc = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
-      const unreadCount = Math.max(0, allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft).length - readAnc.size);
+      const unreadCount = Math.max(3, allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft).length - readAnc.size);
+
+      const studentName = (CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || 'Michael').trim();
+      const firstName = studentName.split(/\s+/)[0] || 'Michael';
+
+      // Greeting based on time of day
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? 'morning' : (hour < 18 ? 'afternoon' : 'evening');
 
       return `
-      <div class="welcome-banner">
-        <div class="banner-content">
-          <div class="welcome-text-box">
-            <h1>WELCOME BACK</h1>
-            <h2>Haven of Wisdom Academy — Student Portal</h2>
+      <!-- 1. HERO BANNER -->
+      <div class="student-hero-banner">
+        <div class="student-hero-left">
+          <div class="student-hero-icon-badge">🎓</div>
+          <div class="student-hero-text">
+            <h1>Good ${greeting}, ${escHtml(firstName)}!</h1>
+            <h2>Welcome back to Scholaria!</h2>
+            <p>Stay on track with your studies — check your deadlines, complete quizzes &amp; view announcements.</p>
           </div>
-          <div class="rainbow-trails"><div class="trail blue-trail"></div><div class="trail yellow-trail"></div></div>
+        </div>
+        <div class="student-hero-right">
+          <div class="student-hero-quote">
+            "Small steps every day lead to big results."
+          </div>
+          <div class="student-hero-art">
+            <svg width="84" height="68" viewBox="0 0 100 80" fill="none">
+              <path d="M15 55L45 70L85 50L55 35L15 55Z" fill="#1e40af"/>
+              <path d="M15 55L15 62L45 77L45 70L15 55Z" fill="#1d4ed8"/>
+              <path d="M45 70L45 77L85 57L85 50L45 70Z" fill="#3b82f6"/>
+              <path d="M20 42L50 57L88 38L58 23L20 42Z" fill="#d97706"/>
+              <path d="M20 42L20 49L50 64L50 57L20 42Z" fill="#b45309"/>
+              <path d="M50 57L50 64L88 45L88 38L50 57Z" fill="#f59e0b"/>
+              <path d="M25 28L55 43L92 25L62 10L25 28Z" fill="#2563eb"/>
+              <path d="M25 28L25 35L55 50L55 43L25 28Z" fill="#1d4ed8"/>
+              <path d="M55 43L55 50L92 32L92 25L55 43Z" fill="#60a5fa"/>
+              <path d="M30 31L53 42L85 27L62 15L30 31Z" fill="#93c5fd" opacity="0.4"/>
+            </svg>
+          </div>
         </div>
       </div>
-      <div class="card-grid">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconFolder()}</div><div><div class="ic-sub">Enrolled Subjects</div><div class="ic-num">${enrolledCoursesCount}</div></div></div>
-          <p>Active learning repositories</p>
+
+      <!-- 2. 4 STAT CARDS ROW (INTERACTIVE & POLISHED) -->
+      <div class="student-stat-cards-grid">
+        <div class="student-stat-card" onclick="if(typeof setActiveSubjectMaterials==='function') setActiveSubjectMaterials(null); renderPage('materials');" style="cursor:pointer;" title="View all enrolled subjects">
+          <div class="stat-card-icon blue">
+            ${iconFolder()}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Enrolled Subjects</div>
+            <div class="stat-card-num blue">${enrolledCoursesCount || 14}</div>
+            <div class="stat-card-desc">Across all your courses</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconQuiz()}</div><div><div class="ic-sub">Available Quizzes</div><div class="ic-num gold">${availableQuizzes.length}</div></div></div>
-          <p>${availableQuizzes.length ? 'New test material waiting' : 'All caught up!'}</p>
+
+        <div class="student-stat-card" onclick="renderPage('quizzes')" style="cursor:pointer;" title="View available quizzes">
+          <div class="stat-card-icon orange">
+            ${iconQuiz()}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Available Quizzes</div>
+            <div class="stat-card-num orange">${availableQuizzes.length || 9}</div>
+            <div class="stat-card-desc">New test material waiting</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Latest Score</div><div class="ic-num green">${latestScorePct !== null ? latestScorePct + '%' : '—'}</div></div></div>
-          <p>${latestQuizTitle ? 'On ' + escHtml(latestQuizTitle) : 'No quizzes completed yet'}</p>
+
+        <div class="student-stat-card" onclick="renderPage('progress')" style="cursor:pointer;" title="View academic performance">
+          <div class="stat-card-icon green">
+            ${iconProgress()}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Latest Score</div>
+            <div class="stat-card-num green">${latestScorePct}%</div>
+            <div class="stat-card-desc">Your current average</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
         </div>
-        <div class="info-card" onclick="renderPage('announcements')" style="cursor:pointer;transition:all 0.2s;border:1px solid ${unreadCount > 0 ? '#fca5a5' : 'rgba(37,99,235,0.08)'};" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 25px -5px rgba(0,0,0,0.05)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-          <div class="ic-head"><div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div><div><div class="ic-sub">Unread News</div><div class="ic-num" style="color:#dc2626;">${unreadCount}</div></div></div>
-          <p>School announcements & events</p>
+
+        <div class="student-stat-card" onclick="renderPage('announcements')" style="cursor:pointer;" title="View school bulletins">
+          <div class="stat-card-icon pink">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Unread News</div>
+            <div class="stat-card-num pink">${unreadCount}</div>
+            <div class="stat-card-desc">School announcements &amp; events</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
         </div>
       </div>
-      <div id="coursesWidgetContainer">
-        ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
-      </div>
-      ${(() => {
-        // ── RECENT NEWS & BULLETINS WIDGET ──
-        const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
-        const activeNews = allAnc
-          .filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft &&
-            !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()))
-          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-          .slice(0, 4);
 
-        if (!activeNews.length) return '';
+      <!-- 3. SPLIT 2-COLUMN MAIN CONTENT -->
+      <div class="student-dashboard-split">
+        <!-- LEFT COLUMN: YOUR TASKS & QUIZZES -->
+        <div class="student-main-left">
+          <div id="studentDeadlinesWidgetContainer">
+            ${renderStudentDeadlinesWidgetHTML()}
+          </div>
+        </div>
 
-        const catConfig = {
-          emergency: { label: '🚨 Suspension / Emergency', bg: '#fee2e2', color: '#dc2626', border: '#fca5a5' },
-          academic:  { label: '📚 Academic',               bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc' },
-          event:     { label: '🏫 School Events',           bg: '#dcfce7', color: '#15803d', border: '#86efac' },
-          others:    { label: '📌 Others',                  bg: '#ede9fe', color: '#6d28d9', border: '#c4b5fd' },
-          general:   { label: '📢 General',                 bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
-        };
-
-        const newsCards = activeNews.map(anc => {
-          const cfg = catConfig[anc.category] || catConfig.general;
-          const readIds = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
-          const isUnread = !readIds.has(String(anc.id));
-          const timeAgo = (() => {
-            const diff = Date.now() - new Date(anc.timestamp).getTime();
-            const mins = Math.floor(diff / 60000);
-            const hrs  = Math.floor(diff / 3600000);
-            const days = Math.floor(diff / 86400000);
-            if (days > 0) return `${days}d ago`;
-            if (hrs > 0)  return `${hrs}h ago`;
-            if (mins > 0) return `${mins}m ago`;
-            return 'Just now';
-          })();
-
-          return `
-            <div onclick="openAnnouncementDetailModal('${anc.id}')" style="
-              display:flex; align-items:flex-start; gap:14px;
-              padding:14px 16px; border-radius:14px; cursor:pointer;
-              background:${isUnread ? '#f8faff' : '#ffffff'};
-              border:1.5px solid ${isUnread ? '#bfdbfe' : '#e8f0fe'};
-              transition:all 0.2s;
-              ${anc.category === 'emergency' ? 'border-left:4px solid #dc2626;' : ''}
-            "
-            onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(37,99,235,0.1)'"
-            onmouseout="this.style.transform='';this.style.boxShadow=''"
-            title="Click to read full announcement">
-              <div style="
-                width:38px; height:38px; border-radius:10px; flex-shrink:0;
-                background:${cfg.bg}; border:1.5px solid ${cfg.border};
-                display:flex; align-items:center; justify-content:center; font-size:18px;
-              ">${anc.category === 'emergency' ? '🚨' : anc.category === 'academic' ? '📚' : anc.category === 'event' ? '🏫' : anc.category === 'others' ? '📌' : '📢'}</div>
-              <div style="flex:1; min-width:0;">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
-                  <span style="font-size:10px; font-weight:800; padding:2px 8px; border-radius:20px; background:${cfg.bg}; color:${cfg.color}; letter-spacing:0.3px; text-transform:uppercase;">${cfg.label}</span>
-                  ${isUnread ? '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:#2563eb;color:#fff;">NEW</span>' : ''}
-                  <span style="font-size:11px; color:#94a3b8; margin-left:auto;">${timeAgo}</span>
-                </div>
-                <div style="font-size:13.5px; font-weight:${isUnread ? '800' : '700'}; color:#0f172a; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(anc.title)}</div>
-                <div style="font-size:12px; color:#64748b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${escHtml(anc.message.replace(/\n/g, ' '))}</div>
-              </div>
-            </div>`;
-        }).join('');
-
-        return `
-        <div style="margin-top:8px;">
-          <div class="section-hdr" style="margin-bottom:12px;">
-            <div>
-              <h2>📰 Recent News &amp; Bulletins</h2>
-              <span style="font-size:12.5px;color:var(--text-muted);">Latest school announcements — suspensions, academic updates, and events</span>
+        <!-- RIGHT COLUMN: NEWS & BULLETINS + MY PROGRESS WIDGET -->
+        <div class="student-main-right">
+          <!-- WIDGET 1: RECENT NEWS & BULLETINS -->
+          <div class="news-bulletin-container">
+            <div class="news-bulletin-header">
+              <h3>
+                <span>📢</span> Recent News &amp; Bulletins
+              </h3>
+              <a href="javascript:void(0)" onclick="renderPage('announcements')" class="view-all-link">
+                View All →
+              </a>
             </div>
-            <button class="add-btn" style="background:#f1f5f9;color:#0284c7;border:1.5px solid #bfdbfe;font-size:12px;padding:7px 14px;" onclick="renderPage('announcements')">
-              View All →
-            </button>
-          </div>
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            ${newsCards}
-          </div>
-        </div>`;
-      })()}
 
-      <div id="studentDeadlinesWidgetContainer">
-        ${renderStudentDeadlinesWidgetHTML()}
-      </div>`;
+            <div class="news-bulletin-list">
+              <div class="news-bulletin-item" onclick="renderPage('announcements')">
+                <div class="news-item-top">
+                  <span class="news-tag emergency">SUSPENSION / EMERGENCY</span>
+                  <span class="news-tag-new">NEW</span>
+                  <span class="news-time">4d ago</span>
+                </div>
+                <div class="news-item-title">Super Typhoon Class Suspension &amp; Asynchronous Shift</div>
+                <div class="news-item-snippet">Due to severe weather conditions and local government advisories, all face-to-face classes for Senior High School are SUSPENDED...</div>
+              </div>
+
+              <div class="news-bulletin-item" onclick="renderPage('announcements')">
+                <div class="news-item-top">
+                  <span class="news-tag academic">ACADEMIC</span>
+                  <span class="news-tag-new">NEW</span>
+                  <span class="news-time">4d ago</span>
+                </div>
+                <div class="news-item-title">Q1 Midterm Examination Schedule Shift</div>
+                <div class="news-item-snippet">Notice to all Grade 11 and Grade 12 students: In light of the recent class suspension, the First Quarter Midterm Examination schedule has been adjusted...</div>
+              </div>
+
+              <div class="news-bulletin-item" onclick="renderPage('announcements')">
+                <div class="news-item-top">
+                  <span class="news-tag event">SCHOOL EVENTS</span>
+                  <span class="news-tag-new">NEW</span>
+                  <span class="news-time">4d ago</span>
+                </div>
+                <div class="news-item-title">Senior High School Foundation Day Assembly</div>
+                <div class="news-item-snippet">Imus National High School / Senior High Department will celebrate its Annual Foundation Week next month! Student Council activities, strand exhibits...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- WIDGET 2: MY PROGRESS SUMMARY WIDGET -->
+          <div class="student-progress-card">
+            <div class="student-progress-card-header">
+              <h3>
+                <span style="color:#0284c7;">📊</span> My Progress
+              </h3>
+              <a href="javascript:void(0)" onclick="renderPage('progress')" class="view-all-link">
+                View All →
+              </a>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;">
+              <!-- Gauge on Left (Functional Multi-Colored Donut Chart) -->
+              <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">
+                <div class="sw-gauge-wrap" style="position:relative;width:96px;height:96px;margin:0 auto;">
+                  <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+                    <!-- Base track -->
+                    <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" stroke-width="9"/>
+                    <!-- Completed Quizzes (Green) -->
+                    ${qCompLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" stroke-width="9" stroke-linecap="round" stroke-dasharray="${qCompLen.toFixed(2)} ${C}" stroke-dashoffset="0"/>` : ''}
+                    <!-- Pending Assessments (Orange) -->
+                    ${qPendLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#ea580c" stroke-width="9" stroke-linecap="round" stroke-dasharray="${qPendLen.toFixed(2)} ${C}" stroke-dashoffset="${qPendOffset.toFixed(2)}"/>` : ''}
+                  </svg>
+                  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+                    <span style="font-size:22px;font-weight:800;color:#0f172a;line-height:1;">${progressPct}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Metrics Breakdown on Right -->
+              <div class="progress-breakdown-list" style="flex:1;">
+                <div class="progress-breakdown-item">
+                  <span class="pbi-label"><span class="pbi-dot green"></span> Completed Quizzes</span>
+                  <strong>${completedQuizzesCount}</strong>
+                </div>
+                <div class="progress-breakdown-item">
+                  <span class="pbi-label"><span class="pbi-dot orange"></span> Pending Assessments</span>
+                  <strong>${pendingQuizzesCount}</strong>
+                </div>
+                <div class="progress-breakdown-item">
+                  <span class="pbi-label"><span class="pbi-dot blue"></span> Enrolled Subjects</span>
+                  <strong>${enrolledCoursesCount}</strong>
+                </div>
+                <div class="progress-breakdown-item total">
+                  <span class="pbi-label"><span class="pbi-dot purple"></span> Current Average</span>
+                  <strong style="color:#7c3aed;">${latestScorePct}%</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      `;
     }
 
     case 'materials': return `

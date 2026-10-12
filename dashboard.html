@@ -4,10 +4,10 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Scholaria • Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="dashboard.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css?v=20045"/>
   <link rel="stylesheet" href="css/modules/deadlines.css?v=1"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20007"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20045"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css"/>
   <link rel="stylesheet" href="css/modules/chat.css?v=20006"/>
@@ -32,7 +32,7 @@
         <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
       </svg>
     </button>
-    <div class="logo">
+    <div class="logo" onclick="if(typeof setActiveSubjectMaterials==='function') setActiveSubjectMaterials(null); renderPage('dashboard');" style="cursor:pointer;" title="Go to Dashboard">
       <svg class="logo-svg" id="brandLogoSvg" viewBox="0 0 216 52" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-label="Scholaria E-Learning">
         <image href="assets/logo.png" xlink:href="assets/logo.png" x="0" y="4" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
         <text x="52" y="30" font-family="'Syne',sans-serif" font-weight="800" font-size="22" letter-spacing="0"><tspan id="wm-schol" fill="#2563eb">schol</tspan><tspan id="wm-aria" fill="#f59e0b">aria</tspan></text>
@@ -41,11 +41,13 @@
         <text x="52" y="47" font-family="'Plus Jakarta Sans',sans-serif" font-weight="700" font-size="9" fill="#94a3b8" letter-spacing="2">E-LEARNING</text>
       </svg>
     </div>
-    <div class="search-bar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:var(--blue);flex-shrink:0;">
+    <div class="search-bar" id="globalSearchBar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;color:var(--blue);flex-shrink:0;">
         <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
       </svg>
-      <input type="text" placeholder="Search courses, paths, or skills..."/>
+      <input type="text" id="globalSearchInput" placeholder="Search courses, paths, or skills..." autocomplete="off" oninput="handleGlobalSearchInput(this.value)" onkeydown="handleGlobalSearchKeydown(event)" onfocus="handleGlobalSearchFocus()"/>
+      <button type="button" id="globalSearchClearBtn" style="display:none;background:none;border:none;color:#94a3b8;cursor:pointer;padding:0 4px;font-size:13px;font-weight:700;" onclick="clearGlobalSearch()" title="Clear">✕</button>
+      <div id="globalSearchResults" class="search-results-dropdown" style="display:none;"></div>
     </div>
     <div class="nav-right">
 
@@ -690,7 +692,7 @@
   <script src="js/core/notifications.js?v=20010"></script>
   <script src="js/core/hotlines.js"></script>
   <script src="js/core/announcements.js?v=20010"></script>
-  <script src="js/modules/repository/materials.js?v=20005"></script>
+  <script src="js/modules/repository/materials.js?v=20045"></script>
   <script src="js/modules/quizzes/take-quiz.js?v=20010"></script>
   <script src="js/modules/quizzes/interactive-player.js?v=20012"></script>
   <script src="js/modules/quizzes/item-analysis.js?v=20005"></script>
@@ -699,7 +701,7 @@
   <script src="js/modules/admin/user-management.js?v=20007"></script>
   <script src="js/modules/admin/report-generator.js?v=20005"></script>
   <script src="js/modules/courses.js?v=20005"></script>
-  <script src="js/core/sidebar.js?v=20010"></script>
+  <script src="js/core/sidebar.js?v=20045"></script>
   <script src="js/core/auth.js?v=20005"></script>
 </body>
 </html>
