@@ -29,7 +29,6 @@ const SIDEBAR = {
     { page: 'users',      label: 'User Management',  icon: iconUsers() },
     { page: 'sections',   label: 'Sections',         icon: iconSections() },
     { page: 'reports',    label: 'Reports',          icon: iconChart() },
-    { page: 'classrec',   label: 'Class Record',     icon: iconRecord() },
     { page: 'notifications', label: 'Notifications', icon: iconNotif() },
     { page: 'announcements', label: 'Announcements', icon: iconAnnouncement() },
     { page: 'chats',      label: 'Chats',            icon: iconChat() },
@@ -1480,9 +1479,10 @@ function renderStudentDeadlinesWidgetHTML() {
       <div class="deadlines-title-wrap">
         <h3>
           <span>📋</span> Your Tasks &amp; Quizzes
+          ${dueCount > 0 ? `
           <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;margin-left:6px;">
-            ${dueCount || 0} Active Due
-          </span>
+            ${dueCount} Active Due
+          </span>` : ''}
         </h3>
         <p>Track upcoming quiz schedules, day/time deadlines, and types for every subject you take.</p>
       </div>
@@ -3402,8 +3402,6 @@ function adminPage(page) {
     }
 
     case 'chats': return buildChatPage('admin');
-
-    case 'classrec': return teacherPage('classrec');
 
     case 'profile': return buildProfilePage('admin');
 

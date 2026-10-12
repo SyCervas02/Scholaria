@@ -1111,7 +1111,7 @@ function renderStudentMaterialsSplitContent() {
   return `
       <!-- LEFT COLUMN: MATERIALS LIST TABLE -->
       <div class="materials-table-card">
-        <div class="materials-table-header" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #e2e8f0;">
+        <div class="materials-table-header" style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #f1f5f9;">
           <div style="display:flex;align-items:center;gap:12px;">
             <div style="width:38px;height:38px;border-radius:10px;background:#fef9c3;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:20px;">📁</div>
             <div>
@@ -1129,12 +1129,12 @@ function renderStudentMaterialsSplitContent() {
           <table class="materials-table">
             <thead>
               <tr>
-                <th style="width:34%;">Material</th>
-                <th style="width:20%;">Subject</th>
-                <th style="width:12%;">Type</th>
-                <th style="width:18%;">Date Added</th>
-                <th style="width:12%;">Status</th>
-                <th style="width:4%;text-align:right;"></th>
+                <th style="width:28%;">Material</th>
+                <th style="width:25%;">Subject</th>
+                <th style="width:9%;">Type</th>
+                <th style="width:20%;">Date Added</th>
+                <th style="width:13%;">Status</th>
+                <th style="width:5%;text-align:right;"></th>
               </tr>
             </thead>
             <tbody>

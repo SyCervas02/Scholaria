@@ -7,10 +7,43 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// --- Account audit trail store ---
+const AUDIT_FILE = path.join(__dirname, 'data', 'account-audit.json');
+
+function getAuditRecords() {
+  try {
+    if (!fs.existsSync(AUDIT_FILE)) return {};
+    return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveAuditRecord(record) {
+  try {
+    const dir = path.dirname(AUDIT_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const records = getAuditRecords();
+    const key = record.school_id || record.user_id;
+    if (key) {
+      records[key] = {
+        ...(records[key] || {}),
+        ...record,
+        updated_at: new Date().toISOString()
+      };
+      fs.writeFileSync(AUDIT_FILE, JSON.stringify(records, null, 2), 'utf8');
+    }
+  } catch (e) {
+    console.error('Failed to save audit record:', e.message);
+  }
+}
 
 // --- Core middleware ---
 app.use(helmet({
@@ -144,6 +177,11 @@ async function requireUser(req, res) {
   const { data: profile } = await supabaseAdmin
     .from('users').select('*').eq('id', user.id).single();
   if (!profile) { res.status(401).json({ error: 'No profile found' }); return null; }
+
+  if (profile.is_active === false) {
+    res.status(403).json({ error: 'Account has been deactivated. Permissions revoked by administration.' });
+    return null;
+  }
 
   return profile;
 }
@@ -380,6 +418,15 @@ app.post('/api/admin/create-account', async (req, res) => {
     ? custom_password
     : (role === 'admin' ? generateComplexPassword(14) : generateTempPassword());
 
+  const createdAtIso = new Date().toISOString();
+  const creatorMeta = {
+    id: profile.id,
+    name: profile.full_name || 'Administrator',
+    school_id: profile.school_id || 'ADMIN',
+    role: profile.role || 'admin',
+    created_at: createdAtIso
+  };
+
   const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
     email: accountEmail,
     password: temp_password,
@@ -388,7 +435,8 @@ app.post('/api/admin/create-account', async (req, res) => {
       full_name: full_name.trim(),
       role,
       must_reset_password: true,
-      recovery_email: (email && email.trim()) ? email.trim() : null
+      recovery_email: (email && email.trim()) ? email.trim() : null,
+      created_by: creatorMeta
     }
   });
   if (authErr) {
@@ -410,6 +458,7 @@ app.post('/api/admin/create-account', async (req, res) => {
       grade_level: grade_level || null,
       section: section || null,
       subjects: subjects || null,
+      is_active: true,
       is_demo: false,
     })
     .select().single();
@@ -419,12 +468,107 @@ app.post('/api/admin/create-account', async (req, res) => {
     return res.status(500).json({ error: insertErr.message });
   }
 
+  // Persistent provenance audit record
+  saveAuditRecord({
+    user_id: authData.user.id,
+    school_id,
+    name: full_name.trim(),
+    role,
+    email: accountEmail,
+    strand: strand || null,
+    grade_level: grade_level || null,
+    section: section || null,
+    created_at: createdAtIso,
+    created_by: creatorMeta,
+    is_active: true
+  });
+
   res.json({ 
     school_id, 
     email: accountEmail, 
     recovery_email: (email && email.trim()) ? email.trim() : null,
     temp_password,
-    name: full_name.trim()
+    name: full_name.trim(),
+    role,
+    strand: strand || null,
+    grade_level: grade_level || null,
+    section: section || null,
+    created_at: createdAtIso,
+    created_by: creatorMeta
+  });
+});
+
+app.get('/api/admin/account-audit', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can view audit records' });
+
+  const records = getAuditRecords();
+  res.json({ success: true, records });
+});
+
+app.post('/api/admin/toggle-user-status', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can modify user status' });
+
+  const { user_id, is_active, reason } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'Missing user ID' });
+  if (typeof is_active !== 'boolean') return res.status(400).json({ error: 'Invalid is_active status' });
+
+  if (profile.id === user_id) {
+    return res.status(400).json({ error: 'Self-deactivation is prohibited for security reasons.' });
+  }
+
+  const { data: updatedUser, error: updateErr } = await supabaseAdmin
+    .from('users')
+    .update({ is_active })
+    .eq('id', user_id)
+    .select()
+    .single();
+
+  if (updateErr) {
+    return res.status(500).json({ error: updateErr.message });
+  }
+
+  if (!is_active) {
+    try {
+      await supabaseAdmin.auth.admin.signOut(user_id);
+    } catch (e) {
+      console.warn('Could not force sign out user:', e.message);
+    }
+  }
+
+  const currentRecords = getAuditRecords();
+  const key = updatedUser.school_id || user_id;
+  const existingAudit = currentRecords[key] || {};
+  const statusHistory = existingAudit.status_history || [];
+  statusHistory.push({
+    action: is_active ? 'reactivated' : 'deactivated',
+    changed_by: {
+      id: profile.id,
+      name: profile.full_name,
+      school_id: profile.school_id,
+      role: profile.role
+    },
+    changed_at: new Date().toISOString(),
+    reason: reason || (is_active ? 'Account reactivated by administrator' : 'Account deactivated by administrator')
+  });
+
+  saveAuditRecord({
+    ...existingAudit,
+    user_id,
+    school_id: updatedUser.school_id,
+    name: updatedUser.full_name,
+    role: updatedUser.role,
+    is_active,
+    status_history: statusHistory
+  });
+
+  res.json({
+    success: true,
+    user: updatedUser,
+    message: is_active ? 'Account successfully reactivated.' : 'Account successfully deactivated. All system permissions revoked.'
   });
 });
 

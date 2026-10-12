@@ -26,9 +26,15 @@ async function guardSessionAndInit() {
   const { data: profile, error } = await db
     .from('users').select('*').eq('id', session.user.id).single();
 
-  if (error || !profile || profile.is_active === false) {
+  if (error || !profile) {
     await db.auth.signOut();
     window.location.href = 'login.html';
+    return;
+  }
+
+  if (profile.is_active === false) {
+    await db.auth.signOut();
+    window.location.href = 'login.html?deactivated=1';
     return;
   }
 
