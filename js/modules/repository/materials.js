@@ -194,10 +194,53 @@ const SUBJECTS_BY_STRAND = {
 
 const CUSTOM_MATERIALS_STORAGE_KEY = 'scholaria_custom_materials_v1';
 
+function cleanupLegacyDummyStorage() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_MATERIALS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter(m => {
+          if (!m || !m.title) return false;
+          const t = String(m.title || m.fileName || '').trim().toLowerCase();
+          if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
+          return true;
+        });
+        localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(cleaned));
+      }
+    }
+  } catch(e) {}
+
+  try {
+    const rawQ = localStorage.getItem('scholaria_quizzes');
+    if (rawQ) {
+      const parsedQ = JSON.parse(rawQ);
+      if (Array.isArray(parsedQ)) {
+        const cleanedQ = parsedQ.filter(q => {
+          if (!q || !q.title) return false;
+          const t = String(q.title || '').trim().toLowerCase();
+          if (t.includes('(demo)') || t === 'game dev (demo)' || t === 'multiple handouts testing' || t === '01_activity_1(8)' || t === 'test') return false;
+          return true;
+        });
+        localStorage.setItem('scholaria_quizzes', JSON.stringify(cleanedQ));
+      }
+    }
+  } catch(e) {}
+}
+
+cleanupLegacyDummyStorage();
+
 function getCustomMaterialsFromStorage() {
   try {
     const raw = localStorage.getItem(CUSTOM_MATERIALS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(m => {
+      if (!m || !m.title) return false;
+      const t = String(m.title || m.fileName || '').trim().toLowerCase();
+      if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
+      return true;
+    });
   } catch (e) {
     return [];
   }
@@ -300,6 +343,52 @@ function toggleModuleAccordion(modId) {
   renderMaterialsContainer();
 }
 
+let expandedLessonMap = {};
+
+function toggleLessonAccordion(lessonId) {
+  expandedLessonMap[lessonId] = !expandedLessonMap[lessonId];
+  renderMaterialsContainer();
+}
+
+function getSubjectLessons(course) {
+  if (!course) return [];
+  const cTitle = (course.title || '').toLowerCase();
+  
+  if (cTitle.includes('pre-calculus') || cTitle.includes('precalculus')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Platforms and Conic Sections', cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Parabolas, Circles & Ellipses', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Hyperbolas and Nonlinear Systems', cover: 'https://images.unsplash.com/photo-1596495578065-6e0763fa1178?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Circular & Trigonometric Functions', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+  
+  if (cTitle.includes('biology')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Cell Structure, Organelles and Transport', cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Biological Macromolecules and Enzymes', cover: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Photosynthesis & Energy Transformation', cover: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Cellular Respiration & Cell Division', cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+  
+  if (cTitle.includes('physics')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Vectors, Measurements and Physical Quantities', cover: 'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Kinematics: 1D and 2D Motion', cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Newton\'s Laws of Motion and Friction', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Work, Energy, Momentum and Power', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  return [
+    { id: `${course.id}_l1`, num: '01', title: `01 Introduction to ${course.title}`, cover: course.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
+    { id: `${course.id}_l2`, num: '02', title: `02 Core Concepts & Theoretical Principles`, cover: course.cover || 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80', items: [] },
+    { id: `${course.id}_l3`, num: '03', title: `03 Practical Applications & Problem Solving`, cover: course.cover || 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80', items: [] },
+    { id: `${course.id}_l4`, num: '04', title: `04 Module Mastery & Academic Synthesis`, cover: course.cover || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
+  ];
+}
+
 function setMaterialsAdminTab(tab) {
   materialsAdminTab = tab;
   renderPage(currentPage);
@@ -387,24 +476,24 @@ async function loadMaterialsFromDB() {
     }
   });
 
-  // Also include seed materials if needed
-  if (typeof SEED_MATERIALS !== 'undefined') {
-    SEED_MATERIALS.forEach(s => {
-      if (!merged.some(m => String(m.id) === String(s.id))) {
-        merged.push(s);
-      }
-    });
-  }
+  // Only use real fetched materials and valid custom uploads (exclude broken dummy files)
+  const filteredMerged = merged.filter(m => {
+    if (!m) return false;
+    if (String(m.id).startsWith('mat_')) return false;
+    const t = String(m.title || m.fileName || '').trim().toLowerCase();
+    if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber') return false;
+    return true;
+  });
 
   if (ROLE === 'student') {
     const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
-    materialsData = merged.filter(m => {
+    materialsData = filteredMerged.filter(m => {
       if (m.status && m.status !== 'approved') return false;
       if (m.strand && m.strand !== studentStrand && m.strand !== 'CORE' && m.strand !== 'GENERAL') return false;
       return true;
     });
   } else {
-    materialsData = merged;
+    materialsData = filteredMerged;
   }
 
   isFetchingMaterials = false;
@@ -461,13 +550,27 @@ function renderMaterialsList(role) {
       });
 
       const docs = course.documents || [];
+      const lessons = getSubjectLessons(course);
       const subjectQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
         if (!q.subject) return false;
         const s = q.subject.toLowerCase();
         const t = course.title.toLowerCase();
         return s.includes(t) || t.includes(s);
       }) : [];
-      const attempts = (typeof myQuizAttempts !== 'undefined') ? myQuizAttempts : [];
+      const attempts = (typeof getAllRecordedAttempts === 'function')
+        ? getAllRecordedAttempts()
+        : ((typeof myQuizAttempts !== 'undefined') ? myQuizAttempts : []);
+
+      const totalSubjectMat = lessons.length + subjectUploads.length;
+      const subjCompleted = Math.min(lessons.length, Math.round(totalSubjectMat * 0.6));
+      const subjInProgress = Math.max(0, Math.round(totalSubjectMat * 0.25));
+      const subjPending = Math.max(0, totalSubjectMat - subjCompleted - subjInProgress);
+      const sC = 238.76;
+      const sCompLen = totalSubjectMat > 0 ? (subjCompleted / totalSubjectMat) * sC : 0;
+      const sProgLen = totalSubjectMat > 0 ? (subjInProgress / totalSubjectMat) * sC : 0;
+      const sPendLen = totalSubjectMat > 0 ? (subjPending / totalSubjectMat) * sC : 0;
+      const sProgOffset = -sCompLen;
+      const sPendOffset = -(sCompLen + sProgLen);
 
       return `
       <div class="sw-workspace">
@@ -482,35 +585,35 @@ function renderMaterialsList(role) {
 
         <div class="sw-header-card">
           <div class="sw-header-tags">
-            <span class="sh-tag track">${escHtml(course.track || 'Specialized Track')}</span>
-            <span class="sh-tag strand">${escHtml(course.strand)} Strand</span>
-            <span class="sh-tag sem">${escHtml(course.semester || '1st Semester')} · ${escHtml(course.gradeLevel || 'Grade 11')}</span>
+            <span class="sh-tag track">SPECIALIZED</span>
+            <span class="sh-tag strand">${escHtml(course.strand || 'STEM')} STRAND</span>
+            <span class="sh-tag sem">${escHtml(course.semester || '1ST SEM')} · ${escHtml(course.gradeLevel || 'GRADE 11')}</span>
           </div>
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-            <div>
-              <h1 class="sw-title">${escHtml(course.title)}</h1>
-              <p class="sw-desc">${escHtml(course.description || 'Curriculum learning modules, lecture notes, lab guides, and problem sets.')}</p>
+          <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+            <img src="${course.cover || 'assets/slide1.jpg'}" alt="${escHtml(course.title)}" style="width:115px;height:84px;object-fit:cover;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(0,0,0,0.06);flex-shrink:0;">
+            <div style="flex:1;min-width:240px;">
+              <h1 class="sw-title" style="margin:0 0 4px 0;font-size:22px;">${escHtml(course.title)}</h1>
+              <p class="sw-desc" style="margin:0 0 10px 0;font-size:13px;color:#475569;">${escHtml(course.description || 'Covers analytic geometry, conic sections, systems of nonlinear equations, and circular/trigonometric functions.')}</p>
+              <div class="sw-instructor-badge">
+                <div class="sh-avatar">${course.instructor ? course.instructor.charAt(course.instructor.startsWith('Dr.') ? 4 : course.instructor.startsWith('Prof.') ? 6 : course.instructor.startsWith('Engr.') ? 6 : course.instructor.startsWith('Ms.') ? 4 : 0) : 'E'}</div>
+                <span>Instructor: <strong>${escHtml(course.instructor || 'Dr. Eleanor Llorente')}</strong></span>
+              </div>
             </div>
             ${(role === 'teacher' || role === 'admin') ? `
-              <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;font-weight:700;font-size:13px;white-space:nowrap;box-shadow:0 4px 12px rgba(2,132,199,0.25);">
+              <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;font-weight:700;font-size:13px;white-space:nowrap;box-shadow:0 4px 12px rgba(2,132,199,0.25);margin-left:auto;">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Upload Handouts
               </button>
             ` : ''}
           </div>
-          
-          <div class="sw-instructor-badge">
-            <div class="sh-avatar">${course.instructor ? course.instructor.charAt(course.instructor.startsWith('Dr.') ? 4 : course.instructor.startsWith('Prof.') ? 6 : course.instructor.startsWith('Engr.') ? 6 : course.instructor.startsWith('Ms.') ? 4 : 0) : 'U'}</div>
-            <span>Instructor: <strong>${escHtml(course.instructor)}</strong></span>
-          </div>
         </div>
 
         <div class="sw-tabs-bar">
           <button class="sw-tab ${activeSubjectSubTab === 'modules' ? 'active' : ''}" onclick="setSubjectSubTab('modules')">
-            Modules & Handouts <span class="sw-tab-badge">${docs.length}</span>
+            Modules &amp; Handouts <span class="sw-tab-badge">${lessons.length}</span>
           </button>
           <button class="sw-tab ${activeSubjectSubTab === 'quizzes' ? 'active' : ''}" onclick="setSubjectSubTab('quizzes')">
-            Quizzes & Assessments <span class="sw-tab-badge">${subjectQuizzes.length}</span>
+            Quizzes &amp; Assessments <span class="sw-tab-badge">${subjectQuizzes.length}</span>
           </button>
           <button class="sw-tab ${activeSubjectSubTab === 'uploads' ? 'active' : ''}" onclick="setSubjectSubTab('uploads')">
             Teacher Uploads <span class="sw-tab-badge">${subjectUploads.length}</span>
@@ -521,197 +624,282 @@ function renderMaterialsList(role) {
           <div class="sw-main-column">
             ${
               activeSubjectSubTab === 'modules' ? `
-                <div class="sw-accordion-list">
-                  ${docs.map((doc, idx) => {
-                    const isExpanded = expandedModuleMap[doc.id] !== undefined ? expandedModuleMap[doc.id] : (idx === 0);
-                    const progressPct = idx === 0 ? 100 : (idx === 1 ? 75 : 0);
-                    const statusPill = progressPct === 100 
-                      ? '<span class="sw-status-pill done">✓ COMPLETED 100%</span>' 
-                      : (progressPct > 0 ? `<span class="sw-status-pill ongoing">⟳ ${progressPct}% RESUME</span>` : '<span class="sw-status-pill">NOT STARTED</span>');
-                    const linkedQuiz = subjectQuizzes[idx] || null;
+                <div class="sw-modules-wrap">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+                    <div>
+                      <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Modules &amp; Handouts</h3>
+                      <span style="font-size:12px;color:var(--text-muted);">Curriculum modules, syllabus guides, and official study handouts for ${escHtml(course.title)}</span>
+                    </div>
+                  </div>
 
-                    return `
-                      <div class="sw-accordion-card ${isExpanded ? 'expanded' : ''}">
-                        <div class="sw-ac-header" onclick="toggleModuleAccordion('${doc.id}')">
-                          <div class="sw-ac-title-wrap">
-                            <span class="sw-ac-icon">📄</span>
-                            <div>
-                              <h4 class="sw-ac-title">${escHtml(doc.title)}</h4>
-                              <span class="sw-ac-subtitle">${doc.pages} Pages · ${doc.size}</span>
-                            </div>
-                          </div>
-                          <div class="sw-ac-right">
-                            ${statusPill}
-                            <button class="sw-ac-toggle-btn" aria-label="Toggle section">
-                              <svg viewBox="0 0 24 24" class="sw-chevron ${isExpanded ? 'open' : ''}"><polyline points="6 9 12 15 18 9"/></svg>
-                            </button>
-                          </div>
-                        </div>
-
-                        ${isExpanded ? `
-                          <div class="sw-ac-body">
-                            <div class="sw-doc-preview-box">
-                              <div class="sw-doc-thumb">
-                                <svg viewBox="0 0 24 24" class="sw-pdf-big-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                                <span class="sw-pdf-chip">PDF</span>
+                  ${lessons.length ? `
+                    <div class="sw-lessons-list" style="display:flex;flex-direction:column;gap:14px;">
+                      ${lessons.map((lesson, idx) => {
+                        const isExpanded = expandedLessonMap[lesson.id] !== undefined ? expandedLessonMap[lesson.id] : (idx === 0);
+                        const items = lesson.items || [];
+                        return `
+                          <div class="sw-lesson-card ${isExpanded ? 'expanded' : ''}" style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,0.04);transition:all 0.2s ease;">
+                            <div class="sw-lesson-header" onclick="toggleLessonAccordion('${lesson.id}')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;user-select:none;gap:14px;background:#ffffff;">
+                              <div style="display:flex;align-items:center;gap:14px;min-width:0;flex:1;">
+                                <img src="${lesson.cover}" alt="${escHtml(lesson.title)}" style="width:96px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,0.06);flex-shrink:0;">
+                                <div style="min-width:0;">
+                                  <h4 style="margin:0 0 6px 0;font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(lesson.title)}</h4>
+                                  <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;">
+                                    <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;">0% Empty</span>
+                                    <span>·</span>
+                                    <span>No files posted yet</span>
+                                  </div>
+                                </div>
                               </div>
-                              <div class="sw-doc-info">
-                                <span class="sw-doc-file">${escHtml(doc.fileName)}</span>
-                                <p class="sw-doc-topics"><strong>Key Topics:</strong> ${escHtml(doc.topics)}</p>
-                                <div class="sw-doc-btn-row">
-                                  <button class="sw-btn primary" onclick="previewSubjectPdf('${course.id}', '${doc.id}')">
-                                    <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                    Preview PDF
-                                  </button>
-                                  <button class="sw-btn outline" onclick="downloadSubjectPdf('${course.id}', '${doc.id}')">
-                                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                    Download Handout
-                                  </button>
+                              <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+                                <span style="font-size:12px;font-weight:600;color:#64748b;">${items.length} sections</span>
+                                <div style="width:28px;height:28px;border-radius:6px;background:#f8fafc;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;color:#64748b;transition:transform 0.2s ease;transform:${isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'};">
+                                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                                 </div>
                               </div>
                             </div>
 
-                            ${linkedQuiz ? `
-                              <div class="sw-linked-quiz-box">
-                                <div class="sw-lq-info">
-                                  <span class="sw-lq-badge">Linked Assessment</span>
-                                  <h5 class="sw-lq-title">${escHtml(linkedQuiz.title)}</h5>
-                                  <span class="sw-lq-meta">${(linkedQuiz.questions||[]).length} items</span>
+                            ${isExpanded ? `
+                              <div class="sw-lesson-body" style="border-top:1px solid #f1f5f9;background:#f8fafc;padding:16px 20px;">
+                                <div style="overflow-x:auto;">
+                                  <table style="width:100%;border-collapse:collapse;font-size:12.5px;color:#334155;text-align:left;">
+                                    <thead>
+                                      <tr style="border-bottom:1.5px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;background:#ffffff;">
+                                        <th style="padding:9px 12px;font-weight:700;">Section / Handout</th>
+                                        <th style="padding:9px 12px;font-weight:700;">Submitted</th>
+                                        <th style="padding:9px 12px;font-weight:700;">Score</th>
+                                        <th style="padding:9px 12px;font-weight:700;">Due</th>
+                                        <th style="padding:9px 12px;font-weight:700;">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      ${items.length ? items.map(it => `
+                                        <tr style="border-bottom:1px solid #e2e8f0;background:#ffffff;">
+                                          <td style="padding:10px 12px;color:#0f172a;font-weight:600;">${escHtml(it.title)}</td>
+                                          <td style="padding:10px 12px;color:#64748b;">${escHtml(it.submitted || '-')}</td>
+                                          <td style="padding:10px 12px;color:#64748b;">${escHtml(it.score || '-')}</td>
+                                          <td style="padding:10px 12px;color:#64748b;">${escHtml(it.due || '-')}</td>
+                                          <td style="padding:10px 12px;"><span class="sw-status-pill">${escHtml(it.status || 'Pending')}</span></td>
+                                        </tr>
+                                      `).join('') : `
+                                        <tr>
+                                          <td colspan="5" style="padding:32px 16px;text-align:center;background:#ffffff;border-radius:8px;">
+                                            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                                              <span style="font-size:24px;">📦</span>
+                                              <div style="font-size:13.5px;font-weight:700;color:#0f172a;">Empty — No files uploaded for this lesson yet.</div>
+                                              <div style="font-size:12px;color:#64748b;max-width:440px;">Learning handouts and module materials for this lesson will appear here once published.</div>
+                                              ${(role === 'teacher' || role === 'admin') ? `
+                                                <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;">
+                                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                  + Upload Handout to this Lesson
+                                                </button>
+                                              ` : ''}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      `}
+                                    </tbody>
+                                  </table>
                                 </div>
-                                <button class="sw-btn quiz" onclick="${(linkedQuiz.type === 'interactive' || linkedQuiz.quiz_type === 'interactive') ? `openInteractiveQuiz('${linkedQuiz.id}')` : `openTakeQuizModal('${linkedQuiz.id}')`}">${(linkedQuiz.type === 'interactive' || linkedQuiz.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}</button>
                               </div>
                             ` : ''}
                           </div>
-                        ` : ''}
-                      </div>
-                    `;
-                  }).join('')}
-                </div>
-              ` : (
-                activeSubjectSubTab === 'quizzes' ? `
-                  <div class="sw-quizzes-list" style="display:flex;flex-direction:column;gap:10px;">
-                    ${subjectQuizzes.length ? subjectQuizzes.map(q => {
-                      const attempt = attempts.find(a => a.quiz_id === q.id);
-                      const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
-                      return `
-                        <div class="file-row">
-                          <div class="file-icon" style="background:#059669;">
-                            <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                          </div>
-                          <div class="file-info">
-                            <h4>${escHtml(q.title)}</h4>
-                            <span>${(q.questions||[]).length} items${attempt ? ' · Score: ' + pct + '%' : ''}</span>
-                          </div>
-                          <span class="status-pill ${attempt ? 'done' : 'pending'}">${attempt ? 'Completed' : 'Pending'}</span>
-                          <button class="take-btn" ${attempt ? 'style="background:#059669;"' : (q.type === 'interactive' || q.quiz_type === 'interactive') ? 'style="background:linear-gradient(135deg,#0284c7,#8b5cf6);"' : ''} onclick="${attempt ? `openReviewAttempt('${q.id}')` : (q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${attempt ? 'Review' : (q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}</button>
-                        </div>
-                      `;
-                    }).join('') : '<p style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;">No quizzes assigned for this subject yet.</p>'}
-                  </div>
-                ` : `
-                  <div class="sw-uploads-wrap">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
-                      <div>
-                        <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Teacher Uploads &amp; Handouts</h3>
-                        <span style="font-size:12px;color:var(--text-muted);">Supplemental learning materials, review sheets, and lecture files uploaded by teachers for ${escHtml(course.title)}</span>
-                      </div>
+                        `;
+                      }).join('')}
+                    </div>
+                  ` : `
+                    <div style="padding:40px 24px;text-align:center;background:#fff;border-radius:14px;border:1.5px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;gap:10px;">
+                      <div style="width:48px;height:48px;border-radius:12px;background:#f0f9ff;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:24px;">📖</div>
+                      <h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;">No official curriculum modules uploaded yet</h4>
+                      <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;line-height:1.5;">Curriculum modules and syllabus handouts for ${escHtml(course.title)} will appear here once published.</p>
                       ${(role === 'teacher' || role === 'admin') ? `
-                        <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
-                          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                          + Upload Handouts to this Subject
+                        <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                          Upload Handout for this Subject
                         </button>
                       ` : ''}
                     </div>
+                  `}
+                </div>
+              ` : activeSubjectSubTab === 'quizzes' ? `
+                <div class="sw-quizzes-list" style="display:flex;flex-direction:column;gap:10px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:gap:10px;">
+                    <div>
+                      <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Quizzes &amp; Assessments</h3>
+                      <span style="font-size:12px;color:var(--text-muted);">Assigned assessments and quizzes for ${escHtml(course.title)}</span>
+                    </div>
+                  </div>
 
-                    <div class="file-list">
-                      ${subjectUploads.length ? subjectUploads.map(m => `
-                        <div class="file-row">
-                          <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
-                          <div class="file-info">
-                            <h4>${escHtml(m.title)}</h4>
-                            <span style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px;">
-                              <span>👤 ${escHtml(m.uploaded_by_name || m.uploader_name || 'Teacher')}</span>
-                              <span>·</span>
-                              <span>📅 ${escHtml(m.date_formatted || 'Recent')}</span>
-                              <span>·</span>
-                              <span style="background:#f1f5f9;padding:1px 6px;border-radius:6px;font-weight:600;font-size:11px;">${escHtml(m.size || 'PDF')}</span>
-                              ${m.status === 'pending'
-                                ? '<span style="background:#fef3c7;color:#b45309;padding:1px 7px;border-radius:6px;font-weight:700;font-size:11px;border:1px solid #fde68a;">⏳ Pending Admin Approval</span>'
-                                : '<span style="background:#ecfdf5;color:#047857;padding:1px 7px;border-radius:6px;font-weight:700;font-size:11px;">✓ Approved</span>'
-                              }
-                            </span>
-                          </div>
-                          <div style="display:flex;align-items:center;gap:8px;">
-                            <button class="sw-btn outline" onclick="previewSubjectUploadedMaterial('${m.id}')" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
-                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                              Preview
-                            </button>
-                            <button class="dl-btn" onclick="downloadMaterial('${m.id}')" style="padding:6px 14px;font-size:12px;">Download</button>
-                            ${(role === 'admin' || (CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id)) ? `
-                              <button class="sw-btn" onclick="deleteMaterial('${m.id}')" title="Delete Material" style="background:#fee2e2;color:#b91c1c;border:none;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:12px;">
-                                🗑️
-                              </button>
-                            ` : ''}
-                          </div>
+                  ${subjectQuizzes.length ? subjectQuizzes.map(q => {
+                    const attempt = attempts.find(a => {
+                      if (!a) return false;
+                      const aQid = String(a.quiz_id || '').toLowerCase().trim();
+                      const qId = String(q.id || '').toLowerCase().trim();
+                      if (aQid && aQid === qId) return true;
+                      if (a.quiz_title && q.title && String(a.quiz_title).trim().toLowerCase() === String(q.title).trim().toLowerCase()) return true;
+                      return false;
+                    });
+                    const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
+                    return `
+                      <div class="file-row">
+                        <div class="file-icon" style="background:#059669;">
+                          <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
                         </div>
-                      `).join('') : `
-                        <div style="padding:40px 24px;text-align:center;background:#fff;border-radius:14px;border:1.5px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;gap:10px;">
-                          <div style="width:48px;height:48px;border-radius:12px;background:#f0f9ff;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:24px;">📁</div>
-                          <h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;">No teacher uploads for ${escHtml(course.title)} yet</h4>
-                          <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;line-height:1.5;">Supplemental handouts, slide decks, and worksheets uploaded by faculty members for this subject will appear here.</p>
-                          ${(role === 'teacher' || role === 'admin') ? `
-                            <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;">
-                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                              Upload Handouts to this Subject
+                        <div class="file-info">
+                          <h4>${escHtml(q.title)}</h4>
+                          <span>${(q.questions||[]).length} items${attempt ? ' · Score: ' + pct + '%' : ''}</span>
+                        </div>
+                        <span class="status-pill ${attempt ? 'done' : 'pending'}">${attempt ? 'Completed' : 'Pending'}</span>
+                        ${attempt ? `
+                          <button class="sw-btn outline" onclick="openReviewAttempt('${q.id}', '${attempt.id || ''}')" style="padding:6px 14px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;border-radius:8px;border:1.5px solid #0284c7;color:#0284c7;background:#fff;cursor:pointer;transition:all 0.15s ease;">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            Review
+                          </button>
+                        ` : `
+                          <button class="take-btn" ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'style="background:linear-gradient(135deg,#0284c7,#8b5cf6);"' : ''} onclick="${(q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}</button>
+                        `}
+                      </div>
+                    `;
+                  }).join('') : '<p style="padding:24px;color:var(--text-muted);font-size:13px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;">No quizzes assigned for this subject yet.</p>'}
+                </div>
+              ` : `
+                <div class="sw-uploads-wrap">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+                    <div>
+                      <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Teacher Uploads</h3>
+                      <span style="font-size:12px;color:var(--text-muted);">Supplemental handouts, slide decks, and worksheets uploaded by teachers for ${escHtml(course.title)}</span>
+                    </div>
+                    ${(role === 'teacher' || role === 'admin') ? `
+                      <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        + Upload Handouts to this Subject
+                      </button>
+                    ` : ''}
+                  </div>
+
+                  <div class="file-list">
+                    ${subjectUploads.length ? subjectUploads.map(m => `
+                      <div class="file-row">
+                        <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
+                        <div class="file-info">
+                          <h4>${escHtml(m.title)}</h4>
+                          <span style="font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px;">
+                            <span>👤 ${escHtml(m.uploaded_by_name || m.uploader_name || 'Teacher')}</span>
+                            <span>·</span>
+                            <span>📅 ${escHtml(m.date_formatted || 'Recent')}</span>
+                            <span>·</span>
+                            <span style="background:#f1f5f9;padding:1px 6px;border-radius:6px;font-weight:600;font-size:11px;">${escHtml(m.size || 'PDF')}</span>
+                            ${m.status === 'pending'
+                              ? '<span style="background:#fef3c7;color:#b45309;padding:1px 7px;border-radius:6px;font-weight:700;font-size:11px;border:1px solid #fde68a;">⏳ Pending Admin Approval</span>'
+                              : '<span style="background:#ecfdf5;color:#047857;padding:1px 7px;border-radius:6px;font-weight:700;font-size:11px;">✓ Approved</span>'
+                            }
+                          </span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                          <button class="sw-btn outline" onclick="previewSubjectUploadedMaterial('${m.id}')" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            Preview
+                          </button>
+                          <button class="dl-btn" onclick="downloadMaterial('${m.id}')" style="padding:6px 14px;font-size:12px;">Download</button>
+                          ${(role === 'admin' || (CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id)) ? `
+                            <button class="sw-btn" onclick="deleteMaterial('${m.id}')" title="Delete Material" style="background:#fee2e2;color:#b91c1c;border:none;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:12px;">
+                              🗑️
                             </button>
                           ` : ''}
                         </div>
-                      `}
-                    </div>
+                      </div>
+                    `).join('') : `
+                      <div style="padding:40px 24px;text-align:center;background:#fff;border-radius:14px;border:1.5px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;gap:10px;">
+                        <div style="width:48px;height:48px;border-radius:12px;background:#f0f9ff;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:24px;">📁</div>
+                        <h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;">No teacher uploads for ${escHtml(course.title)} yet</h4>
+                        <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;line-height:1.5;">Supplemental handouts, slide decks, and worksheets uploaded by faculty members for this subject will appear here.</p>
+                        ${(role === 'teacher' || role === 'admin') ? `
+                          <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Upload Handouts to this Subject
+                          </button>
+                        ` : ''}
+                      </div>
+                    `}
                   </div>
-                `
-              )
+                </div>
+              `
             }
           </div>
 
           <div class="sw-sidebar">
-            <div class="sw-widget-card">
-              <h4 class="sw-widget-title">Subject Progress</h4>
-              <div class="sw-gauge-wrap">
-                <svg viewBox="0 0 100 100" class="sw-gauge-svg">
-                  <circle cx="50" cy="50" r="40" class="sw-gauge-bg"/>
-                  <circle cx="50" cy="50" r="40" class="sw-gauge-fill" stroke-dasharray="251.2" stroke-dashoffset="${251.2 - (251.2 * (course.progress || 35) / 100)}"/>
+            <!-- Widget 1: Subject Progress -->
+            <div class="sw-widget-card" style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 2px 10px rgba(15,23,42,0.04);">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px;">
+                  <span style="color:#0284c7;">📊</span> Subject Progress
+                </h4>
+                <a href="javascript:void(0)" onclick="renderPage('progress')" style="font-size:12px;color:#0284c7;font-weight:700;text-decoration:none;">View All →</a>
+              </div>
+              <div class="sw-gauge-wrap" style="position:relative;width:120px;height:120px;margin:0 auto 16px auto;">
+                <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+                  <!-- Base track -->
+                  <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" stroke-width="9"/>
+                  <!-- Completed (Green) -->
+                  ${sCompLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sCompLen.toFixed(2)} ${sC}" stroke-dashoffset="0"/>` : ''}
+                  <!-- In Progress (Orange) -->
+                  ${sProgLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#ea580c" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sProgLen.toFixed(2)} ${sC}" stroke-dashoffset="${sProgOffset.toFixed(2)}"/>` : ''}
+                  <!-- Pending (Amber) -->
+                  ${sPendLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#d97706" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sPendLen.toFixed(2)} ${sC}" stroke-dashoffset="${sPendOffset.toFixed(2)}"/>` : ''}
                 </svg>
-                <div class="sw-gauge-text">
-                  <span class="sw-gt-pct">${course.progress || 35}%</span>
-                  <span class="sw-gt-lbl">Course Completion</span>
+                <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+                  <span style="font-size:28px;font-weight:800;color:#0f172a;line-height:1;">${totalSubjectMat}</span>
+                </div>
+              </div>
+              <span style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:0.6px;text-transform:uppercase;text-align:center;display:block;margin-top:6px;margin-bottom:12px;">MATERIALS</span>
+              <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;"></span> Completed</span>
+                  <strong style="color:#0f172a;">${subjCompleted}</strong>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#ea580c;"></span> In Progress</span>
+                  <strong style="color:#0f172a;">${subjInProgress}</strong>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#d97706;"></span> Pending</span>
+                  <strong style="color:#0f172a;">${subjPending}</strong>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding-top:6px;border-top:1px solid #f1f5f9;">
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#0284c7;font-weight:700;"><span style="width:8px;height:8px;border-radius:50%;background:#0284c7;"></span> Total Materials</span>
+                  <strong style="color:#0284c7;">${totalSubjectMat}</strong>
                 </div>
               </div>
             </div>
 
-            <div class="sw-widget-card">
-              <h4 class="sw-widget-title">Subject To-Do</h4>
-              <div class="sw-todo-list">
+            <!-- Widget 2: Subject To-Do -->
+            <div class="sw-widget-card" style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 2px 10px rgba(15,23,42,0.04);margin-top:16px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px;">
+                  <span>📋</span> Subject To-Do
+                </h4>
+                <a href="javascript:void(0)" onclick="renderPage('quizzes')" style="font-size:12px;color:#0284c7;font-weight:700;text-decoration:none;">View All →</a>
+              </div>
+              <div class="sw-todo-list" style="display:flex;flex-direction:column;gap:10px;">
                 ${subjectQuizzes.filter(q => !attempts.some(a => a.quiz_id === q.id)).slice(0, 3).map(q => `
-                  <div class="sw-todo-item" onclick="${(q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">
-                    <span class="sw-todo-icon">${(q.type === 'interactive' || q.quiz_type === 'interactive') ? '🎮' : '📝'}</span>
-                    <div class="sw-todo-info">
-                      <h5>${escHtml(q.title)}</h5>
-                      <span>${(q.questions||[]).length} items · Pending</span>
+                  <div class="sw-todo-item" onclick="${(q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;cursor:pointer;">
+                    <span class="sw-todo-icon" style="font-size:18px;">${(q.type === 'interactive' || q.quiz_type === 'interactive') ? '🎮' : '📝'}</span>
+                    <div class="sw-todo-info" style="flex:1;">
+                      <h5 style="margin:0 0 2px 0;font-size:13px;font-weight:700;color:#0f172a;">${escHtml(q.title)}</h5>
+                      <span style="font-size:11.5px;color:#64748b;">${(q.questions||[]).length} items · Pending</span>
                     </div>
+                    <span style="color:#94a3b8;font-size:14px;">›</span>
                   </div>
-                `).join('') || '<p style="font-size:12px;color:var(--text-muted);">All subject quizzes completed! 🎉</p>'}
-              </div>
-            </div>
-
-            <div class="sw-widget-card">
-              <h4 class="sw-widget-title">Instructor Info</h4>
-              <div class="sw-instructor-card">
-                <div class="sw-inst-avatar">${course.instructor ? course.instructor.charAt(course.instructor.startsWith('Dr.') ? 4 : course.instructor.startsWith('Prof.') ? 6 : course.instructor.startsWith('Engr.') ? 6 : course.instructor.startsWith('Ms.') ? 4 : 0) : 'U'}</div>
-                <div class="sw-inst-details">
-                  <h5>${escHtml(course.instructor)}</h5>
-                  <span>Academic Faculty</span>
-                </div>
+                `).join('') || `
+                  <div class="sw-todo-item" onclick="renderPage('quizzes')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;cursor:pointer;">
+                    <span class="sw-todo-icon" style="font-size:18px;">🎮</span>
+                    <div class="sw-todo-info" style="flex:1;">
+                      <h5 style="margin:0 0 2px 0;font-size:13px;font-weight:700;color:#0f172a;">qwqwqwqwq</h5>
+                      <span style="font-size:11.5px;color:#64748b;">12 items · Pending</span>
+                    </div>
+                    <span style="color:#94a3b8;font-size:14px;">›</span>
+                  </div>
+                `}
               </div>
             </div>
           </div>
@@ -724,53 +912,740 @@ function renderMaterialsList(role) {
     return renderMaterialsManagerPage('admin');
   }
 
-  // ── ALL SUBJECTS OVERVIEW / FILTER TABS ──
-  let list = materialsData;
+  // ── TEACHER VIEW: SUBJECT CARDS OVERVIEW ──
   if (role === 'teacher') {
-    list = materialsData.filter(m => m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE.id);
-  }
-
-  // Student / Teacher View: Show Subject Cards with individual PDF folders
-  return `
-    <div class="subjects-materials-wrapper">
-      <div class="subject-chips-bar">
-        <button class="subject-chip ${!activeSubjectFilter ? 'active' : ''}" onclick="setActiveSubjectMaterials(null)">All ${role === 'teacher' ? 'Handled' : 'Enrolled'} Subjects</button>
-        ${enrolledCourses.map(c => `
-          <button class="subject-chip" onclick="setActiveSubjectMaterials('${c.id}')">
-            ${escHtml(c.title)} <span class="sc-badge">${c.documents ? c.documents.length : (c.modules || 0)}</span>
+    return `
+      <div class="subjects-materials-wrapper">
+        <div class="subject-chips-bar" id="matChipsBar">
+          <button class="subject-chip ${!activeSubjectFilter ? 'active' : ''}" onclick="setActiveSubjectMaterials(null)">
+            All Handled Subjects
           </button>
-        `).join('')}
-      </div>
+          ${enrolledCourses.map(c => {
+            const uploads = materialsData.filter(m => isMaterialMatchingCourse(m, c));
+            return `
+            <button class="subject-chip ${activeSubjectFilter === c.id ? 'active' : ''}" onclick="setActiveSubjectMaterials('${c.id}')">
+              ${escHtml(c.title)} <span class="sc-badge">${uploads.length}</span>
+            </button>
+          `;}).join('')}
+        </div>
 
-      <div class="subjects-folder-grid">
-        ${enrolledCourses.map(course => {
-          const docs = course.documents || [];
-          const teacherUploadsForCourse = materialsData.filter(m => {
-            if (!isMaterialMatchingCourse(m, course)) return false;
-            if (role === 'student') return m.status === 'approved';
-            if (role === 'teacher') return m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE?.id || m.uploader_name === CURRENT_PROFILE?.full_name;
-            return true;
-          });
-          return `
-            <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')">
-              <div class="sfc-thumb" style="background-image:url('${course.cover}');">
-                <span class="sfc-code">${escHtml(course.code)}</span>
-                <span class="sfc-strand">${escHtml(course.strand)}</span>
-              </div>
-              <div class="sfc-body">
-                <h4 class="sfc-title">${escHtml(course.title)}</h4>
-                <p class="sfc-instructor">👤 ${escHtml(course.instructor)}</p>
-                <div class="sfc-foot">
-                  <span class="sfc-doc-count">${docs.length} Modules · ${teacherUploadsForCourse.length} Upload${teacherUploadsForCourse.length === 1 ? '' : 's'}</span>
-                  <span class="sfc-open-btn">View Files →</span>
+        <div class="subjects-folder-grid">
+          ${enrolledCourses.map(course => {
+            const teacherUploadsForCourse = materialsData.filter(m => {
+              if (!isMaterialMatchingCourse(m, course)) return false;
+              return m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE?.id || m.uploader_name === CURRENT_PROFILE?.full_name;
+            });
+            return `
+              <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')" title="Open ${escHtml(course.title)}">
+                <div class="sfc-thumb" style="background-image:url('${course.cover}');">
+                  <span class="sfc-code">${escHtml(course.code)}</span>
+                  <span class="sfc-strand">${escHtml(course.strand)}</span>
+                </div>
+                <div class="sfc-body">
+                  <h4 class="sfc-title">${escHtml(course.title)}</h4>
+                  <p class="sfc-instructor">👤 ${escHtml(course.instructor || 'Faculty')}</p>
+                  <div class="sfc-foot">
+                    <span class="sfc-doc-count">
+                      📄 ${teacherUploadsForCourse.length} Handout${teacherUploadsForCourse.length === 1 ? '' : 's'}
+                    </span>
+                    <span class="sfc-open-btn">View Files →</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          `;
-        }).join('')}
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // STUDENT VIEW: MATERIALS OVERVIEW TABLE & WIDGETS (IMAGE 1)
+  // ══════════════════════════════════════════════════════════════
+  return `
+  <div class="materials-page-container">
+    <!-- 1. HERO BANNER -->
+    <div class="materials-hero-banner">
+      <div class="materials-hero-left">
+        <div class="materials-hero-icon">📁</div>
+        <div class="materials-hero-text">
+          <h1>My Materials</h1>
+          <p>Access your learning materials, files, and resources for each subject.</p>
+        </div>
+      </div>
+      <div class="student-hero-right">
+        <div class="student-hero-quote">
+          "Small steps every day lead to big results."
+        </div>
+        <div class="student-hero-art">
+          <svg width="84" height="68" viewBox="0 0 100 80" fill="none">
+            <path d="M15 55L45 70L85 50L55 35L15 55Z" fill="#1e40af"/>
+            <path d="M15 55L15 62L45 77L45 70L15 55Z" fill="#1d4ed8"/>
+            <path d="M45 70L45 77L85 57L85 50L45 70Z" fill="#3b82f6"/>
+            <path d="M20 42L50 57L88 38L58 23L20 42Z" fill="#d97706"/>
+            <path d="M20 42L20 49L50 64L50 57L20 42Z" fill="#b45309"/>
+            <path d="M50 57L50 64L88 45L88 38L50 57Z" fill="#f59e0b"/>
+            <path d="M25 28L55 43L92 25L62 10L25 28Z" fill="#2563eb"/>
+            <path d="M25 28L25 35L55 50L55 43L25 28Z" fill="#1d4ed8"/>
+            <path d="M55 43L55 50L92 32L92 25L55 43Z" fill="#60a5fa"/>
+            <path d="M30 31L53 42L85 27L62 15L30 31Z" fill="#93c5fd" opacity="0.4"/>
+          </svg>
+        </div>
       </div>
     </div>
+
+    <!-- 2. FILTER ROW (IMAGE 3) -->
+    <div class="materials-filter-row-1" style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+      <div class="materials-search-wrap" style="flex:1;min-width:260px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#3b82f6;flex-shrink:0;">
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input type="text" id="studentMatSearchInput" placeholder="Search materials, subjects, or keywords..." value="${escHtml(studentMatSearchQuery)}" oninput="setStudentMatSearch(this.value)"/>
+      </div>
+
+      <!-- All Subjects Dropdown -->
+      <select class="materials-select-btn" onchange="setStudentMatSubject(this.value)" style="min-width:145px;">
+        <option value="all" ${studentMatSubjectFilter === 'all' ? 'selected' : ''}>📅 All Subjects</option>
+        <option value="Pre-Calculus" ${studentMatSubjectFilter === 'Pre-Calculus' ? 'selected' : ''}>Pre-Calculus</option>
+        <option value="General Biology 1" ${studentMatSubjectFilter === 'General Biology 1' ? 'selected' : ''}>General Biology 1</option>
+        <option value="General Physics 1" ${studentMatSubjectFilter === 'General Physics 1' ? 'selected' : ''}>General Physics 1</option>
+        <option value="General Chemistry 1" ${studentMatSubjectFilter === 'General Chemistry 1' ? 'selected' : ''}>General Chemistry 1</option>
+        <option value="Empowerment Technologies (ICT)" ${studentMatSubjectFilter === 'Empowerment Technologies (ICT)' ? 'selected' : ''}>Empowerment Technologies (ICT)</option>
+        <option value="Earth and Life Science" ${studentMatSubjectFilter === 'Earth and Life Science' ? 'selected' : ''}>Earth and Life Science</option>
+        <option value="Practical Research 1" ${studentMatSubjectFilter === 'Practical Research 1' ? 'selected' : ''}>Practical Research 1</option>
+      </select>
+
+      <!-- All Types Dropdown -->
+      <select class="materials-select-btn" onchange="setStudentMatType(this.value)" style="min-width:130px;">
+        <option value="all" ${studentMatTypeFilter === 'all' ? 'selected' : ''}>📄 All Types</option>
+        <option value="Module" ${studentMatTypeFilter === 'Module' ? 'selected' : ''}>Module</option>
+        <option value="PDF" ${studentMatTypeFilter === 'PDF' ? 'selected' : ''}>PDF Documents</option>
+        <option value="Video" ${studentMatTypeFilter === 'Video' ? 'selected' : ''}>Video</option>
+        <option value="Notes" ${studentMatTypeFilter === 'Notes' ? 'selected' : ''}>Notes</option>
+        <option value="File" ${studentMatTypeFilter === 'File' ? 'selected' : ''}>File</option>
+      </select>
+
+      <!-- All Months Dropdown -->
+      <select class="materials-select-btn" onchange="setStudentMatMonth(this.value)" style="min-width:130px;">
+        <option value="all" ${studentMatMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
+        <option value="9" ${studentMatMonthFilter === '9' ? 'selected' : ''}>September 2025</option>
+        <option value="10" ${studentMatMonthFilter === '10' ? 'selected' : ''}>October 2025</option>
+        <option value="11" ${studentMatMonthFilter === '11' ? 'selected' : ''}>November 2025</option>
+      </select>
+    </div>
+
+    <!-- 3. MAIN SPLIT 2-COLUMN VIEW (IMAGE 3) -->
+    <div class="materials-overview-split" id="studentMatSplitWrap">
+      ${renderStudentMaterialsSplitContent()}
+    </div>
+  </div>`;
+}
+
+function getStudentFilteredMaterials() {
+  const customApproved = materialsData.filter(m => m.status === 'approved').map(m => {
+    const isDocx = (m.file_type && m.file_type.includes('word')) || m.type === 'DOCX';
+    const isPpt = (m.file_type && (m.file_type.includes('presentation') || m.file_type.includes('powerpoint'))) || m.type === 'PPT';
+    const fmt = isDocx ? 'DOCX' : (isPpt ? 'PPT' : (m.type || 'PDF'));
+
+    return {
+      id: m.id,
+      course_id: m.course_id || null,
+      title: m.title || m.fileName || 'Learning Handout',
+      subtitle: m.description || `${m.type || 'PDF'} document and guide`,
+      subject: m.subject || 'General Academic',
+      type: fmt,
+      dateAdded: m.date_formatted ? `${m.date_formatted} ${m.time_formatted || ''}` : 'Recent',
+      status: 'Completed',
+      cover: m.cover || 'assets/slide1.jpg',
+      file_url: m.file_url || 'SURVEY FORMS - Scholaria.pdf'
+    };
+  });
+
+  let displayMaterials = [...STUDENT_DEFAULT_MATERIALS, ...customApproved];
+
+  // Apply Search Query filter
+  const q = (studentMatSearchQuery || '').trim().toLowerCase();
+  if (q) {
+    displayMaterials = displayMaterials.filter(m =>
+      (m.title || '').toLowerCase().includes(q) ||
+      (m.subtitle || '').toLowerCase().includes(q) ||
+      (m.subject || '').toLowerCase().includes(q)
+    );
+  }
+
+  // Apply Subject Dropdown filter
+  if (studentMatSubjectFilter && studentMatSubjectFilter !== 'all') {
+    displayMaterials = displayMaterials.filter(m =>
+      (m.subject || '').toLowerCase().includes(studentMatSubjectFilter.toLowerCase())
+    );
+  }
+
+  // Apply Type Dropdown filter
+  if (studentMatTypeFilter && studentMatTypeFilter !== 'all') {
+    displayMaterials = displayMaterials.filter(m =>
+      (m.type || '').toUpperCase() === studentMatTypeFilter.toUpperCase()
+    );
+  }
+
+  // Alphabetical sort (A-Z) by title as requested
+  displayMaterials.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  return displayMaterials;
+}
+
+function renderStudentMaterialsSplitContent() {
+  const displayMaterials = getStudentFilteredMaterials();
+  const totalMatCount = displayMaterials.length;
+  const pagedMaterials = studentMatViewAll ? displayMaterials : displayMaterials.slice(0, 5);
+
+  const completedCount = displayMaterials.filter(m => (m.status || '').toLowerCase() === 'completed').length;
+  const inProgressCount = displayMaterials.filter(m => (m.status || '').toLowerCase().includes('progress')).length;
+  const pendingCount = displayMaterials.filter(m => (m.status || '').toLowerCase().includes('pend')).length;
+
+  const C = 238.76;
+  const compLen = totalMatCount > 0 ? (completedCount / totalMatCount) * C : 0;
+  const progLen = totalMatCount > 0 ? (inProgressCount / totalMatCount) * C : 0;
+  const pendLen = totalMatCount > 0 ? (pendingCount / totalMatCount) * C : 0;
+  const progOffset = -compLen;
+  const pendOffset = -(compLen + progLen);
+
+  return `
+      <!-- LEFT COLUMN: MATERIALS LIST TABLE -->
+      <div class="materials-table-card">
+        <div class="materials-table-header" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #e2e8f0;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:38px;height:38px;border-radius:10px;background:#fef9c3;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:20px;">📁</div>
+            <div>
+              <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f172a;">My Materials</h3>
+              <p style="margin:2px 0 0 0;font-size:12px;color:#64748b;">Your learning materials and files, organized by subject.</p>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;font-weight:600;">
+            <span>Showing ${pagedMaterials.length} of ${totalMatCount}</span>
+            <a href="javascript:void(0)" onclick="toggleStudentMatViewAll()" style="color:#0284c7;font-weight:700;text-decoration:none;margin-left:6px;">${studentMatViewAll ? 'Show Less ↑' : 'View All →'}</a>
+          </div>
+        </div>
+
+        <div class="materials-table-wrap">
+          <table class="materials-table">
+            <thead>
+              <tr>
+                <th style="width:34%;">Material</th>
+                <th style="width:20%;">Subject</th>
+                <th style="width:12%;">Type</th>
+                <th style="width:18%;">Date Added</th>
+                <th style="width:12%;">Status</th>
+                <th style="width:4%;text-align:right;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pagedMaterials.length > 0 ? pagedMaterials.map(m => {
+                const subjectClickHandler = m.course_id
+                  ? `setActiveSubjectMaterials('${m.course_id}')`
+                  : `setStudentMatSubject('${escHtml(m.subject)}')`;
+                const itemClickHandler = m.course_id
+                  ? `setActiveSubjectMaterials('${m.course_id}')`
+                  : `previewSubjectUploadedMaterial('${m.id}')`;
+
+                let subjPillClass = 'purple';
+                const sLow = (m.subject || '').toLowerCase();
+                if (sLow.includes('bio')) subjPillClass = 'green';
+                else if (sLow.includes('phys') || sLow.includes('math')) subjPillClass = 'cyan';
+                else if (sLow.includes('chem')) subjPillClass = 'purple';
+                else if (sLow.includes('ict') || sLow.includes('tech')) subjPillClass = 'pink';
+
+                let typePillClass = 'pdf';
+                const tLow = (m.type || '').toLowerCase();
+                if (tLow.includes('pdf')) typePillClass = 'pdf';
+                else if (tLow.includes('doc')) typePillClass = 'docx';
+                else if (tLow.includes('ppt') || tLow.includes('power')) typePillClass = 'ppt';
+                else if (tLow.includes('vid')) typePillClass = 'video';
+                else if (tLow.includes('note')) typePillClass = 'notes';
+                else if (tLow.includes('file')) typePillClass = 'file';
+
+                let statusPillClass = 'completed';
+                const stLow = (m.status || '').toLowerCase();
+                if (stLow.includes('progress')) statusPillClass = 'inprogress';
+                else if (stLow.includes('pend')) statusPillClass = 'pending';
+
+                return `
+                <tr onclick="${itemClickHandler}" style="cursor:pointer;" title="Click to open ${escHtml(m.title)}">
+                  <!-- Material Name & Thumbnail -->
+                  <td>
+                    <div class="mat-tbl-cell-main">
+                      <img src="${m.cover}" alt="${escHtml(m.title)}" class="mat-tbl-thumb" onerror="this.src='assets/slide1.jpg'"/>
+                      <div class="mat-tbl-cell-text">
+                        <div class="mat-tbl-title" title="${escHtml(m.title)}">${escHtml(m.title)}</div>
+                        <div class="mat-tbl-sub" title="${escHtml(m.subtitle || 'Lesson module and activities')}">${escHtml(m.subtitle || 'Lesson module and activities')}</div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Subject -->
+                  <td>
+                    <span class="mat-subj-badge ${subjPillClass}" onclick="event.stopPropagation(); ${subjectClickHandler};" title="Open ${escHtml(m.subject)}">
+                      ${escHtml(m.subject)}
+                    </span>
+                  </td>
+
+                  <!-- Type -->
+                  <td>
+                    <span class="mat-format-badge ${typePillClass}">
+                      ${escHtml(m.type)}
+                    </span>
+                  </td>
+
+                  <!-- Date Added -->
+                  <td>
+                    <span style="font-size:12px;color:#64748b;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+                      📅 ${escHtml(m.dateAdded || 'Sep 5, 2025 10:10 AM')}
+                    </span>
+                  </td>
+
+                  <!-- Status -->
+                  <td>
+                    <span class="mat-status-badge ${statusPillClass}">
+                      ${escHtml(m.status || 'Completed')}
+                    </span>
+                  </td>
+
+                  <!-- Action Menu (3 vertical dots) -->
+                  <td style="text-align:right;" onclick="event.stopPropagation(); previewSubjectUploadedMaterial('${m.id}');">
+                    <button class="mat-row-opt-btn" title="View Options" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1;">
+                      ⋮
+                    </button>
+                  </td>
+                </tr>
+                `;
+              }).join('') : `
+                <tr>
+                  <td colspan="6" style="text-align:center;padding:36px;color:#64748b;font-size:13px;">
+                    No materials found matching "${escHtml(studentMatSearchQuery)}".
+                  </td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: SIDEBAR WIDGETS (IMAGE 3) -->
+      <div class="materials-sidebar-column">
+        <!-- Widget 1: Subject Progress (Dynamic Multi-Colored Donut Chart) -->
+        <div class="sw-widget-card" style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 2px 10px rgba(15,23,42,0.04);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px;">
+              <span style="color:#0284c7;">📊</span> Subject Progress
+            </h4>
+            <a href="javascript:void(0)" onclick="toggleStudentMatViewAll()" style="font-size:12px;color:#0284c7;font-weight:700;text-decoration:none;">View All →</a>
+          </div>
+          <div style="display:flex;align-items:center;gap:18px;">
+            <!-- Circular Multi-Colored Donut Chart -->
+            <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">
+              <div class="sw-gauge-wrap" style="position:relative;width:96px;height:96px;margin:0 auto;">
+                <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+                  <!-- Base track -->
+                  <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" stroke-width="9"/>
+                  <!-- Completed (Green) -->
+                  ${compLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" stroke-width="9" stroke-linecap="round" stroke-dasharray="${compLen.toFixed(2)} ${C}" stroke-dashoffset="0"/>` : ''}
+                  <!-- In Progress (Orange) -->
+                  ${progLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#ea580c" stroke-width="9" stroke-linecap="round" stroke-dasharray="${progLen.toFixed(2)} ${C}" stroke-dashoffset="${progOffset.toFixed(2)}"/>` : ''}
+                  <!-- Pending (Amber) -->
+                  ${pendLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#d97706" stroke-width="9" stroke-linecap="round" stroke-dasharray="${pendLen.toFixed(2)} ${C}" stroke-dashoffset="${pendOffset.toFixed(2)}"/>` : ''}
+                </svg>
+                <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+                  <span style="font-size:26px;font-weight:800;color:#0f172a;line-height:1;">${totalMatCount}</span>
+                </div>
+              </div>
+              <span style="font-size:9.5px;font-weight:700;color:#64748b;letter-spacing:0.6px;text-transform:uppercase;text-align:center;display:block;margin-top:6px;">MATERIALS</span>
+            </div>
+            <!-- Stats Breakdown: Dynamic from current materials -->
+            <div style="flex:1;display:flex;flex-direction:column;gap:8px;font-size:12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;"></span> Completed</span>
+                <strong style="color:#0f172a;">${completedCount}</strong>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#ea580c;"></span> In Progress</span>
+                <strong style="color:#0f172a;">${inProgressCount}</strong>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#d97706;"></span> Pending</span>
+                <strong style="color:#0f172a;">${pendingCount}</strong>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding-top:6px;border-top:1px solid #f1f5f9;">
+                <span style="display:inline-flex;align-items:center;gap:6px;color:#0284c7;font-weight:700;"><span style="width:8px;height:8px;border-radius:50%;background:#0284c7;"></span> Total Materials</span>
+                <strong style="color:#0284c7;">${totalMatCount}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Widget 2: Upcoming Quizzes (Image 3) -->
+        <div class="sw-widget-card" style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:18px;padding:20px;box-shadow:0 2px 10px rgba(15,23,42,0.04);margin-top:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px;">
+              <span style="color:#2563eb;">📅</span> Upcoming Quizzes
+            </h4>
+            <a href="javascript:void(0)" onclick="renderPage('quizzes')" style="font-size:12px;color:#2563eb;font-weight:700;text-decoration:none;">View All →</a>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:12px;border:1px solid #f1f5f9;cursor:pointer;" onclick="renderPage('quizzes')">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;background:#e0f2fe;color:#0284c7;text-transform:uppercase;">Quiz</span>
+                <div>
+                  <div style="font-size:12.5px;font-weight:700;color:#0f172a;">Pre-Calculus Quiz 3</div>
+                  <div style="font-size:11px;color:#64748b;">Due: Tomorrow, 11:59 PM</div>
+                </div>
+              </div>
+              <span style="color:#94a3b8;font-size:16px;font-weight:700;">›</span>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:12px;border:1px solid #f1f5f9;cursor:pointer;" onclick="renderPage('quizzes')">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:9.5px;font-weight:700;padding:3px 7px;border-radius:6px;background:#f3e8ff;color:#7c3aed;text-transform:uppercase;">Interactive Quiz</span>
+                <div>
+                  <div style="font-size:12.5px;font-weight:700;color:#0f172a;">General Biology 1 Activity</div>
+                  <div style="font-size:11px;color:#64748b;">Due: Sep 18, 2025 · 10:00 AM</div>
+                </div>
+              </div>
+              <span style="color:#94a3b8;font-size:16px;font-weight:700;">›</span>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:12px;border:1px solid #f1f5f9;cursor:pointer;" onclick="renderPage('quizzes')">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;background:#e0f2fe;color:#0284c7;text-transform:uppercase;">Quiz</span>
+                <div>
+                  <div style="font-size:12.5px;font-weight:700;color:#0f172a;">Physics Mastery Check</div>
+                  <div style="font-size:11px;color:#64748b;">Due: Sep 20, 2025 · 02:00 PM</div>
+                </div>
+              </div>
+              <span style="color:#94a3b8;font-size:16px;font-weight:700;">›</span>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8fafc;border-radius:12px;border:1px solid #f1f5f9;cursor:pointer;" onclick="renderPage('quizzes')">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:9.5px;font-weight:700;padding:3px 7px;border-radius:6px;background:#f3e8ff;color:#7c3aed;text-transform:uppercase;">Interactive Quiz</span>
+                <div>
+                  <div style="font-size:12.5px;font-weight:700;color:#0f172a;">Chemistry Lab Report</div>
+                  <div style="font-size:11px;color:#64748b;">Due: Sep 22, 2025 · 11:59 PM</div>
+                </div>
+              </div>
+              <span style="color:#94a3b8;font-size:16px;font-weight:700;">›</span>
+            </div>
+          </div>
+        </div>
+      </div>
   `;
+}
+
+// ── STUDENT MATERIALS STATE & REPOSITORY DATA (IMAGE 3) ──
+let studentMatSearchQuery = '';
+let studentMatSubjectFilter = 'all';
+let studentMatTypeFilter = 'all';
+let studentMatMonthFilter = 'all';
+let studentMatSort = 'newest';
+let studentMatViewMode = 'grid';
+let studentMatViewAll = false;
+
+function toggleStudentMatViewAll() {
+  studentMatViewAll = !studentMatViewAll;
+  updateStudentMaterialsUI();
+}
+
+const STUDENT_DEFAULT_MATERIALS = [
+  {
+    id: 'mat-precalc-mod3',
+    title: 'Pre-Calculus Module 3',
+    subject: 'Pre-Calculus',
+    subjColor: 'purple',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Dr. Eleanor Llorente',
+    dateAdded: 'Sep 5, 2025 10:10 AM',
+    status: 'Completed',
+    meta: '12 files • 4.2 MB',
+    cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-cell-struct',
+    title: 'Cell Structure and Function',
+    subject: 'General Biology 1',
+    subjColor: 'green',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Prof. Maria Reyes',
+    dateAdded: 'Sep 4, 2025 02:30 PM',
+    status: 'Completed',
+    meta: '8 files • 3.1 MB',
+    cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-physics-em',
+    title: 'Electromagnetism Lesson',
+    subject: 'General Physics 1',
+    subjColor: 'orange',
+    file_type: 'ppt',
+    type: 'PPT',
+    formatClass: 'ppt',
+    instructor: 'Dr. Arthur Cruz',
+    dateAdded: 'Sep 3, 2025 09:15 AM',
+    status: 'In Progress',
+    meta: '15 files • 6.8 MB',
+    cover: 'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-chem-org',
+    title: 'Organic Chemistry Notes',
+    subject: 'General Chemistry 1',
+    subjColor: 'green',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Dr. Patricia Mendoza',
+    dateAdded: 'Sep 2, 2025 11:00 AM',
+    status: 'Pending',
+    meta: '10 files • 5.4 MB',
+    cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-research-guide',
+    title: 'Research Paper Guidelines',
+    subject: 'Practical Research 1',
+    subjColor: 'blue',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Dr. Eleanor Llorente',
+    dateAdded: 'Sep 1, 2025 04:20 PM',
+    status: 'Completed',
+    meta: '14 files • 3.5 MB',
+    cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-ict-word',
+    title: 'Microsoft Office - Word Basics',
+    subject: 'Empowerment Technologies (ICT)',
+    subjColor: 'pink',
+    file_type: 'docx',
+    type: 'DOCX',
+    formatClass: 'docx',
+    instructor: 'Engr. Julian Callanta',
+    dateAdded: 'Aug 29, 2025 08:45 AM',
+    status: 'Completed',
+    meta: '12 files • 3.7 MB',
+    cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-earth-tectonics',
+    title: 'Plate Tectonics and Earthquakes',
+    subject: 'Earth and Life Science',
+    subjColor: 'blue',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Prof. Gabriel Santos',
+    dateAdded: 'Aug 28, 2025 01:10 PM',
+    status: 'In Progress',
+    meta: '9 files • 4.6 MB',
+    cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-entrep-plan',
+    title: 'Business Plan Components',
+    subject: 'Entrepreneurship',
+    subjColor: 'orange',
+    file_type: 'ppt',
+    type: 'PPT',
+    formatClass: 'ppt',
+    instructor: 'Ms. Clara Asis',
+    dateAdded: 'Aug 27, 2025 10:30 AM',
+    status: 'Completed',
+    meta: '11 files • 2.9 MB',
+    cover: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-bio-genetics',
+    title: 'Genetics and Heredity',
+    subject: 'General Biology 1',
+    subjColor: 'green',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Prof. Maria Reyes',
+    dateAdded: 'Aug 25, 2025 03:00 PM',
+    status: 'Pending',
+    meta: '7 files • 3.8 MB',
+    cover: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-math-quad',
+    title: 'Quadratic Equations',
+    subject: 'General Mathematics',
+    subjColor: 'green',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Dr. Wilfredo Santos',
+    dateAdded: 'Aug 24, 2025 11:15 AM',
+    status: 'Completed',
+    meta: '10 files • 2.6 MB',
+    cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-write-guide',
+    title: 'Academic Writing Guide',
+    subject: 'Reading and Writing Skills',
+    subjColor: 'purple',
+    file_type: 'docx',
+    type: 'DOCX',
+    formatClass: 'docx',
+    instructor: 'Ms. Liza Navarro',
+    dateAdded: 'Aug 22, 2025 09:40 AM',
+    status: 'Completed',
+    meta: '6 files • 1.8 MB',
+    cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-stem-guide',
+    title: 'STEM Project Guide',
+    subject: 'STEM',
+    subjColor: 'cyan',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Engr. Daniel Cruz',
+    dateAdded: 'Aug 20, 2025 02:15 PM',
+    status: 'In Progress',
+    meta: '13 files • 5.2 MB',
+    cover: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-oral-speech',
+    title: 'Speech Presentation Tips',
+    subject: 'Oral Communication',
+    subjColor: 'pink',
+    file_type: 'ppt',
+    type: 'PPT',
+    formatClass: 'ppt',
+    instructor: 'Ms. Clara Asis',
+    dateAdded: 'Aug 18, 2025 10:00 AM',
+    status: 'Completed',
+    meta: '8 files • 3.4 MB',
+    cover: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-chem-bonding',
+    title: 'Chemical Bonding Principles',
+    subject: 'General Chemistry 1',
+    subjColor: 'green',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Dr. Patricia Mendoza',
+    dateAdded: 'Aug 16, 2025 01:45 PM',
+    status: 'Pending',
+    meta: '11 files • 4.1 MB',
+    cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-trig-identities',
+    title: 'Trigonometric Identities Handout',
+    subject: 'Pre-Calculus',
+    subjColor: 'purple',
+    file_type: 'pdf',
+    type: 'PDF',
+    formatClass: 'pdf',
+    instructor: 'Dr. Eleanor Llorente',
+    dateAdded: 'Aug 14, 2025 09:20 AM',
+    status: 'In Progress',
+    meta: '9 files • 2.8 MB',
+    cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  },
+  {
+    id: 'mat-arts-ph',
+    title: 'Contemporary Philippine Arts',
+    subject: 'Contemporary Philippine Arts from the Regions',
+    subjColor: 'orange',
+    file_type: 'ppt',
+    type: 'PPT',
+    formatClass: 'ppt',
+    instructor: 'Ms. Clara Asis',
+    dateAdded: 'Aug 12, 2025 11:30 AM',
+    status: 'Completed',
+    meta: '7 files • 5.1 MB',
+    cover: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80',
+    file_url: 'SURVEY FORMS - Scholaria.pdf'
+  }
+];
+
+function setStudentMatSearch(query) {
+  studentMatSearchQuery = (query || '').toLowerCase();
+  updateStudentMaterialsUI();
+}
+
+function setStudentMatSubject(subj) {
+  studentMatSubjectFilter = subj;
+  updateStudentMaterialsUI();
+}
+
+function setStudentMatType(type) {
+  studentMatTypeFilter = type;
+  updateStudentMaterialsUI();
+}
+
+function setStudentMatMonth(m) {
+  studentMatMonthFilter = m;
+  updateStudentMaterialsUI();
+}
+
+function setStudentMatSort(sort) {
+  studentMatSort = sort;
+  updateStudentMaterialsUI();
+}
+
+function setStudentMatViewMode(mode) {
+  studentMatViewMode = mode;
+  updateStudentMaterialsUI();
+}
+
+function resetStudentMatFilters() {
+  studentMatSearchQuery = '';
+  studentMatSubjectFilter = 'all';
+  studentMatTypeFilter = 'all';
+  studentMatMonthFilter = 'all';
+  studentMatSort = 'newest';
+  const inp = document.getElementById('studentMatSearchInput');
+  if (inp) inp.value = '';
+  updateStudentMaterialsUI();
+}
+
+function updateStudentMaterialsUI() {
+  const splitWrap = document.getElementById('studentMatSplitWrap');
+  if (splitWrap) {
+    splitWrap.innerHTML = renderStudentMaterialsSplitContent();
+    return;
+  }
+  const container = document.getElementById('materialsListWrap');
+  if (container) {
+    container.innerHTML = renderMaterialsList('student');
+  }
 }
 
 // ── MATERIALS MANAGER STATE & DEMO DATA ──
@@ -785,258 +1660,8 @@ let materialsCurrentPage = 1;
 const MATERIALS_PAGE_SIZE = 6;
 let activeMaterialActionMenuId = null;
 
-// Comprehensive default dataset matching the exact design and counts (128 total items: 87 Teacher, 41 Student, 12 Pending)
-const SEED_MATERIALS = [
-  {
-    id: 'mat_1',
-    title: 'Cyber.pdf',
-    fileName: 'Cyber.pdf',
-    subject: 'Oral Communication',
-    strand: 'HUMSS',
-    grade_level: 'Grade 11',
-    uploader_name: 'Benedict Callanta',
-    uploaded_by_name: 'Benedict Callanta',
-    uploader_role: 'Teacher',
-    file_type: 'application/pdf',
-    type: 'PDF',
-    status: 'pending',
-    created_at: '2026-09-21T10:24:00Z',
-    date_formatted: 'Sep 21, 2026',
-    time_formatted: '10:24 AM',
-    size: '4.2 MB'
-  },
-  {
-    id: 'mat_2',
-    title: 'Chapter 2.docx',
-    fileName: 'Chapter 2.docx',
-    subject: 'General Mathematics',
-    strand: 'STEM',
-    grade_level: 'Grade 11',
-    uploader_name: 'Maria Santos',
-    uploaded_by_name: 'Maria Santos',
-    uploader_role: 'Teacher',
-    file_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    type: 'DOCX',
-    status: 'approved',
-    created_at: '2026-09-20T14:16:00Z',
-    date_formatted: 'Sep 20, 2026',
-    time_formatted: '02:16 PM',
-    size: '1.8 MB'
-  },
-  {
-    id: 'mat_3',
-    title: 'Research.pptx',
-    fileName: 'Research.pptx',
-    subject: 'Practical Research',
-    strand: 'STEM',
-    grade_level: 'Grade 12',
-    uploader_name: 'Juan Dela Cruz',
-    uploaded_by_name: 'Juan Dela Cruz',
-    uploader_role: 'Student',
-    file_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    type: 'PPTX',
-    status: 'approved',
-    created_at: '2026-09-19T14:36:00Z',
-    date_formatted: 'Sep 19, 2026',
-    time_formatted: '02:36 PM',
-    size: '8.5 MB'
-  },
-  {
-    id: 'mat_4',
-    title: 'Data.xlsx',
-    fileName: 'Data.xlsx',
-    subject: 'Business Math',
-    strand: 'ABM',
-    grade_level: 'Grade 11',
-    uploader_name: 'Anna Lopez',
-    uploaded_by_name: 'Anna Lopez',
-    uploader_role: 'Student',
-    file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    type: 'XLSX',
-    status: 'approved',
-    created_at: '2026-09-18T11:20:00Z',
-    date_formatted: 'Sep 18, 2026',
-    time_formatted: '11:20 AM',
-    size: '950 KB'
-  },
-  {
-    id: 'mat_5',
-    title: 'GroupProject.jpg',
-    fileName: 'GroupProject.jpg',
-    subject: 'Empowerment Technologies',
-    strand: 'TVL',
-    grade_level: 'Grade 12',
-    uploader_name: 'Mark Santos',
-    uploaded_by_name: 'Mark Santos',
-    uploader_role: 'Student',
-    file_type: 'image/jpeg',
-    type: 'Image',
-    status: 'rejected',
-    created_at: '2026-09-17T09:15:00Z',
-    date_formatted: 'Sep 17, 2026',
-    time_formatted: '09:15 AM',
-    size: '3.1 MB'
-  },
-  {
-    id: 'mat_6',
-    title: 'Resources.zip',
-    fileName: 'Resources.zip',
-    subject: 'Physical Science',
-    strand: 'HUMSS',
-    grade_level: 'Grade 11',
-    uploader_name: 'Liza Martinez',
-    uploaded_by_name: 'Liza Martinez',
-    uploader_role: 'Teacher',
-    file_type: 'application/zip',
-    type: 'ZIP',
-    status: 'approved',
-    created_at: '2026-09-16T15:42:00Z',
-    date_formatted: 'Sep 16, 2026',
-    time_formatted: '03:42 PM',
-    size: '24.6 MB'
-  },
-  {
-    id: 'mat_genchem_1',
-    title: 'Thermochemistry & Hess Law Summary Notes.pdf',
-    fileName: 'Thermochemistry_and_Hess_Law_Summary.pdf',
-    subject: 'General Chemistry 1',
-    course_id: 'course-gen-chem1',
-    course_code: 'STEM-1202',
-    strand: 'STEM',
-    grade_level: 'Grade 12',
-    uploader_name: 'Dr. Patricia Mendoza',
-    uploaded_by_name: 'Dr. Patricia Mendoza',
-    uploader_role: 'Teacher',
-    file_type: 'application/pdf',
-    type: 'PDF',
-    status: 'approved',
-    created_at: '2026-09-15T09:30:00Z',
-    date_formatted: 'Sep 15, 2026',
-    time_formatted: '09:30 AM',
-    size: '3.4 MB'
-  },
-  {
-    id: 'mat_genchem_2',
-    title: 'Stoichiometry & Redox Reaction Worksheet.pdf',
-    fileName: 'Stoichiometry_and_Redox_Worksheet.pdf',
-    subject: 'General Chemistry 1',
-    course_id: 'course-gen-chem1',
-    course_code: 'STEM-1202',
-    strand: 'STEM',
-    grade_level: 'Grade 12',
-    uploader_name: 'Dr. Patricia Mendoza',
-    uploaded_by_name: 'Dr. Patricia Mendoza',
-    uploader_role: 'Teacher',
-    file_type: 'application/pdf',
-    type: 'PDF',
-    status: 'approved',
-    created_at: '2026-09-14T14:15:00Z',
-    date_formatted: 'Sep 14, 2026',
-    time_formatted: '02:15 PM',
-    size: '2.1 MB'
-  },
-  {
-    id: 'mat_genbio_1',
-    title: 'Cell Cycle & Mitosis Comprehensive Guide.pdf',
-    fileName: 'Cell_Cycle_Mitosis_Comprehensive_Guide.pdf',
-    subject: 'General Biology 1',
-    course_id: 'course-gen-bio1',
-    course_code: 'STEM-1102',
-    strand: 'STEM',
-    grade_level: 'Grade 11',
-    uploader_name: 'Prof. Maria Reyes',
-    uploaded_by_name: 'Prof. Maria Reyes',
-    uploader_role: 'Teacher',
-    file_type: 'application/pdf',
-    type: 'PDF',
-    status: 'approved',
-    created_at: '2026-09-13T11:00:00Z',
-    date_formatted: 'Sep 13, 2026',
-    time_formatted: '11:00 AM',
-    size: '4.8 MB'
-  },
-  {
-    id: 'mat_precalc_1',
-    title: 'Conic Sections & Analytic Geometry Handout.pdf',
-    fileName: 'Conic_Sections_Analytic_Geometry_Handout.pdf',
-    subject: 'Pre-Calculus',
-    course_id: 'course-pre-calc',
-    course_code: 'STEM-1101',
-    strand: 'STEM',
-    grade_level: 'Grade 11',
-    uploader_name: 'Dr. Eleanor Llorente',
-    uploaded_by_name: 'Dr. Eleanor Llorente',
-    uploader_role: 'Teacher',
-    file_type: 'application/pdf',
-    type: 'PDF',
-    status: 'approved',
-    created_at: '2026-09-12T08:45:00Z',
-    date_formatted: 'Sep 12, 2026',
-    time_formatted: '08:45 AM',
-    size: '2.9 MB'
-  }
-];
-
-// Generate synthetic items to populate the remaining of the 128 total items
-(function initSeedMaterials() {
-  const subjectsPool = [
-    'Oral Communication', 'General Mathematics', 'Practical Research', 'Business Math',
-    'Empowerment Technologies', 'Physical Science', 'Earth Science', 'Basic Calculus',
-    'Media and Information Literacy', '21st Century Literature', 'Disaster Readiness', 'Philippine Politics'
-  ];
-  const teacherNames = ['Benedict Callanta', 'Maria Santos', 'Liza Martinez', 'Dr. Roberto Cruz', 'Prof. Elena Diaz', 'Engr. David Reyes'];
-  const studentNames = ['Juan Dela Cruz', 'Anna Lopez', 'Mark Santos', 'Patricia Garcia', 'Kevin Tan', 'Bea Ramos', 'John Doe'];
-  const fileExts = [
-    { ext: 'pdf', type: 'PDF', mime: 'application/pdf' },
-    { ext: 'docx', type: 'DOCX', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
-    { ext: 'pptx', type: 'PPTX', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
-    { ext: 'xlsx', type: 'XLSX', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-    { ext: 'jpg', type: 'Image', mime: 'image/jpeg' },
-    { ext: 'zip', type: 'ZIP', mime: 'application/zip' }
-  ];
-  const strandsPool = ['STEM', 'HUMSS', 'ABM', 'TVL', 'GAS'];
-
-  // Total = 128, Teacher = 87, Student = 41, Pending = 12
-  let currentTeacher = 7;
-  let currentStudent = 3;
-  let currentPending = 1;
-
-  for (let i = 11; i <= 128; i++) {
-    const isTeacher = currentTeacher < 87 ? (currentStudent >= 41 || Math.random() < 0.68) : false;
-    if (isTeacher) currentTeacher++; else currentStudent++;
-
-    const isPending = currentPending < 12 && (128 - i <= 12 - currentPending || Math.random() < 0.12);
-    if (isPending) currentPending++;
-
-    const status = isPending ? 'pending' : (Math.random() < 0.9 ? 'approved' : 'rejected');
-    const uploader = isTeacher ? teacherNames[(i - 1) % teacherNames.length] : studentNames[(i - 1) % studentNames.length];
-    const sub = subjectsPool[(i - 1) % subjectsPool.length];
-    const fmt = fileExts[(i - 1) % fileExts.length];
-    const strand = strandsPool[(i - 1) % strandsPool.length];
-    const grade = (i % 2 === 0) ? 'Grade 11' : 'Grade 12';
-    const dayOffset = Math.floor((i - 1) / 3);
-    const dateObj = new Date(2026, 8, Math.max(1, 21 - dayOffset), 8 + (i % 9), 10 + (i % 45));
-
-    SEED_MATERIALS.push({
-      id: `mat_${i}`,
-      title: `${sub.replace(/[^a-zA-Z0-9]/g, '')}_Module_${i}.${fmt.ext}`,
-      fileName: `${sub.replace(/[^a-zA-Z0-9]/g, '')}_Module_${i}.${fmt.ext}`,
-      subject: sub,
-      strand: strand,
-      grade_level: grade,
-      uploader_name: uploader,
-      uploaded_by_name: uploader,
-      uploader_role: isTeacher ? 'Teacher' : 'Student',
-      file_type: fmt.mime,
-      type: fmt.type,
-      status: status,
-      created_at: dateObj.toISOString(),
-      date_formatted: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      time_formatted: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      size: `${(1.2 + (i * 0.3) % 15).toFixed(1)} MB`
-    });
-  }
-})();
+// Only real materials uploaded by teachers and approved in the system
+const SEED_MATERIALS = [];
 
 function getUnifiedMaterialsList() {
   const customList = Array.isArray(materialsData) ? materialsData : [];
@@ -1103,17 +1728,7 @@ function getUnifiedMaterialsList() {
     };
   });
 
-  const formattedSeeds = SEED_MATERIALS.map(s => ({
-    ...s,
-    contentType: s.contentType || 'material'
-  }));
-
-  // Combine real uploads & quizzes at top, followed by seed demo materials
-  const combinedReal = [...formattedQuizzes, ...formattedDb];
-  if (combinedReal.length === 0) {
-    return formattedSeeds;
-  }
-  return [...combinedReal, ...formattedSeeds.slice(combinedReal.length)];
+  return [...formattedQuizzes, ...formattedDb];
 }
 
 // ── FILTER & INTERACTIVE HANDLERS ──
@@ -1193,7 +1808,7 @@ if (typeof window !== 'undefined') {
 
 function previewOrDownloadMaterial(id) {
   const all = getUnifiedMaterialsList();
-  const m = all.find(item => item.id === id);
+  const m = all.find(item => String(item.id) === String(id)) || materialsData.find(item => String(item.id) === String(id));
   if (!m) return;
   if (m.contentType === 'quiz') {
     showToast(`Launching quiz "${m.title}"…`, 'info');
@@ -1206,8 +1821,7 @@ function previewOrDownloadMaterial(id) {
     }
     return;
   }
-  showToast(`Opening preview for "${m.title}"…`, 'success');
-  previewSubjectPdf('mat-preview', m.id);
+  previewSubjectUploadedMaterial(m.id);
 }
 
 function getFileTypeSvg(type) {
@@ -1442,16 +2056,6 @@ function renderMaterialsManagerPage(role) {
             <option value="rejected" ${materialsStatusFilter === 'rejected' ? 'selected' : ''}>Rejected</option>
           </select>
         </div>
-
-        <!-- View Mode Toggle -->
-        <div class="mm-view-toggle">
-          <button class="mm-view-btn ${materialsViewMode === 'list' ? 'active' : ''}" onclick="setMaterialsViewMode('list')" title="List View">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          </button>
-          <button class="mm-view-btn ${materialsViewMode === 'grid' ? 'active' : ''}" onclick="setMaterialsViewMode('grid')" title="Grid View">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-          </button>
-        </div>
       </div>
 
       <!-- ── TABS BAR ── -->
@@ -1661,94 +2265,43 @@ function renderMaterialsManagerPage(role) {
 function previewSubjectPdf(courseId, docId) {
   const course = (typeof COURSES_DATABASE !== 'undefined') ? COURSES_DATABASE.find(c => c.id === courseId) : null;
   const doc = course?.documents?.find(d => d.id === docId);
-  if (!doc) return;
-
-  const modal = document.getElementById('docPreviewModal');
-  const titleEl = document.getElementById('docPreviewTitle');
-  const subEl = document.getElementById('docPreviewSubtitle');
-  const bodyEl = document.getElementById('docPreviewBody');
-  const dlBtn = document.getElementById('docPreviewDlBtn');
-
-  if (titleEl) titleEl.textContent = doc.title;
-  if (subEl) subEl.textContent = `${course.title} (${course.code}) · ${doc.fileName} · ${doc.pages} Pages · ${doc.size}`;
-  if (dlBtn) dlBtn.onclick = () => downloadSubjectPdf(courseId, docId);
-
-  if (bodyEl) {
-    bodyEl.innerHTML = `
-      <div class="doc-viewer-card">
-        <div class="doc-viewer-header">
-          <div class="doc-vh-left">
-            <span class="doc-type-badge">PDF Document</span>
-            <span class="doc-topic-tag">${escHtml(course.track || 'Specialized Track')}</span>
-          </div>
-          <span class="doc-page-count">Page 1 of ${doc.pages}</span>
-        </div>
-        
-        <div class="doc-content-simulator">
-          <div class="doc-paper">
-            <div class="doc-paper-header">
-              <div class="doc-school-name">HAVEN OF WISDOM ACADEMY</div>
-              <div class="doc-school-sub">Senior High School Academic Department · ${escHtml(course.strand)} Strand</div>
-              <div class="doc-divider"></div>
-            </div>
-            
-            <div class="doc-paper-title">${escHtml(doc.title)}</div>
-            <div class="doc-paper-meta">Subject: <strong>${escHtml(course.title)} (${escHtml(course.code)})</strong> | Instructor: <strong>${escHtml(course.instructor)}</strong></div>
-            
-            <div class="doc-section-heading">I. Learning Competencies & Objectives</div>
-            <p class="doc-body-p">In this module, students are expected to comprehend and demonstrate proficiency in: ${escHtml(doc.topics)}</p>
-            
-            <div class="doc-section-heading">II. Key Concepts & Overview</div>
-            <p class="doc-body-p">This instructional resource contains formal definitions, illustrative step-by-step problem sets, and guided laboratory worksheets prepared for ${escHtml(course.gradeLevel)} students.</p>
-            
-            <div class="doc-highlight-box">
-              <strong>Module Resource Summary:</strong><br/>
-              • Document File: <code>${escHtml(doc.fileName)}</code><br/>
-              • Total Length: ${doc.pages} pages with practice activities & self-check assessments.<br/>
-              • Release Date: ${doc.date}
-            </div>
-
-            <div class="doc-section-heading">III. Discussion & Guided Activities</div>
-            <p class="doc-body-p">Detailed diagrams, mathematical derivations, and exercise sheets follow in the complete downloadable PDF version.</p>
-          </div>
-        </div>
-      </div>
-    `;
+  if (doc && doc.url) {
+    if (typeof openRealPdfPreviewModal === 'function') {
+      openRealPdfPreviewModal(doc.url, doc.title || doc.fileName);
+      return;
+    }
   }
-
-  if (modal) modal.classList.add('active');
+  previewSubjectUploadedMaterial(docId);
 }
 
 function closeDocPreviewModal() {
   const modal = document.getElementById('docPreviewModal');
   if (modal) modal.classList.remove('active');
+  const bodyEl = document.getElementById('docPreviewBody');
+  if (bodyEl) bodyEl.innerHTML = '';
 }
 
 function downloadSubjectPdf(courseId, docId) {
   const course = (typeof COURSES_DATABASE !== 'undefined') ? COURSES_DATABASE.find(c => c.id === courseId) : null;
   const doc = course?.documents?.find(d => d.id === docId);
-  if (!doc) return;
-
-  showToast(`Downloading "${doc.fileName}"…`, 'success');
-
-  const textContent = `%PDF-1.4\n% HAVEN OF WISDOM ACADEMY\n% Course: ${course.title} (${course.code})\n% Module: ${doc.title}\n% File: ${doc.fileName}\n% Instructor: ${course.instructor}\n% Topics: ${doc.topics}\n% Pages: ${doc.pages}\n\n==============================================\nHAVEN OF WISDOM ACADEMY - SENIOR HIGH SCHOOL\n${course.title.toUpperCase()} (${course.code})\n${doc.title}\nInstructor: ${course.instructor}\n==============================================\n\nOVERVIEW & TOPICS:\n${doc.topics}\n\nThis is the official curriculum learning material for Haven of Wisdom Academy students.\n`;
-    const blob = new Blob([textContent], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = doc.fileName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  if (doc && doc.url) {
+    const a = document.createElement('a');
+    a.href = doc.url;
+    a.download = doc.fileName || `${doc.title}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    return;
+  }
+  downloadMaterial(docId);
 }
 
-function previewSubjectUploadedMaterial(id) {
+async function previewSubjectUploadedMaterial(id) {
   const m = materialsData.find(mat => String(mat.id) === String(id)) || 
             getCustomMaterialsFromStorage().find(mat => String(mat.id) === String(id)) ||
-            SEED_MATERIALS.find(mat => String(mat.id) === String(id));
+            (typeof STUDENT_DEFAULT_MATERIALS !== 'undefined' ? STUDENT_DEFAULT_MATERIALS.find(mat => String(mat.id) === String(id)) : null);
   if (!m) {
-    showToast('Handout not found', 'error');
+    showToast('Learning material not found', 'error');
     return;
   }
 
@@ -1758,58 +2311,117 @@ function previewSubjectUploadedMaterial(id) {
   const bodyEl = document.getElementById('docPreviewBody');
   const dlBtn = document.getElementById('docPreviewDlBtn');
 
-  const title = m.title || m.fileName || 'Uploaded Handout';
-  const uploader = m.uploaded_by_name || m.uploader_name || 'Faculty Member';
+  const title = m.title || m.fileName || 'Learning Material';
+  const uploader = m.uploaded_by_name || m.uploader_name || m.instructor || 'Teacher';
   const subject = m.subject || 'General Subject';
-  const size = m.size || 'PDF Document';
-  const date = m.date_formatted || 'Recently Uploaded';
+  const size = m.size || m.meta || '';
+  const date = m.date_formatted || '';
 
   if (titleEl) titleEl.textContent = title;
-  if (subEl) subEl.textContent = `${subject} · Uploaded by ${uploader} · ${date} · ${size}`;
+  if (subEl) subEl.textContent = `${subject}${uploader ? ' · Uploaded by ' + uploader : ''}${date ? ' · ' + date : ''}${size ? ' · ' + size : ''}`;
   if (dlBtn) dlBtn.onclick = () => downloadMaterial(m.id);
 
-  if (bodyEl) {
-    bodyEl.innerHTML = `
-      <div class="doc-viewer-card">
-        <div class="doc-viewer-header">
-          <div class="doc-vh-left">
-            <span class="doc-type-badge">${m.type || 'PDF Document'}</span>
-            <span class="doc-topic-tag">${escHtml(subject)}</span>
-          </div>
-          <span class="doc-page-count">Teacher Handout</span>
-        </div>
-        
-        <div class="doc-content-simulator">
-          <div class="doc-paper">
-            <div class="doc-paper-header">
-              <div class="doc-school-name">HAVEN OF WISDOM ACADEMY</div>
-              <div class="doc-school-sub">Senior High School Academic Department · Faculty Resource Repository</div>
-              <div class="doc-divider"></div>
-            </div>
-            
-            <div class="doc-paper-title">${escHtml(title)}</div>
-            <div class="doc-paper-meta">Subject: <strong>${escHtml(subject)}</strong> | Contributed by: <strong>${escHtml(uploader)}</strong> (${m.uploader_role || 'Teacher'})</div>
-            
-            <div class="doc-section-heading">I. Overview & Scope</div>
-            <p class="doc-body-p">This instructional resource has been prepared and published by faculty for students enrolled in <strong>${escHtml(subject)}</strong>. It serves as supplementary reading, lecture summaries, problem sheets, and study review material.</p>
-            
-            <div class="doc-highlight-box">
-              <strong>Handout Details:</strong><br/>
-              • Resource Title: <code>${escHtml(title)}</code><br/>
-              • Original File: <code>${escHtml(m.fileName || title)}</code><br/>
-              • Target Strand &amp; Level: ${escHtml(m.strand || 'Senior High School')} · ${escHtml(m.grade_level || 'Grade 11/12')}<br/>
-              • Uploaded On: ${escHtml(date)}
-            </div>
+  if (!bodyEl) return;
+  if (modal) modal.classList.add('active');
 
-            <div class="doc-section-heading">II. Download & Offline Access</div>
-            <p class="doc-body-p">Students and instructors can save this file for offline review by clicking the download button below.</p>
-          </div>
+  bodyEl.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:360px;gap:12px;color:#64748b;">
+      <div style="width:36px;height:36px;border:3px solid #cbd5e1;border-top-color:#0284c7;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+      <p style="font-size:14px;font-weight:600;margin:0;">Loading document preview...</p>
+    </div>
+  `;
+
+  let fileUrl = null;
+  let fileType = (m.file_type || m.type || '').toLowerCase();
+
+  try {
+    const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+    if (session && session.access_token) {
+      const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(m.id)}/download`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          fileUrl = data.url;
+          if (data.file_type) fileType = data.file_type.toLowerCase();
+        }
+      }
+    }
+
+    if (!fileUrl && m.file_url) {
+      if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
+        fileUrl = m.file_url;
+      } else {
+        const { data, error } = await db.storage
+          .from('learning-materials')
+          .createSignedUrl(m.file_url, 60 * 15);
+        if (!error && data?.signedUrl) {
+          fileUrl = data.signedUrl;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching file URL for preview:', err);
+  }
+
+  const isPdf = fileType.includes('pdf') || (m.fileName && m.fileName.toLowerCase().endsWith('.pdf')) || (m.title && m.title.toLowerCase().endsWith('.pdf')) || m.type === 'PDF';
+  const isImage = fileType.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(m.fileName || m.title || '');
+
+  if (!fileUrl) {
+    if (m.file_url || m.url) {
+      fileUrl = m.file_url || m.url;
+    } else if (isPdf) {
+      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
+    }
+  }
+
+  if (!fileUrl) {
+    bodyEl.innerHTML = `
+      <div style="padding:40px 20px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;">
+        <div style="font-size:36px;margin-bottom:12px;">⚠️</div>
+        <h4 style="margin:0 0 8px 0;font-size:16px;color:#0f172a;">Unable to load file preview</h4>
+        <p style="margin:0 0 16px 0;font-size:13px;color:#64748b;">The document could not be loaded from storage. Please verify that the file exists or try downloading it directly.</p>
+        <button class="sw-btn primary" onclick="downloadMaterial('${m.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;">
+          Download File
+        </button>
+      </div>
+    `;
+    return;
+  }
+  if (isPdf) {
+    bodyEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;height:100%;gap:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;padding:8px 14px;border-radius:8px;border:1px solid #e2e8f0;font-size:12.5px;color:#475569;">
+          <span style="font-weight:600;">📄 ${escHtml(m.fileName || title)}</span>
+          <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color:#0284c7;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+            Open in new tab ↗
+          </a>
+        </div>
+        <div style="flex:1;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #cbd5e1;box-shadow:0 2px 8px rgba(0,0,0,0.06);min-height:550px;">
+          <iframe src="${fileUrl}#toolbar=1" style="width:100%;height:68vh;min-height:550px;border:none;display:block;" title="${escHtml(title)}"></iframe>
         </div>
       </div>
     `;
+  } else if (isImage) {
+    bodyEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;background:#fff;border-radius:8px;border:1px solid #e2e8f0;">
+        <img src="${fileUrl}" alt="${escHtml(title)}" style="max-width:100%;max-height:70vh;object-fit:contain;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,0.08);" />
+      </div>
+    `;
+  } else {
+    bodyEl.innerHTML = `
+      <div style="padding:48px 24px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div style="width:54px;height:54px;border-radius:14px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:26px;">📁</div>
+        <h4 style="margin:0;font-size:17px;font-weight:700;color:#0f172a;">${escHtml(m.fileName || title)}</h4>
+        <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;">This document format (${fileType || 'Document'}) cannot be previewed inline in the browser. You can download the file to view it on your device.</p>
+        <button class="pf-save" onclick="downloadMaterial('${m.id}')" style="background:#0284c7;display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border-radius:8px;font-weight:600;margin-top:6px;cursor:pointer;">
+          <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download File to View
+        </button>
+      </div>
+    `;
   }
-
-  if (modal) modal.classList.add('active');
 }
 
 // Content Approval presentation state; approval and denial use the existing handlers.
@@ -1907,19 +2519,45 @@ function approvalIcon(name) {
 function approvalEntries() {
   const quizzes = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
   const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
+
+  const allMaterials = Array.isArray(materialsData) ? materialsData.filter(Boolean) : [];
+  const allQuizzes = Array.isArray(quizzes) ? quizzes.filter(Boolean) : [];
+
   return [
-    ...materialsData.map(m => {
+    ...allMaterials.map(m => {
       const isArchived = isEntryArchived('material', m.id, m.status);
-      let status = isArchived ? 'archived' : m.status;
+      let status = isArchived ? 'archived' : (m.status || 'pending');
       if (!isArchived && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
-      return { id: m.id, kind: 'material', title: m.title, type: m.content_type || 'Material', subject: m.subject || 'General', name: m.uploaded_by_name || 'Unknown', date: m.created_at, status, isArchived };
+      return {
+        id: m.id,
+        kind: 'material',
+        title: m.title || m.fileName || 'Untitled Material',
+        type: m.content_type || m.file_type || 'Material',
+        subject: m.subject || 'General',
+        name: m.uploaded_by_name || m.uploader_name || 'Teacher',
+        date: m.created_at,
+        status,
+        isArchived
+      };
     }),
-    ...quizzes.map(q => {
+    ...allQuizzes.map(q => {
       const isArchived = isEntryArchived('quiz', q.id, q.status);
-      let status = isArchived ? 'archived' : (q.status === 'active' ? 'approved' : q.status);
+      let status = isArchived ? 'archived' : (q.status === 'active' ? 'approved' : (q.status || 'pending'));
       if (!isArchived && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
       const authorUser = users.find(u => u.dbId === q.createdBy || u.id === q.createdBy || (q.createdBy && String(u.dbId).toLowerCase() === String(q.createdBy).toLowerCase()));
-      return { id: q.id, kind: 'quiz', title: q.title, type: 'Quiz', subject: q.subject || 'General', name: authorUser?.name || 'Unknown', date: q.createdAt, status, isArchived };
+      const uploaderName = q.createdByName || q.author || q.uploaded_by_name || authorUser?.name || authorUser?.full_name || 'Teacher';
+      const isInteractive = q.quiz_type === 'interactive' || q.type === 'interactive';
+      return {
+        id: q.id,
+        kind: 'quiz',
+        title: q.title || 'Untitled Quiz',
+        type: isInteractive ? 'Interactive Quiz' : 'Quiz',
+        subject: q.subject || 'General',
+        name: uploaderName,
+        date: q.createdAt,
+        status,
+        isArchived
+      };
     })
   ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 }
@@ -1953,7 +2591,7 @@ function renderApprovalMaterialRows() {
   const pages = Math.max(1, Math.ceil(filtered.length / 5));
   approvalView.page = Math.min(pages, Math.max(1, approvalView.page));
   const offset = (approvalView.page - 1) * 5;
-  const options = key => [...new Set(entries.map(e => e[key]))].filter(value => value && (key !== 'subject' || (!value.toLowerCase().includes('handout') && !value.toLowerCase().startsWith('01_')))).sort().map(value => `<option value="${escHtml(value)}" ${approvalView[key] === value ? 'selected' : ''}>${escHtml(value)}</option>`).join('');
+  const options = key => [...new Set(entries.map(e => e[key]))].filter(Boolean).sort().map(value => `<option value="${escHtml(value)}" ${approvalView[key] === value ? 'selected' : ''}>${escHtml(value)}</option>`).join('');
   const rows = filtered.slice(offset, offset + 5).map(e => {
     const args = escHtml(JSON.stringify(e.kind) + ',' + JSON.stringify(String(e.id)));
     const date = new Date(e.date);
@@ -2131,53 +2769,88 @@ async function rejectMaterial(id) {
 async function downloadMaterial(id) {
   const m = materialsData.find(mat => String(mat.id) === String(id)) || 
             getCustomMaterialsFromStorage().find(mat => String(mat.id) === String(id)) ||
-            SEED_MATERIALS.find(mat => String(mat.id) === String(id));
+            (typeof STUDENT_DEFAULT_MATERIALS !== 'undefined' ? STUDENT_DEFAULT_MATERIALS.find(mat => String(mat.id) === String(id)) : null);
 
-  const fallbackTitle = m?.title || 'Learning_Material';
-  const fallbackFileName = (m?.fileName || m?.title || 'Material').replace(/[^\w.\-]+/g, '_') + (m?.fileName?.includes('.') ? '' : '.pdf');
-
-  function triggerLocalDownload(title, filename) {
-    showToast(`Downloading "${title}"…`, 'success');
-    const textContent = `%PDF-1.4\n% HAVEN OF WISDOM ACADEMY\n% Title: ${title}\n% File: ${filename}\n\n==============================================\nHAVEN OF WISDOM ACADEMY - SENIOR HIGH SCHOOL\n${title.toUpperCase()}\n==============================================\n\nThis is a supplementary learning material from Haven of Wisdom Academy.\n`;
-    const blob = new Blob([textContent], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  let cleanFileName = (m?.fileName || m?.title || 'Learning_Material').replace(/[^\w.\-]+/g, '_');
+  if (!cleanFileName.includes('.')) {
+    const isDocx = (m?.file_type && m.file_type.includes('word')) || m?.type === 'DOCX';
+    const isPptx = (m?.file_type && m.file_type.includes('presentation')) || m?.type === 'PPTX';
+    const isXlsx = (m?.file_type && m.file_type.includes('sheet')) || m?.type === 'XLSX';
+    cleanFileName += isDocx ? '.docx' : (isPptx ? '.pptx' : (isXlsx ? '.xlsx' : '.pdf'));
   }
 
+  showToast(`Preparing download for "${m?.title || 'document'}"…`, 'info');
+
   const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-  if (!session || !session.access_token) {
-    triggerLocalDownload(fallbackTitle, fallbackFileName);
+  let fileUrl = null;
+
+  if (session && session.access_token) {
+    try {
+      const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) fileUrl = data.url;
+      }
+    } catch (e) {
+      console.warn('API download call failed, checking direct storage:', e);
+    }
+  }
+
+  // Fallback to direct Supabase storage signed URL
+  if (!fileUrl && m?.file_url) {
+    if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
+      fileUrl = m.file_url;
+    } else {
+      try {
+        const { data, error } = await db.storage
+          .from('learning-materials')
+          .createSignedUrl(m.file_url, 60 * 10);
+        if (!error && data?.signedUrl) {
+          fileUrl = data.signedUrl;
+        }
+      } catch (e) {}
+    }
+  }
+
+  if (!fileUrl) {
+    if (m?.file_url || m?.url) {
+      fileUrl = m.file_url || m.url;
+    } else {
+      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
+    }
+  }
+
+  if (!fileUrl) {
+    showToast('Download failed: File not found in storage.', 'error');
     return;
   }
 
+  // Trigger real download by fetching blob so the browser saves actual binary file data
   try {
-    const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, {
-      headers: { 'Authorization': `Bearer ${session.access_token}` }
-    });
-    if (!res.ok) {
-      triggerLocalDownload(fallbackTitle, fallbackFileName);
-      return;
-    }
-    const data = await res.json();
-    if (!data.url) {
-      triggerLocalDownload(fallbackTitle, fallbackFileName);
-      return;
-    }
-
-    const isPdfSimulated = data.url.includes('learning-materials') || (data.file_type && data.file_type.includes('pdf'));
-    if (isPdfSimulated) {
-      triggerLocalDownload(data.title || fallbackTitle, (data.title || fallbackTitle).replace(/[^\w.\-]+/g, '_') + '.pdf');
-    } else {
-      window.open(data.url, '_blank');
-    }
+    const response = await fetch(fileUrl);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = cleanFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    showToast(`Downloaded "${cleanFileName}" successfully.`, 'success');
   } catch (err) {
-    triggerLocalDownload(fallbackTitle, fallbackFileName);
+    console.warn('Direct blob download failed, falling back to window.open:', err);
+    const a = document.createElement('a');
+    a.href = fileUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.download = cleanFileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 }
 

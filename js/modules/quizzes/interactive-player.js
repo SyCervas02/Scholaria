@@ -7,6 +7,7 @@ const interactivePlayerState = {
   userResponses: {}, // itemId -> { given, isCorrect, correct }
   score: 0,
   totalItems: 0,
+  doubleScoreQuestionIndex: -1,
   timerSecondsLeft: 0,
   timerPerQuestion: 0,
   timerInterval: null,
@@ -327,12 +328,18 @@ function buildInteractiveQuestions(quiz) {
     const qLesson = q.lesson || defaultLesson;
 
     if (q.type === 'multiple_choice') {
+      const isMulti = q.multipleAnswers === true || (Array.isArray(q.answers) && q.answers.length > 1);
+      const correctAnswers = Array.isArray(q.answers) && q.answers.length > 0
+        ? q.answers
+        : (Array.isArray(q.answer) ? q.answer : [q.answer]);
       items.push({
         id: `mc_${qi}`,
         type: 'multiple_choice',
+        multipleAnswers: isMulti,
         question: q.question,
         options: q.options || [],
         answer: q.answer,
+        answers: correctAnswers,
         explanation: q.explanation || '',
         sourceMaterial: qSource,
         sourceFile: q.source_file || qSource,
@@ -410,6 +417,22 @@ function openInteractiveQuiz(quizId) {
     return;
   }
 
+  // Prevent students from taking overdue quizzes
+  if (typeof ROLE !== 'undefined' && ROLE === 'student') {
+    const rawDue = quiz.dueDate || quiz.due_date;
+    if (rawDue) {
+      const dueTime = new Date(rawDue).getTime();
+      if (!isNaN(dueTime) && dueTime < Date.now()) {
+        if (typeof showToast === 'function') {
+          showToast('This assessment deadline has passed and is closed for submissions.', 'error');
+        } else {
+          alert('This assessment deadline has passed and is closed for submissions.');
+        }
+        return;
+      }
+    }
+  }
+
   const questions = buildInteractiveQuestions(quiz);
   if (!questions.length) {
     showToast('This quiz has no interactive items available', 'warning');
@@ -435,6 +458,7 @@ function openInteractiveQuiz(quizId) {
     userResponses: {},
     score: 0,
     totalItems: totalItemsCount,
+    doubleScoreQuestionIndex: -1,
     timerSecondsLeft: timerVal,
     timerPerQuestion: timerVal,
     startTime: Date.now(),
@@ -446,7 +470,8 @@ function openInteractiveQuiz(quizId) {
     matchingEvaluated: false,
     matchingFeedback: null,
     lastMatchingPointsEarned: 0,
-    usedPowerups: { time: false, handout: false, hint: false }
+    secondChanceActive: false,
+    usedPowerups: {}
   });
 
   const modal = document.getElementById('interactiveQuizModal');
@@ -570,12 +595,68 @@ function handleQuestionTimeout() {
   if (!curQ) return;
 
   if (curQ.type === 'multiple_choice' || curQ.type === 'true_false' || curQ.type === 'tf') {
-    submitMultipleChoiceAnswer(null);
+    if (curQ.multipleAnswers) {
+      submitInteractiveMultiChoiceAnswer(true);
+    } else {
+      submitMultipleChoiceAnswer(null);
+    }
   } else if (curQ.type === 'identification') {
-    submitIdentificationAnswer('');
+    submitIdentificationAnswer('', true);
   } else if (curQ.type === 'matching') {
     forceSubmitMatchingOnTimeout();
   }
+}
+
+function getHandoutPowerupKey(qType) {
+  if (qType === 'identification') return 'id_letter_clue';
+  if (qType === 'matching') return 'match_second_chance';
+  if (qType === 'true_false' || qType === 'tf') return 'tf_keyword_lock';
+  return 'mc_handout';
+}
+
+function getHintPowerupKey(qType) {
+  if (qType === 'identification') return 'id_keywords';
+  if (qType === 'matching') return 'match_quick_confirm';
+  if (qType === 'true_false' || qType === 'tf') return 'tf_double_score';
+  return 'mc_5050';
+}
+
+function isHandoutPowerupUsed(qType) {
+  const key = getHandoutPowerupKey(qType);
+  return !!interactivePlayerState.usedPowerups?.[key];
+}
+
+function isHintPowerupUsed(qType) {
+  const key = getHintPowerupKey(qType);
+  return !!interactivePlayerState.usedPowerups?.[key];
+}
+
+function getHandoutPowerupTitle(qType) {
+  const isUsed = isHandoutPowerupUsed(qType);
+  if (qType === 'identification') {
+    return isUsed ? 'First Letter Clue already used' : 'Reveal First Letter · 1-time use';
+  }
+  if (qType === 'matching') {
+    return isUsed ? 'Second Chance already used' : 'Second Chance (Retry on Mistake) · 1-time use';
+  }
+  if (qType === 'true_false' || qType === 'tf') {
+    return isUsed ? 'Keyword Lock already used' : 'Keyword Lock (Highlight Question Keywords) · 1-time use';
+  }
+  return isUsed ? 'Handout Reference already used' : 'Review Handout Reference · 1-time use';
+}
+
+function getHintPowerupTitle(qType) {
+  const isUsed = isHintPowerupUsed(qType);
+  if (qType === 'identification') {
+    return isUsed ? 'Keyword Highlight already used' : 'Highlight Question Keywords · 1-time use';
+  }
+  if (qType === 'matching') {
+    return isUsed ? 'Quick Confirm already used' : 'Quick Confirm (Auto-Match 1 Term) · 1-time use';
+  }
+  if (qType === 'true_false' || qType === 'tf') {
+    return isUsed ? 'Double Score already used' : 'Double Score (Current Question) · 1-time use';
+  }
+  return isUsed ? '50/50 already used' : '50/50 Elimination · 1-time use';
 }
 
 /**
@@ -617,6 +698,9 @@ function renderCurrentInteractiveQuestion() {
   } else if (q.type === 'true_false' || q.type === 'tf') {
     qTitle = 'True or False';
     qSubtitle = 'Choose whether the statement is true or false.';
+  } else if (q.multipleAnswers) {
+    qTitle = 'Multiple Choice · Select All That Apply';
+    qSubtitle = 'Select all correct options, then click "Submit Selections" below.';
   } else {
     qTitle = 'Multiple Choice';
     qSubtitle = 'Select the correct option below.';
@@ -666,7 +750,7 @@ function renderCurrentInteractiveQuestion() {
     </div>
 
     <!-- Arena Body -->
-    <div class="iq-body">
+    <div class="iq-body ${q.type === 'identification' ? 'iq-identification-body' : ''}">
       <div class="iq-match-hero-header">
         <div class="iq-match-hero-left">
           <span class="iq-match-kcheck">Knowledge Check</span>
@@ -696,7 +780,7 @@ function renderCurrentInteractiveQuestion() {
     </div>
 
     <!-- Arena Power-ups Dock (Bottom Right) -->
-    <div class="iq-bottom-dock-right" id="iqBottomDockRight">
+    <div class="iq-bottom-dock-right ${q.type === 'identification' ? 'iq-id-powerups' : q.type === 'matching' ? 'iq-match-powerups' : (q.type === 'true_false' || q.type === 'tf') ? 'iq-tf-powerups' : ''}" id="iqBottomDockRight">
       <button type="button" 
               class="iq-powerup-btn iq-powerup-time ${interactivePlayerState.usedPowerups?.time ? 'used' : ''}" 
               id="iqPowerupTime" 
@@ -706,20 +790,20 @@ function renderCurrentInteractiveQuestion() {
         +15
       </button>
       <button type="button" 
-              class="iq-powerup-btn iq-powerup-handout ${interactivePlayerState.usedPowerups?.handout ? 'used' : ''}" 
+              class="iq-powerup-btn iq-powerup-handout ${isHandoutPowerupUsed(q.type) ? 'used' : ''}" 
               id="iqPowerupHandout" 
               onclick="usePowerupHandout()" 
-              ${interactivePlayerState.usedPowerups?.handout ? 'disabled' : ''}
-              title="${interactivePlayerState.usedPowerups?.handout ? 'Handout Reference already used' : 'Review Handout Reference · 1-time use'}">
-        📖
+              ${isHandoutPowerupUsed(q.type) ? 'disabled' : ''}
+              title="${getHandoutPowerupTitle(q.type)}">
+        ${q.type === 'identification' ? '<svg class="iq-id-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><path d="M2 14s4.5-7 12-7 12 7 12 7-4.5 7-12 7S2 14 2 14Z" fill="#fff" stroke="#334155" stroke-width="2" stroke-linejoin="round"/><circle cx="14" cy="14" r="5" fill="#f6be63" stroke="#334155" stroke-width="1.5"/><circle cx="14" cy="14" r="2.5" fill="#334155"/><circle cx="15.5" cy="12.5" r="1" fill="#fff"/></svg>' : q.type === 'matching' ? '<svg class="iq-match-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><path d="M6 4c3 1 5 0 8-2 3 2 5 3 8 2v9c0 6-4 10-8 13-4-3-8-7-8-13Z" fill="#fff" stroke="#334155" stroke-width="2" stroke-linejoin="round"/><path d="M14 5v17c3-3 5-6 5-10V7c-2 0-3-1-5-2Z" fill="#ef476f"/></svg>' : (q.type === 'true_false' || q.type === 'tf') ? '<svg class="iq-tf-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><circle cx="13" cy="15" r="11" fill="#fff" stroke="#334155" stroke-width="1.5"/><circle cx="13" cy="15" r="8" fill="none" stroke="#ef4444" stroke-width="3"/><circle cx="13" cy="15" r="3.5" fill="#ef4444"/><path d="m13 15 10-11m-1-2v5h5" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '📖'}
       </button>
       <button type="button" 
-              class="iq-powerup-btn iq-powerup-hint ${interactivePlayerState.usedPowerups?.hint ? 'used' : ''}" 
+              class="iq-powerup-btn iq-powerup-hint ${isHintPowerupUsed(q.type) ? 'used' : ''}" 
               id="iqPowerupHint" 
               onclick="usePowerupHint()" 
-              ${interactivePlayerState.usedPowerups?.hint ? 'disabled' : ''}
-              title="${interactivePlayerState.usedPowerups?.hint ? 'Hint already used' : 'Hint / Clue · 1-time use'}">
-        💡
+              ${isHintPowerupUsed(q.type) ? 'disabled' : ''}
+              title="${getHintPowerupTitle(q.type)}">
+        ${q.type === 'identification' ? '<svg class="iq-id-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><path d="m11 18-7 7a2.1 2.1 0 0 1-3-3l7-7" fill="#e9b96a" stroke="#334155" stroke-width="2" stroke-linejoin="round"/><circle cx="17" cy="10" r="7" fill="#bfe9fa" stroke="#334155" stroke-width="2"/><path d="M13 9a4 4 0 0 1 4-3" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>' : q.type === 'matching' ? '<svg class="iq-match-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><path d="m16 2-12 15h9l-2 9L25 11H15Z" fill="#f7c948" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : (q.type === 'true_false' || q.type === 'tf') ? '<svg class="iq-tf-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><path d="M11 2h6v3h-6z" fill="#f7c948" stroke="#334155" stroke-width="1.5"/><path d="m20 6 2-2 2 2-2 2" fill="#f7c948" stroke="#334155" stroke-width="1.5"/><circle cx="14" cy="16" r="10" fill="#f7c948" stroke="#334155" stroke-width="2"/><circle cx="14" cy="16" r="7" fill="#ffe68a" stroke="#b98b18" stroke-width="1"/><path d="M14 10v6l3 2M8 16h1m10 0h1m-6 5v1" fill="none" stroke="#334155" stroke-width="1.5" stroke-linecap="round"/></svg>' : '💡'}
       </button>
     </div>
 
@@ -756,6 +840,7 @@ function renderCurrentInteractiveQuestion() {
  * View 1: Identification
  */
 function renderIdentificationView(q) {
+  const prompt = String(q.question || '').replace(/^\s*Identify the term:\s*/i, '');
   return `
     <div class="iq-id-card">
       <div class="iq-id-question-wrap">
@@ -765,7 +850,10 @@ function renderIdentificationView(q) {
           <line x1="4.5" y1="18.5" x2="8.5" y2="15.5"></line>
         </svg>
 
-        <div class="iq-id-question-text">${escHtml(q.question)}</div>
+        <div class="iq-id-question-text" id="iqIdQuestion">
+          <span class="iq-id-question-label">Identify the term:</span>
+          <span id="iqIdQuestionPromptText">${escHtml(prompt)}</span>
+        </div>
 
         <svg class="iq-id-burst-right" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="21" y1="12" x2="16" y2="12"></line>
@@ -774,19 +862,21 @@ function renderIdentificationView(q) {
         </svg>
       </div>
 
+      <div id="iqIdClueContainer" class="iq-id-clue-container" style="display:none;"></div>
+
       <div class="iq-id-input-box">
         <div class="iq-id-input-row">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 20h9"></path>
             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
           </svg>
-          <input type="text" id="iqIdAnswerInput" placeholder="Type your answer here..." autocomplete="off" onkeydown="if(event.key==='Enter') submitIdentificationAnswer(this.value)">
+          <input type="text" id="iqIdAnswerInput" aria-label="Your answer" aria-describedby="iqIdQuestion" placeholder="Type your answer here..." autocomplete="off" oninput="handleIdentificationInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();submitIdentificationAnswer(this.value);}">
         </div>
         <div class="iq-id-input-line"></div>
       </div>
 
       <div class="iq-submit-btn-wrap">
-        <button class="iq-submit-btn" onclick="submitIdentificationAnswer(document.getElementById('iqIdAnswerInput').value)">
+        <button class="iq-submit-btn incomplete" id="iqSubmitIdBtn" onclick="submitIdentificationAnswer(document.getElementById('iqIdAnswerInput').value)">
           <span>Submit Answer</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
@@ -795,20 +885,54 @@ function renderIdentificationView(q) {
   `;
 }
 
-function submitIdentificationAnswer(val) {
-  if (interactivePlayerState.isWaitingFeedback) return;
-  interactivePlayerState.isWaitingFeedback = true;
+function handleIdentificationInput(val) {
+  const btn = document.getElementById('iqSubmitIdBtn');
+  if (!btn) return;
+  const hasVal = (val || '').trim().length > 0;
+  if (hasVal) {
+    btn.classList.remove('incomplete');
+    btn.classList.add('ready');
+  } else {
+    btn.classList.add('incomplete');
+    btn.classList.remove('ready');
+  }
+}
 
+function submitIdentificationAnswer(val, isTimeout = false) {
+  if (interactivePlayerState.isWaitingFeedback) return;
+
+  const given = (val || '').trim();
+  if (!given && !isTimeout) {
+    if (typeof showToast === 'function') {
+      showToast('Please type your answer before submitting.', 'warning');
+    }
+    const btn = document.getElementById('iqSubmitIdBtn');
+    const inputBox = document.querySelector('.iq-id-input-box');
+    if (btn) {
+      btn.classList.remove('iq-shake');
+      void btn.offsetWidth;
+      btn.classList.add('iq-shake');
+    }
+    if (inputBox) {
+      inputBox.classList.remove('iq-shake');
+      void inputBox.offsetWidth;
+      inputBox.classList.add('iq-shake');
+    }
+    const input = document.getElementById('iqIdAnswerInput');
+    if (input) input.focus();
+    return;
+  }
+
+  interactivePlayerState.isWaitingFeedback = true;
   clearInterval(interactivePlayerState.timerInterval);
   const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!q) return;
 
-  const given = (val || '').trim();
   const correct = (q.answer || '').trim();
   const isCorrect = compareAnswers(given, correct);
 
   if (isCorrect) interactivePlayerState.score++;
-  interactivePlayerState.userResponses[q.id] = { given, correct, isCorrect };
+  interactivePlayerState.userResponses[q.id] = { label: q.question || '', given, correct, isCorrect };
 
   const inputBox = document.querySelector('.iq-id-input-box');
   const inputField = document.getElementById('iqIdAnswerInput');
@@ -843,7 +967,7 @@ function renderMatchingBoardHTML(q) {
   const selections = interactivePlayerState.matchingSelections || {};
   const usedKeys = Object.values(selections);
   const totalPairs = (q.pairs || []).length;
-  const matchedCount = Object.keys(selections).filter(k => selections[k] != null).length;
+  const matchedCount = (q.pairs || []).filter((_, i) => selections[i] != null && selections[i] !== '').length;
   const isGraded = !!interactivePlayerState.matchingEvaluated;
   const feedbackMap = interactivePlayerState.matchingFeedback || {};
   const pointsEarned = interactivePlayerState.lastMatchingPointsEarned || 0;
@@ -852,6 +976,12 @@ function renderMatchingBoardHTML(q) {
 
   return `
     <div class="iq-match-container">
+      ${interactivePlayerState.secondChanceActive ? `
+      <div class="iq-match-shield-banner" style="grid-column: 1 / -1; margin-bottom: 14px; padding: 12px 18px; background: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 14px; display: flex; align-items: center; gap: 12px; font-size: 13.5px; color: #1e40af; font-weight: 700; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);">
+        <span style="font-size: 20px;">🛡️</span>
+        <span>Second Chance Active: If you have any incorrect matches upon submit, you will get a retry before answers are shown!</span>
+      </div>
+      ` : ''}
       <!-- Left Column: Answer Bank -->
       <div class="iq-match-bank-card">
         <div class="iq-bank-head">
@@ -878,7 +1008,7 @@ function renderMatchingBoardHTML(q) {
             const col = colorClasses[i % colorClasses.length];
             return `
               <div class="iq-choice-pill ${col} ${isUsed ? 'used' : ''} ${isSelected ? 'selected' : ''}" 
-                   id="choice_pill_${c.key}"
+                   id="choice_pill_${c.key}" 
                    draggable="${!isUsed && !isGraded}" 
                    ondragstart="${isGraded ? '' : `handleChoiceDragStart(event, '${c.key}')`}"
                    onclick="${isGraded ? '' : `handleChoiceTap('${c.key}')`}">
@@ -964,7 +1094,7 @@ function renderMatchingBoardHTML(q) {
 
     <!-- Bottom Row: Submit button & Rearrange note -->
     <div class="iq-match-bottom-bar">
-      <button class="iq-submit-btn ${isGraded ? 'ready' : (matchedCount === totalPairs ? 'ready' : 'incomplete')}" 
+      <button class="iq-submit-btn ${isGraded ? 'ready' : (matchedCount === totalPairs && totalPairs > 0 ? 'ready' : 'incomplete')}" 
               id="iqSubmitMatchesBtn" 
               ${isGraded ? 'disabled style="cursor:default;"' : ''}
               onclick="${isGraded ? '' : 'submitMatchingAnswer()'}">
@@ -1066,6 +1196,26 @@ function assignMatchingChoice(targetIdx, key) {
   renderMatchingBoardOnly();
 }
 
+function showMatchingPowerupPopup(title, message, isRetry = false) {
+  const modal = document.getElementById('interactiveQuizModal');
+  if (!modal) return;
+  const existing = document.getElementById('iqMatchingPowerupPopup');
+  if (existing) existing.remove();
+
+  const popup = document.createElement('div');
+  popup.id = 'iqMatchingPowerupPopup';
+  popup.setAttribute('role', 'status');
+  popup.setAttribute('aria-live', 'polite');
+  popup.style.cssText = 'position:fixed;top:84px;left:50%;transform:translateX(-50%);z-index:100;width:calc(100% - 32px);max-width:460px;box-sizing:border-box;padding:20px 44px 20px 22px;border-radius:18px;background:#fff;box-shadow:0 12px 36px rgba(15,23,42,.2);border:2px solid ' + (isRetry ? '#fbbf24' : '#34d399') + ';color:#1e293b;';
+  popup.innerHTML = `
+    <strong style="display:block;margin-bottom:6px;font-size:16px;color:${isRetry ? '#92400e' : '#047857'};">${escHtml(title)}</strong>
+    <p style="margin:0;font-size:14px;line-height:1.5;overflow-wrap:anywhere;">${escHtml(message)}</p>
+    <button type="button" aria-label="Dismiss message" style="position:absolute;right:6px;top:6px;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:#64748b;font-size:24px;cursor:pointer;" onclick="this.parentElement.remove()">&times;</button>
+  `;
+  modal.appendChild(popup);
+  setTimeout(() => popup.remove(), 7000);
+}
+
 function submitMatchingAnswer() {
   if (interactivePlayerState.isWaitingFeedback) return;
 
@@ -1074,7 +1224,7 @@ function submitMatchingAnswer() {
 
   const totalPairs = (q.pairs || []).length;
   const selections = interactivePlayerState.matchingSelections || {};
-  const matchedCount = Object.keys(selections).filter(k => selections[k] != null).length;
+  const matchedCount = (q.pairs || []).filter((_, i) => selections[i] != null && selections[i] !== '').length;
 
   if (matchedCount < totalPairs) {
     if (typeof showToast === 'function') {
@@ -1089,12 +1239,10 @@ function submitMatchingAnswer() {
     return;
   }
 
-  interactivePlayerState.isWaitingFeedback = true;
-  clearInterval(interactivePlayerState.timerInterval);
-
   let matchesCorrect = 0;
   const pairDetails = [];
   const feedbackMap = {};
+  const wrongIndices = [];
 
   (q.pairs || []).forEach((pair, pi) => {
     const assignedKey = selections[pi];
@@ -1104,8 +1252,9 @@ function submitMatchingAnswer() {
     const isCorrect = compareAnswers(givenText, correctText);
 
     if (isCorrect) {
-      interactivePlayerState.score++;
       matchesCorrect++;
+    } else {
+      wrongIndices.push(pi);
     }
     pairDetails.push(`${pair.left} ➔ ${pair.right}`);
 
@@ -1114,6 +1263,38 @@ function submitMatchingAnswer() {
       given: givenText,
       correct: correctText
     };
+  });
+
+  const isAllCorrect = matchesCorrect === totalPairs;
+
+  // Intercept if Second Chance is active and there are any mistakes
+  if (!isAllCorrect && interactivePlayerState.secondChanceActive) {
+    interactivePlayerState.secondChanceActive = false;
+
+    // Clear only incorrect slots so student can rearrange them without seeing answers
+    wrongIndices.forEach(wIdx => {
+      delete interactivePlayerState.matchingSelections[wIdx];
+    });
+    interactivePlayerState.selectedMatchingChoice = null;
+
+    playInteractiveSFX(false);
+    showMatchingPowerupPopup('Second Chance: Try again!', `You had ${wrongIndices.length} incorrect match${wrongIndices.length > 1 ? 'es' : ''}. Those slots have been cleared. Your correct matches are kept — try matching the remaining terms again!`, true);
+
+    renderMatchingBoardOnly();
+    return;
+  }
+
+  interactivePlayerState.isWaitingFeedback = true;
+  clearInterval(interactivePlayerState.timerInterval);
+
+  interactivePlayerState.score += matchesCorrect;
+
+  (q.pairs || []).forEach((pair, pi) => {
+    const assignedKey = selections[pi];
+    const assignedChoice = assignedKey ? q.choices.find(c => c.key === assignedKey) : null;
+    const givenText = assignedChoice ? assignedChoice.text : '';
+    const correctText = pair.right;
+    const isCorrect = compareAnswers(givenText, correctText);
 
     interactivePlayerState.userResponses[`${q.id}_${pi}`] = {
       label: pair.left,
@@ -1130,7 +1311,6 @@ function submitMatchingAnswer() {
   // Render board to show green/red per row
   renderMatchingBoardOnly();
 
-  const isAllCorrect = matchesCorrect === totalPairs;
   const feedbackType = isAllCorrect ? 'correct' : (matchesCorrect > 0 ? 'partial' : 'incorrect');
 
   showAnswerFeedback({
@@ -1266,20 +1446,128 @@ function usePowerupTime() {
  * Opens a focused reference dialog highlighting the document and relevant page (1-time use)
  */
 function usePowerupHandout() {
+  if (interactivePlayerState.isWaitingFeedback || interactivePlayerState.isSubmitted) return;
+
   const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!curQ) return;
 
-  if (interactivePlayerState.usedPowerups?.handout) {
+  const powerupKey = getHandoutPowerupKey(curQ.type);
+
+  if (interactivePlayerState.usedPowerups?.[powerupKey]) {
+    const usedMsg = curQ.type === 'identification' 
+      ? 'First Letter Clue power-up can only be used once per quiz!' 
+      : curQ.type === 'matching' 
+        ? 'Second Chance power-up can only be used once per quiz!'
+        : (curQ.type === 'true_false' || curQ.type === 'tf')
+          ? 'Keyword Lock power-up can only be used once per quiz!'
+          : 'Handout reference power-up can only be used once per quiz!';
     if (typeof showToast === 'function') {
-      showToast('Handout reference power-up can only be used once per quiz!', 'warning');
+      showToast(usedMsg, 'warning');
     }
+    return;
+  }
+
+  if (curQ.type === 'identification') {
+    const ans = String(curQ.answer || '').trim();
+    const cleanAns = ans.replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
+    const firstChar = cleanAns.charAt(0).toUpperCase();
+    const letterCount = cleanAns.replace(/\s+/g, '').length;
+    const words = cleanAns.split(/\s+/).filter(Boolean);
+    const wordCountText = words.length > 1 ? ` · ${words.length} words` : '';
+
+    const clueWrap = document.getElementById('iqIdClueContainer');
+    if (clueWrap) {
+      clueWrap.style.display = 'flex';
+      const letterBanner = `
+        <div class="iq-id-clue-banner">
+          <span class="iq-clue-badge">👁️ Letter Clue</span>
+          <span>Starts with <strong>"${firstChar}"</strong> (${letterCount} letters${wordCountText})</span>
+        </div>
+      `;
+      const existingKwBanner = clueWrap.querySelector('.iq-id-keyword-banner');
+      clueWrap.innerHTML = letterBanner + (existingKwBanner ? existingKwBanner.outerHTML : '');
+    }
+
+    const input = document.getElementById('iqIdAnswerInput');
+    if (input) {
+      input.placeholder = `Starts with "${firstChar}" (${letterCount} letters)...`;
+      input.focus();
+    }
+
+    if (typeof showToast === 'function') {
+      showToast(`👁️ Clue: Starts with "${firstChar}" (${letterCount} letters${wordCountText})`, 'info');
+    }
+    playInteractiveSFX(true);
+
+    if (!interactivePlayerState.usedPowerups) {
+      interactivePlayerState.usedPowerups = {};
+    }
+    interactivePlayerState.usedPowerups[powerupKey] = true;
+
+    const btn = document.getElementById('iqPowerupHandout');
+    if (btn) {
+      btn.classList.add('used');
+      btn.disabled = true;
+      btn.title = 'First Letter Clue already used';
+    }
+    return;
+  }
+
+  if (curQ.type === 'true_false' || curQ.type === 'tf') {
+    const prompt = document.querySelector('#interactiveQuizModal .iq-mc-question-banner');
+    if (!prompt) return;
+    prompt.innerHTML = highlightQuestionKeywords(String(curQ.question || ''), curQ);
+    playInteractiveSFX(true);
+
+    if (!interactivePlayerState.usedPowerups) {
+      interactivePlayerState.usedPowerups = {};
+    }
+    interactivePlayerState.usedPowerups[powerupKey] = true;
+
+    const btn = document.getElementById('iqPowerupHandout');
+    if (btn) {
+      btn.classList.add('used');
+      btn.disabled = true;
+      btn.title = 'Keyword Lock already used';
+    }
+    return;
+  }
+
+  if (curQ.type === 'matching') {
+    if (interactivePlayerState.secondChanceActive) {
+      if (typeof showToast === 'function') {
+        showToast('🛡️ Second Chance is already active for this question!', 'info');
+      }
+      return;
+    }
+
+    interactivePlayerState.secondChanceActive = true;
+
+    if (!interactivePlayerState.usedPowerups) {
+      interactivePlayerState.usedPowerups = {};
+    }
+    interactivePlayerState.usedPowerups[powerupKey] = true;
+
+    const btn = document.getElementById('iqPowerupHandout');
+    if (btn) {
+      btn.classList.add('used');
+      btn.disabled = true;
+      btn.title = 'Second Chance already used';
+    }
+
+    playInteractiveSFX(true);
+    if (typeof showToast === 'function') {
+      showToast('🛡️ Second Chance Activated! If you have mistakes on submit, you will get a retry before answers are shown.', 'success');
+    }
+
+    renderMatchingBoardOnly();
     return;
   }
 
   if (!interactivePlayerState.usedPowerups) {
     interactivePlayerState.usedPowerups = {};
   }
-  interactivePlayerState.usedPowerups.handout = true;
+  interactivePlayerState.usedPowerups[powerupKey] = true;
 
   const btn = document.getElementById('iqPowerupHandout');
   if (btn) {
@@ -1303,14 +1591,18 @@ function usePowerupHandout() {
     if (e.target === modal) closeInteractiveHandoutModal();
   };
 
+  const headerEmoji = isMatch ? '🛡️' : '📖';
+  const headerTitle = isMatch ? 'Match Reference & Guide' : 'Handout Reference';
+  const headerSubtitle = isMatch ? 'Reference material for matching pairs' : 'Study material for this question';
+
   modal.innerHTML = `
     <div class="iq-confirm-card" style="max-width: 480px; text-align: left; animation: iqPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);" onclick="event.stopPropagation()">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <div style="display:flex;align-items:center;gap:10px;">
-          <div style="width:38px;height:38px;border-radius:12px;background:#f3e8ff;color:#7e22ce;display:flex;align-items:center;justify-content:center;font-size:18px;border:1.5px solid #ddd6fe;">📖</div>
+          <div style="width:38px;height:38px;border-radius:12px;background:${isMatch ? '#fee2e2' : '#f3e8ff'};color:${isMatch ? '#b91c1c' : '#7e22ce'};display:flex;align-items:center;justify-content:center;font-size:18px;border:1.5px solid ${isMatch ? '#fca5a5' : '#ddd6fe'};">${headerEmoji}</div>
           <div>
-            <h3 style="margin:0;font-size:16.5px;font-weight:800;color:#0f172a;">Handout Reference</h3>
-            <span style="font-size:12px;color:#64748b;">Study material for this question</span>
+            <h3 style="margin:0;font-size:16.5px;font-weight:800;color:#0f172a;">${headerTitle}</h3>
+            <span style="font-size:12px;color:#64748b;">${headerSubtitle}</span>
           </div>
         </div>
         <button type="button" onclick="closeInteractiveHandoutModal()" style="border:none;background:transparent;cursor:pointer;font-size:22px;color:#94a3b8;line-height:1;padding:4px;" title="Close">&times;</button>
@@ -1357,10 +1649,57 @@ function openInteractiveHandoutView() {
 }
 
 /**
+ * Intelligent Keyword Extractor / Highlighter for Identification Questions
+ */
+function highlightQuestionKeywords(text, q) {
+  if (!text) return '';
+
+  const stopWords = new Set([
+    'the','a','an','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','shall','should','may','might','must','can','could',
+    'and','but','or','nor','for','yet','so','of','in','to','for','with','on','at','from','by','about','against','between','into','through','during','before','after','above','below','up','down','out','off','over','under',
+    'again','further','then','once','here','there','when','where','why','how','all','any','both','each','few','more','most','other','some','such','no','not','only','own','same','than','too','very',
+    'what','which','who','whom','this','that','these','those','am','it','its','as','state','term','concept','identify','refers','defined','known','called','type','means','describe','describes','following','statement','question'
+  ]);
+
+  let keywordsToFind = [];
+
+  // If question has a lesson/topic, check if it's in the text
+  const lesson = String(q?.lesson || '').trim();
+  if (lesson && lesson.length > 2 && text.toLowerCase().includes(lesson.toLowerCase())) {
+    keywordsToFind.push(lesson);
+  }
+
+  // Tokenize words
+  const cleanTokens = text.split(/[^a-zA-Z0-9_\-]+/).filter(w => w.length >= 4 && !stopWords.has(w.toLowerCase()));
+  const uniqueWords = [...new Set(cleanTokens)]
+    .filter(w => w.length >= 4)
+    .sort((a, b) => b.length - a.length);
+
+  const topKeywords = uniqueWords.slice(0, Math.min(3, uniqueWords.length));
+  keywordsToFind = [...new Set([...keywordsToFind, ...topKeywords])];
+
+  if (keywordsToFind.length === 0) {
+    const fallback = text.split(/\s+/).filter(w => !stopWords.has(w.toLowerCase().replace(/[^a-z]/g, ''))).slice(0, 2);
+    keywordsToFind = fallback.map(w => w.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
+  }
+
+  let escapedText = escHtml(text);
+
+  keywordsToFind.forEach(kw => {
+    if (!kw || kw.length < 2) return;
+    const safeKw = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b(${safeKw})\\b`, 'gi');
+    escapedText = escapedText.replace(regex, '<mark class="iq-keyword-mark">$1</mark>');
+  });
+
+  return escapedText;
+}
+
+/**
  * Power-up 3: Hint / 50:50 Clue (1-time use)
  * - Multiple Choice: Eliminates 2 incorrect options
- * - True/False: Provides contextual topic clue
- * - Identification: Reveals first letter & word length
+ * - True/False: Doubles leaderboard points for the current question
+ * - Identification: Highlights key terms in the question prompt
  * - Matching: Auto-pairs 1 unassigned term
  */
 function usePowerupHint() {
@@ -1369,9 +1708,18 @@ function usePowerupHint() {
   const curQ = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!curQ) return;
 
-  if (interactivePlayerState.usedPowerups?.hint) {
+  const powerupKey = getHintPowerupKey(curQ.type);
+
+  if (interactivePlayerState.usedPowerups?.[powerupKey]) {
+    const usedMsg = curQ.type === 'identification' 
+      ? 'Keyword highlight power-up can only be used once per quiz!' 
+      : curQ.type === 'matching' 
+        ? 'Quick Confirm power-up can only be used once per quiz!' 
+        : (curQ.type === 'true_false' || curQ.type === 'tf')
+          ? 'Double Score power-up can only be used once per quiz!'
+          : '50/50 power-up can only be used once per quiz!';
     if (typeof showToast === 'function') {
-      showToast('Hint power-up can only be used once per quiz!', 'warning');
+      showToast(usedMsg, 'warning');
     }
     return;
   }
@@ -1381,10 +1729,12 @@ function usePowerupHint() {
   if (curQ.type === 'multiple_choice') {
     // 50/50 elimination: Remove up to 2 wrong option cards
     const opts = curQ.options || [];
-    const correctAns = String(curQ.answer || '').trim().toLowerCase();
+    const correctAnswers = (Array.isArray(curQ.answers) && curQ.answers.length > 0)
+      ? curQ.answers.map(a => String(a).trim().toLowerCase())
+      : [String(curQ.answer || '').trim().toLowerCase()];
     const wrongIndices = [];
     opts.forEach((opt, idx) => {
-      if (String(opt).trim().toLowerCase() !== correctAns) {
+      if (!correctAnswers.includes(String(opt).trim().toLowerCase())) {
         wrongIndices.push(idx);
       }
     });
@@ -1410,35 +1760,25 @@ function usePowerupHint() {
       }
     }
   } else if (curQ.type === 'true_false' || curQ.type === 'tf') {
-    const lesson = curQ.lesson ? curQ.lesson.trim() : '';
-    const msg = lesson 
-      ? `💡 Clue: Focus on the concept of "${lesson}" to verify the statement.`
-      : `💡 Clue: Watch out for absolute terms like "always" or "never".`;
-    if (typeof showToast === 'function') {
-      showToast(msg, 'info');
-    }
+    interactivePlayerState.doubleScoreQuestionIndex = interactivePlayerState.currentIndex;
     hintActivated = true;
     playInteractiveSFX(true);
   } else if (curQ.type === 'identification') {
-    const ans = String(curQ.answer || '').trim();
-    const cleanAns = ans.replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
-    const firstChar = cleanAns.charAt(0).toUpperCase();
-    const letterCount = cleanAns.replace(/\s+/g, '').length;
-    const lesson = curQ.lesson ? ` · Topic: ${curQ.lesson}` : '';
+    const promptEl = document.getElementById('iqIdQuestionPromptText');
+    const rawPrompt = String(curQ.question || '').replace(/^\s*Identify the term:\s*/i, '').trim();
+    const highlighted = highlightQuestionKeywords(rawPrompt, curQ);
 
-    const input = document.getElementById('iqIdAnswerInput');
-    if (input) {
-      input.placeholder = `Starts with "${firstChar}" (${letterCount} letters)...`;
-      input.focus();
+    if (promptEl) {
+      promptEl.innerHTML = highlighted;
     }
 
     if (typeof showToast === 'function') {
-      showToast(`💡 Hint: Starts with "${firstChar}" (${letterCount} letters)${lesson}`, 'info');
+      showToast('✨ Key terms highlighted in the question prompt!', 'info');
     }
     hintActivated = true;
     playInteractiveSFX(true);
   } else if (curQ.type === 'matching') {
-    // Auto-match 1 unassigned term
+    // Quick Confirm: Auto-match 1 unassigned or incorrect term
     const pairs = curQ.pairs || [];
     const choices = curQ.choices || [];
     const selections = interactivePlayerState.matchingSelections || {};
@@ -1467,16 +1807,12 @@ function usePowerupHint() {
       const matchingChoice = choices.find(c => compareAnswers(c.text, correctText));
       if (matchingChoice) {
         assignMatchingChoice(targetPairIdx, matchingChoice.key);
-        if (typeof showToast === 'function') {
-          showToast(`💡 Hint: Matched "${pairs[targetPairIdx].left}" for you!`, 'success');
-        }
+        showMatchingPowerupPopup('Quick Confirm: Correct answer placed!', `The correct answer "${matchingChoice.text}" has been placed for "${pairs[targetPairIdx].left}".`);
         hintActivated = true;
         playInteractiveSFX(true);
       }
     } else {
-      if (typeof showToast === 'function') {
-        showToast('💡 All pairs are already filled!', 'info');
-      }
+      showMatchingPowerupPopup('Quick Confirm: All correct!', 'You have already placed the correct answer for every term. You can submit your matches.');
     }
   }
 
@@ -1484,12 +1820,12 @@ function usePowerupHint() {
     if (!interactivePlayerState.usedPowerups) {
       interactivePlayerState.usedPowerups = {};
     }
-    interactivePlayerState.usedPowerups.hint = true;
+    interactivePlayerState.usedPowerups[powerupKey] = true;
     const btn = document.getElementById('iqPowerupHint');
     if (btn) {
       btn.classList.add('used');
       btn.disabled = true;
-      btn.title = 'Hint already used';
+      btn.title = getHintPowerupTitle(curQ.type);
     }
   }
 }
@@ -1506,6 +1842,12 @@ function renderMultipleChoiceView(q) {
   const cardClasses = ['card-a', 'card-b', 'card-c', 'card-d', 'card-a', 'card-b'];
 
   const isTf = q.type === 'true_false' || q.type === 'tf';
+  const isMulti = Boolean(q.multipleAnswers || (Array.isArray(q.answers) && q.answers.length > 1));
+
+  if (isMulti) {
+    interactivePlayerState.multiChoiceSelectedIndices = [];
+  }
+
   return `
     <div class="iq-mc-container">
       <div class="iq-mc-question-banner">
@@ -1517,9 +1859,9 @@ function renderMultipleChoiceView(q) {
           const letter = cardLetters[i] || String.fromCharCode(65 + i);
           const cardClass = cardClasses[i % cardClasses.length];
           return `
-            <div class="iq-mc-card ${cardClass}" id="mc_card_${i}" onclick="selectMultipleChoiceCard(${i}, '${escHtml(opt).replace(/'/g, "\\'")}')">
+            <div class="iq-mc-card ${cardClass} ${isMulti ? 'multi-mode' : ''}" id="mc_card_${i}" onclick="${isMulti ? `toggleInteractiveMultiChoiceCard(${i})` : `selectMultipleChoiceCard(${i}, '${escHtml(opt).replace(/'/g, "\\'")}')`}">
               <div class="iq-mc-card-head">
-                <span>${letter}</span>
+                <span id="mc_card_letter_${i}">${letter}</span>
               </div>
               <div class="iq-mc-card-body">
                 ${escHtml(opt)}
@@ -1528,8 +1870,133 @@ function renderMultipleChoiceView(q) {
           `;
         }).join('')}
       </div>
+
+      ${isMulti ? `
+      <div class="iq-multi-submit-wrap" style="margin-top:26px;display:flex;justify-content:center;">
+        <button type="button" class="iq-submit-btn incomplete" id="iqSubmitMultiBtn" onclick="submitInteractiveMultiChoiceAnswer()" style="padding:14px 40px;font-size:16px;font-weight:800;border-radius:50px;display:flex;align-items:center;gap:12px;cursor:pointer;box-shadow:0 8px 24px rgba(2,132,199,0.35);transition:all 0.2s cubic-bezier(0.16,1,0.3,1);">
+          <span>✓ Submit Selections</span>
+          <span id="iqMultiSelectedBadge" style="background:rgba(255,255,255,0.25);padding:3px 10px;border-radius:20px;font-size:13px;font-weight:700;">0 selected</span>
+        </button>
+      </div>
+      ` : ''}
     </div>
   `;
+}
+
+function toggleInteractiveMultiChoiceCard(cardIdx) {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  if (!Array.isArray(interactivePlayerState.multiChoiceSelectedIndices)) {
+    interactivePlayerState.multiChoiceSelectedIndices = [];
+  }
+  const idxList = interactivePlayerState.multiChoiceSelectedIndices;
+  const existingPos = idxList.indexOf(cardIdx);
+  const card = document.getElementById(`mc_card_${cardIdx}`);
+  const letterEl = document.getElementById(`mc_card_letter_${cardIdx}`);
+  const cardLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  const baseLetter = cardLetters[cardIdx] || String.fromCharCode(65 + cardIdx);
+
+  if (existingPos >= 0) {
+    idxList.splice(existingPos, 1);
+    if (card) card.classList.remove('selected');
+    if (letterEl) letterEl.innerHTML = baseLetter;
+  } else {
+    idxList.push(cardIdx);
+    if (card) card.classList.add('selected');
+    if (letterEl) letterEl.innerHTML = `✓ ${baseLetter}`;
+  }
+
+  const badge = document.getElementById('iqMultiSelectedBadge');
+  if (badge) {
+    badge.innerText = `${idxList.length} selected`;
+  }
+
+  const btn = document.getElementById('iqSubmitMultiBtn');
+  if (btn) {
+    if (idxList.length > 0) {
+      btn.classList.remove('incomplete');
+      btn.classList.add('ready');
+    } else {
+      btn.classList.remove('ready');
+      btn.classList.add('incomplete');
+    }
+  }
+}
+
+function submitInteractiveMultiChoiceAnswer(isTimeout = false) {
+  if (interactivePlayerState.isWaitingFeedback) return;
+  const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
+  if (!q) return;
+
+  const selectedIndices = interactivePlayerState.multiChoiceSelectedIndices || [];
+  if (selectedIndices.length === 0 && !isTimeout) {
+    if (typeof showToast === 'function') {
+      showToast('Please select at least one choice before submitting.', 'warning');
+    }
+    return;
+  }
+
+  interactivePlayerState.isWaitingFeedback = true;
+  clearInterval(interactivePlayerState.timerInterval);
+
+  const selectedOpts = selectedIndices.map(i => q.options[i]).filter(Boolean);
+  const given = selectedOpts.join(', ');
+
+  const correctList = Array.isArray(q.answers) && q.answers.length > 0
+    ? q.answers
+    : (Array.isArray(q.answer) ? q.answer : [q.answer || '']);
+
+  const normSelected = selectedOpts.map(s => String(s).trim().toLowerCase()).sort();
+  const normCorrect = correctList.map(s => String(s).trim().toLowerCase()).sort();
+
+  const isCorrect = normSelected.length === normCorrect.length &&
+    normSelected.every((v, i) => v === normCorrect[i]);
+
+  const correct = correctList.filter(Boolean).join(', ');
+
+  if (isCorrect) interactivePlayerState.score++;
+  interactivePlayerState.userResponses[q.id] = {
+    label: q.question || '',
+    given,
+    correct,
+    isCorrect,
+    multipleAnswers: true
+  };
+
+  // Color code cards
+  const cards = document.querySelectorAll('.iq-mc-card');
+  cards.forEach(c => c.classList.add('disabled'));
+
+  const correctIndices = (q.options || [])
+    .map((opt, idx) => correctList.some(c => String(c).trim().toLowerCase() === String(opt).trim().toLowerCase()) ? idx : -1)
+    .filter(idx => idx !== -1);
+
+  selectedIndices.forEach(idx => {
+    if (cards[idx]) {
+      if (correctIndices.includes(idx)) {
+        cards[idx].classList.add('mc-correct');
+      } else {
+        cards[idx].classList.add('mc-incorrect');
+      }
+    }
+  });
+
+  correctIndices.forEach(idx => {
+    if (cards[idx] && !cards[idx].classList.contains('mc-correct')) {
+      cards[idx].classList.add('mc-correct');
+    }
+  });
+
+  const submitBtn = document.getElementById('iqSubmitMultiBtn');
+  if (submitBtn) submitBtn.disabled = true;
+
+  showAnswerFeedback({
+    isCorrect,
+    correctAnswerText: correct,
+    sourceMaterialText: q.sourceFile || q.sourceMaterial,
+    sourcePageText: q.sourcePage || null,
+    lessonText: q.lesson,
+    explanationText: q.explanation || null
+  });
 }
 
 function selectMultipleChoiceCard(cardIdx, optValue) {
@@ -1548,19 +2015,32 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
   clearInterval(interactivePlayerState.timerInterval);
   const q = interactivePlayerState.questions[interactivePlayerState.currentIndex];
   if (!q) return;
+  if ((q.type === 'true_false' || q.type === 'tf') && interactivePlayerState.userResponses[q.id]) return;
 
   const given = (val || '').trim();
-  const correct = (q.answer || '').trim();
-  const isCorrect = given.toLowerCase() === correct.toLowerCase();
+  const correctList = Array.isArray(q.answers) && q.answers.length > 0
+    ? q.answers
+    : (Array.isArray(q.answer) ? q.answer : [q.answer || '']);
+  const isCorrect = correctList.some(c => String(c).trim().toLowerCase() === given.toLowerCase());
+  const correct = correctList.filter(Boolean).join(', ');
 
   if (isCorrect) interactivePlayerState.score++;
-  interactivePlayerState.userResponses[q.id] = { given, correct, isCorrect };
+  const isTf = q.type === 'true_false' || q.type === 'tf';
+  const multiplier = isTf && interactivePlayerState.doubleScoreQuestionIndex === interactivePlayerState.currentIndex ? 2 : 1;
+  interactivePlayerState.userResponses[q.id] = {
+    label: q.question || '',
+    given, correct, isCorrect,
+    ...(isTf ? { scoreMultiplier: multiplier, leaderboardPoints: isCorrect ? multiplier : 0 } : {})
+  };
+  if (isTf) interactivePlayerState.doubleScoreQuestionIndex = -1;
 
   // Color-code the cards
   const cards = document.querySelectorAll('.iq-mc-card');
   cards.forEach(c => c.classList.add('disabled'));
 
-  const correctIdx = (q.options || []).findIndex(opt => opt.trim().toLowerCase() === correct.toLowerCase());
+  const correctIndices = (q.options || [])
+    .map((opt, idx) => correctList.some(c => String(c).trim().toLowerCase() === String(opt).trim().toLowerCase()) ? idx : -1)
+    .filter(idx => idx !== -1);
 
   if (isCorrect) {
     if (clickedCardIdx != null && cards[clickedCardIdx]) {
@@ -1570,9 +2050,9 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
     if (clickedCardIdx != null && cards[clickedCardIdx]) {
       cards[clickedCardIdx].classList.add('mc-incorrect');
     }
-    if (correctIdx !== -1 && cards[correctIdx]) {
-      cards[correctIdx].classList.add('mc-correct');
-    }
+    correctIndices.forEach(cIdx => {
+      if (cards[cIdx]) cards[cIdx].classList.add('mc-correct');
+    });
   }
 
   showAnswerFeedback({
@@ -1699,6 +2179,7 @@ function advanceToNextQuestion() {
   interactivePlayerState.lastMatchingPointsEarned = 0;
   interactivePlayerState.matchingSelections = {};
   interactivePlayerState.selectedMatchingChoice = null;
+  interactivePlayerState.secondChanceActive = false;
   closeInteractiveHandoutModal();
   interactivePlayerState.currentIndex++;
   if (interactivePlayerState.currentIndex >= interactivePlayerState.questions.length) {
@@ -1729,7 +2210,11 @@ async function finishInteractiveQuiz() {
       label: item.label || '',
       given: item.given,
       correct: item.correct,
-      isCorrect: item.isCorrect
+      isCorrect: item.isCorrect,
+      ...(item.scoreMultiplier != null ? {
+        scoreMultiplier: item.scoreMultiplier,
+        leaderboardPoints: item.leaderboardPoints
+      } : {})
     };
   });
 
@@ -1774,15 +2259,17 @@ async function finishInteractiveQuiz() {
           score_percentage: totalItems ? Math.round((score / totalItems) * 100) : 0
         });
 
-        await db.from('quiz_attempts').insert({
-          quiz_id: quiz.id,
-          quiz_title: quiz.title || 'Interactive Quiz',
-          student_id: CURRENT_PROFILE.id,
-          student_name: CURRENT_PROFILE.full_name,
-          score,
-          total_items: totalItems,
-          answers: gradedAnswers
-        });
+        const studentUUID = CURRENT_PROFILE.id || CURRENT_PROFILE.school_id;
+        const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(studentUUID);
+        if (isValidUUID) {
+          await db.from('quiz_attempts').insert({
+            quiz_id: quiz.id,
+            student_id: studentUUID,
+            score,
+            total_items: totalItems,
+            answers: gradedAnswers
+          });
+        }
       }
     } catch (err) {
       console.warn('Interactive quiz attempt sync notice:', err);

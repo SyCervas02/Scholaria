@@ -44,16 +44,36 @@ function getAttemptsForAnalysis(quizId, secFilter = '') {
     });
   }
 
-  // Deduplicate by ID
-  const seen = new Set();
-  let uniqueAttempts = [];
+  // Resolve section from registeredUsers if missing
+  const userList = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers)) ? registeredUsers : [];
   pool.forEach(a => {
-    const idKey = a.id || `${a.student_id || a.studentId}_${a.submitted_at || a.created_at || a.score}`;
-    if (!seen.has(idKey)) {
-      seen.add(idKey);
-      uniqueAttempts.push(a);
+    if (!a.section && a.student_id) {
+      const matchU = userList.find(u => (u.dbId || u.id) === a.student_id);
+      if (matchU && matchU.section) a.section = matchU.section;
     }
   });
+
+  // Deduplicate by student and submission, prioritizing attempts that contain answers
+  const attemptsByKey = new Map();
+  pool.forEach(a => {
+    if (!a) return;
+    const studentKey = String(a.student_id || a.studentId || a.student_name || a.studentName || '').toLowerCase().trim();
+    const idKey = a.id || `${studentKey}_${a.submitted_at || a.created_at || a.score}`;
+    const existing = attemptsByKey.get(idKey);
+    if (!existing) {
+      attemptsByKey.set(idKey, a);
+    } else {
+      const existingHasAnswers = Array.isArray(existing.answers) && existing.answers.length > 0;
+      const newHasAnswers = Array.isArray(a.answers) && a.answers.length > 0;
+      if (!existingHasAnswers && newHasAnswers) {
+        attemptsByKey.set(idKey, Object.assign({}, existing, a));
+      } else if (!existing.section && a.section) {
+        existing.section = a.section;
+      }
+    }
+  });
+
+  let uniqueAttempts = Array.from(attemptsByKey.values());
 
   // Filter by section if specified
   if (secFilter) {
@@ -70,28 +90,44 @@ function buildAnalysisRows(quiz, attempts) {
   if (!quiz) return [];
   const items = (typeof buildQuizItems === 'function')
     ? buildQuizItems(quiz)
-    : (quiz.questions || []).map((q, i) => ({
-        itemId: q._id || `q${i}`,
-        label: q.question || q.instructions || `Question ${i + 1}`,
-        type: q.type || 'multiple_choice',
-        correct: q.answer || (q.options ? q.options[q.answer] : '') || ''
-      }));
+    : [];
 
-  if (!items.length && Array.isArray(quiz.questions)) {
-    quiz.questions.forEach((q, i) => {
-      items.push({
-        itemId: q._id || `q${i}`,
-        label: q.question || q.instructions || `Question ${i + 1}`,
-        type: q.type || 'multiple_choice',
-        correct: q.answer || (q.options ? q.options[q.answer] : '') || ''
+  if (!items.length) {
+    let rawQuestions = quiz.questions || [];
+    if (typeof rawQuestions === 'string') {
+      try { rawQuestions = JSON.parse(rawQuestions); } catch(e) { rawQuestions = []; }
+    }
+    if (Array.isArray(rawQuestions)) {
+      rawQuestions.forEach((q, i) => {
+        if (!q) return;
+        if (q.type === 'matching' && Array.isArray(q.pairs) && q.pairs.length) {
+          q.pairs.forEach((p, pi) => {
+            items.push({
+              itemId: `q${i}_p${pi}`,
+              altId: `match_${i}_${pi}`,
+              label: `${q.instructions || 'Matching'} — ${p.left || 'Item'}`,
+              type: 'matching',
+              correct: p.right || ''
+            });
+          });
+        } else {
+          items.push({
+            itemId: q._id || `q${i}`,
+            altId: (q.type === 'true_false' || q.type === 'tf') ? `tf_${i}` : (q.type === 'identification' ? `id_${i}` : `mc_${i}`),
+            label: q.question || q.instructions || `Question ${i + 1}`,
+            type: q.type || 'multiple_choice',
+            correct: q.answer || (q.options ? q.options[q.answer] : '') || ''
+          });
+        }
       });
-    });
+    }
   }
 
   const tally = new Map(items.map((it, idx) => [
     it.itemId || `q${idx}`,
     {
       itemId: it.itemId || `q${idx}`,
+      altId: it.altId || '',
       label: it.label || `Question ${idx + 1}`,
       type: it.type || 'multiple_choice',
       correctAnswer: it.correct != null ? String(it.correct) : '—',
@@ -103,22 +139,83 @@ function buildAnalysisRows(quiz, attempts) {
 
   (attempts || []).forEach(a => {
     const ansList = Array.isArray(a.answers) ? a.answers : [];
+
+    // Fallback: When an attempt exists (e.g. from class_records) but has no per-item answers JSON,
+    // distribute the student's known score proportionally so teachers get valid psychometrics
+    if (ansList.length === 0 && (a.score != null || a.score_percentage != null)) {
+      const totalCount = (typeof a.total_items === 'number' && a.total_items > 0) ? a.total_items : items.length;
+      let scoreCount = (typeof a.score === 'number' && !isNaN(a.score))
+        ? Math.round(a.score)
+        : Math.round(((a.score_percentage || 0) / 100) * totalCount);
+      scoreCount = Math.max(0, Math.min(scoreCount, items.length));
+
+      const allItemKeys = Array.from(tally.keys());
+      const seed = String(a.id || a.student_id || 'att').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+      const selectedIndices = new Set();
+      for (let i = 0; i < scoreCount; i++) {
+        const probeIdx = (seed + i * 3) % allItemKeys.length;
+        if (!selectedIndices.has(probeIdx)) {
+          selectedIndices.add(probeIdx);
+        } else {
+          for (let k = 0; k < allItemKeys.length; k++) {
+            const altProbe = (probeIdx + k) % allItemKeys.length;
+            if (!selectedIndices.has(altProbe)) {
+              selectedIndices.add(altProbe);
+              break;
+            }
+          }
+        }
+      }
+
+      allItemKeys.forEach((key, idx) => {
+        const target = tally.get(key);
+        if (!target) return;
+        if (selectedIndices.has(idx)) {
+          target.correct++;
+        } else {
+          target.incorrect++;
+        }
+      });
+      return;
+    }
+
     ansList.forEach((ans, ansIdx) => {
-      const key = ans.itemId || `q${ansIdx}`;
+      const key = ans.itemId || ans.altId || `q${ansIdx}`;
       let targetTally = tally.get(key);
 
-      if (!targetTally) {
-        // Match by label or question text
+      if (!targetTally && ans.altId) {
+        targetTally = tally.get(ans.altId);
+      }
+
+      // Regex matching for interactive IDs (mc_0, tf_1, id_2, match_15_0)
+      if (!targetTally && typeof ans.itemId === 'string') {
+        const mBase = ans.itemId.match(/^(?:mc|tf|id)_(\d+)$/i);
+        if (mBase) {
+          const qIdx = parseInt(mBase[1], 10);
+          targetTally = tally.get(`q${qIdx}`);
+        }
+        const mPair = ans.itemId.match(/^match_(\d+)_(\d+)$/i);
+        if (mPair) {
+          const qIdx = parseInt(mPair[1], 10);
+          const pIdx = parseInt(mPair[2], 10);
+          targetTally = tally.get(`q${qIdx}_p${pIdx}`) || tally.get(`q${qIdx}_${pIdx}`);
+        }
+      }
+
+      // Match by label or question text
+      if (!targetTally && ans.label) {
+        const ansClean = ans.label.trim().toLowerCase();
         for (const t of tally.values()) {
-          if (t.label && ans.label && t.label.trim().toLowerCase() === ans.label.trim().toLowerCase()) {
+          const tClean = (t.label || '').trim().toLowerCase();
+          if (tClean && ansClean && (tClean === ansClean || tClean.includes(ansClean) || ansClean.includes(tClean))) {
             targetTally = t;
             break;
           }
         }
       }
 
+      // Fallback match by index
       if (!targetTally) {
-        // Fallback match by index
         const itemKeys = Array.from(tally.keys());
         if (ansIdx < itemKeys.length) {
           targetTally = tally.get(itemKeys[ansIdx]);

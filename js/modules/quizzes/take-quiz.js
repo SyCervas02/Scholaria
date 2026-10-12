@@ -14,19 +14,42 @@ const takeQuizState = {
 
 function buildQuizItems(quiz) {
   const items = [];
-  (quiz?.questions || []).forEach((q, qi) => {
+  let rawQuestions = quiz?.questions || [];
+  if (typeof rawQuestions === 'string') {
+    try { rawQuestions = JSON.parse(rawQuestions); } catch(e) { rawQuestions = []; }
+  }
+  if (!Array.isArray(rawQuestions)) rawQuestions = [];
+
+  rawQuestions.forEach((q, qi) => {
+    if (!q) return;
     const srcFile = q.source_file || q.sourceMaterial || q.source_material || '';
     const srcPage = q.source_page || null;
 
     const correctVal = q.answer || q.correct || q.correctAnswer || q.correct_answer || (typeof q._answerIdx === 'number' && q.options ? q.options[q._answerIdx] : '') || '';
+
+    const isMulti = q.multipleAnswers === true || (Array.isArray(q.answers) && q.answers.length > 1) || (Array.isArray(q.answer) && q.answer.length > 1);
+    let correctAnswersList = [];
+    if (Array.isArray(q.answers) && q.answers.length > 0) {
+      correctAnswersList = q.answers.map(a => String(a).trim()).filter(Boolean);
+    } else if (Array.isArray(q.answer) && q.answer.length > 0) {
+      correctAnswersList = q.answer.map(a => String(a).trim()).filter(Boolean);
+    } else if (Array.isArray(q._answerIndices) && q._answerIndices.length > 0 && Array.isArray(q.options)) {
+      correctAnswersList = q._answerIndices.map(i => q.options[i]).filter(Boolean).map(a => String(a).trim());
+    } else if (typeof q.answer === 'string' && q.answer.includes(',') && isMulti) {
+      correctAnswersList = q.answer.split(',').map(s => s.trim()).filter(Boolean);
+    } else if (correctVal) {
+      correctAnswersList = [String(correctVal).trim()];
+    }
 
     if (q.type === 'multiple_choice') {
       items.push({ 
         itemId: `q${qi}`, 
         label: q.question || q.label || `Question ${qi + 1}`, 
         type: 'multiple_choice', 
+        multipleAnswers: isMulti,
         options: Array.isArray(q.options) ? q.options : [], 
-        correct: correctVal,
+        correct: isMulti ? correctAnswersList : correctVal,
+        correctAnswers: correctAnswersList,
         explanation: q.explanation || '',
         sourceFile: srcFile,
         sourcePage: srcPage
@@ -64,6 +87,17 @@ function buildQuizItems(quiz) {
           sourceFile: srcFile,
           sourcePage: srcPage
         });
+      });
+    } else {
+      items.push({
+        itemId: `q${qi}`,
+        label: q.question || q.label || `Question ${qi + 1}`,
+        type: q.options && q.options.length ? 'multiple_choice' : 'identification',
+        options: Array.isArray(q.options) ? q.options : [],
+        correct: correctVal,
+        explanation: q.explanation || '',
+        sourceFile: srcFile,
+        sourcePage: srcPage
       });
     }
   });
@@ -113,6 +147,9 @@ function compareAnswers(given, correct) {
  */
 function isOptionSelected(opt, optIdx, studentGiven) {
   if (studentGiven == null || studentGiven === '') return false;
+  if (Array.isArray(studentGiven)) {
+    return studentGiven.some(g => isOptionSelected(opt, optIdx, g));
+  }
   const s = String(studentGiven).trim();
   const o = String(opt).trim();
   if (s.toLowerCase() === o.toLowerCase()) return true;
@@ -147,10 +184,13 @@ function isOptionSelected(opt, optIdx, studentGiven) {
 
 /**
  * Checks if a given option is the correct answer according to the answer key,
- * handling option text, letter ('A', 'B'), prefixed, or formatted values.
+ * handling option text, letter ('A', 'B'), prefixed, formatted values, or arrays.
  */
 function isOptionCorrect(opt, optIdx, itemCorrect) {
   if (itemCorrect == null || itemCorrect === '') return false;
+  if (Array.isArray(itemCorrect)) {
+    return itemCorrect.some(c => isOptionCorrect(opt, optIdx, c));
+  }
   const c = String(itemCorrect).trim();
   const o = String(opt).trim();
   if (c.toLowerCase() === o.toLowerCase()) return true;
@@ -181,7 +221,34 @@ function isOptionCorrect(opt, optIdx, itemCorrect) {
 }
 
 function gradeItem(item, given) {
-  if (given == null || given === '') return false;
+  if (given == null || given === '' || (Array.isArray(given) && given.length === 0)) return false;
+
+  const isMulti = item.multipleAnswers || (Array.isArray(item.correct) && item.correct.length > 1) || (Array.isArray(item.correctAnswers) && item.correctAnswers.length > 1);
+
+  if (isMulti) {
+    const correctList = Array.isArray(item.correct) 
+      ? item.correct 
+      : (Array.isArray(item.correctAnswers) ? item.correctAnswers : [item.correct]);
+    
+    const givenList = Array.isArray(given)
+      ? given
+      : (typeof given === 'string' ? given.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+    if (givenList.length !== correctList.length || givenList.length === 0) return false;
+
+    // Every given answer must match one of the correct answers
+    const allGivenAreCorrect = givenList.every(g => 
+      correctList.some(c => compareAnswers(g, c))
+    );
+    if (!allGivenAreCorrect) return false;
+
+    // Every correct answer must be matched by one of the given answers
+    const allCorrectAreSelected = correctList.every(c => 
+      givenList.some(g => compareAnswers(g, c))
+    );
+    return allCorrectAreSelected;
+  }
+
   return compareAnswers(given, item.correct || '');
 }
 
@@ -234,6 +301,22 @@ function openTakeQuizModal(quizId) {
     return; 
   }
 
+  // Prevent students from taking overdue quizzes
+  if (typeof ROLE !== 'undefined' && ROLE === 'student') {
+    const rawDue = quiz.dueDate || quiz.due_date;
+    if (rawDue) {
+      const dueTime = new Date(rawDue).getTime();
+      if (!isNaN(dueTime) && dueTime < Date.now()) {
+        if (typeof showToast === 'function') {
+          showToast('This assessment deadline has passed and is closed for submissions.', 'error');
+        } else {
+          alert('This assessment deadline has passed and is closed for submissions.');
+        }
+        return;
+      }
+    }
+  }
+
   if (quiz.type === 'interactive' || quiz.quiz_type === 'interactive') {
     if (typeof openInteractiveQuiz === 'function') {
       openInteractiveQuiz(quizId);
@@ -257,6 +340,7 @@ function openTakeQuizModal(quizId) {
     submitting: false, 
     reviewMode: false, 
     reviewAnswers: [],
+    startTime: Date.now(),
     timeLimitMinutes: timeLimitMins,
     secondsLeft: timeLimitMins * 60
   });
@@ -272,19 +356,13 @@ function openTakeQuizModal(quizId) {
   }
 }
 
-function openReviewAttempt(quizId) {
+async function openReviewAttempt(quizIdOrAttemptId, optionalAttemptId) {
   clearInterval(takeQuizState.timerInterval);
   const quizList = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
-  const qStr = String(quizId || '').toLowerCase().trim();
-  let quiz = quizList.find(q => String(q.id).toLowerCase().trim() === qStr);
-  if (!quiz && typeof allQuizzes !== 'undefined' && Array.isArray(allQuizzes)) {
-    quiz = allQuizzes.find(q => String(q.id).toLowerCase().trim() === qStr);
-  }
-  if (!quiz) {
-    quiz = quizList.find(q => q.title && String(q.title).toLowerCase().trim() === qStr);
-  }
+  const targetId = String(quizIdOrAttemptId || '').toLowerCase().trim();
+  const targetAttemptId = String(optionalAttemptId || '').toLowerCase().trim();
 
-  // Look for attempt in pool
+  // 1. Gather all attempts in memory & storage
   let attemptsPool = [];
   if (typeof getAllRecordedAttempts === 'function') {
     try { attemptsPool.push(...getAllRecordedAttempts()); } catch(e) {}
@@ -311,29 +389,97 @@ function openReviewAttempt(quizId) {
   const currentStudentId = String(prof.id || prof.school_id || '').toLowerCase().trim();
   const currentStudentName = String(prof.full_name || '').toLowerCase().trim();
 
-  // Filter for matching quiz attempts
-  const matchingAttempts = attemptsPool.filter(a => {
-    if (!a) return false;
-    const aQid = String(a.quiz_id || '').toLowerCase().trim();
-    if (aQid && aQid === qStr) return true;
-    if (quiz && a.quiz_title && quiz.title && String(a.quiz_title).trim().toLowerCase() === String(quiz.title).trim().toLowerCase()) return true;
-    return false;
-  });
+  // 2. Identify the attempt
+  let attempt = null;
 
-  // Prioritize attempt belonging to current student
-  let attempt = matchingAttempts.find(a => {
-    const sid = String(a.student_id || a.studentId || a.user_id || '').toLowerCase().trim();
-    const sname = String(a.student_name || a.studentName || '').toLowerCase().trim();
-    if (currentStudentId && sid === currentStudentId) return true;
-    if (currentStudentName && (sname === currentStudentName || sid === currentStudentName)) return true;
-    return false;
-  }) || matchingAttempts[0] || null;
+  // Case A: specific attemptId was passed
+  if (targetAttemptId) {
+    attempt = attemptsPool.find(a => a && String(a.id || '').toLowerCase().trim() === targetAttemptId);
+  }
 
-  if (!quiz || !attempt) { 
-    if (typeof showToast === 'function') showToast('Attempt not found', 'error'); 
+  // Case B: targetId is itself an attempt ID (e.g. from sidebar recent attempts)
+  if (!attempt && targetId) {
+    attempt = attemptsPool.find(a => a && String(a.id || '').toLowerCase().trim() === targetId);
+  }
+
+  // Case C: targetId is a quiz ID
+  if (!attempt && targetId) {
+    const matching = attemptsPool.filter(a => {
+      if (!a) return false;
+      const aQid = String(a.quiz_id || '').toLowerCase().trim();
+      return aQid && aQid === targetId;
+    });
+    if (matching.length) {
+      attempt = matching.find(a => {
+        const sid = String(a.student_id || a.studentId || a.user_id || '').toLowerCase().trim();
+        const sname = String(a.student_name || a.studentName || '').toLowerCase().trim();
+        if (currentStudentId && sid === currentStudentId) return true;
+        if (currentStudentName && (sname === currentStudentName || sid === currentStudentName)) return true;
+        return false;
+      }) || matching[0];
+    }
+  }
+
+  // Case D: targetId matches quiz title
+  if (!attempt && targetId) {
+    const matchingByTitle = attemptsPool.filter(a => {
+      if (!a || !a.quiz_title) return false;
+      return String(a.quiz_title).toLowerCase().trim() === targetId;
+    });
+    if (matchingByTitle.length) attempt = matchingByTitle[0];
+  }
+
+  // Case E: Try fetching from Supabase directly if still not found
+  if (!attempt && typeof db !== 'undefined' && db && db.from && targetId) {
+    try {
+      const { data } = await db.from('quiz_attempts').select('*').or(`id.eq.${targetId},quiz_id.eq.${targetId}`);
+      if (data && data.length) {
+        attempt = data[0];
+        attemptsPool.push(attempt);
+      }
+    } catch(dbErr) {}
+  }
+
+  // 3. Identify the quiz
+  let quiz = null;
+  const quizTargetId = attempt ? String(attempt.quiz_id || '').toLowerCase().trim() : targetId;
+
+  if (quizTargetId) {
+    quiz = quizList.find(q => String(q.id).toLowerCase().trim() === quizTargetId);
+    if (!quiz && typeof allQuizzes !== 'undefined' && Array.isArray(allQuizzes)) {
+      quiz = allQuizzes.find(q => String(q.id).toLowerCase().trim() === quizTargetId);
+    }
+  }
+  if (!quiz && attempt && attempt.quiz_title) {
+    const tLower = String(attempt.quiz_title).toLowerCase().trim();
+    quiz = quizList.find(q => q.title && String(q.title).toLowerCase().trim() === tLower);
+  }
+
+  // Try fetching quiz from Supabase if not in memory
+  if (!quiz && typeof db !== 'undefined' && db && db.from && quizTargetId) {
+    try {
+      const { data } = await db.from('quizzes').select('*').eq('id', quizTargetId).single();
+      if (data) quiz = data;
+    } catch(qDbErr) {}
+  }
+
+  // Fallback: Reconstruct minimal quiz object from attempt metadata
+  if (!quiz && attempt) {
+    quiz = {
+      id: attempt.quiz_id || targetId,
+      title: attempt.quiz_title || 'Quiz Review',
+      subject: attempt.subject || 'General',
+      strand: attempt.strand || 'General',
+      questions: []
+    };
+  }
+
+  if (!attempt) { 
+    if (typeof showToast === 'function') showToast('Quiz attempt record not found', 'error'); 
     return; 
   }
 
+  // 4. Parse answers safely
   let parsedAnswers = attempt.answers || [];
   if (typeof parsedAnswers === 'string') {
     try { parsedAnswers = JSON.parse(parsedAnswers); } catch(e) { parsedAnswers = []; }
@@ -343,7 +489,23 @@ function openReviewAttempt(quizId) {
   }
   if (!Array.isArray(parsedAnswers)) parsedAnswers = [];
 
-  const items = buildQuizItems(quiz);
+  // 5. Build items and populate from parsed answers if quiz questions are missing
+  let items = buildQuizItems(quiz);
+  if (!items.length && parsedAnswers.length) {
+    parsedAnswers.forEach((ans, idx) => {
+      items.push({
+        itemId: ans.itemId || `q${idx}`,
+        label: ans.label || ans.question || `Question ${idx + 1}`,
+        type: ans.type || (Array.isArray(ans.options) && ans.options.length ? 'multiple_choice' : 'identification'),
+        options: Array.isArray(ans.options) ? ans.options : (ans.given && ans.correct && ans.given !== ans.correct ? [ans.given, ans.correct] : [ans.correct || 'Option A']),
+        correct: ans.correct ?? ans.correctAnswer ?? '',
+        explanation: ans.explanation || '',
+        sourceFile: ans.sourceFile || ans.sourceMaterial || '',
+        sourcePage: ans.sourcePage || null
+      });
+    });
+  }
+
   Object.assign(takeQuizState, { 
     quiz, 
     items, 
@@ -361,6 +523,8 @@ function openReviewAttempt(quizId) {
   }
   renderTakeQuizModal();
 }
+
+window.openReviewAttempt = openReviewAttempt;
 
 function requestCloseTakeQuizModal() {
   if (takeQuizState.reviewMode) {
@@ -395,6 +559,12 @@ function closeTakeQuizModal() {
   }
 }
 
+function isItemResponseAnswered(val) {
+  if (val == null) return false;
+  if (Array.isArray(val)) return val.length > 0;
+  return String(val).trim() !== '';
+}
+
 function setTQAnswer(itemId, value) {
   takeQuizState.responses[itemId] = value;
   // Update selected state visually without full re-render
@@ -417,11 +587,53 @@ function setTQAnswer(itemId, value) {
   });
 
   // Update answered count
-  const answeredCount = items.filter(it => responses[it.itemId] != null && String(responses[it.itemId]).trim() !== '').length;
+  const answeredCount = items.filter(it => isItemResponseAnswered(responses[it.itemId])).length;
   const countEl = document.querySelector('.sq-footer-count strong');
   if (countEl) countEl.textContent = `${answeredCount} of ${items.length} answered`;
 
   // Hide warning box immediately when student starts/continues answering
+  const warningBox = document.getElementById('sqWarningBox');
+  if (warningBox) {
+    warningBox.style.display = 'none';
+  }
+}
+
+function toggleTQMultiAnswer(itemId, value) {
+  let current = takeQuizState.responses[itemId];
+  let list = Array.isArray(current) ? [...current] : (current ? [String(current)] : []);
+  const valStr = String(value);
+
+  const existingIdx = list.findIndex(item => String(item).toLowerCase() === valStr.toLowerCase());
+  if (existingIdx !== -1) {
+    list.splice(existingIdx, 1);
+  } else {
+    list.push(valStr);
+  }
+  takeQuizState.responses[itemId] = list;
+
+  const { items, responses } = takeQuizState;
+
+  // Remove unanswered highlight from this card if present
+  const cardEl = document.getElementById(`sq-card-${itemId}`);
+  if (cardEl) {
+    cardEl.classList.remove('sq-card-unanswered');
+  }
+
+  // Update checkbox rows visually for this item
+  document.querySelectorAll(`.sq-opt-row[data-item="${itemId}"]`).forEach(row => {
+    const rowVal = row.getAttribute('data-val');
+    if (list.some(ans => String(ans).toLowerCase() === String(rowVal).toLowerCase())) {
+      row.classList.add('selected');
+    } else {
+      row.classList.remove('selected');
+    }
+  });
+
+  // Update answered count
+  const answeredCount = items.filter(it => isItemResponseAnswered(responses[it.itemId])).length;
+  const countEl = document.querySelector('.sq-footer-count strong');
+  if (countEl) countEl.textContent = `${answeredCount} of ${items.length} answered`;
+
   const warningBox = document.getElementById('sqWarningBox');
   if (warningBox) {
     warningBox.style.display = 'none';
@@ -448,7 +660,7 @@ function renderTakeQuizModal() {
     : `<div class="sq-user-avatar-init">${userInitials}</div>`;
 
   const totalItems = items.length;
-  const answeredCount = items.filter(it => responses[it.itemId] != null && String(responses[it.itemId]).trim() !== '').length;
+  const answeredCount = items.filter(it => isItemResponseAnswered(responses[it.itemId])).length;
   const reviewScore = (typeof takeQuizState.attempt?.score === 'number')
     ? takeQuizState.attempt.score
     : items.reduce((acc, it, idx) => {
@@ -457,8 +669,7 @@ function renderTakeQuizModal() {
                   reviewAnswers[idx];
         if (!ans) return acc;
         const g = ans.given ?? ans.answer ?? ans.studentAnswer ?? ans.user_answer ?? ans.selected ?? '';
-        const c = it.correct || ans.correct || ans.correctAnswer || '';
-        const ok = ans.isCorrect !== undefined ? Boolean(ans.isCorrect) : compareAnswers(g, c);
+        const ok = ans.isCorrect !== undefined ? Boolean(ans.isCorrect) : gradeItem(it, g);
         return acc + (ok ? 1 : 0);
       }, 0);
 
@@ -533,10 +744,13 @@ function renderTakeQuizModal() {
     let inputHtml = '';
 
     if (item.type === 'multiple_choice' || item.type === 'true_false') {
+      const isMulti = Boolean(item.multipleAnswers);
       const optionsList = (item.options || []).map((opt, optIdx) => {
         const isSelected = reviewMode 
           ? isOptionSelected(opt, optIdx, studentGiven)
-          : (String(studentGiven) === String(opt));
+          : (isMulti
+              ? (Array.isArray(studentGiven) && studentGiven.some(g => String(g).toLowerCase() === String(opt).toLowerCase()))
+              : (String(studentGiven) === String(opt)));
 
         const isOptRight = isOptionCorrect(opt, optIdx, itemCorrect);
         const letter = letters[optIdx] || String.fromCharCode(65 + optIdx);
@@ -548,12 +762,12 @@ function renderTakeQuizModal() {
           rowClass += ' disabled';
           if (isSelected) {
             rowClass += ' selected';
-            if (isAnsCorrect) {
+            if (isOptRight) {
               rowClass += ' correct';
               badgeHtml = `<span class="sq-opt-badge correct-badge">✔ Your Answer (Correct)</span>`;
             } else {
               rowClass += ' wrong';
-              badgeHtml = `<span class="sq-opt-badge wrong-badge">✘ Your Answer</span>`;
+              badgeHtml = `<span class="sq-opt-badge wrong-badge">✘ Your Answer (Incorrect)</span>`;
             }
           } else if (isOptRight && allowReviewAnswers) {
             // When teacher allows review answers, highlight the actual correct answer in green
@@ -564,9 +778,18 @@ function renderTakeQuizModal() {
           if (isSelected) rowClass += ' selected';
         }
 
-        const clickAttr = reviewMode ? '' : `onclick="setTQAnswer('${item.itemId}', '${safeEsc(opt).replace(/'/g, "\\'")}')"`; 
+        const clickAttr = reviewMode ? '' : (
+          isMulti
+            ? `onclick="toggleTQMultiAnswer('${item.itemId}', '${safeEsc(opt).replace(/'/g, "\\'")}')"`
+            : `onclick="setTQAnswer('${item.itemId}', '${safeEsc(opt).replace(/'/g, "\\'")}')"`
+        );
+
+        const indicatorHtml = isMulti
+          ? `<div class="sq-opt-checkbox"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>`
+          : `<div class="sq-opt-radio"></div>`;
+
         return `<div class="${rowClass}" data-item="${safeEsc(item.itemId)}" data-val="${safeEsc(opt)}" ${clickAttr}>
-          <div class="sq-opt-radio"></div>
+          ${indicatorHtml}
           <div class="sq-opt-text">${letter}. ${safeEsc(opt)}</div>
           ${badgeHtml}
         </div>`;
@@ -574,14 +797,18 @@ function renderTakeQuizModal() {
 
       let feedbackHtml = '';
       if (reviewMode) {
+        const correctText = Array.isArray(itemCorrect)
+          ? itemCorrect.join(', ')
+          : (Array.isArray(item.correctAnswers) ? item.correctAnswers.join(', ') : String(itemCorrect || ''));
+
         if (isAnsCorrect) {
           feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#dcfce7;color:#166534;border:1px solid #86efac;">
-            ✔ Correct!
+            ✔ Correct!${isMulti ? ' All matching choices selected.' : ''}
           </div>${explanationHtml}`;
         } else {
           if (allowReviewAnswers) {
             feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
-              ✘ Incorrect — Correct answer: <strong>${safeEsc(String(itemCorrect || ''))}</strong>
+              ✘ Incorrect — Correct answer${isMulti ? 's' : ''}: <strong>${safeEsc(correctText)}</strong>
             </div>${explanationHtml}`;
           } else {
             feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;">
@@ -658,6 +885,7 @@ function renderTakeQuizModal() {
       <div class="sq-qcard-header">
         <span class="sq-qnum">${idx + 1}.</span>
         <span class="sq-qlabel">${safeEsc(item.label)}</span>
+        ${item.multipleAnswers ? `<span class="sq-multi-badge">☑️ Select all that apply</span>` : ''}
         ${cardHeaderStatusBadge}
       </div>
       ${inputHtml}
@@ -751,7 +979,7 @@ async function submitQuizAttempt(isAutoSubmit = false) {
   if (submitting) return;
 
   if (!isAutoSubmit) {
-    const unansweredItems = items.filter(it => responses[it.itemId] == null || String(responses[it.itemId]).trim() === '');
+    const unansweredItems = items.filter(it => !isItemResponseAnswered(responses[it.itemId]));
     if (unansweredItems.length > 0) { 
       // Highlight unanswered question cards
       unansweredItems.forEach(it => {
@@ -788,8 +1016,18 @@ async function submitQuizAttempt(isAutoSubmit = false) {
   renderTakeQuizModal();
 
   const gradedAnswers = items.map(it => {
-    const given = responses[it.itemId] || '';
-    return { itemId: it.itemId, label: it.label, type: it.type, given, correct: it.correct, isCorrect: gradeItem(it, given) };
+    const rawGiven = responses[it.itemId];
+    const given = Array.isArray(rawGiven) ? rawGiven : (rawGiven || '');
+    return { 
+      itemId: it.itemId, 
+      label: it.label, 
+      type: it.type, 
+      multipleAnswers: !!it.multipleAnswers,
+      options: it.options || [],
+      given, 
+      correct: it.correct, 
+      isCorrect: gradeItem(it, given) 
+    };
   });
   const score = gradedAnswers.filter(a => a.isCorrect).length;
   const total = gradedAnswers.length;
@@ -852,20 +1090,12 @@ async function submitQuizAttempt(isAutoSubmit = false) {
       }
 
       try {
-        let { error } = await db.from('quiz_attempts').insert({
-          quiz_id: quiz?.id || '',
-          quiz_title: quiz?.title || 'Quiz',
-          student_id: prof.id || studentId,
-          student_name: studentName,
-          score,
-          total_items: total,
-          answers: gradedAnswers
-        });
-
-        if (error) {
+        const studentUUID = prof.id || studentId;
+        const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(studentUUID);
+        if (isValidUUID) {
           await db.from('quiz_attempts').insert({
             quiz_id: quiz?.id || '',
-            student_id: prof.id || studentId,
+            student_id: studentUUID,
             score,
             total_items: total,
             answers: gradedAnswers
@@ -877,6 +1107,7 @@ async function submitQuizAttempt(isAutoSubmit = false) {
     }
   }
 
+  const elapsedSec = Math.max(1, Math.round((Date.now() - (takeQuizState.startTime || Date.now())) / 1000));
   takeQuizState.submitting = false;
   closeTakeQuizModal();
   
@@ -936,4 +1167,262 @@ async function loadMyAttemptsFromDB() {
       mainContent.innerHTML = getPageContent(ROLE, currentPage);
     }
   }
+}
+
+/* ── CLASS LEADERBOARD MODAL (FOR TEACHERS & ADMINS IN QUIZ MANAGER) ── */
+function closeClassLeaderboardModal() {
+  const modal = document.getElementById('classLeaderboardModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+async function openClassLeaderboardModalById(quizId) {
+  const all = (typeof customQuizzes !== 'undefined' ? customQuizzes : []);
+  const quiz = all.find(q => String(q.id) === String(quizId)) || { id: quizId, title: 'Quiz Assessment' };
+  await openClassLeaderboardModal(quiz);
+}
+
+async function openClassLeaderboardModal(quiz) {
+  // STRICTLY FOR TEACHERS & ADMINS (hidden from students)
+  if (typeof ROLE !== 'undefined' && ROLE === 'student') return;
+
+  const modal = document.getElementById('classLeaderboardModal');
+  const container = document.getElementById('classLeaderboardModalContent');
+  if (!modal || !container) return;
+
+  const quizTitle = quiz?.title || 'Class Quiz Assessment';
+  const totalQuestions = (quiz?.questions || []).length || 10;
+
+  // Show modal immediately with loading indicator
+  container.innerHTML = `
+    <div style="padding: 40px 32px; text-align: center; background: #ffffff;">
+      <div style="font-size: 32px; margin-bottom: 12px; animation: spin 1s linear infinite;">⏳</div>
+      <h3 style="font-size: 16px; font-weight: 700; color: #1e3a8a; margin: 0 0 6px;">Loading Leaderboard</h3>
+      <p style="font-size: 13px; color: #64748b; margin: 0;">Retrieving real student submissions from database...</p>
+    </div>`;
+  modal.style.display = 'flex';
+
+  // 1. Fetch live attempts from Supabase for this quiz
+  let liveAttempts = [];
+  if (typeof db !== 'undefined' && db && db.from && quiz?.id) {
+    try {
+      const { data, error } = await db.from('quiz_attempts')
+        .select('*')
+        .eq('quiz_id', quiz.id)
+        .order('submitted_at', { ascending: false });
+      if (!error && Array.isArray(data)) {
+        liveAttempts = data;
+      }
+    } catch (dbErr) {
+      console.warn('Leaderboard Supabase fetch notice:', dbErr);
+    }
+  }
+
+  // 2. Fetch local storage attempts fallback
+  let localAttempts = [];
+  try {
+    const raw = localStorage.getItem('scholaria_all_attempts_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        localAttempts = parsed.filter(a => String(a.quiz_id) === String(quiz?.id || ''));
+      }
+    }
+  } catch (_) {}
+
+  // 3. Cached in-memory attempts
+  const cachedAttempts = [
+    ...(typeof classRecAttemptsCache !== 'undefined' && Array.isArray(classRecAttemptsCache) ? classRecAttemptsCache : []),
+    ...(typeof myQuizAttempts !== 'undefined' && Array.isArray(myQuizAttempts) ? myQuizAttempts : [])
+  ].filter(a => String(a.quiz_id) === String(quiz?.id || ''));
+
+  // Combine attempts uniquely
+  const attemptMap = new Map();
+  [...liveAttempts, ...localAttempts, ...cachedAttempts].forEach(a => {
+    if (!a) return;
+    const key = a.id || `${a.student_id || a.user_id}_${a.submitted_at || a.created_at || a.score}`;
+    if (!attemptMap.has(key)) attemptMap.set(key, a);
+  });
+  const allAttempts = Array.from(attemptMap.values());
+
+  // 4. Resolve registered students to get official names
+  const handledStudents = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : []).filter(u => u.role === 'student');
+
+  // 5. Aggregate best attempt per student (highest score, tie-breaker: fastest time)
+  const studentBestMap = new Map();
+  allAttempts.forEach(att => {
+    const sId = String(att.student_id || att.user_id || att.email || '').trim();
+    if (!sId) return;
+
+    const score = Number(att.score != null ? att.score : 0);
+    const total = Number(att.total_items || totalQuestions);
+    const durationSec = att.time_taken_seconds != null ? Number(att.time_taken_seconds) : (att.duration != null ? Number(att.duration) : null);
+
+    const studentObj = handledStudents.find(u => String(u.id) === sId || u.email === att.student_email || u.email === att.email) || null;
+    const studentName = att.student_name || (studentObj ? (studentObj.full_name || studentObj.name) : '') || 'Student User';
+
+    const existing = studentBestMap.get(sId);
+    if (!existing) {
+      studentBestMap.set(sId, { id: sId, name: studentName, score, total, durationSec });
+    } else {
+      if (score > existing.score) {
+        studentBestMap.set(sId, { id: sId, name: studentName, score, total, durationSec });
+      } else if (score === existing.score && durationSec != null && (existing.durationSec == null || durationSec < existing.durationSec)) {
+        studentBestMap.set(sId, { id: sId, name: studentName, score, total, durationSec });
+      }
+    }
+  });
+
+  const rankingList = Array.from(studentBestMap.values());
+
+  // Sort: Highest score first, then fastest time
+  rankingList.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (a.durationSec != null && b.durationSec != null) return a.durationSec - b.durationSec;
+    return 0;
+  });
+
+  const formatDuration = (sec) => {
+    if (sec == null || isNaN(sec) || sec <= 0) return '—';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}m ${s < 10 ? '0' : ''}${s}s`;
+  };
+
+  const getRankBadgeStyle = (rank) => {
+    if (rank === 1) return 'background: #f59e0b; color: #fff; box-shadow: 0 3px 8px rgba(245,158,11,0.4);';
+    if (rank === 2) return 'background: #94a3b8; color: #fff;';
+    if (rank === 3) return 'background: #ea580c; color: #fff;';
+    return 'background: #60a5fa; color: #fff;';
+  };
+
+  const getScorePillStyle = (score, total) => {
+    const pct = total > 0 ? (score / total) * 100 : 0;
+    if (pct >= 90) return 'background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;';
+    if (pct >= 70) return 'background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd;';
+    if (pct >= 50) return 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a;';
+    return 'background: #fee2e2; color: #dc2626; border: 1px solid #fecaca;';
+  };
+
+  const avatarColors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#6366f1', '#14b8a6'];
+
+  const tableOrEmptyHtml = rankingList.length > 0 ? `
+    <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 16px; max-height: 440px; overflow-y: auto;">
+      <table style="width: 100%; border-collapse: separate; border-spacing: 0 8px; min-width: 480px;">
+        <thead>
+          <tr style="color: #64748b; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em;">
+            <th style="padding: 6px 14px; text-align: center; width: 64px;">Rank</th>
+            <th style="padding: 6px 14px; text-align: left;">Student</th>
+            <th style="padding: 6px 14px; text-align: center; width: 110px;">Score</th>
+            <th style="padding: 6px 14px; text-align: right; width: 110px;">Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rankingList.map((st, idx) => {
+            const rank = idx + 1;
+            const isRank1 = rank === 1;
+            const rowStyle = isRank1
+              ? 'background: #f0fdf4; border: 1.5px solid #bbf7d0; box-shadow: 0 3px 10px rgba(34,197,94,0.12);'
+              : 'background: #ffffff; border: 1px solid #f1f5f9;';
+
+            const avatarColor = avatarColors[idx % avatarColors.length];
+            const initial = (st.name || 'S').trim().charAt(0).toUpperCase();
+
+            return `
+            <tr style="${rowStyle} border-radius: 14px; transition: transform 0.15s ease;">
+              <!-- Rank -->
+              <td style="padding: 10px 14px; text-align: center; border-top-left-radius: 14px; border-bottom-left-radius: 14px;">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; font-size: 13px; font-weight: 800; ${getRankBadgeStyle(rank)}">
+                  ${rank}
+                </div>
+              </td>
+
+              <!-- Student -->
+              <td style="padding: 10px 14px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <div style="width: 34px; height: 34px; border-radius: 50%; background: ${avatarColor}; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.08);">
+                    ${initial}
+                  </div>
+                  <div>
+                    <div style="font-weight: 700; font-size: 13.5px; color: #1e293b;">${escHtml(st.name)}</div>
+                  </div>
+                </div>
+              </td>
+
+              <!-- Score -->
+              <td style="padding: 10px 14px; text-align: center;">
+                <span style="display: inline-block; padding: 4px 14px; border-radius: 20px; font-weight: 800; font-size: 12.5px; ${getScorePillStyle(st.score, st.total)}">
+                  ${st.score}/${st.total}
+                </span>
+              </td>
+
+              <!-- Time -->
+              <td style="padding: 10px 14px; text-align: right; border-top-right-radius: 14px; border-bottom-right-radius: 14px;">
+                <span style="font-weight: 700; font-size: 13px; color: #334155;">
+                  ${formatDuration(st.durationSec)}
+                </span>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>` : `
+    <div style="text-align: center; padding: 42px 20px; background: #f8fafc; border-radius: 16px; border: 1.5px dashed #cbd5e1; margin: 10px 0;">
+      <div style="font-size: 40px; margin-bottom: 8px;">📝</div>
+      <h3 style="font-size: 16px; font-weight: 700; color: #1e293b; margin: 0 0 6px;">No Submissions Recorded Yet</h3>
+      <p style="font-size: 13.5px; color: #64748b; max-width: 400px; margin: 0 auto; line-height: 1.5;">
+        None of your enrolled students have completed this quiz yet. Rankings and completion times will automatically appear here once students submit their answers.
+      </p>
+    </div>`;
+
+  container.innerHTML = `
+  <div style="padding: 28px 32px; background: #ffffff; position: relative;">
+    <!-- Top Bar with Teacher Badge & Close Button -->
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="display: inline-flex; align-items: center; gap: 6px; background: #eff6ff; color: #1d4ed8; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bfdbfe;">
+          ⚡ Teacher Portal • Real Student Records
+        </span>
+        <span style="display: inline-flex; align-items: center; gap: 4px; background: #f1f5f9; color: #475569; padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 700;">
+          ${rankingList.length} ${rankingList.length === 1 ? 'Student' : 'Students'} Completed
+        </span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="display: inline-flex; align-items: center; gap: 6px; background: #f0fdf4; color: #15803d; padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bbf7d0; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(quizTitle)}</span>
+        </div>
+        <button onclick="closeClassLeaderboardModal()" style="background: #f1f5f9; border: none; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748b; font-size: 16px; font-weight: 700;" title="Close">✕</button>
+      </div>
+    </div>
+
+    <!-- Centered Trophy & Title -->
+    <div style="text-align: center; margin-bottom: 24px;">
+      <div style="display: inline-block; position: relative; margin-bottom: 4px;">
+        <div style="font-size: 52px; line-height: 1; filter: drop-shadow(0 4px 12px rgba(245,158,11,0.3));">🏆</div>
+        <div style="position: absolute; top: -6px; right: -14px; font-size: 18px;">✨</div>
+        <div style="position: absolute; bottom: 4px; left: -14px; font-size: 18px;">⭐</div>
+      </div>
+      <h2 style="font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: #1e3a8a; margin: 4px 0 6px 0; letter-spacing: -0.02em;">Class Leaderboard</h2>
+      <p style="font-size: 14px; color: #64748b; font-weight: 600; margin: 0;">Verified student rankings and completion times on this assessment</p>
+    </div>
+
+    <!-- Table Container or Empty Notice -->
+    ${tableOrEmptyHtml}
+
+    <!-- Action Button -->
+    <div style="text-align: center; margin-top: 24px;">
+      <button onclick="closeClassLeaderboardModal()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #ffffff; font-weight: 700; border-radius: 50px; padding: 12px 36px; border: none; cursor: pointer; font-size: 14px; box-shadow: 0 4px 14px rgba(37,99,235,0.3); transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+        Close Leaderboard
+      </button>
+    </div>
+  </div>`;
+}
+
+if (typeof window !== 'undefined') {
+  window.openClassLeaderboardModalById = openClassLeaderboardModalById;
+  window.openClassLeaderboardModal = openClassLeaderboardModal;
+  window.closeClassLeaderboardModal = closeClassLeaderboardModal;
 }

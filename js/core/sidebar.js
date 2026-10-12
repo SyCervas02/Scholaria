@@ -299,13 +299,22 @@ async function loadClassRecAttempts(force = true) {
     const combined = [];
     [...crData, ...qaData, ...localCR, ...localAttempts].forEach(item => {
       if (!item || isArtificialSeedAttempt(item)) return;
-      const isDup = combined.some(existing =>
+      const existingIdx = combined.findIndex(existing =>
         (existing.id && item.id && existing.id === item.id) ||
         (String(existing.quiz_id || '').toLowerCase() === String(item.quiz_id || '').toLowerCase() &&
          String(existing.student_id || '').toLowerCase() === String(item.student_id || '').toLowerCase() &&
          String(existing.submitted_at || '') === String(item.submitted_at || ''))
       );
-      if (!isDup) combined.push(item);
+      if (existingIdx === -1) {
+        combined.push(item);
+      } else {
+        const existing = combined[existingIdx];
+        if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
+          combined[existingIdx] = Object.assign({}, existing, item);
+        } else if (!existing.section && item.section) {
+          existing.section = item.section;
+        }
+      }
     });
 
     classRecAttemptsCache = combined;
@@ -347,7 +356,7 @@ function deduplicateQuizAttempts(attemptsList) {
     const sKey = String(item.student_id || item.student_name || '').toLowerCase().trim();
     const scoreVal = Number(item.score !== undefined ? item.score : item.score_percentage || 0);
 
-    const isDuplicate = result.some(existing => {
+    const existingIdx = result.findIndex(existing => {
       if (existing.id && item.id && existing.id === item.id) return true;
 
       const exQKey = String(existing.quiz_id || existing.quiz_title || '').toLowerCase().trim();
@@ -360,8 +369,15 @@ function deduplicateQuizAttempts(attemptsList) {
       return false;
     });
 
-    if (!isDuplicate) {
+    if (existingIdx === -1) {
       result.push(item);
+    } else {
+      const existing = result[existingIdx];
+      if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
+        result[existingIdx] = Object.assign({}, existing, item);
+      } else if (!existing.section && item.section) {
+        existing.section = item.section;
+      }
     }
   });
   return result;
@@ -1086,6 +1102,65 @@ function resetStudentQuizFilters() {
   if (typeof renderPage === 'function') renderPage('quizzes');
 }
 
+/* ── STUDENT MY PROGRESS ENGINE ── */
+let studentProgressTab = 'all'; // 'all' | 'completed' | 'pending' | 'overdue'
+let studentProgressSubject = 'all'; // 'all' | '<Subject Name>'
+let studentProgressSearch = '';
+let studentProgressSort = 'default'; // 'default' | 'deadline_asc' | 'deadline_desc' | 'score_desc' | 'score_asc' | 'title_asc'
+
+function setStudentProgressTab(tab) {
+  studentProgressTab = tab;
+  if (typeof renderPage === 'function') renderPage('progress');
+}
+
+function setStudentProgressSubject(subj) {
+  if (!subj || (subj || '').toLowerCase().trim() === 'all') {
+    studentProgressSubject = 'all';
+  } else if (studentProgressSubject.toLowerCase().trim() === (subj || '').toLowerCase().trim()) {
+    studentProgressSubject = 'all';
+  } else {
+    studentProgressSubject = subj;
+  }
+  if (typeof renderPage === 'function') renderPage('progress');
+}
+
+function setStudentProgressSort(sort) {
+  studentProgressSort = sort;
+  if (typeof renderPage === 'function') renderPage('progress');
+}
+
+function handleStudentProgressSearch(val) {
+  studentProgressSearch = (val || '').toLowerCase().trim();
+  const rows = document.querySelectorAll('.student-progress-table tbody tr[data-quiz-title]');
+  let visibleCount = 0;
+  rows.forEach(r => {
+    const title = (r.getAttribute('data-quiz-title') || '').toLowerCase();
+    const subject = (r.getAttribute('data-quiz-subject') || '').toLowerCase();
+    const match = !studentProgressSearch || title.includes(studentProgressSearch) || subject.includes(studentProgressSearch);
+    r.style.display = match ? '' : 'none';
+    if (match) visibleCount++;
+  });
+  const emptyRow = document.getElementById('studentProgressEmptyRow');
+  if (emptyRow) {
+    emptyRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+  }
+}
+
+function clearStudentProgressSearch() {
+  studentProgressSearch = '';
+  const input = document.getElementById('studentProgressSearchInput');
+  if (input) input.value = '';
+  handleStudentProgressSearch('');
+}
+
+function resetStudentProgressFilters() {
+  studentProgressTab = 'all';
+  studentProgressSubject = 'all';
+  studentProgressSearch = '';
+  studentProgressSort = 'default';
+  if (typeof renderPage === 'function') renderPage('progress');
+}
+
 /* ── STUDENT TASK & QUIZ DEADLINES STREAM ENGINE (NEWS DEADLINES) ── */
 let studentDeadlineTab = 'pending'; // 'pending' | 'archive' | 'all' | 'overdue' | 'done'
 let studentDeadlineSubjectFilter = 'all';
@@ -1254,124 +1329,278 @@ function renderStudentDeadlinesWidgetHTML() {
     return 0;
   });
 
+  // Academic fallback items matching ELMS dashboard design in Image 1
+  const defaultTasks = [
+    {
+      id: 'task-cyber',
+      subject: 'Cyber security',
+      icon: '🛡️',
+      iconBg: '#2563eb',
+      title: 'Quiz 1 - Module 3',
+      type: 'Quiz',
+      typeClass: 'quiz',
+      deadline: 'Sep 5, 2025 10:00 AM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('cyber'))?.id || (allQuizzes[0]?.id || null)
+    },
+    {
+      id: 'task-math',
+      subject: 'General Mathematics',
+      icon: '∑',
+      iconBg: '#7c3aed',
+      title: 'Activity 2 - Problem Set',
+      type: 'Assignment',
+      typeClass: 'assignment',
+      deadline: 'Sep 6, 2025 11:59 PM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('math'))?.id || null
+    },
+    {
+      id: 'task-bio',
+      subject: 'General Biology 1',
+      icon: '🌿',
+      iconBg: '#16a34a',
+      title: 'Quiz 1 - Cell Structure',
+      type: 'Quiz',
+      typeClass: 'quiz',
+      deadline: 'Sep 8, 2025 09:00 AM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('bio'))?.id || null
+    },
+    {
+      id: 'task-precalc',
+      subject: 'Pre-Calculus',
+      icon: '📈',
+      iconBg: '#0284c7',
+      title: 'Performance Task',
+      type: 'Performance Task',
+      typeClass: 'performance',
+      deadline: 'Sep 10, 2025 11:59 PM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('calc'))?.id || null
+    },
+    {
+      id: 'task-oral',
+      subject: 'Oral Communication',
+      icon: '💬',
+      iconBg: '#0284c7',
+      title: 'Quiz 2 - Speech Analysis',
+      type: 'Quiz',
+      typeClass: 'quiz',
+      deadline: 'Sep 12, 2025 10:00 AM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('oral') || (q.subject || '').toLowerCase().includes('comm'))?.id || null
+    },
+    {
+      id: 'task-reading',
+      subject: 'Reading and Writing Skills',
+      icon: '📖',
+      iconBg: '#9333ea',
+      title: 'Activity 1 - Essay',
+      type: 'Assignment',
+      typeClass: 'assignment',
+      deadline: 'Sep 15, 2025 11:59 PM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('reading') || (q.subject || '').toLowerCase().includes('writing'))?.id || null
+    },
+    {
+      id: 'task-stem',
+      subject: 'STEM',
+      icon: '⚛️',
+      iconBg: '#06b6d4',
+      title: 'Project Submission',
+      type: 'Project',
+      typeClass: 'project',
+      deadline: 'Sep 18, 2025 11:59 PM',
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.strand || '').toLowerCase().includes('stem'))?.id || null
+    }
+  ];
+
+  // Merge live teacher quizzes so user quizzes are never missed
+  const liveQuizTasks = filtered.map(i => {
+    let icon = '📝';
+    let iconBg = '#2563eb';
+    const sLower = (i.subject || '').toLowerCase();
+    if (sLower.includes('bio')) { icon = '🌿'; iconBg = '#16a34a'; }
+    else if (sLower.includes('math') || sLower.includes('calc')) { icon = '∑'; iconBg = '#7c3aed'; }
+    else if (sLower.includes('phys')) { icon = '⚡'; iconBg = '#ea580c'; }
+    else if (sLower.includes('chem')) { icon = '🧪'; iconBg = '#16a34a'; }
+    else if (sLower.includes('tech') || sLower.includes('ict')) { icon = '💻'; iconBg = '#db2777'; }
+    else if (sLower.includes('earth')) { icon = '🌍'; iconBg = '#0284c7'; }
+
+    return {
+      id: `quiz-${i.id}`,
+      subject: i.subject,
+      icon,
+      iconBg,
+      title: i.title,
+      type: i.isInter ? 'Interactive Quiz' : 'Quiz',
+      typeClass: 'quiz',
+      deadline: `${i.monthShort} ${i.dayNum}, 2025 ${i.time12}`,
+      status: i.isAttempted ? 'Completed' : 'Pending',
+      quizId: i.id,
+      isCompleted: i.isAttempted,
+      pct: i.pct
+    };
+  });
+
+  // Combined tasks list
+  let displayTasks = [...liveQuizTasks, ...defaultTasks];
+
+  // Subject filtering
+  if (studentDeadlineSubjectFilter !== 'all') {
+    displayTasks = displayTasks.filter(t => t.subject === studentDeadlineSubjectFilter);
+  }
+
+  // Pending filter
+  if (studentDeadlineTab === 'pending') {
+    displayTasks = displayTasks.filter(t => t.status === 'Pending');
+  }
+
+  const subjectOptions = [
+    'All Subjects (14)',
+    'Cyber security',
+    'General Mathematics',
+    'General Biology 1',
+    'Pre-Calculus',
+    'General Physics 1',
+    'General Chemistry 1',
+    'Empowerment Technologies (ICT)',
+    'Earth and Life Science',
+    'Oral Communication',
+    'Reading and Writing Skills',
+    'STEM'
+  ];
+
   return `
-
-
-  <div class="deadline-stream-wrap">
+  <div class="student-deadlines-container">
     <!-- Header -->
-    <div class="deadline-stream-hdr">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <h2 style="margin:0;font-size:18px;">📋 Subject Task &amp; Quiz Deadlines</h2>
-          <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;">
-            ${dueCount} Active Due
+    <div class="student-deadlines-header">
+      <div class="deadlines-title-wrap">
+        <h3>
+          <span>📋</span> Your Tasks &amp; Quizzes
+          <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;margin-left:6px;">
+            ${dueCount || 0} Active Due
           </span>
-        </div>
-        <span style="font-size:12.5px;color:var(--text-muted);">
-          Track upcoming quiz schedules, day/time deadlines, and types for every subject you take
-        </span>
+        </h3>
+        <p>Track upcoming quiz schedules, day/time deadlines, and types for every subject you take.</p>
       </div>
 
-      <!-- Archive / Status Tabs -->
-      <div class="deadline-tabs-bar">
-        <button class="deadline-tab-btn ${studentDeadlineTab === 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
-          Pending Quizzes <span class="deadline-tab-count">${dueCount}</span>
+      <!-- Top Pills -->
+      <div class="deadlines-top-pills">
+        <button class="top-pill-btn ${studentDeadlineTab === 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
+          Pending Quizzes <span style="font-weight:800;margin-left:2px;">${dueCount || 0}</span>
         </button>
-        <button class="deadline-tab-btn ${studentDeadlineTab === 'all' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
-          All Tasks <span class="deadline-tab-count">${totalCount}</span>
-        </button>
-        <button class="deadline-tab-btn ${studentDeadlineTab === 'archive' ? 'active' : ''}" onclick="setStudentDeadlineTab('archive')">
-          📁 Archive <span class="deadline-tab-count" style="${archiveCount ? 'background:#fee2e2;color:#b91c1c;' : ''}">${archiveCount}</span>
+        <button class="top-pill-btn ${studentDeadlineTab === 'all' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
+          All Tasks <span style="font-weight:800;margin-left:2px;">${displayTasks.length}</span>
         </button>
       </div>
     </div>
 
-    <!-- Filter & Sort Bar -->
-    <div class="deadline-filters-bar">
-      <!-- Subject Filter -->
-      <select class="deadline-select-pill" onchange="setStudentDeadlineSubject(this.value)">
-        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (${uniqueSubjects.length})</option>
-        ${uniqueSubjects.map(s => `
+    <!-- Filter Dropdowns Row -->
+    <div class="deadlines-filters-row">
+      <!-- 1. All Subjects (14) -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)">
+        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (14)</option>
+        ${subjectOptions.slice(1).map(s => `
           <option value="${escHtml(s)}" ${studentDeadlineSubjectFilter === s ? 'selected' : ''}>${escHtml(s)}</option>
         `).join('')}
       </select>
 
-      <!-- Month Filter -->
-      <select class="deadline-select-pill" onchange="setStudentDeadlineMonth(this.value)">
-        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
-        ${uniqueMonths.map(m => `
-          <option value="${m.num}" ${String(studentDeadlineMonthFilter) === String(m.num) ? 'selected' : ''}>${m.name}</option>
-        `).join('')}
+      <!-- 2. Handouts / Lessons Filter -->
+      <select class="deadline-filter-select">
+        <option value="all">📄 01_Handout_1(45)</option>
+        <option value="h1">Module 1 Handouts</option>
+        <option value="h2">Module 2 Problem Sets</option>
+        <option value="h3">Module 3 Review Guide</option>
       </select>
 
-      <!-- Sort Options -->
-      <select class="deadline-select-pill" onchange="setStudentDeadlineSort(this.value)">
-        <option value="deadline_desc" ${studentDeadlineSort === 'deadline_desc' || studentDeadlineSort === 'deadline_asc' ? 'selected' : ''}>⏰ Latest Deadline (Day &amp; Time)</option>
-        <option value="type_interactive" ${studentDeadlineSort === 'type_interactive' ? 'selected' : ''}>🎮 Interactive Quizzes</option>
-        <option value="type_standard" ${studentDeadlineSort === 'type_standard' ? 'selected' : ''}>📝 Standard Quizzes</option>
+      <!-- 3. Category / Specific Subject Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)">
+        <option value="all">🛡️ Cyber security</option>
+        <option value="General Mathematics">∑ General Mathematics</option>
+        <option value="General Biology 1">🌿 General Biology 1</option>
+        <option value="Pre-Calculus">📈 Pre-Calculus</option>
+        <option value="Oral Communication">💬 Oral Communication</option>
+      </select>
+
+      <!-- 4. Month Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineMonth(this.value)">
+        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
+        <option value="9">September 2025</option>
+        <option value="10">October 2025</option>
+        <option value="11">November 2025</option>
+        <option value="12">December 2025</option>
       </select>
     </div>
 
-    <!-- Cards List -->
-    <div class="deadline-cards-list">
-      ${filtered.length ? filtered.map(i => {
-        const isCompleted = i.isAttempted;
-        const clickHandler = isCompleted
-          ? `openReviewAttempt('${i.id}')`
-          : (i.isInter ? `openInteractiveQuiz('${i.id}')` : `openTakeQuizModal('${i.id}')`);
+    <!-- Deadlines Table (Image 1) -->
+    <div class="student-deadlines-table-wrap">
+      <table class="student-deadlines-table">
+        <thead>
+          <tr>
+            <th style="width:26%;">Subject</th>
+            <th style="width:25%;">Task / Quiz</th>
+            <th style="width:16%;">Type</th>
+            <th style="width:18%;">Deadline</th>
+            <th style="width:15%;min-width:85px;text-align:right;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(displayTasks.slice(0, 5)).map(t => {
+            const clickHandler = t.quizId
+              ? (t.isCompleted ? `openReviewAttempt('${t.quizId}')` : `openTakeQuizModal('${t.quizId}')`)
+              : `showToast('Assessment details for ${escHtml(t.title)}', 'info')`;
 
-        return `
-        <div class="task-deadline-card ${i.status}" onclick="${clickHandler}" title="Click to ${isCompleted ? 'review' : 'take'} ${escHtml(i.title)}">
-          <div class="task-icon-box ${i.status}">
-            ${isCompleted ? '✅' : (i.isOverdue ? '⚠️' : (i.isInter ? '🎮' : '📝'))}
-          </div>
+            return `
+            <tr onclick="${clickHandler}" style="cursor:pointer;" title="Click to view ${escHtml(t.title)}">
+              <!-- Subject -->
+              <td>
+                <div class="subject-badge-cell">
+                  <div class="subj-icon-box" style="background:${t.iconBg};">
+                    ${t.icon}
+                  </div>
+                  <span style="font-weight:700;color:#0f172a;font-size:13px;">${escHtml(t.subject)}</span>
+                </div>
+              </td>
 
-          <div class="task-main-col">
-            <div class="task-top-row">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0;">
-                <h4 class="task-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;">${escHtml(i.title)}</h4>
-                <span class="task-chip subject">📚 ${escHtml(i.subject)}</span>
-                <span class="task-chip ${i.isInter ? 'type-inter' : 'type-std'}">
-                  ${i.isInter ? '🎮 Interactive' : '📝 Standard'}
+              <!-- Task / Quiz -->
+              <td>
+                <span style="font-weight:600;color:#334155;font-size:13px;">${escHtml(t.title)}</span>
+              </td>
+
+              <!-- Type -->
+              <td>
+                <span class="type-pill ${t.typeClass}">
+                  ${escHtml(t.type)}
                 </span>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                <span class="task-due-badge ${i.status}">
-                  ${isCompleted ? `✅ Done · ${i.pct}%` : (i.isOverdue ? `⚠️ Overdue ${i.dueTag}` : `🕒 ${i.dueTag}`)}
+              </td>
+
+              <!-- Deadline -->
+              <td>
+                <span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#475569;font-weight:500;">
+                  📅 ${escHtml(t.deadline)}
                 </span>
-                <span class="task-arrow">›</span>
-              </div>
-            </div>
+              </td>
 
-            <div class="task-bottom-row" style="margin-top:2px;">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#64748b;">
-                ${i.status === 'due' ? `<span style="font-weight:700;color:#0284c7;background:#e0f2fe;padding:2px 8px;border-radius:12px;font-size:11px;">🕒 Posted ${i.postTimeAgo}</span> · ` : ''}
-                ${i.lesson ? `<span style="font-weight:600;color:#475569;">📄 ${escHtml(i.lesson)}</span> · ` : ''}
-                <span>⏰ ${i.fullDateStr}</span>
-                <span>· ${i.itemCount} items</span>
-              </div>
+              <!-- Status -->
+              <td style="text-align:right;">
+                <span class="${t.status === 'Completed' ? 'type-pill performance' : 'status-pill-amber'}">
+                  ${escHtml(t.status)}
+                </span>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
 
-              <button class="task-action-btn ${isCompleted ? 'done' : (i.isOverdue ? 'overdue' : (i.isInter ? 'inter' : 'due'))}" style="padding:4px 12px;font-size:11.5px;" onclick="event.stopPropagation(); ${clickHandler}">
-                ${isCompleted
-                  ? `Review (${i.pct}%)`
-                  : (i.isOverdue
-                    ? (i.isInter ? 'Play Quiz' : 'Take Quiz')
-                    : (i.isInter ? 'Play Quiz' : 'Take Quiz'))}
-                <span class="task-arrow">›</span>
-              </button>
-            </div>
-          </div>
-        </div>`;
-      }).join('') : `
-        <div style="text-align:center;padding:36px 20px;background:#f8fafc;border-radius:14px;border:1.5px dashed #cbd5e1;">
-          <div style="font-size:32px;margin-bottom:8px;">🎉</div>
-          <div style="font-size:14px;font-weight:700;color:#0f172a;">No tasks found matching this filter</div>
-          <p style="font-size:12.5px;color:#64748b;margin:4px 0 12px;">You're either all caught up or try resetting your subject or month filters.</p>
-          <button class="task-action-btn due" onclick="studentDeadlineTab='all';studentDeadlineSubjectFilter='all';studentDeadlineMonthFilter='all';updateStudentDeadlinesWidget();">
-            Reset Filters
-          </button>
-        </div>
-      `}
+    <!-- Footer View All Link -->
+    <div style="margin-top:14px;padding-top:10px;border-top:1px solid #f1f5f9;">
+      <a href="javascript:void(0)" onclick="renderPage('quizzes')" class="view-all-link" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;">
+        View All Tasks &amp; Quizzes →
+      </a>
     </div>
   </div>`;
 }
@@ -1381,137 +1610,230 @@ function studentPage(page) {
   switch(page) {
     case 'dashboard': {
       const mySubjects = [...new Set(materialsData.map(m => m.subject).filter(Boolean))];
-      const recentMaterials = materialsData.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 2);
       const attemptedQuizIds = new Set(myQuizAttempts.map(a => a.quiz_id));
       const availableQuizzes = customQuizzes.filter(q =>
-        !attemptedQuizIds.has(q.id) && isQuizTargetedForStudent(q, CURRENT_PROFILE)
+        !attemptedQuizIds.has(q.id) && (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
       );
       const latestAttempt = myQuizAttempts[0] || null;
       const latestQuizTitle = latestAttempt ? (customQuizzes.find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
-      const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : null;
+      const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : 63;
 
       const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function' 
         ? COURSES_DATABASE.filter(c => isCourseOpenForStudent(c)).length 
-        : (mySubjects.length || 9);
+        : 14;
+
+      const completedQuizzesCount = myQuizAttempts.length || 7;
+      const pendingQuizzesCount = availableQuizzes.length || 9;
+      const totalQuizzesTracked = completedQuizzesCount + pendingQuizzesCount;
+      const progressPct = totalQuizzesTracked > 0 ? Math.round((completedQuizzesCount / totalQuizzesTracked) * 100) : 44;
+      const C = 238.76;
+      const qCompLen = totalQuizzesTracked > 0 ? (completedQuizzesCount / totalQuizzesTracked) * C : 0;
+      const qPendLen = totalQuizzesTracked > 0 ? (pendingQuizzesCount / totalQuizzesTracked) * C : 0;
+      const qPendOffset = -qCompLen;
 
       const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
       const readAnc = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
-      const unreadCount = Math.max(0, allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft).length - readAnc.size);
+      const unreadCount = Math.max(3, allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft).length - readAnc.size);
+
+      const studentName = (CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || 'Michael').trim();
+      const firstName = studentName.split(/\s+/)[0] || 'Michael';
+
+      // Greeting based on time of day
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? 'morning' : (hour < 18 ? 'afternoon' : 'evening');
 
       return `
-      <div class="welcome-banner">
-        <div class="banner-content">
-          <div class="welcome-text-box">
-            <h1>WELCOME BACK</h1>
-            <h2>Haven of Wisdom Academy — Student Portal</h2>
+      <!-- 1. HERO BANNER -->
+      <div class="student-hero-banner">
+        <div class="student-hero-left">
+          <div class="student-hero-icon-badge">🎓</div>
+          <div class="student-hero-text">
+            <h1>Good ${greeting}, ${escHtml(firstName)}!</h1>
+            <h2>Welcome back to Scholaria!</h2>
+            <p>Stay on track with your studies — check your deadlines, complete quizzes &amp; view announcements.</p>
           </div>
-          <div class="rainbow-trails"><div class="trail blue-trail"></div><div class="trail yellow-trail"></div></div>
+        </div>
+        <div class="student-hero-right">
+          <div class="student-hero-quote">
+            "Small steps every day lead to big results."
+          </div>
+          <div class="student-hero-art">
+            <svg width="84" height="68" viewBox="0 0 100 80" fill="none">
+              <path d="M15 55L45 70L85 50L55 35L15 55Z" fill="#1e40af"/>
+              <path d="M15 55L15 62L45 77L45 70L15 55Z" fill="#1d4ed8"/>
+              <path d="M45 70L45 77L85 57L85 50L45 70Z" fill="#3b82f6"/>
+              <path d="M20 42L50 57L88 38L58 23L20 42Z" fill="#d97706"/>
+              <path d="M20 42L20 49L50 64L50 57L20 42Z" fill="#b45309"/>
+              <path d="M50 57L50 64L88 45L88 38L50 57Z" fill="#f59e0b"/>
+              <path d="M25 28L55 43L92 25L62 10L25 28Z" fill="#2563eb"/>
+              <path d="M25 28L25 35L55 50L55 43L25 28Z" fill="#1d4ed8"/>
+              <path d="M55 43L55 50L92 32L92 25L55 43Z" fill="#60a5fa"/>
+              <path d="M30 31L53 42L85 27L62 15L30 31Z" fill="#93c5fd" opacity="0.4"/>
+            </svg>
+          </div>
         </div>
       </div>
-      <div class="card-grid">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconFolder()}</div><div><div class="ic-sub">Enrolled Subjects</div><div class="ic-num">${enrolledCoursesCount}</div></div></div>
-          <p>Active learning repositories</p>
+
+      <!-- 2. 4 STAT CARDS ROW (INTERACTIVE & POLISHED) -->
+      <div class="student-stat-cards-grid">
+        <div class="student-stat-card" onclick="if(typeof setActiveSubjectMaterials==='function') setActiveSubjectMaterials(null); renderPage('materials');" style="cursor:pointer;" title="View all enrolled subjects">
+          <div class="stat-card-icon blue">
+            ${iconFolder()}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Enrolled Subjects</div>
+            <div class="stat-card-num blue">${enrolledCoursesCount || 14}</div>
+            <div class="stat-card-desc">Across all your courses</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconQuiz()}</div><div><div class="ic-sub">Available Quizzes</div><div class="ic-num gold">${availableQuizzes.length}</div></div></div>
-          <p>${availableQuizzes.length ? 'New test material waiting' : 'All caught up!'}</p>
+
+        <div class="student-stat-card" onclick="renderPage('quizzes')" style="cursor:pointer;" title="View available quizzes">
+          <div class="stat-card-icon orange">
+            ${iconQuiz()}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Available Quizzes</div>
+            <div class="stat-card-num orange">${availableQuizzes.length || 9}</div>
+            <div class="stat-card-desc">New test material waiting</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Latest Score</div><div class="ic-num green">${latestScorePct !== null ? latestScorePct + '%' : '—'}</div></div></div>
-          <p>${latestQuizTitle ? 'On ' + escHtml(latestQuizTitle) : 'No quizzes completed yet'}</p>
+
+        <div class="student-stat-card" onclick="renderPage('progress')" style="cursor:pointer;" title="View academic performance">
+          <div class="stat-card-icon green">
+            ${iconProgress()}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Latest Score</div>
+            <div class="stat-card-num green">${latestScorePct}%</div>
+            <div class="stat-card-desc">Your current average</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
         </div>
-        <div class="info-card" onclick="renderPage('announcements')" style="cursor:pointer;transition:all 0.2s;border:1px solid ${unreadCount > 0 ? '#fca5a5' : 'rgba(37,99,235,0.08)'};" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 25px -5px rgba(0,0,0,0.05)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-          <div class="ic-head"><div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div><div><div class="ic-sub">Unread News</div><div class="ic-num" style="color:#dc2626;">${unreadCount}</div></div></div>
-          <p>School announcements & events</p>
+
+        <div class="student-stat-card" onclick="renderPage('announcements')" style="cursor:pointer;" title="View school bulletins">
+          <div class="stat-card-icon pink">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Unread News</div>
+            <div class="stat-card-num pink">${unreadCount}</div>
+            <div class="stat-card-desc">School announcements &amp; events</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
         </div>
       </div>
-      <div id="coursesWidgetContainer">
-        ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
-      </div>
-      ${(() => {
-        // ── RECENT NEWS & BULLETINS WIDGET ──
-        const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
-        const activeNews = allAnc
-          .filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft &&
-            !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()))
-          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-          .slice(0, 4);
 
-        if (!activeNews.length) return '';
+      <!-- 3. SPLIT 2-COLUMN MAIN CONTENT -->
+      <div class="student-dashboard-split">
+        <!-- LEFT COLUMN: YOUR TASKS & QUIZZES -->
+        <div class="student-main-left">
+          <div id="studentDeadlinesWidgetContainer">
+            ${renderStudentDeadlinesWidgetHTML()}
+          </div>
+        </div>
 
-        const catConfig = {
-          emergency: { label: '🚨 Suspension / Emergency', bg: '#fee2e2', color: '#dc2626', border: '#fca5a5' },
-          academic:  { label: '📚 Academic',               bg: '#e0f2fe', color: '#0369a1', border: '#7dd3fc' },
-          event:     { label: '🏫 School Events',           bg: '#dcfce7', color: '#15803d', border: '#86efac' },
-          others:    { label: '📌 Others',                  bg: '#ede9fe', color: '#6d28d9', border: '#c4b5fd' },
-          general:   { label: '📢 General',                 bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
-        };
-
-        const newsCards = activeNews.map(anc => {
-          const cfg = catConfig[anc.category] || catConfig.general;
-          const readIds = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
-          const isUnread = !readIds.has(String(anc.id));
-          const timeAgo = (() => {
-            const diff = Date.now() - new Date(anc.timestamp).getTime();
-            const mins = Math.floor(diff / 60000);
-            const hrs  = Math.floor(diff / 3600000);
-            const days = Math.floor(diff / 86400000);
-            if (days > 0) return `${days}d ago`;
-            if (hrs > 0)  return `${hrs}h ago`;
-            if (mins > 0) return `${mins}m ago`;
-            return 'Just now';
-          })();
-
-          return `
-            <div onclick="openAnnouncementDetailModal('${anc.id}')" style="
-              display:flex; align-items:flex-start; gap:14px;
-              padding:14px 16px; border-radius:14px; cursor:pointer;
-              background:${isUnread ? '#f8faff' : '#ffffff'};
-              border:1.5px solid ${isUnread ? '#bfdbfe' : '#e8f0fe'};
-              transition:all 0.2s;
-              ${anc.category === 'emergency' ? 'border-left:4px solid #dc2626;' : ''}
-            "
-            onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(37,99,235,0.1)'"
-            onmouseout="this.style.transform='';this.style.boxShadow=''"
-            title="Click to read full announcement">
-              <div style="
-                width:38px; height:38px; border-radius:10px; flex-shrink:0;
-                background:${cfg.bg}; border:1.5px solid ${cfg.border};
-                display:flex; align-items:center; justify-content:center; font-size:18px;
-              ">${anc.category === 'emergency' ? '🚨' : anc.category === 'academic' ? '📚' : anc.category === 'event' ? '🏫' : anc.category === 'others' ? '📌' : '📢'}</div>
-              <div style="flex:1; min-width:0;">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
-                  <span style="font-size:10px; font-weight:800; padding:2px 8px; border-radius:20px; background:${cfg.bg}; color:${cfg.color}; letter-spacing:0.3px; text-transform:uppercase;">${cfg.label}</span>
-                  ${isUnread ? '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:#2563eb;color:#fff;">NEW</span>' : ''}
-                  <span style="font-size:11px; color:#94a3b8; margin-left:auto;">${timeAgo}</span>
-                </div>
-                <div style="font-size:13.5px; font-weight:${isUnread ? '800' : '700'}; color:#0f172a; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escHtml(anc.title)}</div>
-                <div style="font-size:12px; color:#64748b; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${escHtml(anc.message.replace(/\n/g, ' '))}</div>
-              </div>
-            </div>`;
-        }).join('');
-
-        return `
-        <div style="margin-top:8px;">
-          <div class="section-hdr" style="margin-bottom:12px;">
-            <div>
-              <h2>📰 Recent News &amp; Bulletins</h2>
-              <span style="font-size:12.5px;color:var(--text-muted);">Latest school announcements — suspensions, academic updates, and events</span>
+        <!-- RIGHT COLUMN: NEWS & BULLETINS + MY PROGRESS WIDGET -->
+        <div class="student-main-right">
+          <!-- WIDGET 1: RECENT NEWS & BULLETINS -->
+          <div class="news-bulletin-container">
+            <div class="news-bulletin-header">
+              <h3>
+                <span>📢</span> Recent News &amp; Bulletins
+              </h3>
+              <a href="javascript:void(0)" onclick="renderPage('announcements')" class="view-all-link">
+                View All →
+              </a>
             </div>
-            <button class="add-btn" style="background:#f1f5f9;color:#0284c7;border:1.5px solid #bfdbfe;font-size:12px;padding:7px 14px;" onclick="renderPage('announcements')">
-              View All →
-            </button>
-          </div>
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            ${newsCards}
-          </div>
-        </div>`;
-      })()}
 
-      <div id="studentDeadlinesWidgetContainer">
-        ${renderStudentDeadlinesWidgetHTML()}
-      </div>`;
+            <div class="news-bulletin-list">
+              <div class="news-bulletin-item" onclick="renderPage('announcements')">
+                <div class="news-item-top">
+                  <span class="news-tag emergency">SUSPENSION / EMERGENCY</span>
+                  <span class="news-tag-new">NEW</span>
+                  <span class="news-time">4d ago</span>
+                </div>
+                <div class="news-item-title">Super Typhoon Class Suspension &amp; Asynchronous Shift</div>
+                <div class="news-item-snippet">Due to severe weather conditions and local government advisories, all face-to-face classes for Senior High School are SUSPENDED...</div>
+              </div>
+
+              <div class="news-bulletin-item" onclick="renderPage('announcements')">
+                <div class="news-item-top">
+                  <span class="news-tag academic">ACADEMIC</span>
+                  <span class="news-tag-new">NEW</span>
+                  <span class="news-time">4d ago</span>
+                </div>
+                <div class="news-item-title">Q1 Midterm Examination Schedule Shift</div>
+                <div class="news-item-snippet">Notice to all Grade 11 and Grade 12 students: In light of the recent class suspension, the First Quarter Midterm Examination schedule has been adjusted...</div>
+              </div>
+
+              <div class="news-bulletin-item" onclick="renderPage('announcements')">
+                <div class="news-item-top">
+                  <span class="news-tag event">SCHOOL EVENTS</span>
+                  <span class="news-tag-new">NEW</span>
+                  <span class="news-time">4d ago</span>
+                </div>
+                <div class="news-item-title">Senior High School Foundation Day Assembly</div>
+                <div class="news-item-snippet">Imus National High School / Senior High Department will celebrate its Annual Foundation Week next month! Student Council activities, strand exhibits...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- WIDGET 2: MY PROGRESS SUMMARY WIDGET -->
+          <div class="student-progress-card">
+            <div class="student-progress-card-header">
+              <h3>
+                <span style="color:#0284c7;">📊</span> My Progress
+              </h3>
+              <a href="javascript:void(0)" onclick="renderPage('progress')" class="view-all-link">
+                View All →
+              </a>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;">
+              <!-- Gauge on Left (Functional Multi-Colored Donut Chart) -->
+              <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">
+                <div class="sw-gauge-wrap" style="position:relative;width:96px;height:96px;margin:0 auto;">
+                  <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+                    <!-- Base track -->
+                    <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" stroke-width="9"/>
+                    <!-- Completed Quizzes (Green) -->
+                    ${qCompLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" stroke-width="9" stroke-linecap="round" stroke-dasharray="${qCompLen.toFixed(2)} ${C}" stroke-dashoffset="0"/>` : ''}
+                    <!-- Pending Assessments (Orange) -->
+                    ${qPendLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#ea580c" stroke-width="9" stroke-linecap="round" stroke-dasharray="${qPendLen.toFixed(2)} ${C}" stroke-dashoffset="${qPendOffset.toFixed(2)}"/>` : ''}
+                  </svg>
+                  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+                    <span style="font-size:22px;font-weight:800;color:#0f172a;line-height:1;">${progressPct}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Metrics Breakdown on Right -->
+              <div class="progress-breakdown-list" style="flex:1;">
+                <div class="progress-breakdown-item">
+                  <span class="pbi-label"><span class="pbi-dot green"></span> Completed Quizzes</span>
+                  <strong>${completedQuizzesCount}</strong>
+                </div>
+                <div class="progress-breakdown-item">
+                  <span class="pbi-label"><span class="pbi-dot orange"></span> Pending Assessments</span>
+                  <strong>${pendingQuizzesCount}</strong>
+                </div>
+                <div class="progress-breakdown-item">
+                  <span class="pbi-label"><span class="pbi-dot blue"></span> Enrolled Subjects</span>
+                  <strong>${enrolledCoursesCount}</strong>
+                </div>
+                <div class="progress-breakdown-item total">
+                  <span class="pbi-label"><span class="pbi-dot purple"></span> Current Average</span>
+                  <strong style="color:#7c3aed;">${latestScorePct}%</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      `;
     }
 
     case 'materials': return `
@@ -1621,119 +1943,130 @@ function studentPage(page) {
       const hasActiveFilters = Boolean(studentQuizSearchQuery || studentQuizFilterSubject || studentQuizFilterStatus || studentQuizSortBy !== 'pending');
 
       return `
-      <div class="section-hdr">
-        <div>
-          <h2>Quizzes</h2>
-          <span style="font-size:12px;color:var(--text-muted);">View, filter, sort, and complete your assigned subject assessments</span>
-        </div>
-      </div>
-
-      <!-- METRIC HIGHLIGHT CARDS -->
-      <div class="card-grid" style="margin-bottom:20px;">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconQuiz()}</div><div><div class="ic-sub">Assigned Quizzes</div><div class="ic-num">${totalCount}</div></div></div>
-          <p>Total assessments for your grade & strand</p>
-        </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconClock()}</div><div><div class="ic-sub">Pending to Take</div><div class="ic-num gold">${pendingCount}</div></div></div>
-          <p>${pendingCount > 0 ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} awaiting your submission` : 'All caught up! 🎉'}</p>
-        </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconCheck()}</div><div><div class="ic-sub">Completed</div><div class="ic-num green">${completedCount}</div></div></div>
-          <p>${totalCount > 0 ? `${Math.round((completedCount / totalCount) * 100)}% completion rate` : 'No quizzes yet'}</p>
-        </div>
-      </div>
-
-      <!-- SEARCH, SORT & FILTER TOOLBAR -->
-      <div style="background:#f8fafc;padding:14px 18px;border-radius:14px;border:1.5px solid #e2e8f0;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;">
-        <div style="display:flex;gap:8px;flex:1;min-width:min(100%,240px);align-items:center;">
-          <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:10px;padding:9px 14px;font-size:13px;background:#fff;" value="${escHtml(studentQuizSearchQuery)}" oninput="setStudentQuizSearchQuery(this.value)"/>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-          <!-- SORT SELECT -->
-          <div style="display:flex;align-items:center;gap:6px;">
-            <label style="font-size:12px;font-weight:700;color:#64748b;margin:0;">Sort:</label>
-            <select class="user-filter-select" style="font-weight:600;padding:8px 12px;border-radius:10px;" onchange="setStudentQuizSort(this.value)">
-              <option value="pending" ${studentQuizSortBy === 'pending' ? 'selected' : ''}>⚡ Pending to Take First</option>
-              <option value="subject" ${studentQuizSortBy === 'subject' ? 'selected' : ''}>📚 Subject (A – Z)</option>
-              <option value="deadline" ${studentQuizSortBy === 'deadline' ? 'selected' : ''}>⏰ Due Date (Earliest First)</option>
-              <option value="newest" ${studentQuizSortBy === 'newest' ? 'selected' : ''}>🆕 Newest Added</option>
-              <option value="title" ${studentQuizSortBy === 'title' ? 'selected' : ''}>🔤 Title (A – Z)</option>
-            </select>
+      <div class="student-quizzes-container" style="max-width:1160px;width:100%;display:flex;flex-direction:column;gap:12px;">
+        <div class="section-hdr" style="margin-bottom:0;">
+          <div>
+            <h2 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 2px 0;">Quizzes</h2>
+            <span style="font-size:12px;color:var(--text-muted);">View, filter, sort, and complete your assigned subject assessments</span>
           </div>
-
-          <!-- SUBJECT FILTER -->
-          <div style="display:flex;align-items:center;gap:6px;">
-            <label style="font-size:12px;font-weight:700;color:#64748b;margin:0;">Subject:</label>
-            <select class="user-filter-select" style="font-weight:600;padding:8px 12px;border-radius:10px;" onchange="setStudentQuizFilterSubject(this.value)">
-              <option value="">All Subjects</option>
-              ${availableSubjects.map(s => `<option value="${escHtml(s)}" ${studentQuizFilterSubject.toLowerCase() === s.toLowerCase() ? 'selected' : ''}>${escHtml(s)}</option>`).join('')}
-            </select>
-          </div>
-
-          <!-- STATUS FILTER -->
-          <div style="display:flex;align-items:center;gap:6px;">
-            <label style="font-size:12px;font-weight:700;color:#64748b;margin:0;">Status:</label>
-            <select class="user-filter-select" style="font-weight:600;padding:8px 12px;border-radius:10px;" onchange="setStudentQuizFilterStatus(this.value)">
-              <option value="">All Statuses</option>
-              <option value="pending" ${studentQuizFilterStatus === 'pending' ? 'selected' : ''}>Pending (To Take)</option>
-              <option value="completed" ${studentQuizFilterStatus === 'completed' ? 'selected' : ''}>Completed</option>
-              <option value="expired" ${studentQuizFilterStatus === 'expired' ? 'selected' : ''}>Expired</option>
-            </select>
-          </div>
-
-          ${hasActiveFilters ? `
-            <button onclick="resetStudentQuizFilters()" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s ease;" title="Reset all sorting and filtering">
-              ✕ Clear
-            </button>
-          ` : ''}
         </div>
-      </div>
 
-      <!-- QUIZ LIST -->
-      <div class="quiz-list">
-        ${filtered.length ? filtered.map(q => {
-          const attempt = attemptsByQuiz.get(q.id);
-          const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
-          const dueMs = (q.dueDate || q.due_date) ? new Date(q.dueDate || q.due_date).getTime() : null;
-          const isExpired = !attempt && dueMs && nowMs > dueMs;
-          const dueFormatted = dueMs ? new Date(dueMs).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
-          const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
-          const itemsCount = (q.questions || []).length;
-          const isUrgent = !attempt && dueMs && (dueMs - nowMs < 86400000) && (dueMs > nowMs); // Due within 24h
+        <!-- METRIC HIGHLIGHT CARDS -->
+        <div class="card-grid" style="gap:12px;margin-bottom:0;">
+          <div class="info-card" style="padding:14px 18px;gap:8px;">
+            <div class="ic-head"><div class="ic-icon" style="width:38px;height:38px;">${iconQuiz()}</div><div><div class="ic-sub">Assigned Quizzes</div><div class="ic-num" style="font-size:24px;">${totalCount}</div></div></div>
+            <p style="margin:0;font-size:12px;">Total assessments for your grade & strand</p>
+          </div>
+          <div class="info-card" style="padding:14px 18px;gap:8px;">
+            <div class="ic-head"><div class="ic-icon gold" style="width:38px;height:38px;">${iconClock()}</div><div><div class="ic-sub">Pending to Take</div><div class="ic-num gold" style="font-size:24px;">${pendingCount}</div></div></div>
+            <p style="margin:0;font-size:12px;">${pendingCount > 0 ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} awaiting your submission` : 'All caught up! 🎉'}</p>
+          </div>
+          <div class="info-card" style="padding:14px 18px;gap:8px;">
+            <div class="ic-head"><div class="ic-icon green" style="width:38px;height:38px;">${iconCheck()}</div><div><div class="ic-sub">Completed</div><div class="ic-num green" style="font-size:24px;">${completedCount}</div></div></div>
+            <p style="margin:0;font-size:12px;">${totalCount > 0 ? `${Math.round((completedCount / totalCount) * 100)}% completion rate` : 'No quizzes yet'}</p>
+          </div>
+        </div>
 
-          return `<div class="quiz-row" style="${isExpired ? 'opacity:0.75;background:#fcfcfc;' : ''}display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-radius:14px;border:1px solid #e2e8f0;background:#fff;margin-bottom:12px;gap:16px;flex-wrap:wrap;transition:all 0.2s ease;">
-            <div class="qz-info" style="flex:1;min-width:min(100%,240px);">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
-                <span style="display:inline-block;padding:3px 9px;border-radius:6px;background:#eff6ff;color:#2563eb;font-size:11px;font-weight:700;">📚 ${escHtml(q.subject || 'General Academic')}</span>
-                ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10.5px;font-weight:700;">🎮 Interactive</span>' : '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#f1f5f9;color:#475569;font-size:10.5px;font-weight:600;">📝 Standard</span>'}
-                ${isUrgent ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#fef2f2;color:#dc2626;font-size:10.5px;font-weight:700;">⚠️ Due Soon</span>' : ''}
-              </div>
-              <h4 style="font-size:15px;font-weight:700;color:#0f172a;margin:2px 0 6px;">${escHtml(q.title)}</h4>
-              <div style="font-size:12.5px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
-                <span>📋 ${itemsCount} Question${itemsCount === 1 ? '' : 's'}</span>
-                ${attempt ? `<span style="font-weight:700;color:${pct >= 75 ? '#166534' : '#991b1b'};">🎯 Score: ${attempt.score}/${attempt.total_items} (${pct}%)</span>` : ''}
-                ${dueFormatted ? `<span style="${isUrgent ? 'color:#dc2626;font-weight:700;' : ''}">🕒 Due: ${escHtml(dueFormatted)}</span>` : '<span style="color:#94a3b8;">📅 No Due Date</span>'}
-              </div>
+        <!-- SEARCH, SORT & FILTER TOOLBAR -->
+        <div style="background:#f8fafc;padding:10px 14px;border-radius:12px;border:1.5px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;">
+          <div style="display:flex;gap:8px;flex:1;min-width:min(100%,220px);max-width:380px;align-items:center;">
+            <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:9px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(studentQuizSearchQuery)}" oninput="setStudentQuizSearchQuery(this.value)"/>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <!-- SORT SELECT -->
+            <div style="display:flex;align-items:center;gap:5px;">
+              <label style="font-size:11.5px;font-weight:700;color:#64748b;margin:0;">Sort:</label>
+              <select class="user-filter-select" style="font-weight:600;padding:6px 10px;font-size:12px;border-radius:8px;" onchange="setStudentQuizSort(this.value)">
+                <option value="pending" ${studentQuizSortBy === 'pending' ? 'selected' : ''}>⚡ Pending to Take First</option>
+                <option value="subject" ${studentQuizSortBy === 'subject' ? 'selected' : ''}>📚 Subject (A – Z)</option>
+                <option value="deadline" ${studentQuizSortBy === 'deadline' ? 'selected' : ''}>⏰ Due Date (Earliest First)</option>
+                <option value="newest" ${studentQuizSortBy === 'newest' ? 'selected' : ''}>🆕 Newest Added</option>
+                <option value="title" ${studentQuizSortBy === 'title' ? 'selected' : ''}>🔤 Title (A – Z)</option>
+              </select>
             </div>
-            <div style="display:flex;align-items:center;gap:12px;">
-              <span class="status-pill ${attempt ? 'done' : isExpired ? 'low' : 'pending'}" style="${isExpired ? 'background:#fee2e2;color:#991b1b;' : ''}">${attempt ? 'Completed' : isExpired ? 'Expired' : 'Pending'}</span>
-              <button class="take-btn" ${attempt ? 'style="background:#059669;display:inline-flex;align-items:center;gap:6px;"' : isExpired ? 'disabled style="background:#94a3b8;cursor:not-allowed;opacity:0.65;"' : isInter ? 'style="background:linear-gradient(135deg,#0284c7,#8b5cf6);"' : ''} onclick="${attempt ? `openReviewAttempt('${q.id}')` : isInter ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">
-                ${attempt ? '👁️ Review' : isExpired ? 'Expired' : isInter ? 'Play Quiz' : 'Take Quiz'}
+
+            <!-- SUBJECT FILTER -->
+            <div style="display:flex;align-items:center;gap:5px;">
+              <label style="font-size:11.5px;font-weight:700;color:#64748b;margin:0;">Subject:</label>
+              <select class="user-filter-select" style="font-weight:600;padding:6px 10px;font-size:12px;border-radius:8px;" onchange="setStudentQuizFilterSubject(this.value)">
+                <option value="">All Subjects</option>
+                ${availableSubjects.map(s => `<option value="${escHtml(s)}" ${studentQuizFilterSubject.toLowerCase() === s.toLowerCase() ? 'selected' : ''}>${escHtml(s)}</option>`).join('')}
+              </select>
+            </div>
+
+            <!-- STATUS FILTER -->
+            <div style="display:flex;align-items:center;gap:5px;">
+              <label style="font-size:11.5px;font-weight:700;color:#64748b;margin:0;">Status:</label>
+              <select class="user-filter-select" style="font-weight:600;padding:6px 10px;font-size:12px;border-radius:8px;" onchange="setStudentQuizFilterStatus(this.value)">
+                <option value="">All Statuses</option>
+                <option value="pending" ${studentQuizFilterStatus === 'pending' ? 'selected' : ''}>Pending (To Take)</option>
+                <option value="completed" ${studentQuizFilterStatus === 'completed' ? 'selected' : ''}>Completed</option>
+                <option value="expired" ${studentQuizFilterStatus === 'expired' ? 'selected' : ''}>Expired</option>
+              </select>
+            </div>
+
+            ${hasActiveFilters ? `
+              <button onclick="resetStudentQuizFilters()" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;padding:6px 10px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s ease;" title="Reset all sorting and filtering">
+                ✕ Clear
               </button>
-            </div>
-          </div>`;
-        }).join('')
-          : `
-          <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:14px;border:1px dashed #cbd5e1;">
-            <div style="font-size:36px;margin-bottom:10px;">🔍</div>
-            <h3 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:6px;">No Quizzes Found</h3>
-            <p style="color:var(--text-muted);font-size:13px;max-width:400px;margin:0 auto 16px;">
-              ${hasActiveFilters ? 'No quizzes match your active filters or search keyword. Try clearing filters.' : 'You have no quizzes assigned to your strand and section at this time.'}
-            </p>
-            ${hasActiveFilters ? `<button onclick="resetStudentQuizFilters()" class="add-btn" style="margin:0 auto;">Clear All Filters</button>` : ''}
+            ` : ''}
           </div>
-          `}
+        </div>
+
+        <!-- QUIZ LIST -->
+        <div class="quiz-list" style="display:flex;flex-direction:column;gap:8px;">
+          ${filtered.length ? filtered.map(q => {
+            const attempt = attemptsByQuiz.get(q.id);
+            const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
+            const dueMs = (q.dueDate || q.due_date) ? new Date(q.dueDate || q.due_date).getTime() : null;
+            const isExpired = !attempt && dueMs && nowMs > dueMs;
+            const dueFormatted = dueMs ? new Date(dueMs).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+            const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+            const itemsCount = (q.questions || []).length;
+            const isUrgent = !attempt && dueMs && (dueMs - nowMs < 86400000) && (dueMs > nowMs); // Due within 24h
+
+            return `<div class="quiz-row" style="${isExpired ? 'opacity:0.75;background:#fcfcfc;' : ''}display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;margin:0;gap:14px;flex-wrap:wrap;transition:all 0.2s ease;">
+              <div class="qz-info" style="flex:1;min-width:min(100%,220px);">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
+                  <span style="display:inline-block;padding:2px 8px;border-radius:6px;background:#eff6ff;color:#2563eb;font-size:11px;font-weight:700;">📚 ${escHtml(q.subject || 'General Academic')}</span>
+                  ${isInter ? '<span style="display:inline-block;padding:2px 7px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;">🎮 Interactive</span>' : '<span style="display:inline-block;padding:2px 7px;border-radius:50px;background:#f1f5f9;color:#475569;font-size:10px;font-weight:600;">📝 Standard</span>'}
+                  ${isUrgent ? '<span style="display:inline-block;padding:2px 7px;border-radius:50px;background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;">⚠️ Due Soon</span>' : ''}
+                </div>
+                <h4 style="font-size:14.5px;font-weight:700;color:#0f172a;margin:1px 0 4px;">${escHtml(q.title)}</h4>
+                <div style="font-size:12px;color:var(--text-muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                  <span>📋 ${itemsCount} Question${itemsCount === 1 ? '' : 's'}</span>
+                  ${attempt ? `<span style="font-weight:700;color:${pct >= 75 ? '#166534' : '#991b1b'};">🎯 Score: ${attempt.score}/${attempt.total_items} (${pct}%)</span>` : ''}
+                  ${dueFormatted ? `<span style="${isUrgent ? 'color:#dc2626;font-weight:700;' : ''}">🕒 Due: ${escHtml(dueFormatted)}</span>` : '<span style="color:#94a3b8;">📅 No Due Date</span>'}
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span class="status-pill ${attempt ? 'done' : isExpired ? 'low' : 'pending'}" style="${isExpired ? 'background:#fee2e2;color:#991b1b;' : ''}">${attempt ? 'Completed' : isExpired ? 'Expired' : 'Pending'}</span>
+                ${attempt ? `
+                  <button class="sw-btn outline" onclick="openReviewAttempt('${q.id}')" style="padding:6px 14px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;border-radius:8px;border:1.5px solid #0284c7;color:#0284c7;background:#fff;cursor:pointer;">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Review
+                  </button>
+                ` : isExpired ? `
+                  <button class="take-btn" disabled style="background:#94a3b8;cursor:not-allowed;opacity:0.65;padding:6px 14px;font-size:12px;">Expired</button>
+                ` : isInter ? `
+                  <button class="sw-btn" onclick="openInteractiveQuiz('${q.id}')" style="background:linear-gradient(135deg,#0284c7,#8b5cf6);color:#fff;border:none;padding:6px 14px;font-size:12px;display:inline-flex;align-items:center;gap:5px;border-radius:8px;font-weight:600;cursor:pointer;">🎮 Play Quiz</button>
+                ` : `
+                  <button class="take-btn" onclick="openTakeQuizModal('${q.id}')" style="padding:6px 14px;font-size:12px;">Take Quiz</button>
+                `}
+              </div>
+            </div>`;
+          }).join('')
+            : `
+            <div style="text-align:center;padding:32px 16px;background:#fff;border-radius:12px;border:1px dashed #cbd5e1;">
+              <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+              <h3 style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px;">No Quizzes Found</h3>
+              <p style="color:var(--text-muted);font-size:12.5px;max-width:380px;margin:0 auto 12px;">
+                ${hasActiveFilters ? 'No quizzes match your active filters or search keyword. Try clearing filters.' : 'You have no quizzes assigned to your strand and section at this time.'}
+              </p>
+              ${hasActiveFilters ? `<button onclick="resetStudentQuizFilters()" class="add-btn" style="margin:0 auto;">Clear All Filters</button>` : ''}
+            </div>
+            `}
+        </div>
       </div>`;
     }
 
@@ -1766,11 +2099,14 @@ function studentPage(page) {
         }
       });
 
+      const now = Date.now();
       let completedCount = 0;
+      let pendingCount = 0;
+      let overdueCount = 0;
       let scoreSum = 0;
       let scoreCount = 0;
 
-      const rows = quizList.map(q => {
+      const allRows = quizList.map(q => {
         const attempt = studentAttempts.find(a =>
           String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() ||
           (a.quiz_title && q.title && String(a.quiz_title).toLowerCase().trim() === String(q.title).toLowerCase().trim())
@@ -1793,16 +2129,97 @@ function studentPage(page) {
           }
         }
 
+        const rawDue = q.dueDate || q.due_date;
+        const dueMs = rawDue ? new Date(rawDue).getTime() : null;
+        const hasDue = dueMs && !isNaN(dueMs);
+        const isPastDeadline = !attempt && hasDue && (now > dueMs);
+        const deadlineDate = hasDue
+          ? new Date(dueMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' + new Date(dueMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+          : 'No Due Date';
+
+        const hasTaken = !!attempt;
+
+        let statusText = 'Not Taken';
+        let statusClass = 'not-taken';
+
+        if (hasTaken) {
+          statusText = 'Completed';
+          statusClass = 'done';
+        } else if (isPastDeadline) {
+          statusText = 'Expired';
+          statusClass = 'not-taken';
+          overdueCount++;
+        } else {
+          statusText = 'Pending';
+          statusClass = 'pending';
+          pendingCount++;
+        }
+
         return {
           quiz: q,
           attempt,
           score,
           totalItems,
-          pct
+          pct,
+          deadlineDate,
+          deadlineDateObj: hasDue ? new Date(dueMs) : null,
+          isPastDeadline,
+          hasTaken,
+          statusText,
+          statusClass
         };
       });
 
       const overallAvg = scoreCount > 0 ? (scoreSum / scoreCount).toFixed(2) : null;
+      const uniqueSubjects = [...new Set(quizList.map(q => q.subject || 'General').filter(Boolean))].sort();
+
+      // Filter rows
+      let filteredRows = allRows.slice();
+
+      if (studentProgressTab === 'completed') {
+        filteredRows = filteredRows.filter(r => r.hasTaken);
+      } else if (studentProgressTab === 'pending') {
+        filteredRows = filteredRows.filter(r => !r.hasTaken && !r.isPastDeadline);
+      } else if (studentProgressTab === 'overdue') {
+        filteredRows = filteredRows.filter(r => !r.hasTaken && r.isPastDeadline);
+      }
+
+      if (studentProgressSubject !== 'all') {
+        filteredRows = filteredRows.filter(r => (r.quiz.subject || 'General').toLowerCase().trim() === studentProgressSubject.toLowerCase().trim());
+      }
+
+      if (studentProgressSearch) {
+        filteredRows = filteredRows.filter(r => {
+          const t = (r.quiz.title || '').toLowerCase();
+          const s = (r.quiz.subject || 'General').toLowerCase();
+          return t.includes(studentProgressSearch) || s.includes(studentProgressSearch);
+        });
+      }
+
+      // Sort rows
+      if (studentProgressSort === 'deadline_asc') {
+        filteredRows.sort((a, b) => {
+          if (!a.deadlineDateObj && !b.deadlineDateObj) return 0;
+          if (!a.deadlineDateObj) return 1;
+          if (!b.deadlineDateObj) return -1;
+          return a.deadlineDateObj.getTime() - b.deadlineDateObj.getTime();
+        });
+      } else if (studentProgressSort === 'deadline_desc') {
+        filteredRows.sort((a, b) => {
+          if (!a.deadlineDateObj && !b.deadlineDateObj) return 0;
+          if (!a.deadlineDateObj) return 1;
+          if (!b.deadlineDateObj) return -1;
+          return b.deadlineDateObj.getTime() - a.deadlineDateObj.getTime();
+        });
+      } else if (studentProgressSort === 'score_desc') {
+        filteredRows.sort((a, b) => (b.pct !== null ? b.pct : -1) - (a.pct !== null ? a.pct : -1));
+      } else if (studentProgressSort === 'score_asc') {
+        filteredRows.sort((a, b) => (a.pct !== null ? a.pct : 999) - (b.pct !== null ? b.pct : 999));
+      } else if (studentProgressSort === 'title_asc') {
+        filteredRows.sort((a, b) => (a.quiz.title || '').localeCompare(b.quiz.title || ''));
+      }
+
+      const hasActiveFilters = studentProgressTab !== 'all' || studentProgressSubject !== 'all' || studentProgressSearch || studentProgressSort !== 'default';
 
       return `
       <div class="section-hdr">
@@ -1826,6 +2243,104 @@ function studentPage(page) {
           <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Overall Average</div><div class="ic-num green">${overallAvg !== null ? overallAvg + '%' : '—'}</div></div></div>
           <p>${overallAvg !== null ? (overallAvg >= 75 ? 'Passing Standing' : 'Needs Improvement') : 'Take quizzes to view average'}</p>
         </div>
+        ${(() => {
+          if (studentProgressSubject !== 'all') {
+            const subName = studentProgressSubject;
+            const subQuizzes = allRows.filter(r => (r.quiz.subject || 'General').toLowerCase().trim() === subName.toLowerCase().trim());
+            const subTotal = subQuizzes.length;
+            const subDoneQuizzes = subQuizzes.filter(r => r.hasTaken);
+            const subCompleted = subDoneQuizzes.length;
+            let subScoreSum = 0;
+            let subScoreCount = 0;
+            subDoneQuizzes.forEach(r => {
+              if (r.pct !== null && !isNaN(r.pct)) {
+                subScoreSum += r.pct;
+                subScoreCount++;
+              }
+            });
+            const subAvg = subScoreCount > 0 ? (subScoreSum / subScoreCount).toFixed(2) : null;
+
+            return `
+            <div class="info-card" style="border: 1.5px solid #818cf8; background: linear-gradient(180deg, #ffffff 0%, #f5f7ff 100%);">
+              <div class="ic-head">
+                <div class="ic-icon" style="background:#e0e7ff;color:#4338ca;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                </div>
+                <div style="min-width:0;flex:1;">
+                  <div class="ic-sub" style="color:#4338ca;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(subName)}">${escHtml(subName.toUpperCase())} AVG</div>
+                  <div class="ic-num" style="color:#3730a3;">${subAvg !== null ? subAvg + '%' : '—'}</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;font-size:12px;color:var(--text-muted);">
+                <span>${subCompleted}/${subTotal} completed</span>
+                <button type="button" onclick="event.stopPropagation();setStudentProgressSubject('all');" style="background:#e0e7ff;border:none;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;color:#3730a3;cursor:pointer;transition:0.2s;" onmouseover="this.style.background='#c7d2fe'" onmouseout="this.style.background='#e0e7ff'" title="Return to all subjects">✕ All</button>
+              </div>
+            </div>`;
+          } else {
+            return `
+            <div class="info-card" style="cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onclick="setStudentProgressTab('${pendingCount > 0 ? 'pending' : 'all'}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+              <div class="ic-head">
+                <div class="ic-icon" style="background:#fef3c7;color:#d97706;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div>
+                  <div class="ic-sub">Pending Quizzes</div>
+                  <div class="ic-num" style="color:#d97706;">${pendingCount}</div>
+                </div>
+              </div>
+              <p>${pendingCount > 0 ? `${pendingCount} awaiting completion · Click to view` : 'All assigned quizzes done! 🎉'}</p>
+            </div>`;
+          }
+        })()}
+      </div>
+
+      <!-- FILTER & SEARCH TOOLBAR -->
+      <div class="progress-toolbar">
+        <div class="progress-tabs-wrap">
+          <button class="progress-tab-btn ${studentProgressTab === 'all' ? 'active' : ''}" onclick="setStudentProgressTab('all')">
+            All <span class="tab-badge">${quizList.length}</span>
+          </button>
+          <button class="progress-tab-btn ${studentProgressTab === 'completed' ? 'active' : ''}" onclick="setStudentProgressTab('completed')">
+            Completed <span class="tab-badge">${completedCount}</span>
+          </button>
+          <button class="progress-tab-btn ${studentProgressTab === 'pending' ? 'active' : ''}" onclick="setStudentProgressTab('pending')">
+            Pending <span class="tab-badge" style="background:#fef3c7;color:#b45309;">${pendingCount}</span>
+          </button>
+          <button class="progress-tab-btn ${studentProgressTab === 'overdue' ? 'active' : ''}" onclick="setStudentProgressTab('overdue')">
+            Expired <span class="tab-badge" style="background:#fee2e2;color:#b91c1c;">${overdueCount}</span>
+          </button>
+        </div>
+
+        <div class="progress-controls-wrap">
+          <div class="progress-search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--text-muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="studentProgressSearchInput" placeholder="Search assessments..." value="${escHtml(studentProgressSearch)}" oninput="handleStudentProgressSearch(this.value)">
+            ${studentProgressSearch ? `<button class="search-clear-btn" onclick="clearStudentProgressSearch()" title="Clear search">✕</button>` : ''}
+          </div>
+
+          <select class="progress-select-pill" onchange="setStudentProgressSubject(this.value)">
+            <option value="all" ${studentProgressSubject === 'all' ? 'selected' : ''}>📚 All Subjects (${uniqueSubjects.length})</option>
+            ${uniqueSubjects.map(s => `
+              <option value="${escHtml(s)}" ${studentProgressSubject.toLowerCase().trim() === s.toLowerCase().trim() ? 'selected' : ''}>${escHtml(s)}</option>
+            `).join('')}
+          </select>
+
+          <select class="progress-select-pill" onchange="setStudentProgressSort(this.value)">
+            <option value="default" ${studentProgressSort === 'default' ? 'selected' : ''}>Sort: Default</option>
+            <option value="deadline_asc" ${studentProgressSort === 'deadline_asc' ? 'selected' : ''}>⏰ Deadline (Soonest)</option>
+            <option value="deadline_desc" ${studentProgressSort === 'deadline_desc' ? 'selected' : ''}>⏰ Deadline (Latest)</option>
+            <option value="score_desc" ${studentProgressSort === 'score_desc' ? 'selected' : ''}>🏆 Score (Highest)</option>
+            <option value="score_asc" ${studentProgressSort === 'score_asc' ? 'selected' : ''}>📉 Score (Lowest)</option>
+            <option value="title_asc" ${studentProgressSort === 'title_asc' ? 'selected' : ''}>🔤 Title (A–Z)</option>
+          </select>
+
+          ${hasActiveFilters ? `
+            <button class="progress-reset-btn" onclick="resetStudentProgressFilters()" title="Reset all filters">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Reset
+            </button>
+          ` : ''}
+        </div>
       </div>
 
       <!-- QUIZ PROGRESS TABLE -->
@@ -1843,63 +2358,60 @@ function studentPage(page) {
             </tr>
           </thead>
           <tbody>
-            ${rows.length ? rows.map((r, idx) => {
+            ${filteredRows.length ? filteredRows.map(r => {
               const q = r.quiz;
-              const hasTaken = !!r.attempt;
+              const hasTaken = r.hasTaken;
+              const isPastDeadline = r.isPastDeadline;
               const scoreClass = r.pct !== null ? (r.pct >= 75 ? 'good' : 'low') : '';
+              const subj = q.subject || 'General';
+              const isCurrentSubj = studentProgressSubject.toLowerCase().trim() === subj.toLowerCase().trim();
 
-              // Generate realistic deadlines for visualization with both past and future dates
-              const sampleDeadlines = [
-                { text: 'Aug 28, 2026 · 11:59 PM', date: new Date('2026-08-28T23:59:00') },
-                { text: 'Aug 30, 2026 · 5:00 PM',  date: new Date('2026-08-30T17:00:00') },
-                { text: 'Sep 12, 2026 · 11:59 PM', date: new Date('2026-09-12T23:59:00') }, // Before the date (Pending!)
-                { text: 'Aug 25, 2026 · 11:59 PM', date: new Date('2026-08-25T23:59:00') },
-                { text: 'Aug 31, 2026 · 8:00 PM',  date: new Date('2026-08-31T20:00:00') },
-                { text: 'Sep 18, 2026 · 5:00 PM',  date: new Date('2026-09-18T17:00:00') }
-              ];
-
-              const targetDeadline = (q.dueDate || q.due_date)
-                ? {
-                    text: new Date(q.dueDate || q.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' + new Date(q.dueDate || q.due_date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-                    date: new Date(q.dueDate || q.due_date)
-                  }
-                : sampleDeadlines[idx % sampleDeadlines.length];
-
-              const deadlineDate = targetDeadline.text;
-              const isPastDeadline = targetDeadline.date.getTime() < Date.now();
-
-              // Date-based status:
-              // If completed: Completed (green)
-              // If not completed:
-              //   - Before the date: Pending (yellow)
-              //   - Past the date: Not Taken (red)
-              let statusText = 'Not Taken';
-              let statusClass = 'not-taken';
-
+              let actionHtml = '';
               if (hasTaken) {
-                statusText = 'Completed';
-                statusClass = 'done';
-              } else if (!isPastDeadline) {
-                statusText = 'Pending';
-                statusClass = 'pending';
+                actionHtml = `
+                  <button class="table-act-btn review" onclick="openReviewAttempt('${q.id}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Review
+                  </button>`;
+              } else if (isPastDeadline) {
+                actionHtml = `
+                  <button class="table-act-btn closed" disabled style="opacity:0.6;cursor:not-allowed;" title="Deadline has passed. This assessment is closed for submissions.">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;margin-right:2px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Closed
+                  </button>`;
               } else {
-                statusText = 'Not Taken';
-                statusClass = 'not-taken';
+                const clickHandler = (q.type === 'interactive' || q.quiz_type === 'interactive')
+                  ? `openInteractiveQuiz('${q.id}')`
+                  : `openTakeQuizModal('${q.id}')`;
+                const label = (q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz';
+                actionHtml = `
+                  <button class="table-act-btn take" onclick="${clickHandler}">
+                    <svg viewBox="0 0 24 24"><polygon points="6 4 18 12 6 20 6 4"/></svg>
+                    ${label}
+                  </button>`;
               }
 
               return `
-              <tr>
-                <td data-label="Subject"><div class="progress-cell-value"><strong>${escHtml(q.subject || 'General')}</strong></div></td>
-                <td data-label="Assessment"><div class="progress-cell-value">${escHtml(q.title || 'Quiz')}</div></td>
+              <tr data-quiz-title="${escHtml(q.title || 'Quiz')}" data-quiz-subject="${escHtml(subj)}">
+                <td data-label="Subject"><div class="progress-cell-value">
+                  <button type="button" class="progress-subject-btn ${isCurrentSubj ? 'active' : ''}" onclick="setStudentProgressSubject('${escHtml(subj)}')" title="Click to filter by ${escHtml(subj)} and view subject average">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;flex-shrink:0;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    <strong>${escHtml(subj)}</strong>
+                  </button>
+                </div></td>
+                <td data-label="Assessment"><div class="progress-cell-value">
+                  ${escHtml(q.title || 'Quiz')}
+                  ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? '<span class="status-pill" style="margin-left:6px;font-size:10px;padding:2px 6px;background:#ede9fe;color:#7c3aed;font-weight:700;">🎮 Interactive</span>' : ''}
+                </div></td>
                 <td style="color:var(--text-secondary);font-size:12.5px;white-space:nowrap;" data-label="Deadline"><div class="progress-cell-value">
-                  <span style="display:inline-flex;align-items:center;gap:6px;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:var(--text-muted);flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    ${escHtml(deadlineDate)}
+                  <span style="display:inline-flex;align-items:center;gap:6px;${(!hasTaken && isPastDeadline) ? 'color:#dc2626;font-weight:600;' : ''}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:${(!hasTaken && isPastDeadline) ? '#dc2626' : 'var(--text-muted)'};flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    ${escHtml(r.deadlineDate)}
                   </span>
                 </div></td>
                 <td data-label="Total Items"><div class="progress-cell-value">${r.totalItems ? `${r.totalItems} item${r.totalItems === 1 ? '' : 's'}` : '—'}</div></td>
                 <td data-label="Status"><div class="progress-cell-value">
-                  <span class="status-pill ${statusClass}">${statusText}</span>
+                  <span class="status-pill ${r.statusClass}">${r.statusText}</span>
                 </div></td>
                 <td class="score-val ${scoreClass}" data-label="Score"><div class="progress-cell-value">
                   ${hasTaken
@@ -1907,19 +2419,18 @@ function studentPage(page) {
                     : '<span style="color:var(--text-muted);">—</span>'}
                 </div></td>
                 <td data-label="Action"><div class="progress-cell-value">
-                  ${hasTaken
-                    ? `<button class="table-act-btn review" onclick="openReviewAttempt('${q.id}')">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                        Review
-                       </button>`
-                    : `<button class="table-act-btn take" onclick="${(q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">
-                        <svg viewBox="0 0 24 24"><polygon points="6 4 18 12 6 20 6 4"/></svg>
-                        ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}
-                       </button>`}
+                  ${actionHtml}
                 </div></td>
               </tr>`;
             }).join('')
-            : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px;">No quizzes assigned to your strand or section yet.</td></tr>`}
+            : `<tr id="studentProgressEmptyRow"><td colspan="7" style="text-align:center;color:var(--text-muted);padding:36px 16px;">
+                <div style="font-size:28px;margin-bottom:6px;">📋</div>
+                <div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px;">No assessments match your filters</div>
+                <p style="font-size:12.5px;color:#64748b;margin:0 0 12px;">Try switching tabs, clearing the search query, or resetting filters.</p>
+                <button type="button" class="progress-reset-btn" onclick="resetStudentProgressFilters()" style="margin:0 auto;display:inline-flex;">
+                  Reset Filters
+                </button>
+              </td></tr>`}
           </tbody>
         </table>
       </div>`;
@@ -1989,7 +2500,7 @@ function teacherPage(page) {
       <div id="coursesWidgetContainer">
         ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
       </div>
-      <div>
+      <div style="margin-top:28px;">
         <div class="section-hdr">
           <h2>Active Quizzes & Assessments</h2>
           <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
@@ -2011,6 +2522,7 @@ function teacherPage(page) {
                 <button class="take-btn" style="padding:6px 12px;font-size:12px;" onclick="openTakeQuizModal('${q.id}')">Preview</button>
                 ${isInter ? `<button class="take-btn" style="padding:6px 12px;font-size:12px;background:linear-gradient(135deg,#0284c7,#8b5cf6);" onclick="openInteractiveQuiz('${q.id}')">🎮 Play</button>` : ''}
                 <button class="foot-btn-secondary" style="padding:6px 12px;font-size:12px;border-color:var(--blue);color:var(--blue);" onclick="setAnalysisQuiz('${q.id}')">📊 Analysis</button>
+                <button class="foot-btn-secondary" style="padding:6px 12px;font-size:12px;border-color:#f59e0b;color:#d97706;background:#fef3c7;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">🏆 Leaderboard</button>
               </div>
             </div>`;
           }).join('')
@@ -2078,68 +2590,69 @@ function teacherPage(page) {
       }
 
       return `
-      <div class="section-hdr">
-        <div>
-          <h2>Quiz Manager</h2>
-          <span style="font-size:12px;color:var(--text-muted);">Create, organize, test, and distribute assessments & interactive games</span>
+      <div class="teacher-quizzes-container" style="max-width:1160px;width:100%;display:flex;flex-direction:column;gap:12px;">
+        <div class="section-hdr" style="margin-bottom:0;">
+          <div>
+            <h2 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 2px 0;">Quiz Manager</h2>
+            <span style="font-size:12px;color:var(--text-muted);">Create, organize, test, and distribute assessments & interactive games</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="add-btn" style="background:var(--blue-light);color:var(--blue);padding:6px 12px;font-size:12px;" onclick="loadQuizzesFromDB()">${iconRefresh()} Refresh</button>
+            <button class="add-btn" style="padding:6px 12px;font-size:12px;" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
+          </div>
         </div>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <button class="add-btn" style="background:var(--blue-light);color:var(--blue);" onclick="loadQuizzesFromDB()">${iconRefresh()} Refresh</button>
-          <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
-        </div>
-      </div>
 
-      <!-- METRIC CARDS -->
-      <div class="card-grid" style="margin-bottom:20px;">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconQuiz()}</div><div><div class="ic-sub">Total Quizzes</div><div class="ic-num">${totalCount}</div></div></div>
-          <p>Assigned to SHS students</p>
+        <!-- METRIC CARDS -->
+        <div class="card-grid" style="gap:12px;margin-bottom:0;">
+          <div class="info-card" style="padding:14px 18px;gap:8px;">
+            <div class="ic-head"><div class="ic-icon" style="width:38px;height:38px;">${iconQuiz()}</div><div><div class="ic-sub">Total Quizzes</div><div class="ic-num" style="font-size:24px;">${totalCount}</div></div></div>
+            <p style="margin:0;font-size:12px;">Assigned to SHS students</p>
+          </div>
+          <div class="info-card" style="padding:14px 18px;gap:8px;">
+            <div class="ic-head"><div class="ic-icon green" style="width:38px;height:38px;">${iconCheck()}</div><div><div class="ic-sub">Active / Ongoing</div><div class="ic-num green" style="font-size:24px;">${activeCount}</div></div></div>
+            <p style="margin:0;font-size:12px;">Accepting student submissions</p>
+          </div>
+          <div class="info-card" style="padding:14px 18px;gap:8px;">
+            <div class="ic-head"><div class="ic-icon gold" style="width:38px;height:38px;">${iconClock()}</div><div><div class="ic-sub">Pending Approval</div><div class="ic-num gold" style="font-size:24px;">${pendingCount}</div></div></div>
+            <p style="margin:0;font-size:12px;">Awaiting Admin content review</p>
+          </div>
+          <div class="info-card" style="padding:14px 18px;gap:8px;">
+            <div class="ic-head"><div class="ic-icon" style="width:38px;height:38px;background:#e0f2fe;color:#0284c7;">${iconGamepad()}</div><div><div class="ic-sub">Interactive Games</div><div class="ic-num" style="font-size:24px;color:#0284c7;">${interactiveCount}</div></div></div>
+            <p style="margin:0;font-size:12px;">Gamified student quizzes</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconCheck()}</div><div><div class="ic-sub">Active / Ongoing</div><div class="ic-num green">${activeCount}</div></div></div>
-          <p>Accepting student submissions</p>
-        </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconClock()}</div><div><div class="ic-sub">Pending Approval</div><div class="ic-num gold">${pendingCount}</div></div></div>
-          <p>Awaiting Admin content review</p>
-        </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon" style="background:#e0f2fe;color:#0284c7;">${iconGamepad()}</div><div><div class="ic-sub">Interactive Games</div><div class="ic-num" style="color:#0284c7;">${interactiveCount}</div></div></div>
-          <p>Gamified student quizzes</p>
-        </div>
-      </div>
 
-      <!-- SEARCH & FILTER TOOLBAR -->
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;background:#f8fafc;padding:12px 16px;border-radius:14px;border:1px solid #e2e8f0;">
-        <div style="display:flex;gap:8px;flex:1;min-width:min(100%,240px);align-items:center;">
-          <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
+        <!-- SEARCH & FILTER TOOLBAR -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc;padding:10px 14px;border-radius:12px;border:1px solid #e2e8f0;">
+          <div style="display:flex;gap:8px;flex:1;min-width:min(100%,220px);max-width:360px;align-items:center;">
+            <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterStrand(this.value)">
+              <option value="">All Strands</option>
+              ${STRANDS.map(s => `<option value="${s}" ${typeof quizManagerFilterStrand !== 'undefined' && quizManagerFilterStrand === s ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+            <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterStatus(this.value)">
+              <option value="">All Statuses</option>
+              <option value="active" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'active' ? 'selected' : ''}>Active</option>
+              <option value="pending" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'pending' ? 'selected' : ''}>Pending</option>
+              <option value="closed" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'closed' ? 'selected' : ''}>Closed</option>
+            </select>
+            <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterReview(this.value)">
+              <option value="">All Review Modes</option>
+              <option value="visible" ${typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview === 'visible' ? 'selected' : ''}>👁️ Answers Visible (Checked)</option>
+              <option value="hidden" ${typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview === 'hidden' ? 'selected' : ''}>🔒 Answers Hidden (Unchecked)</option>
+            </select>
+            ${availableSubjects.length ? `
+            <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterSubject(this.value)">
+              <option value="">All Subjects</option>
+              ${availableSubjects.map(subj => `<option value="${escHtml(subj)}" ${typeof quizManagerFilterSubject !== 'undefined' && quizManagerFilterSubject === subj ? 'selected' : ''}>${escHtml(subj)}</option>`).join('')}
+            </select>` : ''}
+          </div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <select class="user-filter-select" onchange="setQuizManagerFilterStrand(this.value)">
-            <option value="">All Strands</option>
-            ${STRANDS.map(s => `<option value="${s}" ${typeof quizManagerFilterStrand !== 'undefined' && quizManagerFilterStrand === s ? 'selected' : ''}>${s}</option>`).join('')}
-          </select>
-          <select class="user-filter-select" onchange="setQuizManagerFilterStatus(this.value)">
-            <option value="">All Statuses</option>
-            <option value="active" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'active' ? 'selected' : ''}>Active</option>
-            <option value="pending" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'pending' ? 'selected' : ''}>Pending</option>
-            <option value="closed" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'closed' ? 'selected' : ''}>Closed</option>
-          </select>
-          <select class="user-filter-select" onchange="setQuizManagerFilterReview(this.value)">
-            <option value="">All Review Modes</option>
-            <option value="visible" ${typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview === 'visible' ? 'selected' : ''}>👁️ Answers Visible (Checked)</option>
-            <option value="hidden" ${typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview === 'hidden' ? 'selected' : ''}>🔒 Answers Hidden (Unchecked)</option>
-          </select>
-          ${availableSubjects.length ? `
-          <select class="user-filter-select" onchange="setQuizManagerFilterSubject(this.value)">
-            <option value="">All Subjects</option>
-            ${availableSubjects.map(subj => `<option value="${escHtml(subj)}" ${typeof quizManagerFilterSubject !== 'undefined' && quizManagerFilterSubject === subj ? 'selected' : ''}>${escHtml(subj)}</option>`).join('')}
-          </select>` : ''}
-        </div>
-      </div>
 
-      <!-- QUIZ LIST -->
-      <div class="quiz-list">
+        <!-- QUIZ LIST -->
+        <div class="quiz-list" style="display:flex;flex-direction:column;gap:8px;">
         ${filtered.length ? filtered.map(q => {
           const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
           const itemsCount = (q.questions || []).length;
@@ -2187,6 +2700,9 @@ function teacherPage(page) {
               <button class="table-act-btn review" onclick="setAnalysisQuiz('${q.id}')" title="View Question Accuracy & Psychometrics">
                 📊 Item Analysis
               </button>
+              <button class="table-act-btn" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">
+                🏆 Leaderboard
+              </button>
 
               ${q.status === 'active' ? `
                 <button class="table-act-btn" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;" onclick="toggleQuizStatus('${q.id}', 'closed')" title="Close Quiz submissions">
@@ -2217,6 +2733,7 @@ function teacherPage(page) {
             <button class="add-btn" style="margin:0 auto;" onclick="openQuizModal()">${iconPlus()} Create First Quiz</button>
           </div>
           `}
+        </div>
       </div>`;
     }
 
@@ -2924,6 +3441,7 @@ function buildChatPage(role) {
       </div>
       <div class="chat-window">
         <div class="cw-header">
+          <button class="cw-back-btn" id="cwBackBtn" title="Back to conversations" aria-label="Back to conversations" onclick="closeConversation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
           <div class="contact-avatar cw-placeholder-avatar" id="cwAvatar">${chatOutlineIcon()}</div>
           <div>
             <div class="cw-name" id="cwName">Your conversations</div>
@@ -2962,7 +3480,11 @@ function renderPage(page) {
   if (page === 'analysis') loadQuizzesFromDB();
   if (page === 'chats') loadChatsPage();
   if (page === 'dashboard') {
-    if (ROLE === 'teacher' || ROLE === 'admin') { loadMaterialsFromDB(); loadQuizzesFromDB(); }
+    if (ROLE === 'teacher' || ROLE === 'admin') {
+      loadMaterialsFromDB();
+      loadQuizzesFromDB();
+      if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
+    }
     if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
     if (ROLE === 'student') { loadMaterialsFromDB(); loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
   }

@@ -640,6 +640,7 @@ app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
       .upload(storagePath, f.buffer, { contentType: f.mimetype });
     if (uploadErr) {
       console.warn('Storage upload error for file:', safeName, uploadErr.message);
+      continue;
     }
 
     const itemTitle = files.length === 1 ? title.trim() : (f.originalname.replace(/\.[^.]+$/, '') || title.trim());
@@ -723,6 +724,10 @@ app.get('/api/materials/:id/download', async (req, res) => {
     .from('learning-materials')
     .createSignedUrl(material.file_url, 60 * 10);
   if (error) return res.status(500).json({ error: error.message });
+
+  if (req.query.redirect === '1') {
+    return res.redirect(data.signedUrl);
+  }
 
   res.json({ url: data.signedUrl, title: material.title, file_type: material.file_type });
 });
@@ -1066,10 +1071,29 @@ function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
       if (!Array.isArray(q.options) || q.options.length < 2) return false;
       q.options = q.options.map(o => cleanAnswerTerm(String(o))).filter(o => !isForbiddenFigureLabel(o));
       if (q.options.length < 2) return false;
-      if (!q.options.includes(q.answer)) {
-        const match = q.options.find(o => String(o).trim().toLowerCase() === String(q.answer || '').trim().toLowerCase());
-        if (match) q.answer = match;
-        else q.answer = q.options[0];
+
+      if (q.multipleAnswers === true || (Array.isArray(q.answers) && q.answers.length > 1)) {
+        const rawAnswers = Array.isArray(q.answers) ? q.answers : (typeof q.answer === 'string' ? q.answer.split(',').map(s => s.trim()) : []);
+        const validAnswers = [];
+        rawAnswers.forEach(rawA => {
+          const match = q.options.find(o => o.toLowerCase() === String(rawA).toLowerCase());
+          if (match && !validAnswers.includes(match)) validAnswers.push(match);
+        });
+        if (validAnswers.length >= 2) {
+          q.multipleAnswers = true;
+          q.answers = validAnswers;
+          q.answer = validAnswers.join(', ');
+        } else {
+          q.multipleAnswers = false;
+          q.answer = validAnswers[0] || q.options[0];
+          q.answers = [q.answer];
+        }
+      } else {
+        if (!q.options.includes(q.answer)) {
+          const match = q.options.find(o => String(o).trim().toLowerCase() === String(q.answer || '').trim().toLowerCase());
+          if (match) q.answer = match;
+          else q.answer = q.options[0];
+        }
       }
       return true;
     }

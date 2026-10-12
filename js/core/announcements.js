@@ -2,16 +2,7 @@
 
 const ANNOUNCEMENTS_STORAGE_KEY = 'scholaria_announcements_v1';
 
-const DEFAULT_HOTLINES = [
-  { id: 'hl_imus_cdrrmo', name: 'Imus Disaster Risk (CDRRMO)', number: '(046) 515-1358', icon: '🚨' },
-  { id: 'hl_imus_bfp', name: 'Imus Bureau of Fire (BFP)', number: '(046) 970-5161', icon: '🚒' },
-  { id: 'hl_imus_pnp', name: 'Imus Police (PNP)', number: '(046) 471-3993', icon: '🚓' },
-  { id: 'hl_imus_hospital', name: 'Medical Center Imus', number: '(046) 471-9487', icon: '🏥' },
-  { id: 'hl_imus_mayor', name: 'Imus City Hall (Mayor)', number: '(046) 471-2732', icon: '🏛️' },
-  { id: 'hl_imus_health', name: 'Imus City Health Center', number: '(046) 471-5560', icon: '🩺' },
-  { id: 'hl_national_911', name: 'National Emergency', number: '911', icon: '🆘' },
-  { id: 'hl_red_cross', name: 'Philippine Red Cross', number: '143', icon: '⛑️' }
-];
+
 
 const DEFAULT_SEED_ANNOUNCEMENTS = [
   {
@@ -158,7 +149,12 @@ function reuseAnnouncement(id) {
 
   if (anc.priority) {
     const prioRadio = document.querySelector(`input[name="ancPriority"][value="${anc.priority}"]`);
-    if (prioRadio && !prioRadio.disabled) prioRadio.checked = true;
+    if (prioRadio && !prioRadio.disabled && (ROLE !== 'teacher' || anc.priority !== 'critical')) {
+      prioRadio.checked = true;
+    } else {
+      const fallbackRadio = document.querySelector('input[name="ancPriority"][value="important"]');
+      if (fallbackRadio) fallbackRadio.checked = true;
+    }
   }
 
   const audCheckboxes = document.querySelectorAll('input[name="ancAudience"]');
@@ -396,10 +392,13 @@ function buildAnnouncementsPage() {
         <span style="font-size:12.5px;color:var(--text-muted);">Official advisories, class suspension notices, and City of Imus emergency hotlines</span>
       </div>
       ${canPost ? `
-        <button class="add-btn" onclick="openCreateAnnouncementModal()">
-          ${typeof iconPlus === 'function' ? iconPlus() : ''}
-          Broadcast Announcement
-        </button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          ${ROLE === 'admin' ? `<button class="add-btn" style="background:#475569;border-color:#334155;" onclick="openManageHotlinesModal()">⚙️ Manage Hotlines</button>` : ''}
+          <button class="add-btn" onclick="openCreateAnnouncementModal()">
+            ${typeof iconPlus === 'function' ? iconPlus() : ''}
+            Broadcast Announcement
+          </button>
+        </div>
       ` : ''}
     </div>
 
@@ -732,9 +731,9 @@ function openCreateAnnouncementModal() {
     }
     if (criticalRadio) {
       criticalRadio.disabled = true;
+      criticalRadio.checked = false;
       if (criticalRadio.closest('.anc-radio-label')) {
-        criticalRadio.closest('.anc-radio-label').style.opacity = '0.45';
-        criticalRadio.closest('.anc-radio-label').style.cursor = 'not-allowed';
+        criticalRadio.closest('.anc-radio-label').style.display = 'none';
       }
     }
     if (importantRadio) importantRadio.checked = true;
@@ -763,6 +762,7 @@ function openCreateAnnouncementModal() {
       criticalRadio.disabled = false;
       criticalRadio.checked = true;
       if (criticalRadio.closest('.anc-radio-label')) {
+        criticalRadio.closest('.anc-radio-label').style.display = '';
         criticalRadio.closest('.anc-radio-label').style.opacity = '1';
         criticalRadio.closest('.anc-radio-label').style.cursor = 'pointer';
       }
@@ -836,7 +836,7 @@ function submitCreateAnnouncement(isDraft = false) {
   const selectedHotlines = [];
   const hlCheckboxes = document.querySelectorAll('input[name="ancHotline"]:checked');
   hlCheckboxes.forEach(cb => {
-    const hl = DEFAULT_HOTLINES.find(h => h.id === cb.value);
+    const hl = (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).find(h => h.id === cb.value);
     if (hl) selectedHotlines.push(hl);
   });
 
@@ -858,7 +858,9 @@ function submitCreateAnnouncement(isDraft = false) {
     title: titleInput.value.trim(),
     category: categoryValue,
     customCategory: customCategoryName,
-    priority: priorityInput ? priorityInput.value : 'normal',
+    priority: (ROLE === 'teacher' && priorityInput && priorityInput.value === 'critical')
+      ? 'important'
+      : (priorityInput ? priorityInput.value : 'normal'),
     audience: selectedAudience.length ? selectedAudience : ['All Students', 'All Teachers'],
     message: msgInput.value.trim(),
     authorName: CURRENT_PROFILE ? CURRENT_PROFILE.full_name : 'School Administration',
@@ -868,7 +870,7 @@ function submitCreateAnnouncement(isDraft = false) {
     isArchived: false,
     isDraft: !!isDraft,
     status: isDraft ? 'draft' : 'active',
-    hotlines: selectedHotlines.length ? selectedHotlines : DEFAULT_HOTLINES.slice(0, 4)
+    hotlines: selectedHotlines.length ? selectedHotlines : (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).slice(0, 4)
   };
 
   const all = getStoredAnnouncements();
@@ -933,26 +935,48 @@ function publishAnnouncementDraft(id) {
   if (typeof renderPage === 'function') renderPage('announcements');
 }
 
-/* ── NEWS ALERT POPUP (Auto-show on student dashboard load) ── */
+/* ── NEWS ALERT POPUP (Persistent single-view until a NEW announcement is posted) ── */
+
+function getSeenNewsAlertIds() {
+  try {
+    const raw = localStorage.getItem('scholaria_news_popup_seen_ids_v1');
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function markNewsAlertsAsSeen(ids) {
+  try {
+    const set = getSeenNewsAlertIds();
+    ids.forEach(id => set.add(String(id)));
+    localStorage.setItem('scholaria_news_popup_seen_ids_v1', JSON.stringify([...set]));
+  } catch (e) {}
+}
 
 function closeNewsAlertModal() {
   const modal = document.getElementById('newsAlertModal');
   if (modal) modal.classList.remove('active');
-  // Remember shown for this session
-  sessionStorage.setItem('scholaria_news_popup_shown', 'true');
+
+  // Mark all active announcements as seen so it will NEVER pop up again until a BRAND NEW announcement is posted!
+  const all = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+  const active = all.filter(a =>
+    !a.isArchived && a.status !== 'draft' && !a.isDraft &&
+    !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now())
+  );
+  markNewsAlertsAsSeen(active.map(a => a.id));
 }
 
 function showNewsAlertIfNeeded() {
-  // Only for students, only once per session
+  // Only for students
   if (typeof ROLE === 'undefined' || ROLE !== 'student') return;
-  if (sessionStorage.getItem('scholaria_news_popup_shown') === 'true') return;
 
   const modal = document.getElementById('newsAlertModal');
   const listEl = document.getElementById('newsAlertList');
   if (!modal || !listEl) return;
 
-  const all = getStoredAnnouncements();
-  const readIds = getReadAnnouncementIds();
+  const all = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+  const seenIds = getSeenNewsAlertIds();
 
   // Get active, non-draft announcements
   const active = all.filter(a =>
@@ -960,12 +984,21 @@ function showNewsAlertIfNeeded() {
     !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now())
   ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-  // Priority: unread emergency first, then any unread, then latest 3
-  const emergencyUnread = active.filter(a => a.category === 'emergency' && !readIds.has(String(a.id)));
-  const otherUnread    = active.filter(a => a.category !== 'emergency' && !readIds.has(String(a.id)));
-  const toShow = [...emergencyUnread, ...otherUnread].slice(0, 4);
+  // If no active announcements exist, never show popup
+  if (!active.length) return;
 
-  // If nothing unread at all — skip popup
+  // Filter for brand-new announcements that the student has NOT seen in the pop-up yet
+  const unseenNew = active.filter(a => !seenIds.has(String(a.id)));
+
+  // If there are NO new announcements, DO NOT SHOW POPUP!
+  // The popup will ONLY trigger if a teacher/admin posted a brand new announcement!
+  if (!unseenNew.length) return;
+
+  // Priority: unseen emergency first, then other unseen announcements
+  const emergencyUnseen = unseenNew.filter(a => a.category === 'emergency');
+  const otherUnseen = unseenNew.filter(a => a.category !== 'emergency');
+  const toShow = [...emergencyUnseen, ...otherUnseen].slice(0, 4);
+
   if (!toShow.length) return;
 
   const catConfig = {
@@ -1037,7 +1070,10 @@ function showNewsAlertIfNeeded() {
   }).join('');
 
   // Show modal after a short delay so dashboard renders first
-  setTimeout(() => modal.classList.add('active'), 600);
+  setTimeout(() => {
+    modal.classList.add('active');
+    markNewsAlertsAsSeen(toShow.map(a => a.id));
+  }, 600);
 }
 
 function renderDashboardNewsWidget() {
@@ -1103,3 +1139,13 @@ function renderDashboardNewsWidget() {
       </div>`;
   }).join('');
 }
+
+
+
+
+
+
+
+
+
+

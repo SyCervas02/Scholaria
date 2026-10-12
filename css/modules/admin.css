@@ -53,9 +53,11 @@
 .ca-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
 .ca-table th { background: #f0f5ff; color: #344978; font-weight: 600; padding: 6px 14px; white-space: nowrap; }
 .ca-table td { padding: 5px 14px; border-top: 1px solid #e7efff; }
-.ca-table th:first-child { width: 39%; }
+.ca-table th:first-child { width: 34%; }
 .ca-table th:nth-child(2) { width: 22%; }
-.ca-table th:nth-child(3) { width: 18%; }
+.ca-table th:nth-child(3) { width: 16%; }
+.ca-table th:nth-child(4),
+.ca-table td:nth-child(4) { width: 28%; min-width: 195px; white-space: nowrap; }
 .ca-content, .ca-person { display: flex; align-items: center; gap: 20px; }
 .ca-content strong { display: block; font-size: 14px; font-weight: 600; }
 .ca-content small, .ca-person small { display: block; color: #6575aa; font-size: 13px; margin-top: 3px; }
@@ -69,11 +71,13 @@
 .ca-table tr:nth-child(4n+3) .ca-avatar { background: #ede0ff; color: #9238de; }
 .ca-table tr:nth-child(4n+4) .ca-avatar { background: #dcf6e6; color: #009c49; }
 .ca-date { color: #6575aa; white-space: nowrap; }
-.ca-actions { display: flex; gap: 12px; align-items: center; }
-.ca-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 5px; height: 36px; padding: 0 14px; font-size: 13px; font-weight: 600; }
-.ca-actions .ca-review { background: white; color: #065cff; border: 1px solid #719aff; }
-.ca-approve { color: #009c4b; background: #e6f8ed; }
-.ca-reject { color: #ff243b; background: #ffebed; }
+.ca-actions { display: flex; gap: 8px; align-items: center; white-space: nowrap; flex-wrap: nowrap; }
+.ca-actions button { display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important; border: 0; border-radius: 6px; height: 34px; padding: 0 12px; font-size: 12.5px; font-weight: 600; white-space: nowrap !important; flex-shrink: 0; }
+.ca-actions .ca-review { background: #f0f7ff !important; color: #0284c7 !important; border: 1px solid #bae6fd !important; width: auto !important; min-width: 84px !important; cursor: pointer; white-space: nowrap !important; transition: all 0.15s ease; }
+.ca-actions .ca-review:hover { background: #e0f2fe !important; border-color: #7dd3fc !important; color: #0369a1 !important; }
+.ca-actions .ca-review svg { width: 14px !important; height: 14px !important; flex-shrink: 0; }
+.ca-approve { color: #009c4b !important; background: #e6f8ed !important; width: 34px !important; min-width: 34px !important; padding: 0 !important; cursor: pointer; }
+.ca-reject { color: #ff243b !important; background: #ffebed !important; width: 34px !important; min-width: 34px !important; padding: 0 !important; cursor: pointer; }
 .ca-unarchive-btn { color: #0960ff !important; background: #eaf1ff !important; border: 1px solid #b9d1ff !important; }
 .ca-unarchive-btn:hover { background: #d6e5ff !important; }
 .ca-more-wrap { position: relative; display: inline-flex; align-items: center; }

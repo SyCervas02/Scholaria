@@ -56,6 +56,8 @@ async function loadChatsPage() {
   chatListState.search = '';
   chatListState.role = 'all';
   activeConversationId = null;
+  const chatContainer = document.querySelector('.scholaria-chat');
+  if (chatContainer) chatContainer.classList.remove('has-active-chat');
   await loadConversationsFromDB();
   renderContactsList();
   renderInputArea();
@@ -178,6 +180,9 @@ function renderContactsList() {
 
 async function openConversation(id) {
   activeConversationId = id;
+  const chatContainer = document.querySelector('.scholaria-chat');
+  if (chatContainer) chatContainer.classList.add('has-active-chat');
+
   const conv = chatConversations.find(c => c.id === id);
   if (!conv) return;
   conv.unread = 0;
@@ -202,6 +207,30 @@ async function openConversation(id) {
   if (error) { console.error('Failed to load messages:', error.message); return; }
   (data || []).forEach(m => seenMessageIds.add(m.id));
   renderMessages(conv, data || []);
+}
+
+function closeConversation() {
+  activeConversationId = null;
+  const chatContainer = document.querySelector('.scholaria-chat');
+  if (chatContainer) chatContainer.classList.remove('has-active-chat');
+
+  const avatar = document.getElementById('cwAvatar');
+  const name = document.getElementById('cwName');
+  const role = document.getElementById('cwRole');
+  const msgsBox = document.getElementById('cwMessages');
+
+  if (avatar) {
+    avatar.className = 'contact-avatar cw-placeholder-avatar';
+    avatar.innerHTML = chatOutlineIcon();
+  }
+  if (name) name.textContent = 'Your conversations';
+  if (role) role.textContent = 'Stay connected, keep learning.';
+  if (msgsBox) {
+    const isTeacher = (typeof ROLE !== 'undefined' && ROLE === 'teacher');
+    msgsBox.innerHTML = `<div class="cw-empty chat-welcome">${chatEmptyIllustration()}<h3>Start a conversation</h3><p>${isTeacher ? 'Message a student, connect with fellow teachers,<br>or create a class group.' : 'Message a teacher, connect with classmates,<br>or create a study group.'}</p><button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button></div>`;
+  }
+  renderInputArea();
+  renderContactsList();
 }
 
 function renderMessages(conv, msgs) {
