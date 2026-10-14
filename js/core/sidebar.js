@@ -569,26 +569,30 @@ function buildRealClassRecordEntries() {
         if (attempt.score_percentage !== undefined && attempt.score_percentage !== null) {
           scorePct = Math.round(Number(attempt.score_percentage));
         } else if (attempt.score !== undefined && attempt.total_items) {
-          scorePct = Math.round((attempt.score / attempt.total_items) * 100);
+          scorePct = Math.round((Number(attempt.score) / Number(attempt.total_items)) * 100);
         } else if (attempt.score !== undefined) {
           scorePct = Math.round(Number(attempt.score));
         }
         isLive = true;
         hasRealData = true;
       } else if (customData[q.id] !== undefined) {
-        scorePct = Number(customData[q.id]);
+        const parsed = Number(customData[q.id]);
+        if (!isNaN(parsed)) scorePct = parsed;
         hasRealData = true;
       }
 
-      if (scorePct !== null) {
+      if (scorePct !== null && !isNaN(scorePct) && isFinite(scorePct)) {
+        scorePct = Math.min(100, Math.max(0, scorePct));
         validScoresSum += scorePct;
         validScoresCount++;
+      } else {
+        scorePct = null;
       }
 
       quizScores[q.id] = { scorePct, isLive };
     });
 
-    let avg = validScoresCount > 0 ? Number((validScoresSum / validScoresCount).toFixed(2)) : null;
+    let avg = validScoresCount > 0 ? Math.min(100, Math.max(0, Number((validScoresSum / validScoresCount).toFixed(2)))) : null;
 
     if (studAttempts.length > 0) {
       hasRealData = true;
@@ -599,17 +603,18 @@ function buildRealClassRecordEntries() {
         if (sa.score_percentage !== undefined && sa.score_percentage !== null) {
           p = Number(sa.score_percentage);
         } else if (sa.score !== undefined && sa.total_items) {
-          p = (sa.score / sa.total_items) * 100;
+          p = (Number(sa.score) / Number(sa.total_items)) * 100;
         } else if (sa.score !== undefined) {
           p = Number(sa.score);
         }
-        if (p !== null && !isNaN(p)) {
+        if (p !== null && !isNaN(p) && isFinite(p)) {
+          p = Math.min(100, Math.max(0, p));
           attSum += p;
           attCnt++;
         }
       });
       if (attCnt > 0) {
-        avg = Number((attSum / attCnt).toFixed(2));
+        avg = Math.min(100, Math.max(0, Number((attSum / attCnt).toFixed(2))));
       }
     }
 
@@ -645,16 +650,17 @@ function buildSectionSummaryEntries() {
     }
     const secData = sectionMap.get(sec);
     secData.studentsCount++;
-    if (st.avg !== null) {
-      secData.scoresSum += st.avg;
+    if (st.avg !== null && !isNaN(st.avg) && isFinite(st.avg)) {
+      const numAvg = Math.min(100, Math.max(0, Number(st.avg)));
+      secData.scoresSum += numAvg;
       secData.scoresCount++;
-      if (st.avg >= 75) secData.passingCount++;
+      if (numAvg >= 75) secData.passingCount++;
     }
   });
 
   return Array.from(sectionMap.values()).map(sec => {
-    const classAvg = sec.scoresCount > 0 ? Number((sec.scoresSum / sec.scoresCount).toFixed(2)) : null;
-    const passRate = sec.scoresCount > 0 ? Math.round((sec.passingCount / sec.scoresCount) * 100) : null;
+    const classAvg = sec.scoresCount > 0 ? Math.min(100, Math.max(0, Number((sec.scoresSum / sec.scoresCount).toFixed(2)))) : null;
+    const passRate = sec.scoresCount > 0 ? Math.min(100, Math.max(0, Math.round((sec.passingCount / sec.scoresCount) * 100))) : null;
     return {
       ...sec,
       classAvg,
@@ -1484,21 +1490,37 @@ function studentPage(page) {
         </div>
       </div>
       <div class="card-grid">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconFolder()}</div><div><div class="ic-sub">Enrolled Subjects</div><div class="ic-num">${enrolledCoursesCount}</div></div></div>
-          <p>Active learning repositories</p>
+        <div class="stat-filter-card" onclick="renderPage('materials')" style="cursor:pointer;">
+          <div class="ic-icon">${iconFolder()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Enrolled Subjects</div>
+            <div class="ic-num">${enrolledCoursesCount}</div>
+            <p>Active learning repositories</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconQuiz()}</div><div><div class="ic-sub">Available Quizzes</div><div class="ic-num gold">${availableQuizzes.length}</div></div></div>
-          <p>${availableQuizzes.length ? 'New test material waiting' : 'All caught up!'}</p>
+        <div class="stat-filter-card" onclick="renderPage('quizzes')" style="cursor:pointer;">
+          <div class="ic-icon gold">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Available Quizzes</div>
+            <div class="ic-num gold">${availableQuizzes.length}</div>
+            <p>${availableQuizzes.length ? 'New test material waiting' : 'All caught up!'}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Latest Score</div><div class="ic-num green">${latestScorePct !== null ? latestScorePct + '%' : '—'}</div></div></div>
-          <p>${latestQuizTitle ? 'On ' + escHtml(latestQuizTitle) : 'No quizzes completed yet'}</p>
+        <div class="stat-filter-card" onclick="renderPage('progress')" style="cursor:pointer;">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Latest Score</div>
+            <div class="ic-num green">${latestScorePct !== null ? latestScorePct + '%' : '—'}</div>
+            <p>${latestQuizTitle ? 'On ' + escHtml(latestQuizTitle) : 'No quizzes completed yet'}</p>
+          </div>
         </div>
-        <div class="info-card" onclick="renderPage('announcements')" style="cursor:pointer;transition:all 0.2s;border:1px solid ${unreadCount > 0 ? '#fca5a5' : 'rgba(37,99,235,0.08)'};" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 25px -5px rgba(0,0,0,0.05)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-          <div class="ic-head"><div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div><div><div class="ic-sub">Unread News</div><div class="ic-num" style="color:#dc2626;">${unreadCount}</div></div></div>
-          <p>School announcements & events</p>
+        <div class="stat-filter-card" onclick="renderPage('announcements')" style="cursor:pointer;border-color:${unreadCount > 0 ? '#fca5a5' : '#e2e8f0'};">
+          <div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div>
+          <div class="ic-content">
+            <div class="ic-sub">Unread News</div>
+            <div class="ic-num" style="color:#dc2626;">${unreadCount}</div>
+            <p>School announcements & events</p>
+          </div>
         </div>
       </div>
       <div id="coursesWidgetContainer">
@@ -1706,17 +1728,29 @@ function studentPage(page) {
 
         <!-- METRIC HIGHLIGHT CARDS -->
         <div class="card-grid" style="gap:12px;margin-bottom:0;">
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon" style="width:38px;height:38px;">${iconQuiz()}</div><div><div class="ic-sub">Assigned Quizzes</div><div class="ic-num" style="font-size:24px;">${totalCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Total assessments for your grade & strand</p>
+          <div class="stat-filter-card ${studentQuizFilterStatus === '' ? 'active' : ''}" onclick="setStudentQuizFilterStatus('')" title="Click to view all assigned quizzes">
+            <div class="ic-icon">${iconQuiz()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Assigned Quizzes</div>
+              <div class="ic-num">${totalCount}</div>
+              <p>Total assessments for your grade & strand</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon gold" style="width:38px;height:38px;">${iconClock()}</div><div><div class="ic-sub">Pending to Take</div><div class="ic-num gold" style="font-size:24px;">${pendingCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">${pendingCount > 0 ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} awaiting your submission` : 'All caught up! 🎉'}</p>
+          <div class="stat-filter-card ${studentQuizFilterStatus === 'pending' ? 'active' : ''}" onclick="setStudentQuizFilterStatus('pending')" title="Click to filter quizzes pending to take">
+            <div class="ic-icon gold">${iconClock()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Pending to Take</div>
+              <div class="ic-num gold">${pendingCount}</div>
+              <p>${pendingCount > 0 ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} awaiting your submission` : 'All caught up! 🎉'}</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon green" style="width:38px;height:38px;">${iconCheck()}</div><div><div class="ic-sub">Completed</div><div class="ic-num green" style="font-size:24px;">${completedCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">${totalCount > 0 ? `${Math.round((completedCount / totalCount) * 100)}% completion rate` : 'No quizzes yet'}</p>
+          <div class="stat-filter-card ${studentQuizFilterStatus === 'completed' ? 'active' : ''}" onclick="setStudentQuizFilterStatus('completed')" title="Click to filter completed quizzes">
+            <div class="ic-icon green">${iconCheck()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Completed</div>
+              <div class="ic-num green">${completedCount}</div>
+              <p>${totalCount > 0 ? `${Math.round((completedCount / totalCount) * 100)}% completion rate` : 'No quizzes yet'}</p>
+            </div>
           </div>
         </div>
 
@@ -1984,17 +2018,29 @@ function studentPage(page) {
 
       <!-- SUMMARY HIGHLIGHT CARDS -->
       <div class="card-grid" style="margin-bottom:20px;">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconQuiz()}</div><div><div class="ic-sub">Assigned Quizzes</div><div class="ic-num">${quizList.length}</div></div></div>
-          <p>Total quizzes for your strand & section</p>
+        <div class="stat-filter-card ${studentProgressTab === 'all' ? 'active' : ''}" onclick="setStudentProgressTab('all')">
+          <div class="ic-icon">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Assigned Quizzes</div>
+            <div class="ic-num">${quizList.length}</div>
+            <p>Total quizzes for your strand</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${typeof iconApproval === 'function' ? iconApproval() : iconProgress()}</div><div><div class="ic-sub">Completed</div><div class="ic-num gold">${completedCount}</div></div></div>
-          <p>${quizList.length ? `${Math.round((completedCount / quizList.length) * 100)}% completion rate` : 'No quizzes assigned'}</p>
+        <div class="stat-filter-card ${studentProgressTab === 'completed' ? 'active' : ''}" onclick="setStudentProgressTab('completed')">
+          <div class="ic-icon gold">${typeof iconApproval === 'function' ? iconApproval() : iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Completed</div>
+            <div class="ic-num gold">${completedCount}</div>
+            <p>${quizList.length ? `${Math.round((completedCount / quizList.length) * 100)}% completion rate` : 'No quizzes assigned'}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Overall Average</div><div class="ic-num green">${overallAvg !== null ? overallAvg + '%' : '—'}</div></div></div>
-          <p>${overallAvg !== null ? (overallAvg >= 75 ? 'Passing Standing' : 'Needs Improvement') : 'Take quizzes to view average'}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Overall Average</div>
+            <div class="ic-num green">${overallAvg !== null ? overallAvg + '%' : '—'}</div>
+            <p>${overallAvg !== null ? (overallAvg >= 75 ? 'Passing Standing' : 'Needs Improvement') : 'Take quizzes to view average'}</p>
+          </div>
         </div>
         ${(() => {
           if (studentProgressSubject !== 'all') {
@@ -2014,34 +2060,30 @@ function studentPage(page) {
             const subAvg = subScoreCount > 0 ? (subScoreSum / subScoreCount).toFixed(2) : null;
 
             return `
-            <div class="info-card" style="border: 1.5px solid #818cf8; background: linear-gradient(180deg, #ffffff 0%, #f5f7ff 100%);">
-              <div class="ic-head">
-                <div class="ic-icon" style="background:#e0e7ff;color:#4338ca;">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                </div>
-                <div style="min-width:0;flex:1;">
-                  <div class="ic-sub" style="color:#4338ca;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(subName)}">${escHtml(subName.toUpperCase())} AVG</div>
-                  <div class="ic-num" style="color:#3730a3;">${subAvg !== null ? subAvg + '%' : '—'}</div>
-                </div>
+            <div class="info-card horizontal-card" style="border: 1.5px solid #818cf8; background: linear-gradient(180deg, #ffffff 0%, #f5f7ff 100%);">
+              <div class="ic-icon" style="background:#e0e7ff;color:#4338ca;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
               </div>
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;font-size:12px;color:var(--text-muted);">
-                <span>${subCompleted}/${subTotal} completed</span>
-                <button type="button" onclick="event.stopPropagation();setStudentProgressSubject('all');" style="background:#e0e7ff;border:none;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;color:#3730a3;cursor:pointer;transition:0.2s;" onmouseover="this.style.background='#c7d2fe'" onmouseout="this.style.background='#e0e7ff'" title="Return to all subjects">✕ All</button>
+              <div class="ic-content" style="min-width:0;flex:1;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div class="ic-sub" style="color:#4338ca;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(subName)}">${escHtml(subName.toUpperCase())} AVG</div>
+                  <button type="button" onclick="event.stopPropagation();setStudentProgressSubject('all');" style="background:#e0e7ff;border:none;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;color:#3730a3;cursor:pointer;transition:0.2s;" onmouseover="this.style.background='#c7d2fe'" onmouseout="this.style.background='#e0e7ff'" title="Return to all subjects">✕ All</button>
+                </div>
+                <div class="ic-num" style="color:#3730a3;">${subAvg !== null ? subAvg + '%' : '—'}</div>
+                <p>${subCompleted}/${subTotal} completed</p>
               </div>
             </div>`;
           } else {
             return `
-            <div class="info-card" style="cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onclick="setStudentProgressTab('${pendingCount > 0 ? 'pending' : 'all'}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
-              <div class="ic-head">
-                <div class="ic-icon" style="background:#fef3c7;color:#d97706;">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                </div>
-                <div>
-                  <div class="ic-sub">Pending Quizzes</div>
-                  <div class="ic-num" style="color:#d97706;">${pendingCount}</div>
-                </div>
+            <div class="stat-filter-card ${studentProgressTab === 'pending' ? 'active' : ''}" onclick="setStudentProgressTab('${pendingCount > 0 ? 'pending' : 'all'}')">
+              <div class="ic-icon" style="background:#fef3c7;color:#d97706;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               </div>
-              <p>${pendingCount > 0 ? `${pendingCount} awaiting completion · Click to view` : 'All assigned quizzes done! 🎉'}</p>
+              <div class="ic-content">
+                <div class="ic-sub">Pending Quizzes</div>
+                <div class="ic-num" style="color:#d97706;">${pendingCount}</div>
+                <p>${pendingCount > 0 ? `${pendingCount} awaiting completion` : 'All assigned quizzes done! 🎉'}</p>
+              </div>
             </div>`;
           }
         })()}
@@ -2233,21 +2275,37 @@ function teacherPage(page) {
         </div>
       </div>
       <div class="card-grid">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">My Classes</div><div class="ic-num">${myStrands.length || 3}</div></div></div>
-          <p>${myStrands.length ? escHtml(myStrands.join(', ')) : 'ICT, CS, TVL — Grade 11 & 12'}</p>
+        <div class="stat-filter-card" onclick="renderPage('classrec')" style="cursor:pointer;">
+          <div class="ic-icon">${iconUsers()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">My Classes</div>
+            <div class="ic-num">${myStrands.length || 3}</div>
+            <p>${myStrands.length ? escHtml(myStrands.join(', ')) : 'ICT, CS, TVL — Grade 11 & 12'}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconFolder()}</div><div><div class="ic-sub">Materials Uploaded</div><div class="ic-num gold">${myMaterials.length || 12}</div></div></div>
-          <p>${myPendingMaterials || 0} pending admin approval</p>
+        <div class="stat-filter-card" onclick="renderPage('materials')" style="cursor:pointer;">
+          <div class="ic-icon gold">${iconFolder()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Materials Uploaded</div>
+            <div class="ic-num gold">${myMaterials.length || 12}</div>
+            <p>${myPendingMaterials || 0} pending admin approval</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconQuiz()}</div><div><div class="ic-sub">Active Quizzes</div><div class="ic-num green">${myActiveQuizzes.length}</div></div></div>
-          <p>${myQuizzes.length} total across all handled subjects</p>
+        <div class="stat-filter-card" onclick="renderPage('quiz')" style="cursor:pointer;">
+          <div class="ic-icon green">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Active Quizzes</div>
+            <div class="ic-num green">${myActiveQuizzes.length}</div>
+            <p>${myQuizzes.length} total across all handled subjects</p>
+          </div>
         </div>
-        <div class="info-card" onclick="renderPage('announcements')" style="cursor:pointer;transition:all 0.2s;border:1px solid ${unreadCount > 0 ? '#fca5a5' : 'rgba(37,99,235,0.08)'};" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 25px -5px rgba(0,0,0,0.05)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-          <div class="ic-head"><div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div><div><div class="ic-sub">Unread News</div><div class="ic-num" style="color:#dc2626;">${unreadCount}</div></div></div>
-          <p>School announcements & events</p>
+        <div class="stat-filter-card" onclick="renderPage('announcements')" style="cursor:pointer;border-color:${unreadCount > 0 ? '#fca5a5' : '#e2e8f0'};">
+          <div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div>
+          <div class="ic-content">
+            <div class="ic-sub">Unread News</div>
+            <div class="ic-num" style="color:#dc2626;">${unreadCount}</div>
+            <p>School announcements & events</p>
+          </div>
         </div>
       </div>
       <div id="coursesWidgetContainer">
@@ -2331,6 +2389,13 @@ function teacherPage(page) {
       if (typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus) {
         filtered = filtered.filter(q => String(q.status || '').toLowerCase() === quizManagerFilterStatus.toLowerCase());
       }
+      if (typeof quizManagerFilterType !== 'undefined' && quizManagerFilterType) {
+        if (quizManagerFilterType === 'interactive') {
+          filtered = filtered.filter(q => q.type === 'interactive' || q.quiz_type === 'interactive');
+        } else if (quizManagerFilterType === 'standard') {
+          filtered = filtered.filter(q => q.type !== 'interactive' && q.quiz_type !== 'interactive');
+        }
+      }
       if (typeof quizManagerFilterSubject !== 'undefined' && quizManagerFilterSubject) {
         filtered = filtered.filter(q => String(q.subject || '').toLowerCase() === quizManagerFilterSubject.toLowerCase());
       }
@@ -2357,21 +2422,37 @@ function teacherPage(page) {
 
         <!-- METRIC CARDS -->
         <div class="card-grid" style="gap:12px;margin-bottom:0;">
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon" style="width:38px;height:38px;">${iconQuiz()}</div><div><div class="ic-sub">Total Quizzes</div><div class="ic-num" style="font-size:24px;">${totalCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Assigned to SHS students</p>
+          <div class="stat-filter-card ${!quizManagerFilterStatus && !quizManagerFilterType ? 'active' : ''}" onclick="setQuizManagerFilterStatus(''); setQuizManagerFilterType('');">
+            <div class="ic-icon">${iconQuiz()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Total Quizzes</div>
+              <div class="ic-num">${totalCount}</div>
+              <p>Assigned to SHS students</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon green" style="width:38px;height:38px;">${iconCheck()}</div><div><div class="ic-sub">Active / Ongoing</div><div class="ic-num green" style="font-size:24px;">${activeCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Accepting student submissions</p>
+          <div class="stat-filter-card ${quizManagerFilterStatus === 'active' && !quizManagerFilterType ? 'active' : ''}" onclick="setQuizManagerFilterStatus('active'); setQuizManagerFilterType('');">
+            <div class="ic-icon green">${iconCheck()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Active / Ongoing</div>
+              <div class="ic-num green">${activeCount}</div>
+              <p>Accepting student submissions</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon gold" style="width:38px;height:38px;">${iconClock()}</div><div><div class="ic-sub">Pending Approval</div><div class="ic-num gold" style="font-size:24px;">${pendingCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Awaiting Admin content review</p>
+          <div class="stat-filter-card ${quizManagerFilterStatus === 'pending' && !quizManagerFilterType ? 'active' : ''}" onclick="setQuizManagerFilterStatus('pending'); setQuizManagerFilterType('');">
+            <div class="ic-icon gold">${iconClock()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Pending Approval</div>
+              <div class="ic-num gold">${pendingCount}</div>
+              <p>Awaiting Admin content review</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon" style="width:38px;height:38px;background:#e0f2fe;color:#0284c7;">${iconGamepad()}</div><div><div class="ic-sub">Interactive Games</div><div class="ic-num" style="font-size:24px;color:#0284c7;">${interactiveCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Gamified student quizzes</p>
+          <div class="stat-filter-card ${quizManagerFilterType === 'interactive' ? 'active' : ''}" onclick="setQuizManagerFilterStatus(''); setQuizManagerFilterType('interactive');">
+            <div class="ic-icon" style="background:#e0f2fe;color:#0284c7;">${iconGamepad()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Interactive Games</div>
+              <div class="ic-num" style="color:#0284c7;">${interactiveCount}</div>
+              <p>Gamified student quizzes</p>
+            </div>
           </div>
         </div>
 
@@ -2567,21 +2648,37 @@ function teacherPage(page) {
 
       <!-- PERFORMANCE STAT CARDS -->
       <div class="card-grid" style="margin-bottom:20px;">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">Submissions</div><div class="ic-num">${attemptCount}</div></div></div>
-          <p>${analysisSectionFilter ? `Filtered for ${escHtml(analysisSectionFilter)}` : 'Across all class sections'}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon">${iconUsers()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Submissions</div>
+            <div class="ic-num">${attemptCount}</div>
+            <p>${analysisSectionFilter ? `Filtered for ${escHtml(analysisSectionFilter)}` : 'Across all class sections'}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Class Average</div><div class="ic-num green">${avgScore !== null ? avgScore + '%' : '—'}</div></div></div>
-          <p>${passRate !== null ? `${passRate}% passing rate (≥ 75%)` : 'No attempts recorded'}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Class Average</div>
+            <div class="ic-num green">${avgScore !== null ? avgScore + '%' : '—'}</div>
+            <p>${passRate !== null ? `${passRate}% passing rate (≥ 75%)` : 'No attempts recorded'}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconChart()}</div><div><div class="ic-sub">Score Range</div><div class="ic-num gold">${highestScore !== null ? `${highestScore}% / ${lowestScore}%` : '—'}</div></div></div>
-          <p>Highest vs lowest student score</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon gold">${iconChart()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Score Range</div>
+            <div class="ic-num gold compact">${highestScore !== null ? `${highestScore}% / ${lowestScore}%` : '—'}</div>
+            <p>Highest vs lowest student score</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconQuiz()}</div><div><div class="ic-sub">Total Items</div><div class="ic-num">${rows.length}</div></div></div>
-          <p>${selectedQuiz.type === 'interactive' ? '🎮 Interactive Mode' : '📝 Standard Assessment'}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Total Items</div>
+            <div class="ic-num">${rows.length}</div>
+            <p>${selectedQuiz.type === 'interactive' ? '🎮 Interactive Mode' : '📝 Standard Assessment'}</p>
+          </div>
         </div>
       </div>
 
@@ -2654,10 +2751,10 @@ function teacherPage(page) {
 
       const totalStudentsCount = allHandledStudents.length;
       const quizzesCount = quizzes.length;
-      const validStudentAvgs = filteredEntries.map(e => e.avg).filter(a => a !== null);
-      const overallAvg = validStudentAvgs.length ? Number((validStudentAvgs.reduce((a, b) => a + b, 0) / validStudentAvgs.length).toFixed(2)) : null;
+      const validStudentAvgs = filteredEntries.map(e => (e.avg !== null && !isNaN(e.avg)) ? Math.min(100, Math.max(0, Number(e.avg))) : null).filter(a => a !== null);
+      const overallAvg = validStudentAvgs.length ? Math.min(100, Math.max(0, Number((validStudentAvgs.reduce((a, b) => Number(a) + Number(b), 0) / validStudentAvgs.length).toFixed(2)))) : null;
       const passingStudentsCount = validStudentAvgs.filter(a => a >= 75).length;
-      const overallPassingRate = validStudentAvgs.length ? Math.round((passingStudentsCount / validStudentAvgs.length) * 100) : null;
+      const overallPassingRate = validStudentAvgs.length ? Math.min(100, Math.max(0, Math.round((passingStudentsCount / validStudentAvgs.length) * 100))) : null;
 
       // MODE 1: MAIN CLASS RECORD PAGE (SECTIONS ONLY)
       if (!classRecExpandedSection) {
@@ -2683,17 +2780,29 @@ function teacherPage(page) {
 
         <!-- SUMMARY HIGHLIGHT CARDS -->
         <div class="card-grid" style="margin-bottom:20px;">
-          <div class="info-card">
-            <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">Handled Sections</div><div class="ic-num">${sectionSummaries.length}</div></div></div>
-            <p>Active class sections</p>
+          <div class="info-card horizontal-card">
+            <div class="ic-icon">${iconUsers()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Handled Sections</div>
+              <div class="ic-num">${sectionSummaries.length}</div>
+              <p>Active class sections</p>
+            </div>
           </div>
-          <div class="info-card">
-            <div class="ic-head"><div class="ic-icon gold">${iconQuiz()}</div><div><div class="ic-sub">Total Students</div><div class="ic-num gold">${totalStudentsCount}</div></div></div>
-            <p>Enrolled student roster</p>
+          <div class="info-card horizontal-card">
+            <div class="ic-icon gold">${iconQuiz()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Total Students</div>
+              <div class="ic-num gold">${totalStudentsCount}</div>
+              <p>Enrolled student roster</p>
+            </div>
           </div>
-          <div class="info-card">
-            <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Combined Class Average</div><div class="ic-num green">${overallAvg !== null ? overallAvg + '%' : '—'}</div></div></div>
-            <p>${overallPassingRate !== null ? overallPassingRate + '% passing rate' : 'No attempt scores recorded yet'}</p>
+          <div class="info-card horizontal-card">
+            <div class="ic-icon green">${iconProgress()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Combined Class Average</div>
+              <div class="ic-num green">${overallAvg !== null ? overallAvg.toFixed(2) + '%' : '—'}</div>
+              <p>${overallPassingRate !== null ? overallPassingRate + '% passing rate' : 'No attempt scores recorded yet'}</p>
+            </div>
           </div>
         </div>
 
@@ -2782,17 +2891,29 @@ function teacherPage(page) {
 
       <!-- SECTION ROSTER CARDS -->
       <div class="card-grid" style="margin-bottom:20px;">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">Section Roster</div><div class="ic-num">${filteredEntries.length}</div></div></div>
-          <p>Students in ${escHtml(classRecExpandedSection)}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon">${iconUsers()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Section Roster</div>
+            <div class="ic-num">${filteredEntries.length}</div>
+            <p>Students in ${escHtml(classRecExpandedSection)}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconQuiz()}</div><div><div class="ic-sub">Quizzes Evaluated</div><div class="ic-num gold">${quizzes.length}</div></div></div>
-          <p>Active quiz assessments</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon gold">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Quizzes Evaluated</div>
+            <div class="ic-num gold">${quizzes.length}</div>
+            <p>Active quiz assessments</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Section Average</div><div class="ic-num green">${currentSecData.classAvg !== null && currentSecData.classAvg !== undefined ? currentSecData.classAvg.toFixed(2) + '%' : (overallAvg !== null ? overallAvg + '%' : '—')}</div></div></div>
-          <p>Combined section performance</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Section Average</div>
+            <div class="ic-num green">${currentSecData.classAvg !== null && currentSecData.classAvg !== undefined ? Number(currentSecData.classAvg).toFixed(2) + '%' : (overallAvg !== null ? Number(overallAvg).toFixed(2) + '%' : '—')}</div>
+            <p>Combined section performance</p>
+          </div>
         </div>
       </div>
 
@@ -3212,10 +3333,12 @@ function buildChatPage(role) {
 
 /* ── PAGE ROUTER & POLL TIMER ── */
 let currentPage = 'dashboard';
+window.currentPage = 'dashboard';
 let materialsPollTimer = null;
 
 function renderPage(page) {
   currentPage = page;
+  window.currentPage = page;
   document.querySelectorAll('.menu-item').forEach(i => {
     if (i.dataset.page === page) i.classList.add('active');
     else i.classList.remove('active');

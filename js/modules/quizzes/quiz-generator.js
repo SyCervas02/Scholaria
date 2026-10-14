@@ -412,9 +412,15 @@ function quizModalClose() {
   closeQuizModal();
 }
 
-function closeQuizModal() {
+function closeQuizModal(redirect = true) {
   const modal = document.getElementById('quizModal');
-  if (modal) modal.classList.remove('active');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  if (redirect && (document.getElementById('quizMakerContainer') || window.location.pathname.endsWith('quiz-maker.html') || window.location.href.includes('quiz-maker.html'))) {
+    window.location.href = 'dashboard.html';
+  }
 }
 
 if (typeof SUBJECTS_BY_STRAND === 'undefined') {
@@ -1884,7 +1890,7 @@ async function saveQuiz() {
       });
     }
 
-    closeQuizModal();
+    closeQuizModal(false);
     await loadQuizzesFromDB();
     if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
 
@@ -2085,6 +2091,12 @@ function setQuizManagerSearchQuery(q) {
 }
 
 let quizManagerFilterReview = '';
+let quizManagerFilterType = '';
+
+function setQuizManagerFilterType(t) {
+  quizManagerFilterType = t;
+  if (typeof renderPage === 'function') renderPage('quiz');
+}
 
 function setQuizManagerFilterReview(val) {
   quizManagerFilterReview = val;

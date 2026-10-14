@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css"/>
   <link rel="stylesheet" href="css/modules/deadlines.css?v=1"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20007"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20016"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css"/>
   <link rel="stylesheet" href="css/modules/chat.css?v=20006"/>
@@ -41,11 +41,14 @@
         <text x="52" y="47" font-family="'Plus Jakarta Sans',sans-serif" font-weight="700" font-size="9" fill="#94a3b8" letter-spacing="2">E-LEARNING</text>
       </svg>
     </div>
-    <div class="search-bar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:var(--blue);flex-shrink:0;">
+    <div class="search-bar" id="globalSearchWrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--blue);flex-shrink:0;">
         <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
       </svg>
-      <input type="text" placeholder="Search courses, paths, or skills..."/>
+      <input type="text" id="globalSearchInput" placeholder="Search subjects, quizzes, handouts, news (Ctrl + K)..." autocomplete="off" spellcheck="false"/>
+      <button type="button" id="globalSearchClearBtn" class="search-clear-btn" aria-label="Clear search" style="display:none;">✕</button>
+      <kbd class="search-kbd-badge" id="searchKbdBadge">Ctrl K</kbd>
+      <div class="search-results-dropdown" id="searchResultsDropdown" style="display:none;" role="listbox" aria-label="Search results"></div>
     </div>
     <div class="nav-right">
 
@@ -459,7 +462,7 @@
 
       <div class="modal-body" style="padding:20px;">
         <div style="margin-bottom:16px;">
-          <h4 style="font-size:13px;color:#0f172a;margin-bottom:12px;">Add New Hotline</h4>
+          <h4 id="manageHlFormTitle" style="font-size:13px;color:#0f172a;margin-bottom:12px;">Add New Hotline</h4>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
             <input type="text" id="newHlName" class="anc-form-input" placeholder="Full Name (e.g. Med Center)" style="font-size:12px;"/>
             <input type="text" id="newHlShort" class="anc-form-input" placeholder="Short Name (e.g. Med)" style="font-size:12px;"/>
@@ -467,7 +470,10 @@
             <input type="text" id="newHlTel" class="anc-form-input" placeholder="Callable Number (e.g. 0461234567)" style="font-size:12px;"/>
             <input type="text" id="newHlIcon" class="anc-form-input" placeholder="Icon (e.g. 🚨)" style="font-size:12px;grid-column: span 2;"/>
           </div>
-          <button onclick="addNewHotline()" style="background:#0284c7;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%;">Add Hotline</button>
+          <div style="display:flex;gap:8px;">
+            <button type="button" id="saveHlBtn" onclick="addNewHotline()" style="background:#0284c7;color:#fff;border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;flex:1;">Add Hotline</button>
+            <button type="button" id="cancelEditHlBtn" onclick="cancelEditHotline()" style="display:none;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;padding:9px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
+          </div>
         </div>
 
         <h4 style="font-size:13px;color:#0f172a;margin-bottom:12px;border-top:1px solid #e2e8f0;padding-top:16px;">Current Hotlines</h4>
@@ -687,19 +693,20 @@
 
   <!-- Modular Scripts -->
   <script src="js/core/ui-helpers.js?v=20005"></script>
-  <script src="js/core/notifications.js?v=20010"></script>
-  <script src="js/core/hotlines.js"></script>
+  <script src="js/core/notifications.js?v=20011"></script>
+  <script src="js/core/hotlines.js?v=20011"></script>
   <script src="js/core/announcements.js?v=20010"></script>
   <script src="js/modules/repository/materials.js?v=20005"></script>
   <script src="js/modules/quizzes/take-quiz.js?v=20010"></script>
   <script src="js/modules/quizzes/interactive-player.js?v=20012"></script>
   <script src="js/modules/quizzes/item-analysis.js?v=20005"></script>
-  <script src="js/modules/quizzes/quiz-generator.js?v=20005"></script>
+  <script src="js/modules/quizzes/quiz-generator.js?v=20016"></script>
   <script src="js/modules/chat/chat.js?v=20005"></script>
   <script src="js/modules/admin/user-management.js?v=20007"></script>
   <script src="js/modules/admin/report-generator.js?v=20005"></script>
   <script src="js/modules/courses.js?v=20005"></script>
-  <script src="js/core/sidebar.js?v=20010"></script>
+  <script src="js/core/sidebar.js?v=20016"></script>
+  <script src="js/core/search.js?v=20015"></script>
   <script src="js/core/auth.js?v=20005"></script>
 </body>
 </html>

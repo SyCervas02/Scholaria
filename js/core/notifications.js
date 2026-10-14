@@ -225,7 +225,7 @@ function refreshNotificationsUI() {
     const timeAgo = formatTimeAgo(n.timestamp);
     const iconStr = n.type === 'approval' ? '📌' : n.type === 'material' ? '📄' : n.type === 'quiz' ? '🎉' : '📢';
     return `
-      <div class="notif-item ${isUnread ? 'unread' : ''}" onclick="renderPage('notifications');closeNotif();">
+      <div class="notif-item ${isUnread ? 'unread' : ''}" onclick="handleNotifItemClick('${n.id}')">
         <div class="notif-dot"></div>
         <div class="notif-body">
           <p class="notif-msg">${iconStr} <strong>${escHtml(n.title)}</strong>: ${escHtml(n.message)}</p>
@@ -233,6 +233,28 @@ function refreshNotificationsUI() {
         </div>
       </div>`;
   }).join('');
+}
+
+function handleNotifItemClick(id) {
+  const all = getStoredNotifications();
+  const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
+  const item = all.find(n => n.id === id);
+  if (item) {
+    if (!item.readBy) item.readBy = [];
+    if (!item.readBy.includes(myId)) {
+      item.readBy.push(myId);
+      saveNotifications(all);
+      refreshNotificationsUI();
+    }
+  }
+  closeNotif();
+  if (typeof renderPage === 'function') renderPage('notifications');
+}
+
+function isNotificationsPageActive() {
+  return (typeof window !== 'undefined' && window.currentPage === 'notifications') ||
+         (typeof currentPage !== 'undefined' && currentPage === 'notifications') ||
+         !!document.querySelector('.notif-page-wrap');
 }
 
 function formatTimeAgo(isoString) {
@@ -277,7 +299,7 @@ let selectedNotifIds = new Set();
 
 function setNotifTabFilter(tab) {
   notifTabFilter = tab;
-  if (typeof renderPage === 'function') renderPage('notifications');
+  if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
 }
 
 function toggleNotifSelection(id) {
@@ -286,7 +308,7 @@ function toggleNotifSelection(id) {
   } else {
     selectedNotifIds.add(id);
   }
-  if (typeof renderPage === 'function') renderPage('notifications');
+  if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
 }
 
 function toggleSelectAllNotifs(checked) {
@@ -300,7 +322,7 @@ function toggleSelectAllNotifs(checked) {
   } else {
     selectedNotifIds.clear();
   }
-  if (typeof renderPage === 'function') renderPage('notifications');
+  if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
 }
 
 function markAllRead() {
@@ -313,7 +335,9 @@ function markAllRead() {
   saveNotifications(all);
   refreshNotificationsUI();
   if (typeof showToast === 'function') showToast('All notifications marked as read', 'success');
-  if (typeof renderPage === 'function') renderPage('notifications');
+  if (isNotificationsPageActive() && typeof renderPage === 'function') {
+    renderPage('notifications');
+  }
 }
 
 function markSelectedNotifsRead() {
@@ -333,7 +357,7 @@ function markSelectedNotifsRead() {
   selectedNotifIds.clear();
   refreshNotificationsUI();
   if (typeof showToast === 'function') showToast('Selected notifications marked as read', 'success');
-  if (typeof renderPage === 'function') renderPage('notifications');
+  if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
 }
 
 function deleteSelectedNotifs() {
@@ -347,7 +371,7 @@ function deleteSelectedNotifs() {
   selectedNotifIds.clear();
   refreshNotificationsUI();
   if (typeof showToast === 'function') showToast('Selected notifications deleted', 'success');
-  if (typeof renderPage === 'function') renderPage('notifications');
+  if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
 }
 
 function deleteSingleNotif(id) {
@@ -357,7 +381,7 @@ function deleteSingleNotif(id) {
   saveNotifications(all);
   refreshNotificationsUI();
   if (typeof showToast === 'function') showToast('Notification deleted', 'success');
-  if (typeof renderPage === 'function') renderPage('notifications');
+  if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
 }
 
 function clearAllNotifs() {
@@ -365,7 +389,7 @@ function clearAllNotifs() {
   selectedNotifIds.clear();
   refreshNotificationsUI();
   if (typeof showToast === 'function') showToast('All notifications cleared', 'success');
-  if (typeof renderPage === 'function') renderPage('notifications');
+  if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
 }
 
 function buildNotificationsPage() {
