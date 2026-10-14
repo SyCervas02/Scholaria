@@ -1988,3 +1988,43 @@ button svg {
   }
 }
 
+/* ═════════════════════════════════════════════════════════════
+   MICHAEL'S USER TABLE NO-WRAP & LAYOUT ENFORCEMENT
+═════════════════════════════════════════════════════════════ */
+.user-table td {
+  padding: 14px 18px !important;
+  border-bottom: 1px solid var(--blue-light) !important;
+  font-size: 13px !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+}
+
+.user-table code,
+.user-table .sec-badge,
+.user-table .au-grade-pill,
+.user-table .role-tag,
+.user-table .action-link,
+.user-table strong,
+.user-table .date-val,
+#userTableWrap code,
+#userTableWrap .sec-badge,
+#userTableWrap .au-grade-pill,
+#userTableWrap .role-tag,
+#userTableWrap .action-link,
+#userTableWrap strong,
+#userTableWrap .date-val {
+  white-space: nowrap !important;
+}
+
+.user-table .sec-badge,
+#userTableWrap .sec-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+}
+
+.user-table td > div,
+#userTableWrap td > div {
+  white-space: nowrap !important;
+}
+

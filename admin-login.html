@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Haven Of Wisdom Academy â€“ Admin Portal</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -19,7 +19,7 @@
         }
 
         body {
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -74,7 +74,7 @@
             flex-direction: column;
         }
         .portal-brand-title {
-            font-family: 'Playfair Display', serif;
+            font-family: 'Poppins', sans-serif;
             font-weight: 700;
             font-size: 19px;
             color: #78350f;
@@ -126,7 +126,7 @@
             border: none;
             padding: 10px 24px;
             border-radius: 50px;
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Inter', sans-serif;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
@@ -306,7 +306,7 @@
             border: 1px solid #fde68a;
         }
         .section-headline {
-            font-family: 'Playfair Display', serif;
+            font-family: 'Poppins', sans-serif;
             font-size: 32px;
             font-weight: 700;
             color: #0f172a;
@@ -367,9 +367,9 @@
             height: 26px;
         }
         .mv-title {
-            font-family: 'Playfair Display', serif;
+            font-family: 'Poppins', sans-serif;
             font-size: 22px;
-            font-weight: 700;
+            font-weight: 600;
             color: #78350f;
             margin-bottom: 14px;
         }
@@ -533,7 +533,7 @@
         }
 
         .logo-text h1 {
-            font-family: 'Playfair Display', serif;
+            font-family: 'Poppins', sans-serif;
             font-size: 17px;
             font-weight: 700;
             color: #fff;
@@ -561,7 +561,7 @@
             font-weight: 500;
             cursor: pointer;
             transition: background 0.2s;
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Inter', sans-serif;
             margin-right: 36px;
         }
         .back-pill:hover { background: rgba(255,255,255,0.3); }
@@ -583,7 +583,7 @@
         .role-badge svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
 
         .tab-label {
-            font-family: 'Playfair Display', serif;
+            font-family: 'Poppins', sans-serif;
             font-size: 26px;
             font-weight: 700;
             color: #fff;
@@ -634,7 +634,7 @@
             font-size: 14px;
             color: #1e293b;
             background: #fffdfa;
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Inter', sans-serif;
             transition: border-color 0.2s, box-shadow 0.2s;
             outline: none;
         }
@@ -671,7 +671,7 @@
             letter-spacing: 0.18em;
             text-align: center;
             text-transform: uppercase;
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Inter', sans-serif;
             color: #78350f;
             background: #fffdfa;
             outline: none;
@@ -706,7 +706,7 @@
             font-size: 14.5px;
             font-weight: 600;
             cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Inter', sans-serif;
             transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
             margin-top: 6px;
             box-shadow: 0 4px 14px rgba(180, 83, 9, 0.25);
@@ -896,7 +896,7 @@
   </footer>
 
 <!-- LOGIN MODAL OVERLAY -->
-<div class="login-modal-overlay" id="loginModalOverlay" onclick="handleBackdropClick(event)">
+<div class="login-modal-overlay open" id="loginModalOverlay" onclick="handleBackdropClick(event)">
   <div class="card-wrap">
     <div class="card">
         <!-- Close Button for Modal -->
@@ -1146,7 +1146,20 @@
             const { data: profile, error: profileErr } = await db
                 .from('users').select('role, is_active, is_demo').eq('id', authData.user.id).single();
 
-            if (profileErr || !profile || profile.role !== 'admin' || profile.is_active === false) {
+            if (profileErr || !profile) {
+                await db.auth.signOut();
+                showToast('This account is not registered as a School Admin', 'error');
+                return;
+            }
+
+            if (profile.is_active === false) {
+                await db.auth.signOut();
+                showError('l-pw-err', 'This administrator account has been deactivated. Permissions revoked by institutional security.');
+                showToast('Administrator account is deactivated. Permissions revoked.', 'error');
+                return;
+            }
+
+            if (profile.role !== 'admin') {
                 await db.auth.signOut();
                 showToast('This account is not registered as a School Admin', 'error');
                 return;
@@ -1200,9 +1213,18 @@
     }
 
     (async () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('deactivated') === '1') {
+            showToast('This administrator account has been deactivated. Permissions revoked.', 'error');
+        }
         const { data } = await db.auth.getSession();
         if (data?.session) {
-            const { data: profile } = await db.from('users').select('role').eq('id', data.session.user.id).single();
+            const { data: profile } = await db.from('users').select('role, is_active').eq('id', data.session.user.id).single();
+            if (profile && profile.is_active === false) {
+                await db.auth.signOut();
+                showToast('This administrator account has been deactivated. Permissions revoked.', 'error');
+                return;
+            }
             if (profile?.role === 'admin') {
                 window.location.href = 'dashboard.html';
             }
@@ -1274,6 +1296,10 @@
         if (overlay) {
             overlay.classList.add('open');
             document.body.style.overflow = 'hidden';
+            setTimeout(() => {
+                const idInput = document.getElementById('l-id');
+                if (idInput) idInput.focus();
+            }, 60);
         }
     }
 
@@ -1297,6 +1323,9 @@
 
     // Start carousel auto-rotation on page load
     startSlideTimer();
+
+    // Auto-open admin login credentials modal on page load
+    openLoginModal();
 </script>
 </body>
 </html>

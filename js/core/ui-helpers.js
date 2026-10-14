@@ -102,3 +102,254 @@ async function logout() {
   await db.auth.signOut();
   window.location.href = 'login.html';
 }
+
+/* ── GLOBAL SEARCH ENGINE (INSTANT REAL-TIME SEARCH) ── */
+let globalSearchDebounceTimer = null;
+
+function handleGlobalSearchFocus() {
+  const input = document.getElementById('globalSearchInput');
+  if (input && input.value.trim().length >= 1) {
+    handleGlobalSearchInput(input.value);
+  }
+}
+
+function clearGlobalSearch() {
+  const input = document.getElementById('globalSearchInput');
+  const clearBtn = document.getElementById('globalSearchClearBtn');
+  const dropdown = document.getElementById('globalSearchResults');
+  if (input) input.value = '';
+  if (clearBtn) clearBtn.style.display = 'none';
+  if (dropdown) {
+    dropdown.style.display = 'none';
+    dropdown.innerHTML = '';
+  }
+}
+
+function handleGlobalSearchKeydown(e) {
+  if (e.key === 'Escape') {
+    clearGlobalSearch();
+  } else if (e.key === 'Enter') {
+    const input = document.getElementById('globalSearchInput');
+    const q = (input ? input.value : '').trim().toLowerCase();
+    if (!q) return;
+    closeGlobalSearchDropdown();
+
+    if (typeof currentPage !== 'undefined' && currentPage === 'materials') {
+      const matInput = document.getElementById('materialsSearchInput');
+      if (matInput) {
+        matInput.value = q;
+        if (typeof setMaterialsSearchQuery === 'function') setMaterialsSearchQuery(q);
+      }
+    } else if (typeof currentPage !== 'undefined' && currentPage === 'quizzes') {
+      if (typeof studentQuizSearchQuery !== 'undefined') {
+        studentQuizSearchQuery = q;
+        if (typeof renderPage === 'function') renderPage('quizzes');
+      }
+    }
+  }
+}
+
+function handleGlobalSearchInput(rawVal) {
+  const clearBtn = document.getElementById('globalSearchClearBtn');
+  const dropdown = document.getElementById('globalSearchResults');
+  const query = (rawVal || '').trim().toLowerCase();
+
+  if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
+
+  if (!query) {
+    if (dropdown) {
+      dropdown.style.display = 'none';
+      dropdown.innerHTML = '';
+    }
+    return;
+  }
+
+  clearTimeout(globalSearchDebounceTimer);
+  globalSearchDebounceTimer = setTimeout(() => {
+    executeGlobalSearch(query);
+  }, 120);
+}
+
+function executeGlobalSearch(query) {
+  const dropdown = document.getElementById('globalSearchResults');
+  if (!dropdown) return;
+
+  const results = {
+    courses: [],
+    materials: [],
+    quizzes: [],
+    announcements: []
+  };
+
+  // 1. Courses & Subjects
+  if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
+    COURSES_DATABASE.forEach(c => {
+      const t = (c.title || '').toLowerCase();
+      const code = (c.code || '').toLowerCase();
+      const inst = (c.instructor || '').toLowerCase();
+      if (t.includes(query) || code.includes(query) || inst.includes(query)) {
+        results.courses.push({
+          id: c.id,
+          title: c.title,
+          sub: `${c.code} · ${c.instructor}`,
+          action: `navigateToSubjectMaterials('${c.id}')`
+        });
+      }
+    });
+  }
+
+  // 2. Learning Materials & PDFs
+  const allMats = (typeof materialsData !== 'undefined' && Array.isArray(materialsData)) ? materialsData : [];
+  allMats.forEach(m => {
+    const t = (m.title || m.fileName || '').toLowerCase();
+    const s = (m.subject || '').toLowerCase();
+    if (t.includes(query) || s.includes(query)) {
+      results.materials.push({
+        id: m.id,
+        title: m.title || m.fileName || 'Learning Handout',
+        sub: `📄 ${m.subject || 'Material'} · ${m.file_type ? m.file_type.toUpperCase() : 'PDF'}`,
+        action: `previewSubjectUploadedMaterial('${m.id}')`
+      });
+    }
+  });
+
+  // 3. Quizzes & Assessments
+  const allQuizzes = (typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes)) ? customQuizzes : [];
+  allQuizzes.forEach(q => {
+    const t = (q.title || '').toLowerCase();
+    const s = (q.subject || '').toLowerCase();
+    if (t.includes(query) || s.includes(query)) {
+      const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+      results.quizzes.push({
+        id: q.id,
+        title: q.title || 'Quiz Assessment',
+        sub: `📝 ${q.subject || 'Quiz'} · ${isInter ? 'Interactive' : 'Standard'}`,
+        action: isInter ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`
+      });
+    }
+  });
+
+  // 4. Announcements
+  const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+  allAnc.forEach(a => {
+    if (a.isArchived || a.status === 'draft') return;
+    const t = (a.title || '').toLowerCase();
+    const msg = (a.message || '').toLowerCase();
+    if (t.includes(query) || msg.includes(query)) {
+      results.announcements.push({
+        id: a.id,
+        title: a.title,
+        sub: `📢 ${a.category ? a.category.toUpperCase() : 'News'}`,
+        action: `openAnnouncementDetailModal('${a.id}')`
+      });
+    }
+  });
+
+  const totalHits = results.courses.length + results.materials.length + results.quizzes.length + results.announcements.length;
+
+  if (totalHits === 0) {
+    dropdown.innerHTML = `
+      <div style="padding:16px;text-align:center;color:#64748b;font-size:13px;">
+        <div style="font-size:22px;margin-bottom:6px;">🔍</div>
+        No matching courses, materials, or quizzes found for "<strong>${escHtml(query)}</strong>"
+      </div>
+    `;
+    dropdown.style.display = 'block';
+    return;
+  }
+
+  let html = '';
+
+  if (results.courses.length) {
+    html += `
+      <div class="search-results-group">
+        <div class="search-group-title">📚 Courses &amp; Subjects</div>
+        ${results.courses.slice(0, 4).map(c => `
+          <div class="search-item" onclick="${c.action}; closeGlobalSearchDropdown();">
+            <div class="search-item-icon" style="background:#eff6ff;color:#2563eb;">📚</div>
+            <div class="search-item-main">
+              <div class="search-item-title">${escHtml(c.title)}</div>
+              <div class="search-item-sub">${escHtml(c.sub)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  if (results.materials.length) {
+    html += `
+      <div class="search-results-group">
+        <div class="search-group-title">📄 Materials &amp; PDFs</div>
+        ${results.materials.slice(0, 4).map(m => `
+          <div class="search-item" onclick="${m.action}; closeGlobalSearchDropdown();">
+            <div class="search-item-icon" style="background:#f0fdf4;color:#16a34a;">📄</div>
+            <div class="search-item-main">
+              <div class="search-item-title">${escHtml(m.title)}</div>
+              <div class="search-item-sub">${escHtml(m.sub)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  if (results.quizzes.length) {
+    html += `
+      <div class="search-results-group">
+        <div class="search-group-title">📝 Quizzes &amp; Assessments</div>
+        ${results.quizzes.slice(0, 4).map(q => `
+          <div class="search-item" onclick="${q.action}; closeGlobalSearchDropdown();">
+            <div class="search-item-icon" style="background:#ede9fe;color:#7c3aed;">📝</div>
+            <div class="search-item-main">
+              <div class="search-item-title">${escHtml(q.title)}</div>
+              <div class="search-item-sub">${escHtml(q.sub)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  if (results.announcements.length) {
+    html += `
+      <div class="search-results-group">
+        <div class="search-group-title">📢 Announcements &amp; News</div>
+        ${results.announcements.slice(0, 3).map(a => `
+          <div class="search-item" onclick="${a.action}; closeGlobalSearchDropdown();">
+            <div class="search-item-icon" style="background:#fee2e2;color:#dc2626;">📢</div>
+            <div class="search-item-main">
+              <div class="search-item-title">${escHtml(a.title)}</div>
+              <div class="search-item-sub">${escHtml(a.sub)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  dropdown.innerHTML = html;
+  dropdown.style.display = 'block';
+}
+
+function closeGlobalSearchDropdown() {
+  const dropdown = document.getElementById('globalSearchResults');
+  if (dropdown) dropdown.style.display = 'none';
+}
+
+function navigateToSubjectMaterials(courseId) {
+  if (typeof setActiveSubjectMaterials === 'function') {
+    setActiveSubjectMaterials(courseId);
+  }
+  if (typeof renderPage === 'function') {
+    renderPage('materials');
+  }
+}
+
+document.addEventListener('click', function(e) {
+  const searchBar = document.getElementById('globalSearchBar');
+  if (searchBar && !searchBar.contains(e.target)) {
+    closeGlobalSearchDropdown();
+  }
+});
+

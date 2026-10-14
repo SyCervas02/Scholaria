@@ -1304,7 +1304,20 @@
             const { data: profile, error: profileErr } = await db
                 .from('users').select('role, is_active, is_demo').eq('id', authData.user.id).single();
 
-            if (profileErr || !profile || profile.role !== currentRole || profile.is_active === false) {
+            if (profileErr || !profile) {
+                await db.auth.signOut();
+                showToast(`This account isn't registered as a ${cfg.badgeLabel.replace(' Portal','')}`, 'error');
+                return;
+            }
+
+            if (profile.is_active === false) {
+                await db.auth.signOut();
+                showError('l-pw-err', 'This account has been deactivated. System permissions revoked by administration.');
+                showToast('Account is deactivated. Permissions revoked by administration.', 'error');
+                return;
+            }
+
+            if (profile.role !== currentRole) {
                 await db.auth.signOut();
                 showToast(`This account isn't registered as a ${cfg.badgeLabel.replace(' Portal','')}`, 'error');
                 return;
@@ -1406,8 +1419,20 @@
     }
 
     (async () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('deactivated') === '1') {
+            showToast('This account has been deactivated. Permissions revoked by administration.', 'error');
+        }
         const { data } = await db.auth.getSession();
-        if (data?.session) window.location.href = 'dashboard.html';
+        if (data?.session) {
+            const { data: profile } = await db.from('users').select('is_active').eq('id', data.session.user.id).single();
+            if (profile && profile.is_active === false) {
+                await db.auth.signOut();
+                showToast('This account has been deactivated. Permissions revoked by administration.', 'error');
+                return;
+            }
+            window.location.href = 'dashboard.html';
+        }
     })();
 
     /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•

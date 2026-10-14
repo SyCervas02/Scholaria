@@ -4,10 +4,10 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Scholaria • Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css"/>
   <link rel="stylesheet" href="css/modules/deadlines.css?v=1"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20016"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20020"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css"/>
   <link rel="stylesheet" href="css/modules/chat.css?v=20006"/>
@@ -21,6 +21,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/vendor_html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <link rel="stylesheet" href="css/responsive.css?v=4">
 </head>
 
@@ -32,7 +34,7 @@
         <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
       </svg>
     </button>
-    <div class="logo">
+    <div class="logo" onclick="if(typeof setActiveSubjectMaterials==='function') setActiveSubjectMaterials(null); renderPage('dashboard');" style="cursor:pointer;" title="Go to Dashboard">
       <svg class="logo-svg" id="brandLogoSvg" viewBox="0 0 216 52" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-label="Scholaria E-Learning">
         <image href="assets/logo.png" xlink:href="assets/logo.png" x="0" y="4" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
         <text x="52" y="30" font-family="'Syne',sans-serif" font-weight="800" font-size="22" letter-spacing="0"><tspan id="wm-schol" fill="#2563eb">schol</tspan><tspan id="wm-aria" fill="#f59e0b">aria</tspan></text>
@@ -696,16 +698,16 @@
   <script src="js/core/notifications.js?v=20011"></script>
   <script src="js/core/hotlines.js?v=20011"></script>
   <script src="js/core/announcements.js?v=20010"></script>
-  <script src="js/modules/repository/materials.js?v=20005"></script>
+  <script src="js/modules/repository/materials.js?v=20020"></script>
   <script src="js/modules/quizzes/take-quiz.js?v=20010"></script>
   <script src="js/modules/quizzes/interactive-player.js?v=20012"></script>
   <script src="js/modules/quizzes/item-analysis.js?v=20005"></script>
   <script src="js/modules/quizzes/quiz-generator.js?v=20016"></script>
   <script src="js/modules/chat/chat.js?v=20005"></script>
-  <script src="js/modules/admin/user-management.js?v=20007"></script>
+  <script src="js/modules/admin/user-management.js?v=20020"></script>
   <script src="js/modules/admin/report-generator.js?v=20005"></script>
   <script src="js/modules/courses.js?v=20005"></script>
-  <script src="js/core/sidebar.js?v=20016"></script>
+  <script src="js/core/sidebar.js?v=20020"></script>
   <script src="js/core/search.js?v=20015"></script>
   <script src="js/core/auth.js?v=20005"></script>
 </body>

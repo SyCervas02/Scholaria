@@ -29,7 +29,6 @@ const SIDEBAR = {
     { page: 'users',      label: 'User Management',  icon: iconUsers() },
     { page: 'sections',   label: 'Sections',         icon: iconSections() },
     { page: 'reports',    label: 'Reports',          icon: iconChart() },
-    { page: 'classrec',   label: 'Class Record',     icon: iconRecord() },
     { page: 'notifications', label: 'Notifications', icon: iconNotif() },
     { page: 'announcements', label: 'Announcements', icon: iconAnnouncement() },
     { page: 'chats',      label: 'Chats',            icon: iconChat() },
@@ -3276,8 +3275,6 @@ function adminPage(page) {
     }
 
     case 'chats': return buildChatPage('admin');
-
-    case 'classrec': return teacherPage('classrec');
 
     case 'profile': return buildProfilePage('admin');
 

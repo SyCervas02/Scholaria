@@ -9,32 +9,71 @@ const DEFAULT_SEED_ADMINS = [
   { name: 'Senior High School Head Administrator', id: 'HWA-A-2026-001', dbId: 'seed_admin_1', role: 'admin', email: 'admin@hwa.edu.ph', createdAt: '2026-01-10T08:00:00Z', lastActive: new Date().toISOString() }
 ];
 
+const CREDENTIAL_SLIP_STORAGE_KEY = 'scholaria_credential_slip_records';
 const ADMIN_HANDOUTS_STORAGE_KEY = 'scholaria_admin_handout_records';
+const ORIGINS_STORAGE_KEY = 'scholaria_account_origins_v1';
 
-function getAdminHandoutRecords() {
+function getLocalOriginRecords() {
   try {
-    const raw = localStorage.getItem(ADMIN_HANDOUTS_STORAGE_KEY);
+    const raw = localStorage.getItem(ORIGINS_STORAGE_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch (_) {
     return {};
   }
 }
 
-function saveAdminHandoutRecord(rec) {
+function saveLocalOriginRecord(rec) {
   try {
-    const all = getAdminHandoutRecords();
-    all[rec.school_id] = {
-      ...rec,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem(ADMIN_HANDOUTS_STORAGE_KEY, JSON.stringify(all));
+    const all = getLocalOriginRecords();
+    const key = rec.school_id || rec.user_id;
+    if (key) {
+      all[key] = {
+        ...(all[key] || {}),
+        ...rec,
+        cached_at: new Date().toISOString()
+      };
+      localStorage.setItem(ORIGINS_STORAGE_KEY, JSON.stringify(all));
+    }
   } catch (_) {}
 }
 
-function getAdminHandoutRecord(schoolId) {
-  const all = getAdminHandoutRecords();
+function getCredentialSlipRecords() {
+  try {
+    const raw = localStorage.getItem(CREDENTIAL_SLIP_STORAGE_KEY);
+    const legacy = localStorage.getItem(ADMIN_HANDOUTS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const parsedLegacy = legacy ? JSON.parse(legacy) : {};
+    return { ...parsedLegacy, ...parsed };
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveCredentialSlipRecord(rec) {
+  try {
+    const all = getCredentialSlipRecords();
+    const key = rec.school_id || rec.user_id;
+    if (key) {
+      all[key] = {
+        ...(all[key] || {}),
+        ...rec,
+        savedAt: new Date().toISOString()
+      };
+      localStorage.setItem(CREDENTIAL_SLIP_STORAGE_KEY, JSON.stringify(all));
+      localStorage.setItem(ADMIN_HANDOUTS_STORAGE_KEY, JSON.stringify(all));
+    }
+  } catch (_) {}
+}
+
+function getCredentialSlipRecord(schoolId) {
+  const all = getCredentialSlipRecords();
   return all[schoolId] || null;
 }
+
+// Backwards compatibility aliases:
+function getAdminHandoutRecords() { return getCredentialSlipRecords(); }
+function saveAdminHandoutRecord(rec) { return saveCredentialSlipRecord(rec); }
+function getAdminHandoutRecord(schoolId) { return getCredentialSlipRecord(schoolId); }
 
 function generateComplexPasswordClient(length = 14) {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -106,40 +145,160 @@ function setAdminUserTab(tab) {
     wrap.innerHTML = renderUserManagementContent();
   }
 }
+if (typeof window !== 'undefined') {
+  window.setAdminUserTab = setAdminUserTab;
+}
 
-function formatDateCreated(ts) {
+function formatExactDateTime(ts) {
   if (!ts) return '—';
   try {
     const d = new Date(ts);
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }) + ' · ' + d.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
   } catch {
     return '—';
   }
 }
 
-function formatLastActiveHtml(lastActive, createdAt) {
-  if (!lastActive) {
-    return `<span style="color:#d97706;font-size:12px;font-weight:600;background:#fef3c7;padding:2px 8px;border-radius:4px;">Pending first login</span>`;
-  }
-  const date = new Date(lastActive);
-  if (isNaN(date.getTime())) {
-    return `<span style="color:#94a3b8;font-size:12px;">—</span>`;
-  }
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
+function formatDateCreated(ts) {
+  return formatExactDateTime(ts);
+}
 
-  if (diffMins < 5) {
-    return `<span style="color:#10b981;font-weight:700;font-size:12px;display:inline-flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;background:#10b981;border-radius:50%;display:inline-block;box-shadow:0 0 6px #10b981;"></span> Online now</span>`;
+function formatDateWithOriginHtml(u) {
+  const dateStr = formatExactDateTime(u.createdAt);
+  let originLabel = '';
+  if (u.origin && u.origin.name) {
+    originLabel = `<div style="font-size:11px;color:#2563eb;font-weight:600;display:inline-flex;align-items:center;gap:3px;margin-top:2px;white-space:nowrap;" title="Created by ${escHtml(u.origin.name)} (${escHtml(u.origin.school_id || u.origin.role || 'Admin')})">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px;flex-shrink:0;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+      <span>by <strong>${escHtml(u.origin.name)}</strong></span>
+    </div>`;
+  } else {
+    originLabel = `<div style="font-size:10.5px;color:#94a3b8;font-style:italic;margin-top:2px;white-space:nowrap;">Institutional Initial</div>`;
   }
-  if (diffHours < 1) {
-    return `<span style="color:#475569;font-size:12px;">Active ${diffMins}m ago</span>`;
+
+  return `<div style="white-space:nowrap;">
+    <div style="font-size:12px;color:var(--text-primary);font-weight:600;white-space:nowrap;">${dateStr}</div>
+    ${originLabel}
+  </div>`;
+}
+
+function formatLastActiveHtml(lastActive, createdAt) {
+  const ts = lastActive || createdAt;
+  if (!ts) {
+    return `<span style="color:#94a3b8;font-size:12px;font-style:italic;white-space:nowrap;">No recorded session</span>`;
   }
-  if (diffHours < 24) {
-    return `<span style="color:#475569;font-size:12px;">Active ${diffHours}h ago</span>`;
+
+  const formatted = formatExactDateTime(ts);
+  let statusBadge = '';
+  try {
+    const diffMs = Date.now() - new Date(ts).getTime();
+    if (!isNaN(diffMs)) {
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 15) {
+        statusBadge = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#059669;font-weight:600;white-space:nowrap;"><span style="width:6px;height:6px;background:#10b981;border-radius:50%;box-shadow:0 0 6px #10b981;"></span> Online Now</span>`;
+      } else if (diffHours < 1) {
+        statusBadge = `<span style="font-size:11px;color:#64748b;white-space:nowrap;">${Math.max(1, diffMins)}m ago</span>`;
+      } else if (diffHours < 24) {
+        statusBadge = `<span style="font-size:11px;color:#64748b;white-space:nowrap;">${diffHours}h ago</span>`;
+      } else if (diffDays < 7) {
+        statusBadge = `<span style="font-size:11px;color:#64748b;white-space:nowrap;">${diffDays}d ago</span>`;
+      }
+    }
+  } catch (_) {}
+
+  return `<div style="white-space:nowrap;">
+    <div style="font-size:12px;color:var(--text-primary);font-weight:600;white-space:nowrap;">${formatted}</div>
+    ${statusBadge ? `<div style="margin-top:2px;white-space:nowrap;">${statusBadge}</div>` : ''}
+  </div>`;
+}
+
+function formatAccountStatusBadge(u) {
+  const active = u.isActive !== false;
+  if (active) {
+    return `<span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
+      <span style="width:6px;height:6px;background:#10b981;border-radius:50%;box-shadow:0 0 6px #10b981;"></span> Active
+    </span>`;
   }
-  return `<span style="color:#64748b;font-size:12px;">${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>`;
+  return `<span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;" title="Permissions revoked by administration">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" style="width:11px;height:11px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Deactivated
+  </span>`;
+}
+
+function renderUserDeactivationAction(u) {
+  const isSelf = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && (CURRENT_PROFILE.id === u.dbId || CURRENT_PROFILE.school_id === u.id));
+  if (isSelf) {
+    return `<span style="color:#94a3b8;font-size:11.5px;font-style:italic;" title="You cannot deactivate your own active session">You (Active)</span>`;
+  }
+
+  const active = u.isActive !== false;
+  const targetId = u.dbId || u.id;
+  if (active) {
+    return `<span class="action-link" style="color:#dc2626;font-weight:600;cursor:pointer;white-space:nowrap;" onclick="adminToggleUserStatus('${escHtml(targetId)}', false, '${escHtml(u.name)}')">Deactivate</span>`;
+  } else {
+    return `<span class="action-link" style="color:#059669;font-weight:600;cursor:pointer;white-space:nowrap;" onclick="adminToggleUserStatus('${escHtml(targetId)}', true, '${escHtml(u.name)}')">Reactivate</span>`;
+  }
+}
+
+async function adminToggleUserStatus(userId, shouldActivate, name) {
+  const actionWord = shouldActivate ? 'reactivate' : 'deactivate';
+  const confirmMsg = shouldActivate
+    ? `Reactivate account for "${name}"?\n\nThis will restore login privileges and all associated system permissions.`
+    : `Deactivate account for "${name}"?\n\n⚠️ Deactivation will immediately revoke all system permissions, terminate active sessions, and block future logins. (Accounts are preserved for administrative and academic audit integrity).`;
+
+  if (!confirm(confirmMsg)) return;
+
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) {
+    if (typeof showToast === 'function') showToast('Your session has expired — please sign in again', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/toggle-user-status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        is_active: shouldActivate
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      if (typeof showToast === 'function') showToast(data.error || `Failed to ${actionWord} account`, 'error');
+      return;
+    }
+
+    if (typeof showToast === 'function') {
+      showToast(data.message || `Account successfully ${shouldActivate ? 'reactivated' : 'deactivated'}`, shouldActivate ? 'success' : 'info');
+    }
+
+    // Update locally in registeredUsers
+    registeredUsers = registeredUsers.map(u => {
+      if (u.dbId === userId || u.id === userId) {
+        return { ...u, isActive: shouldActivate };
+      }
+      return u;
+    });
+
+    filterUserTable();
+  } catch (err) {
+    if (typeof showToast === 'function') showToast(`Could not reach the server to ${actionWord} user`, 'error');
+  }
 }
 
 function renderStudentRow(u) {
@@ -151,14 +310,22 @@ function renderStudentRow(u) {
     ? `<span class="action-link" style="color:#2563eb;font-weight:600;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`
     : `<span class="action-link" style="color:#d97706;font-weight:600;" onclick="adminMuteUser('${escHtml(targetId)}')">Mute</span>`;
   return `<tr>
-    <td><strong>${escHtml(u.name)}</strong></td>
-    <td><code style="font-size:12px;background:#f0f6ff;padding:2px 6px;border-radius:4px;color:var(--blue);">${escHtml(u.id)}</code></td>
-    <td><span class="au-grade-pill on" style="padding:2px 8px;font-size:11px;">${escHtml(u.gradeLevel || 'Grade 11')}</span></td>
-    <td><span class="role-tag student">${escHtml(u.strand || 'N/A')}</span></td>
-    <td>${isUnassigned ? '<span style="color:#d97706;font-weight:600;font-size:12px;background:#fef3c7;padding:2px 8px;border-radius:4px;">Unassigned</span>' : `<span class="sec-badge grade">${escHtml(u.section)}</span>`}</td>
-    <td class="date-val">${formatDateCreated(u.createdAt)}</td>
-    <td>${chatStatusHtml(u)}</td>
-    <td><span class="action-link" onclick="openMassAssignForSingleStudent('${escHtml(targetId)}')">Assign Section</span>${isAdmin ? ` &nbsp; ${actionBtn}` : ''}</td>
+    <td style="white-space:nowrap;"><strong style="white-space:nowrap;">${escHtml(u.name)}</strong></td>
+    <td style="white-space:nowrap;"><code style="font-size:12px;background:#f0f6ff;padding:3px 8px;border-radius:4px;color:var(--blue);font-family:'JetBrains Mono',monospace;white-space:nowrap;display:inline-block;">${escHtml(u.id)}</code></td>
+    <td style="white-space:nowrap;"><span class="au-grade-pill on" style="padding:2px 8px;font-size:11px;white-space:nowrap;display:inline-block;">${escHtml(u.gradeLevel || 'Grade 11')}</span></td>
+    <td style="white-space:nowrap;"><span class="role-tag student" style="white-space:nowrap;display:inline-block;">${escHtml(u.strand || 'N/A')}</span></td>
+    <td style="white-space:nowrap;">${isUnassigned ? '<span style="color:#d97706;font-weight:600;font-size:12px;background:#fef3c7;padding:2px 8px;border-radius:4px;white-space:nowrap;display:inline-block;">Unassigned</span>' : `<span class="sec-badge grade" style="white-space:nowrap;display:inline-flex;align-items:center;">${escHtml(u.section)}</span>`}</td>
+    <td class="date-val" style="white-space:nowrap;">${formatDateWithOriginHtml(u)}</td>
+    <td style="white-space:nowrap;">${formatAccountStatusBadge(u)}</td>
+    <td style="white-space:nowrap;">${chatStatusHtml(u)}</td>
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:10px;white-space:nowrap;">
+        <span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
+        <span class="action-link" style="white-space:nowrap;" onclick="openMassAssignForSingleStudent('${escHtml(targetId)}')">Assign</span>
+        ${isAdmin ? actionBtn : ''}
+        ${isAdmin ? renderUserDeactivationAction(u) : ''}
+      </div>
+    </td>
   </tr>`;
 }
 
@@ -167,17 +334,24 @@ function renderTeacherRow(u) {
   const isMuted = u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()) || (u.strikes && u.strikes > 0);
   const targetId = u.dbId || u.id;
   const actionBtn = isMuted
-    ? `<span class="action-link" style="color:#2563eb;font-weight:600;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`
-    : `<span class="action-link" style="color:#d97706;font-weight:600;" onclick="adminMuteUser('${escHtml(targetId)}')">Mute</span>`;
+    ? `<span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`
+    : `<span class="action-link" style="color:#d97706;font-weight:600;white-space:nowrap;" onclick="adminMuteUser('${escHtml(targetId)}')">Mute</span>`;
   return `<tr>
-    <td><strong>${escHtml(u.name)}</strong></td>
-    <td><code style="font-size:12px;background:#fffbeb;padding:2px 6px;border-radius:4px;color:#d97706;">${escHtml(u.id)}</code></td>
-    <td><span class="role-tag teacher">${escHtml(u.subjects || u.strand || 'General')}</span></td>
-    <td><span style="font-size:12px;font-weight:600;color:var(--text-secondary);">Grade 11 & 12</span></td>
-    <td>${escHtml(u.section || 'All / None')}</td>
-    <td class="date-val">${formatDateCreated(u.createdAt)}</td>
-    <td>${chatStatusHtml(u)}</td>
-    <td><span class="action-link">Edit</span> &nbsp; <span class="action-link" style="color:#dc2626">Deactivate</span>${isAdmin ? ` &nbsp; ${actionBtn}` : ''}</td>
+    <td style="white-space:nowrap;"><strong style="white-space:nowrap;">${escHtml(u.name)}</strong></td>
+    <td style="white-space:nowrap;"><code style="font-size:12px;background:#fffbeb;padding:3px 8px;border-radius:4px;color:#d97706;font-family:'JetBrains Mono',monospace;white-space:nowrap;display:inline-block;">${escHtml(u.id)}</code></td>
+    <td style="white-space:nowrap;"><span class="role-tag teacher" style="white-space:nowrap;display:inline-block;">${escHtml(u.subjects || u.strand || 'General')}</span></td>
+    <td style="white-space:nowrap;"><span style="font-size:12px;font-weight:600;color:var(--text-secondary);white-space:nowrap;">Grade 11 & 12</span></td>
+    <td style="white-space:nowrap;">${escHtml(u.section || 'All / None')}</td>
+    <td class="date-val" style="white-space:nowrap;">${formatDateWithOriginHtml(u)}</td>
+    <td style="white-space:nowrap;">${formatAccountStatusBadge(u)}</td>
+    <td style="white-space:nowrap;">${chatStatusHtml(u)}</td>
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:10px;white-space:nowrap;">
+        <span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
+        ${isAdmin ? actionBtn : ''}
+        ${isAdmin ? renderUserDeactivationAction(u) : ''}
+      </div>
+    </td>
   </tr>`;
 }
 
@@ -190,67 +364,54 @@ function renderAdminRow(u) {
     .slice(0, 2)
     .toUpperCase() || 'AD';
 
-  const handout = getAdminHandoutRecord(u.id);
   const isInstitutionalEmail = !u.email || u.email.endsWith('@admin.hwa.edu.ph');
 
   return `<tr>
-    <td>
-      <div style="display:flex;align-items:center;gap:12px;">
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:12px;white-space:nowrap;">
         <div style="width:36px;height:36px;border-radius:10px;background:#0f172a;color:#f59e0b;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;border:1.5px solid #d97706;box-shadow:0 2px 8px rgba(0,0,0,0.12);flex-shrink:0;">
           ${initials}
         </div>
-        <div>
-          <strong style="color:var(--text-primary);font-size:13.5px;">${escHtml(u.name)}</strong>
-          <div style="font-size:11.5px;color:#64748b;display:flex;align-items:center;gap:4px;margin-top:2px;">
+        <div style="white-space:nowrap;">
+          <strong style="color:var(--text-primary);font-size:13.5px;white-space:nowrap;">${escHtml(u.name)}</strong>
+          <div style="font-size:11.5px;color:#64748b;display:flex;align-items:center;gap:4px;margin-top:2px;white-space:nowrap;">
             <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" style="width:12px;height:12px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             Department Administrator
           </div>
         </div>
       </div>
     </td>
-    <td>
-      <span style="font-size:13px;color:#ea580c;font-weight:700;letter-spacing:0.4px;">${escHtml(u.id)}</span>
+    <td style="white-space:nowrap;">
+      <span style="font-size:13px;color:#ea580c;font-weight:700;letter-spacing:0.4px;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${escHtml(u.id)}</span>
     </td>
-    <td>
+    <td style="white-space:nowrap;">
       ${!isInstitutionalEmail
-        ? `<div style="font-size:12.5px;color:var(--text-primary);display:inline-flex;align-items:center;gap:6px;">
+        ? `<div style="font-size:12.5px;color:var(--text-primary);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
             <svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" style="width:13px;height:13px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             ${escHtml(u.email)}
            </div>`
-        : `<span style="color:#94a3b8;font-size:12px;font-style:italic;">None provided (Optional)</span>`
+        : `<span style="color:#94a3b8;font-size:12px;font-style:italic;white-space:nowrap;">None provided (Optional)</span>`
       }
     </td>
-    <td class="date-val">${formatDateCreated(u.createdAt)}</td>
-    <td>
+    <td class="date-val" style="white-space:nowrap;">${formatDateWithOriginHtml(u)}</td>
+    <td style="white-space:nowrap;">
       ${formatLastActiveHtml(u.lastActive, u.createdAt)}
     </td>
-    <td>
-      <span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
-        <span style="width:6px;height:6px;background:#10b981;border-radius:50%;"></span> Active
-      </span>
+    <td style="white-space:nowrap;">
+      ${formatAccountStatusBadge(u)}
     </td>
-    <td>
-      <div style="display:flex;align-items:center;gap:12px;">
-        ${handout ? `<span class="action-link" style="color:#ea580c;font-weight:600;white-space:nowrap;" onclick="viewAdminHandoutModal('${escHtml(u.id)}')">View Handout</span>` : ''}
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:12px;white-space:nowrap;">
+        <span class="action-link" style="color:#ea580c;font-weight:600;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
         <span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="openAdminResetPasswordPrompt('${escHtml(u.dbId || u.id)}', '${escHtml(u.name)}')">Reset Password</span>
+        ${renderUserDeactivationAction(u)}
       </div>
     </td>
   </tr>`;
 }
 
 function viewAdminHandoutModal(schoolId) {
-  const handout = getAdminHandoutRecord(schoolId);
-  if (!handout) {
-    if (typeof showToast === 'function') showToast('No saved handout card found for this admin ID', 'info');
-    return;
-  }
-  showAdminHandoutModal({
-    school_id: handout.school_id,
-    name: handout.name,
-    temp_password: handout.temp_password,
-    recovery_email: handout.recovery_email,
-    email: handout.recovery_email
-  });
+  viewUserCredentialSlip(schoolId);
 }
 
 async function openAdminResetPasswordPrompt(userId, name) {
@@ -279,15 +440,23 @@ async function openAdminResetPasswordPrompt(userId, name) {
       return;
     }
 
-    saveAdminHandoutRecord({
+    const adminSlip = {
       school_id: data.school_id,
       name: data.name || name,
+      role: 'admin',
       temp_password: data.temp_password,
-      created_at: new Date().toISOString()
-    });
+      created_at: new Date().toISOString(),
+      created_by: {
+        id: CURRENT_PROFILE?.id,
+        name: CURRENT_PROFILE?.full_name || 'Administrator',
+        school_id: CURRENT_PROFILE?.school_id || 'ADMIN',
+        role: 'admin'
+      }
+    };
+    saveCredentialSlipRecord(adminSlip);
 
     if (typeof showToast === 'function') showToast(`New password generated for ${name}!`, 'success');
-    showAdminHandoutModal(data);
+    showOfficialCredentialSlipModal([adminSlip]);
   } catch (err) {
     if (typeof showToast === 'function') showToast('Could not reach the server to reset password', 'error');
   }
@@ -362,7 +531,8 @@ function renderUserManagementContent() {
               <th>Grade Level</th>
               <th>Strand</th>
               <th>Section</th>
-              <th>Date Registered</th>
+              <th>Date & Origin</th>
+              <th>Account Status</th>
               <th>Chat Access</th>
               <th>Actions</th>
             </tr>
@@ -373,7 +543,8 @@ function renderUserManagementContent() {
               <th>Strands Handled</th>
               <th>Grade Level</th>
               <th>Section Handled</th>
-              <th>Date Registered</th>
+              <th>Date & Origin</th>
+              <th>Account Status</th>
               <th>Chat Access</th>
               <th>Actions</th>
             </tr>
@@ -382,7 +553,7 @@ function renderUserManagementContent() {
               <th>Administrator</th>
               <th>Admin ID</th>
               <th>Recovery Email</th>
-              <th>Date Created</th>
+              <th>Date & Origin</th>
               <th>Latest Activity</th>
               <th>Account Status</th>
               <th>Actions</th>
@@ -409,28 +580,51 @@ async function loadUsersFromDB() {
   if (isFetchingUsers) return;
   isFetchingUsers = true;
   try {
+    let auditMap = {};
+    try {
+      const { data: { session } } = await db.auth.getSession();
+      if (session) {
+        const auditRes = await fetch(`${API_BASE}/api/admin/account-audit`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (auditRes.ok) {
+          const auditJson = await auditRes.json();
+          auditMap = auditJson.records || {};
+        }
+      }
+    } catch (_) {}
+    const localAudits = getLocalOriginRecords();
+
     const { data, error } = await db.from('users').select('*').order('created_at', { ascending: false });
     if (error) { console.error('Failed to load users:', error.message); return; }
-    const fetchedUsers = (data || []).map(u => ({
-      name: u.full_name,
-      id: u.school_id,
-      role: u.role,
-      detail: u.role === 'student'
-        ? `${u.strand || ''} — ${u.grade_level || ''}`
-        : (u.role === 'teacher' ? (u.section ? `${u.subjects || u.strand || ''} (${u.section})` : (u.subjects || u.strand || '')) : 'School Administrator'),
-      strand: u.strand || '',
-      gradeLevel: u.grade_level || '',
-      section: u.section || '',
-      subjects: u.subjects || '',
-      email: u.email || '',
-      recoveryEmail: u.email || '',
-      createdAt: u.created_at || null,
-      lastActive: u.last_active_at || u.created_at || null,
-      dbId: u.id,
-      permanentlyMuted: !!u.permanently_muted,
-      mutedUntil: u.muted_until || null,
-      strikes: u.profanity_strikes || 0
-    }));
+    const fetchedUsers = (data || []).map(u => {
+      const auditInfo = auditMap[u.school_id] || auditMap[u.id] || localAudits[u.school_id] || localAudits[u.id] || null;
+      const origin = auditInfo?.created_by || null;
+
+      return {
+        name: u.full_name,
+        id: u.school_id,
+        role: u.role,
+        detail: u.role === 'student'
+          ? `${u.strand || ''} — ${u.grade_level || ''}`
+          : (u.role === 'teacher' ? (u.section ? `${u.subjects || u.strand || ''} (${u.section})` : (u.subjects || u.strand || '')) : 'School Administrator'),
+        strand: u.strand || '',
+        gradeLevel: u.grade_level || '',
+        section: u.section || '',
+        subjects: u.subjects || '',
+        email: u.email || '',
+        recoveryEmail: u.email || '',
+        createdAt: u.created_at || null,
+        lastActive: u.last_active_at || u.created_at || null,
+        dbId: u.id,
+        isActive: u.is_active !== false,
+        origin: origin,
+        statusHistory: auditInfo?.status_history || [],
+        permanentlyMuted: !!u.permanently_muted,
+        mutedUntil: u.muted_until || null,
+        strikes: u.profanity_strikes || 0
+      };
+    });
 
     const existingNames = new Set(fetchedUsers.map(u => u.name.toLowerCase()));
     const missingSeeds = DEFAULT_SEED_USERS.filter(su => !existingNames.has(su.name.toLowerCase()));
@@ -1277,7 +1471,11 @@ function openAddUserModal(initialType) {
   renderAddUserModal();
 }
 function closeAddUserModal() {
-  document.getElementById('addUserModal').classList.remove('active');
+  const modal = document.getElementById('addUserModal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.classList.remove('credential-slip-modal');
+  }
 }
 
 function auSelectType(t) {
@@ -1570,7 +1768,25 @@ async function auSaveUsers() {
       });
       const body = await res.json();
       if (!res.ok) { failures.push(`${u.name}: ${body.error || 'failed'}`); continue; }
-      results.push({ name: u.name, ...body });
+      const itemRecord = {
+        name: u.name,
+        role: u.role,
+        strand: u.strand,
+        grade_level: u.grade_level,
+        section: u.section,
+        subjects: u.subjects,
+        ...body
+      };
+      saveCredentialSlipRecord(itemRecord);
+      saveLocalOriginRecord({
+        school_id: body.school_id,
+        user_id: body.school_id,
+        name: u.name,
+        role: u.role,
+        created_at: body.created_at,
+        created_by: body.created_by
+      });
+      results.push(itemRecord);
     } catch {
       failures.push(`${u.name}: could not reach the server`);
     }
@@ -1580,7 +1796,7 @@ async function auSaveUsers() {
 
   if (results.length) {
     closeAddUserModal();
-    showCredentialsModal(results);
+    showOfficialCredentialSlipModal(results);
     await loadUsersFromDB();
   }
 }
@@ -1631,16 +1847,33 @@ async function auSaveAdminAccount() {
       return;
     }
 
-    saveAdminHandoutRecord({
+    const adminSlip = {
       school_id: data.school_id,
       name: data.name || name,
+      role: 'admin',
       temp_password: data.temp_password || password,
       recovery_email: data.recovery_email || email || null,
-      created_at: new Date().toISOString()
+      email: data.email || email,
+      created_at: data.created_at || new Date().toISOString(),
+      created_by: data.created_by || {
+        id: CURRENT_PROFILE?.id,
+        name: CURRENT_PROFILE?.full_name || 'Administrator',
+        school_id: CURRENT_PROFILE?.school_id || 'ADMIN',
+        role: 'admin'
+      }
+    };
+
+    saveCredentialSlipRecord(adminSlip);
+    saveLocalOriginRecord({
+      school_id: data.school_id,
+      name: data.name || name,
+      role: 'admin',
+      created_at: adminSlip.created_at,
+      created_by: adminSlip.created_by
     });
 
     closeAddUserModal();
-    showAdminHandoutModal(data);
+    showOfficialCredentialSlipModal([adminSlip]);
     await loadUsersFromDB();
   } catch (err) {
     if (typeof showToast === 'function') showToast('Could not reach the server to create account', 'error');
@@ -1648,114 +1881,436 @@ async function auSaveAdminAccount() {
   }
 }
 
-function showAdminHandoutModal(adminData) {
+function buildCredentialSlipCardHtml(slip, index = 0) {
+  const cardId = `credentialSlipCard_${index}_${(slip.school_id || 'user').replace(/[^a-zA-Z0-9]/g, '_')}`;
+  const roleTitle = slip.role === 'admin'
+    ? 'Department Administrator'
+    : slip.role === 'teacher'
+      ? 'Senior High Faculty'
+      : 'Senior High Student';
+
+  const portalUrl = slip.role === 'admin'
+    ? `${window.location.origin}/admin-login.html`
+    : `${window.location.origin}/login.html`;
+
+  const createdTimeStr = formatExactDateTime(slip.created_at || slip.createdAt || Date.now());
+  const creatorName = slip.created_by?.name || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'Institutional Administration';
+  const creatorId = slip.created_by?.school_id || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.school_id) || 'ADMIN';
+  const refCode = `HWA-SLIP-${slip.school_id || 'GEN'}`;
+
+  const academicInfo = slip.role === 'admin'
+    ? 'Institutional Systems & Department Administration'
+    : [slip.strand || slip.subjects, slip.grade_level || slip.gradeLevel, slip.section].filter(Boolean).join(' · ') || 'Senior High School Academic Department';
+
+  const emailDisplay = slip.recovery_email || slip.email || (slip.role === 'admin' ? `${(slip.school_id || '').toLowerCase()}@admin.hwa.edu.ph` : 'None on file');
+  const pwDisplay = slip.temp_password || slip.tempPassword || '[Security Key Issued / User Established]';
+
+  return `
+    <div class="credential-slip-card" id="${cardId}"
+         data-school-id="${escHtml(slip.school_id || slip.id || '')}"
+         data-name="${escHtml(slip.name || slip.full_name || 'Authorized User')}"
+         data-role="${escHtml(roleTitle)}"
+         data-temp-pw="${escHtml(pwDisplay)}"
+         data-created-at="${escHtml(createdTimeStr)}"
+         data-created-by="${escHtml(creatorName)}"
+         data-origin-id="${escHtml(creatorId)}"
+         data-academic="${escHtml(academicInfo)}"
+         data-email="${escHtml(emailDisplay)}"
+         data-portal="${escHtml(portalUrl)}">
+      <div class="credential-slip-watermark">HAVEN OF WISDOM</div>
+
+      <div class="credential-slip-head">
+        <div class="slip-school-brand">
+          <div class="slip-school-logo" style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;background:#1e3a8a;border-radius:12px;border:2px solid #d97706;box-shadow:0 2px 8px rgba(30,58,138,0.25);flex-shrink:0;">
+            <svg viewBox="0 0 40 40" style="width:34px;height:34px;" fill="none">
+              <circle cx="20" cy="20" r="18" stroke="#f59e0b" stroke-width="1.8" stroke-dasharray="2,2"/>
+              <path d="M20 9 L31 15 L20 21 L9 15 Z" fill="#fbbf24"/>
+              <path d="M14 17.5 V23.5 C14 27.5 20 30.5 20 30.5 C20 30.5 26 27.5 26 23.5 V17.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+              <path d="M31 15 V22.5" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="31" cy="24" r="1.2" fill="#fbbf24"/>
+            </svg>
+          </div>
+          <div class="slip-school-info">
+            <h2>Haven of Wisdom Academy</h2>
+            <p>Senior High School Department · Scholaria Academic Management Portal</p>
+          </div>
+        </div>
+        <div class="slip-doc-badge">
+          <div class="slip-badge-title">Official Credential Slip</div>
+          <div class="slip-badge-ref">REF: ${escHtml(refCode)}</div>
+        </div>
+      </div>
+
+      <div class="slip-provenance-bar">
+        <div class="slip-provenance-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" style="width:13px;height:13px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Created: <strong>${createdTimeStr}</strong></span>
+        </div>
+        <div class="slip-provenance-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" style="width:13px;height:13px;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg>
+          <span>Originator: <strong>${escHtml(creatorName)}</strong> (${escHtml(creatorId)})</span>
+        </div>
+        <div class="slip-provenance-item">
+          <span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:12px;">
+            ${slip.isActive === false ? 'STATUS: DEACTIVATED' : 'STATUS: ACTIVE'}
+          </span>
+        </div>
+      </div>
+
+      <div class="slip-info-grid">
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Account Holder Name</div>
+          <div class="slip-info-value">${escHtml(slip.name || slip.full_name || 'Authorized User')}</div>
+        </div>
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Official Institutional School ID</div>
+          <div class="slip-info-value school-id-val">${escHtml(slip.school_id || slip.id)}</div>
+        </div>
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Account Classification / Role</div>
+          <div class="slip-info-value" style="color:#d97706;">${escHtml(roleTitle)}</div>
+        </div>
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Academic Assignment / Division</div>
+          <div class="slip-info-value" style="font-size:12.5px;">${escHtml(academicInfo)}</div>
+        </div>
+      </div>
+
+      <div class="slip-creds-box">
+        <div class="slip-creds-title">
+          <span>Official Portal Login Credentials</span>
+          <span class="tag">Confidential Security Slip</span>
+        </div>
+        <div class="slip-pw-display">
+          <div>
+            <div style="font-size:10.5px;color:#94a3b8;font-weight:600;margin-bottom:2px;">TEMPORARY SYSTEM PASSWORD</div>
+            <div class="slip-pw-code">${escHtml(pwDisplay)}</div>
+          </div>
+          <button type="button" class="admin-pw-btn" onclick="copyTextToClipboard('${escHtml(pwDisplay)}', 'Temporary password copied!')" title="Copy Password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy Key
+          </button>
+        </div>
+        <div class="slip-portal-url">
+          <span>Official Login Portal URL:</span>
+          <strong>${portalUrl}</strong>
+        </div>
+      </div>
+
+      <div class="slip-instructions">
+        <strong>First-Time Login Security Directives:</strong>
+        <ol>
+          <li>Open your web browser and navigate directly to the official login portal URL specified above.</li>
+          <li>Enter your <strong>Institutional School ID</strong> (or registered email: <em>${escHtml(emailDisplay)}</em>) and this temporary password.</li>
+          <li>For institutional integrity, the system will prompt you to replace this temporary password with your permanent confidential password immediately.</li>
+          <li>Never share this slip or disclose your security credentials to any other individual.</li>
+        </ol>
+      </div>
+
+      <div class="slip-signatures-row">
+        <div class="slip-sig-box">
+          <div class="slip-sig-line"></div>
+          <div class="slip-sig-role">${escHtml(creatorName)}</div>
+          <div class="slip-sig-sub">Issuing Administrator / School Registrar</div>
+        </div>
+        <div class="slip-sig-box">
+          <div class="slip-sig-line"></div>
+          <div class="slip-sig-role">${escHtml(slip.name || 'Account Holder')}</div>
+          <div class="slip-sig-sub">Account Holder Signature & Date Received</div>
+        </div>
+      </div>
+
+      <div class="slip-legal-notice">
+        Haven of Wisdom Academy · Republic Act 10173 (Philippine Data Privacy Act of 2012) Compliance Notice.<br>
+        This official credential document is strictly confidential. Unauthorized duplication, scanning, or distribution is prohibited.
+      </div>
+    </div>
+  `;
+}
+
+function buildDirectSlipPdfString(data) {
+  const sanitize = s => String(s || '').replace(/[\(\)\\\r\n]/g, ' ');
+  const title = 'HAVEN OF WISDOM ACADEMY - CREDENTIAL ISSUANCE SLIP';
+  const ref = 'REF CODE: HWA-SLIP-' + sanitize(data.school_id);
+  const name = 'Account Holder: ' + sanitize(data.name);
+  const id = 'Institutional School ID: ' + sanitize(data.school_id);
+  const role = 'Classification: ' + sanitize(data.role);
+  const academic = 'Assignment: ' + sanitize(data.academic);
+  const created = 'Creation Timestamp: ' + sanitize(data.created_at);
+  const creator = 'Originator / Creator: ' + sanitize(data.creator_name || 'Administrator') + ' (' + sanitize(data.creator_id || 'ADMIN') + ')';
+  const portal = 'Official Portal URL: ' + sanitize(data.portal || '/login.html');
+  const pw = 'TEMPORARY PASSWORD: ' + sanitize(data.temp_password);
+  const note1 = 'SECURITY DIRECTIVE: You must change this temporary password upon first login.';
+  const note2 = 'Republic Act 10173 (Data Privacy Act of 2012) - Confidential Issuance Slip.';
+
+  const streamLines = [
+    'BT',
+    '/F1 16 Tf',
+    '50 740 Td (' + sanitize(title) + ') Tj',
+    '/F1 10 Tf',
+    '0 -18 Td (' + sanitize(ref) + ') Tj',
+    '/F1 12 Tf',
+    '0 -35 Td (' + sanitize(name) + ') Tj',
+    '0 -20 Td (' + sanitize(id) + ') Tj',
+    '0 -20 Td (' + sanitize(role) + ') Tj',
+    '0 -20 Td (' + sanitize(academic) + ') Tj',
+    '0 -20 Td (' + sanitize(created) + ') Tj',
+    '0 -20 Td (' + sanitize(creator) + ') Tj',
+    '0 -20 Td (' + sanitize(portal) + ') Tj',
+    '/F1 14 Tf',
+    '0 -40 Td (' + sanitize(pw) + ') Tj',
+    '/F1 10 Tf',
+    '0 -35 Td (' + sanitize(note1) + ') Tj',
+    '0 -20 Td (' + sanitize(note2) + ') Tj',
+    'ET'
+  ];
+
+  const streamContent = streamLines.join('\n');
+  const streamLen = streamContent.length;
+
+  let body = '%PDF-1.4\n';
+  const offsets = [];
+
+  function addObj(num, content) {
+    offsets[num] = body.length;
+    body += num + ' 0 obj\n' + content + '\nendobj\n';
+  }
+
+  addObj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  addObj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  addObj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>');
+  addObj(4, '<< /Length ' + streamLen + ' >>\nstream\n' + streamContent + '\nendstream');
+  addObj(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+
+  const startxref = body.length;
+  let xref = 'xref\n0 6\n0000000000 65535 f \n';
+  for (let i = 1; i <= 5; i++) {
+    xref += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+  }
+  xref += 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + startxref + '\n%%EOF';
+
+  return body + xref;
+}
+
+function fallbackDownloadDirectSlipPdf(el, filename) {
+  try {
+    const schoolId = el.getAttribute('data-school-id') || 'USER';
+    const name = el.getAttribute('data-name') || el.querySelector('.slip-info-value')?.innerText || 'Authorized User';
+    const role = el.getAttribute('data-role') || 'User';
+    const tempPw = el.getAttribute('data-temp-pw') || el.querySelector('.slip-pw-code')?.innerText || '';
+    const createdAt = el.getAttribute('data-created-at') || '';
+    const creatorName = el.getAttribute('data-created-by') || 'Institutional Administration';
+    const creatorId = el.getAttribute('data-origin-id') || 'ADMIN';
+    const academic = el.getAttribute('data-academic') || 'Senior High School';
+    const portal = el.getAttribute('data-portal') || `${window.location.origin}/login.html`;
+
+    const pdfStr = buildDirectSlipPdfString({
+      school_id: schoolId,
+      name: name,
+      role: role,
+      temp_password: tempPw,
+      created_at: createdAt,
+      creator_name: creatorName,
+      creator_id: creatorId,
+      academic: academic,
+      portal: portal
+    });
+
+    const blob = new Blob([pdfStr], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `HWA_Credential_Slip_${schoolId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    if (typeof showToast === 'function') showToast('Official PDF slip downloaded successfully!', 'success');
+  } catch (err) {
+    console.error('Fallback PDF download failed:', err);
+    if (typeof showToast === 'function') showToast('Could not initiate file download', 'error');
+  }
+}
+
+function downloadCredentialSlipPdf(cardId, filename) {
+  const el = document.getElementById(cardId);
+  if (!el) {
+    if (typeof showToast === 'function') showToast('Slip element not found', 'error');
+    return;
+  }
+
+  const safeFilename = filename || 'HWA_Credential_Slip.pdf';
+  if (typeof showToast === 'function') showToast('Generating official PDF credential slip...', 'info');
+
+  if (typeof html2pdf !== 'undefined') {
+    try {
+      const opt = {
+        margin: [6, 6, 6, 6],
+        filename: safeFilename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(el).save().then(() => {
+        if (typeof showToast === 'function') showToast('Credential slip PDF downloaded successfully!', 'success');
+      }).catch(err => {
+        console.warn('html2pdf render failed, falling back to direct PDF download:', err);
+        fallbackDownloadDirectSlipPdf(el, safeFilename);
+      });
+      return;
+    } catch (err) {
+      console.warn('html2pdf invocation error:', err);
+    }
+  }
+
+  fallbackDownloadDirectSlipPdf(el, safeFilename);
+}
+
+function downloadAllCredentialSlipsPdf(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  const filename = `HWA_Credential_Slips_Batch_${new Date().toISOString().slice(0, 10)}.pdf`;
+  if (typeof showToast === 'function') showToast('Generating comprehensive PDF bundle...', 'info');
+
+  if (typeof html2pdf !== 'undefined') {
+    try {
+      const opt = {
+        margin: [6, 6, 6, 6],
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(el).save().then(() => {
+        if (typeof showToast === 'function') showToast('Batch PDF credential slips downloaded!', 'success');
+      }).catch(err => {
+        console.warn('Batch html2pdf failed, falling back to direct PDF downloads:', err);
+        const cards = el.querySelectorAll('.credential-slip-card');
+        cards.forEach((card, idx) => {
+          setTimeout(() => {
+            const sid = card.getAttribute('data-school-id') || `slip_${idx+1}`;
+            fallbackDownloadDirectSlipPdf(card, `HWA_Credential_Slip_${sid}.pdf`);
+          }, idx * 250);
+        });
+      });
+      return;
+    } catch (err) {
+      console.warn('Batch html2pdf invocation error:', err);
+    }
+  }
+
+  const cards = el.querySelectorAll('.credential-slip-card');
+  cards.forEach((card, idx) => {
+    setTimeout(() => {
+      const sid = card.getAttribute('data-school-id') || `slip_${idx+1}`;
+      fallbackDownloadDirectSlipPdf(card, `HWA_Credential_Slip_${sid}.pdf`);
+    }, idx * 250);
+  });
+}
+
+function showOfficialCredentialSlipModal(slips) {
+  const list = Array.isArray(slips) ? slips : [slips];
+  if (!list.length) return;
+
   const modal = document.getElementById('addUserModal');
   const body = document.getElementById('addUserModalBody');
   const foot = document.getElementById('addUserModalFoot');
   if (!modal || !body || !foot) return;
 
-  const schoolId = adminData.school_id;
-  const name = adminData.name || adminData.full_name || 'Administrator';
-  const tempPw = adminData.temp_password || '';
-  const email = adminData.recovery_email || adminData.email || 'None provided (Log in with Admin ID)';
+  modal.classList.add('credential-slip-modal');
 
-  const handoutSummary = `HAVEN OF WISDOM ACADEMY - SCHOLARIA PORTAL
-ADMINISTRATOR CREDENTIAL HANDOUT
-========================================
-Employee Name: ${name}
-Admin ID: ${schoolId}
-Temporary Password: ${tempPw}
-Recovery Email: ${email}
-Portal Login URL: ${window.location.origin}/admin-login.html
-Security Requirement: You must change your temporary password immediately upon your first sign-in.
-========================================`;
+  const isMulti = list.length > 1;
+  const containerId = 'credentialSlipsBundleContainer';
 
   body.innerHTML = `
-    <div style="text-align:center;margin-bottom:16px;">
-      <div style="width:48px;height:48px;background:#0f172a;color:#f59e0b;border:2px solid #d97706;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px;box-shadow:0 4px 14px rgba(15,23,42,0.25);">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    <div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
+      <div>
+        <h4 style="font-family:'Poppins',sans-serif;font-size:16px;font-weight:700;color:#1e3a8a;margin:0 0 2px 0;">Official Credential Issuance ${isMulti ? 'Slips' : 'Slip'}</h4>
+        <span style="font-size:12px;color:#64748b;">${isMulti ? `${list.length} accounts created. Download or print individual slips below.` : 'Confidential credentials ready for safe issuance to account holder.'}</span>
       </div>
-      <h3 style="font-size:17px;font-weight:700;color:var(--text-primary);margin-bottom:4px;">Administrator Account Ready</h3>
-      <p style="font-size:12.5px;color:var(--text-muted);max-width:380px;margin:0 auto;">
-        Hand this temporary credential card to the employee in person or via private channel.
-      </p>
+      <span class="sec-badge" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;font-size:11.5px;font-weight:700;">
+        ${list.length} ${list.length === 1 ? 'Credential Slip' : 'Credential Slips'}
+      </span>
     </div>
 
-    <div class="admin-handout-box">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;border-bottom:1px solid #f1f5f9;padding-bottom:10px;">
+    <div class="credential-slip-wrapper" id="${containerId}">
+      ${list.map((slip, i) => `
         <div>
-          <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Employee</span>
-          <h4 style="font-size:15px;color:#0f172a;margin:2px 0 0 0;">${escHtml(name)}</h4>
+          ${buildCredentialSlipCardHtml(slip, i)}
+          ${isMulti ? `
+            <div style="margin-top:8px;text-align:right;">
+              <button type="button" class="gen-btn" onclick="downloadCredentialSlipPdf('credentialSlipCard_${i}_${(slip.school_id || 'user').replace(/[^a-zA-Z0-9]/g, '_')}', 'HWA_Credential_Slip_${escHtml(slip.school_id || 'user')}.pdf')" style="background:#1e3a8a;color:#fff;font-size:12px;padding:6px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download Slip (${escHtml(slip.school_id || slip.name)}) PDF
+              </button>
+            </div>
+          ` : ''}
         </div>
-        <span class="sec-badge" style="background:#0f172a;color:#f59e0b;border:1px solid #d97706;font-size:11px;font-weight:700;">Administrator</span>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-        <div style="background:#f8fafc;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;">
-          <div style="font-size:11px;color:#64748b;font-weight:600;margin-bottom:3px;">Admin School ID</div>
-          <div style="font-family:monospace;font-size:13.5px;font-weight:700;color:#0f172a;">${escHtml(schoolId)}</div>
-        </div>
-        <div style="background:#f8fafc;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;">
-          <div style="font-size:11px;color:#64748b;font-weight:600;margin-bottom:3px;">Recovery Email</div>
-          <div style="font-size:12px;font-weight:600;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(email)}</div>
-        </div>
-      </div>
-
-      <div style="background:#0f172a;border-radius:10px;padding:12px 14px;border:1.5px solid #334155;">
-        <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;">
-          <span>TEMPORARY SECURE PASSWORD</span>
-          <span style="color:#f59e0b;font-size:10.5px;">Auto-Generated</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-          <code style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#f59e0b;letter-spacing:1px;word-break:break-all;">${escHtml(tempPw)}</code>
-          <button type="button" class="admin-pw-btn" onclick="copyTextToClipboard('${escHtml(tempPw)}', 'Password copied!')" style="background:#1e293b;border-color:#475569;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            Copy
-          </button>
-        </div>
-      </div>
-
-      <div style="margin-top:12px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#b45309;background:#fef3c7;padding:8px 12px;border-radius:8px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span>The employee will be forced to change this password immediately on their first login.</span>
-      </div>
+      `).join('')}
     </div>
   `;
 
+  const singleCardId = `credentialSlipCard_0_${(list[0].school_id || 'user').replace(/[^a-zA-Z0-9]/g, '_')}`;
+  const singleFilename = `HWA_Credential_Slip_${list[0].school_id || 'user'}.pdf`;
+
   foot.innerHTML = `
-    <button class="foot-btn-secondary" onclick="closeAddUserModal()">Done</button>
-    <button class="gen-btn" onclick="copyTextToClipboard(\`${handoutSummary.replace(/`/g, '\\`')}\`, 'Complete handout card copied!')" style="background:#0f172a;color:#f59e0b;border:1.5px solid #d97706;display:inline-flex;align-items:center;gap:6px;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      Copy Complete Handout Card
+    <button class="foot-btn-secondary" onclick="closeAddUserModal()">Done / Close</button>
+    <button class="gen-btn" onclick="window.print()" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;display:inline-flex;align-items:center;gap:6px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print Slip
     </button>
+    ${isMulti ? `
+      <button class="gen-btn" onclick="downloadAllCredentialSlipsPdf('${containerId}')" style="background:#1e3a8a;color:#fff;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(30,58,138,0.25);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download All Slips (PDF)
+      </button>
+    ` : `
+      <button class="gen-btn" onclick="downloadCredentialSlipPdf('${singleCardId}', '${singleFilename}')" style="background:#1e3a8a;color:#fff;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(30,58,138,0.25);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Official PDF Slip
+      </button>
+    `}
   `;
 
   modal.classList.add('active');
 }
 
-function showCredentialsModal(results) {
-  const rows = results.map(r => `
-    <div class="added-user-row">
-      <div class="au-info">
-        <h5>${escHtml(r.name)}</h5>
-        <span>${escHtml(r.school_id)} · ${escHtml(r.email)}</span>
-        <div style="margin-top:4px;font-family:monospace;font-size:12.5px;background:#f8fbff;border:1px solid var(--blue-light);border-radius:6px;padding:6px 10px;display:inline-block;">
-          ${escHtml(r.temp_password)}
-        </div>
-      </div>
-    </div>`).join('');
+function viewUserCredentialSlip(schoolId) {
+  const savedSlip = getCredentialSlipRecord(schoolId);
+  const user = registeredUsers.find(u => u.id === schoolId || u.dbId === schoolId);
 
-  document.getElementById('addUserModalBody').innerHTML = '';
-  document.getElementById('addUserModal').classList.add('active');
-  document.getElementById('addUserModalBody').innerHTML = `
-    <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;">
-      Account${results.length !== 1 ? 's' : ''} created. Copy each temporary password now —
-      it will not be shown again. Share it out of band (in person, or to the
-      email on file), not over chat or in a screenshot you keep around.
-    </p>
-    ${rows}`;
-  document.getElementById('addUserModalFoot').innerHTML =
-    `<button class="foot-btn-secondary" onclick="closeAddUserModal()">Done</button>`;
+  const slipData = {
+    school_id: schoolId,
+    name: savedSlip?.name || user?.name || 'Account Holder',
+    role: savedSlip?.role || user?.role || 'student',
+    strand: savedSlip?.strand || user?.strand || '',
+    grade_level: savedSlip?.grade_level || user?.gradeLevel || '',
+    section: savedSlip?.section || user?.section || '',
+    email: savedSlip?.email || savedSlip?.recovery_email || user?.email || '',
+    recovery_email: savedSlip?.recovery_email || user?.recoveryEmail || user?.email || '',
+    temp_password: savedSlip?.temp_password || savedSlip?.tempPassword || '',
+    created_at: savedSlip?.created_at || savedSlip?.savedAt || user?.createdAt || new Date().toISOString(),
+    created_by: savedSlip?.created_by || user?.origin || {
+      name: 'School Administration / Registrar',
+      school_id: 'HWA-ADMIN',
+      role: 'admin'
+    },
+    isActive: user?.isActive !== false
+  };
+
+  showOfficialCredentialSlipModal([slipData]);
+}
+
+function showAdminHandoutModal(adminData) {
+  showOfficialCredentialSlipModal([adminData]);
+}
+
+function showCredentialsModal(results) {
+  showOfficialCredentialSlipModal(results);
 }
 
 function renderAddUserModal() {
