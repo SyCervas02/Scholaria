@@ -483,7 +483,11 @@ async function loadMaterialsFromDB() {
     const t = String(m.title || m.fileName || '').trim().toLowerCase();
     if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber') return false;
     return true;
-  });
+  }).map(m => ({
+    ...m,
+    category: m.category || 'Handout',
+    tag: m.tag || 'Handout'
+  }));
 
   if (ROLE === 'student') {
     const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
@@ -1711,6 +1715,8 @@ function getUnifiedMaterialsList() {
       id: m.id,
       title: m.title || 'Untitled Material',
       fileName: m.title || 'Document.pdf',
+      category: m.category || 'Handout',
+      tag: m.tag || 'Handout',
       subject: m.subject || 'General',
       strand: m.strand || 'General',
       grade_level: m.grade_level || 'Grade 11',
@@ -2139,6 +2145,9 @@ function renderMaterialsManagerPage(role) {
                           <span class="mm-type-dot ${typeClass}"></span>
                           <span>${escHtml(m.type || 'PDF')}</span>
                         </div>
+                        <span class="mm-handout-badge" style="display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #fde68a;padding:1px 6px;border-radius:4px;margin-top:4px;white-space:nowrap;">
+                          Handout
+                        </span>
                       </td>
 
                       <!-- 5. Status -->
@@ -2228,7 +2237,12 @@ function renderMaterialsManagerPage(role) {
                         typeClass === 'xlsx' ? '<span class="mm-doc-letter">X</span>' :
                         getFileTypeSvg(m.type)}
                     </div>
-                    <span class="mm-status-pill ${statusClass}">${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : 'Rejected'}</span>
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                      <span class="mm-status-pill ${statusClass}">${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : 'Rejected'}</span>
+                      <span class="mm-handout-badge" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #fde68a;padding:1px 6px;border-radius:4px;white-space:nowrap;">
+                        Handout
+                      </span>
+                    </div>
                   </div>
                   <h4 class="mm-card-title">${escHtml(m.title)}</h4>
                   <p class="mm-card-subject">${escHtml(m.subject)} · ${escHtml(m.strand)}</p>
@@ -3250,6 +3264,8 @@ async function submitMaterialUpload() {
       id: srv ? srv.id : `local_${Date.now()}_${idx}`,
       title: itemTitle,
       fileName: f.name,
+      category: 'Handout',
+      tag: 'Handout',
       subject: s.subject.trim(),
       course_id: s.course_id || activeSubjectFilter || null,
       course_code: s.course_code || null,
@@ -3302,6 +3318,12 @@ async function submitMaterialUpload() {
       activeSubjectFilter = s.course_id;
     }
     activeSubjectSubTab = 'uploads';
+  } else if (ROLE === 'admin') {
+    // For admin, reset filters so the newly uploaded handout appears immediately at the top
+    materialsActiveTab = 'all';
+    materialsStatusFilter = '';
+    materialsSearchQuery = '';
+    materialsCurrentPage = 1;
   }
 
   closeMaterialModal();

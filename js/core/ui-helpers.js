@@ -29,11 +29,11 @@ function saveManagedSections() {
   syncSectionsArray();
 }
 
-let SECTIONS = managedSections.map(s => s.name);
+let SECTIONS = managedSections.filter(s => !s.isArchived).map(s => s.name);
 
 function syncSectionsArray() {
   SECTIONS.length = 0;
-  managedSections.forEach(s => SECTIONS.push(s.name));
+  managedSections.filter(s => !s.isArchived).forEach(s => SECTIONS.push(s.name));
 }
 
 
@@ -59,6 +59,155 @@ function initialsFor(fullName) {
   if (!fullName) return '?';
   const parts = fullName.replace(',', '').trim().split(/\s+/);
   return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
+}
+
+/* ── STRICT TEXTBOX VALIDATION UTILITIES (SYSTEM-WIDE) ── */
+
+/**
+ * Strictly blocks numbers and special characters from being typed into name fields.
+ * Only allows letters (a-z, A-Z), spaces, hyphens, and periods (for initials).
+ */
+function allowLettersOnly(e) {
+  if (e.ctrlKey || e.altKey || e.metaKey || ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End'].includes(e.key)) {
+    return true;
+  }
+  // Block digits 0-9 and special characters
+  if (!/^[a-zA-Z\sñÑ\-.]+$/.test(e.key)) {
+    e.preventDefault();
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Sanitizes input for name fields (oninput / onpaste).
+ * Strips any numbers and special characters immediately.
+ */
+function sanitizeNameInput(el) {
+  if (!el) return;
+  const original = el.value;
+  const cleaned = original.replace(/[^a-zA-Z\sñÑ\-.]/g, '');
+  if (original !== cleaned) {
+    el.value = cleaned;
+  }
+}
+
+/**
+ * Strictly allows ONLY digits (0-9) to be typed into phone number textboxes.
+ */
+function allowDigitsOnly(e) {
+  if (e.ctrlKey || e.altKey || e.metaKey || ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End'].includes(e.key)) {
+    return true;
+  }
+  if (!/^[0-9]$/.test(e.key)) {
+    e.preventDefault();
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Sanitizes phone input textboxes (oninput / onpaste).
+ * Strictly allows numbers only and enforces maximum of 11 characters.
+ */
+function sanitizePhoneInput(el) {
+  if (!el) return;
+  let digits = el.value.replace(/\D/g, '');
+  if (digits.length > 11) {
+    digits = digits.slice(0, 11);
+  }
+  if (el.value !== digits) {
+    el.value = digits;
+  }
+}
+
+/**
+ * Strictly validates Philippine mobile number format:
+ * Must be exactly 11 digits starting with "09" (e.g., 09123456789).
+ */
+function isValidPhilippineMobile(num) {
+  if (!num) return false;
+  const clean = String(num).trim().replace(/\D/g, '');
+  return /^09\d{9}$/.test(clean);
+}
+
+/**
+ * Real-time validator helper for phone textboxes with visual error hint.
+ */
+function validatePhoneField(el, errId) {
+  if (!el) return true;
+  const val = (el.value || '').trim();
+  const errEl = document.getElementById(errId);
+  if (!val) {
+    if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+    el.classList.remove('input-err-active');
+    return true;
+  }
+  const valid = isValidPhilippineMobile(val);
+  if (!valid) {
+    if (errEl) {
+      errEl.textContent = 'Must be exactly 11 digits starting with 09 (e.g. 09123456789)';
+      errEl.style.display = 'block';
+    }
+    el.classList.add('input-err-active');
+    return false;
+  } else {
+    if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+    el.classList.remove('input-err-active');
+    return true;
+  }
+}
+
+/**
+ * Splits a full name string into First Name, Middle Initial, and Last Name parts.
+ */
+function parseFullNameParts(fullName) {
+  if (!fullName) return { firstName: '', lastName: '', middleInitial: '' };
+  const str = String(fullName).trim();
+  if (str.includes(',')) {
+    const [last, rest] = str.split(',').map(s => s.trim());
+    const restParts = (rest || '').split(/\s+/).filter(Boolean);
+    let mi = '';
+    let first = rest || '';
+    if (restParts.length > 1) {
+      const candidateMi = restParts[restParts.length - 1].replace('.', '');
+      if (candidateMi.length <= 2) {
+        mi = candidateMi.toUpperCase();
+        first = restParts.slice(0, -1).join(' ');
+      }
+    }
+    return { firstName: first, lastName: last || '', middleInitial: mi };
+  }
+  const parts = str.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: '', lastName: '', middleInitial: '' };
+  if (parts.length === 1) return { firstName: parts[0], lastName: '', middleInitial: '' };
+  if (parts.length === 2) return { firstName: parts[0], lastName: parts[1], middleInitial: '' };
+
+  const secondPart = parts[1].replace('.', '');
+  if (secondPart.length <= 2 && parts.length >= 3) {
+    return {
+      firstName: parts[0],
+      middleInitial: secondPart.toUpperCase(),
+      lastName: parts.slice(2).join(' ')
+    };
+  }
+
+  return {
+    firstName: parts.slice(0, -1).join(' '),
+    middleInitial: '',
+    lastName: parts[parts.length - 1]
+  };
+}
+
+/**
+ * Assembles First Name, Middle Initial, and Last Name into a standardized Full Name.
+ */
+function assembleFullName(firstName, lastName, middleInitial) {
+  const f = (firstName || '').trim();
+  const l = (lastName || '').trim();
+  let mi = (middleInitial || '').trim().toUpperCase().replace('.', '');
+  if (mi) mi = mi + '.';
+  return [f, mi, l].filter(Boolean).join(' ');
 }
 
 

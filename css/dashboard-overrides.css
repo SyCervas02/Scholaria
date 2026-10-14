@@ -56,24 +56,77 @@
 .info-card .ic-num.red { color: #dc2626; }
 .info-card .ic-sub { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); }
 
-.score-table {
-  background: #fff; border: 1.5px solid var(--blue-light); border-radius: 16px;
-  overflow: hidden; box-shadow: var(--shadow);
+.score-table,
+.score-table-responsive {
+  background: #fff;
+  border: 1.5px solid var(--blue-light);
+  border-radius: 16px;
+  overflow-x: auto !important;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: var(--shadow);
+  max-width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
 }
-.score-table table { width: 100%; border-collapse: collapse; }
-.score-table th {
-  background: var(--blue); color: #fff; font-size: 12px; font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase; padding: 12px 16px; text-align: left;
+.score-table table,
+.score-table-responsive table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
 }
-.score-table td {
-  padding: 12px 16px; border-bottom: 1px solid var(--blue-light);
-  font-size: 13.5px; color: var(--text-primary);
+.score-table th,
+.score-table-responsive th {
+  background: var(--blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 13px 18px;
+  text-align: left;
+  white-space: nowrap !important;
+  word-break: normal !important;
+  hyphens: none !important;
 }
-.score-table tr:last-child td { border-bottom: none; }
-.score-table tr:hover td { background: #f0f6ff; }
-.score-val { font-weight: 700; color: var(--blue); }
+.score-table td,
+.score-table-responsive td {
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--blue-light);
+  font-size: 13.5px;
+  color: var(--text-primary);
+  white-space: nowrap !important;
+  word-break: normal !important;
+  hyphens: none !important;
+}
+.score-table tr:last-child td,
+.score-table-responsive tr:last-child td { border-bottom: none; }
+.score-table tr:hover td,
+.score-table-responsive tr:hover td { background: #f0f6ff; }
+.score-val { font-weight: 700; color: var(--blue); white-space: nowrap !important; }
 .score-val.good { color: #059669; }
 .score-val.low  { color: #dc2626; }
+
+/* ── SCORE TABLE CUSTOM HORIZONTAL SCROLLBAR ── */
+.score-table::-webkit-scrollbar,
+.score-table-responsive::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.score-table::-webkit-scrollbar-track,
+.score-table-responsive::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.score-table::-webkit-scrollbar-thumb,
+.score-table-responsive::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.score-table::-webkit-scrollbar-thumb:hover,
+.score-table-responsive::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
 
 /* ── ENHANCED PROFILE STYLES ── */
 .profile-grid-layout { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; align-items: start; }
@@ -286,15 +339,50 @@
   background: #ffffff; border: 1.5px solid #e8f0fe; border-radius: 12px;
   overflow: hidden; box-shadow: 0 1px 6px rgba(15,23,42,0.03);
 }
-.notif-table-responsive { width: 100%; overflow-x: auto; }
-.notif-table { width: 100%; border-collapse: collapse; text-align: left; }
+.notif-table-responsive {
+  width: 100%;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+.notif-table-responsive::-webkit-scrollbar {
+  height: 6px;
+}
+.notif-table-responsive::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.notif-table-responsive::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.notif-table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  text-align: left;
+}
 .notif-table th {
-  background: #0f172a; color: #f8fafc; font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.4px; padding: 10px 14px;
-  border-bottom: 1px solid #1e293b; white-space: nowrap;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #1e293b;
+  white-space: nowrap !important;
+  word-break: normal !important;
 }
 .notif-table td {
-  padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 12.5px; color: #334155; vertical-align: middle;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12.5px;
+  color: #334155;
+  vertical-align: middle;
+  white-space: nowrap !important;
+  word-break: normal !important;
 }
 .notif-table tr:last-child td { border-bottom: none; }
 .notif-table tbody tr { transition: background-color 0.15s ease; }
@@ -549,11 +637,26 @@ body.has-anc-banner {
 .report-table-container {
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
   margin-bottom: 28px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+.report-table-container::-webkit-scrollbar {
+  height: 6px;
+}
+.report-table-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.report-table-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
 }
 .report-table {
   width: 100%;
+  min-width: 820px;
   border-collapse: collapse;
   font-size: 12.5px;
 }
@@ -566,11 +669,15 @@ body.has-anc-banner {
   border-bottom: 1.5px solid #cbd5e1;
   font-size: 11.5px;
   letter-spacing: 0.02em;
+  white-space: nowrap !important;
+  word-break: normal !important;
 }
 .report-table td {
   padding: 8px 12px;
   border-bottom: 1px solid #e2e8f0;
   color: #1e293b;
+  white-space: nowrap !important;
+  word-break: normal !important;
 }
 .report-table tr:last-child td { border-bottom: none; }
 .report-table tr:nth-child(even) td { background: #f8fafc; }
@@ -1730,6 +1837,9 @@ h1, h2, h3,
 .mm-table th {
   font-weight: 600 !important;
   font-family: 'Inter', sans-serif !important;
+  white-space: nowrap !important;
+  word-break: normal !important;
+  hyphens: none !important;
 }
 .student-deadlines-table td,
 .score-table td,
@@ -1740,6 +1850,9 @@ h1, h2, h3,
 .mm-table td {
   font-weight: 400 !important;
   font-family: 'Inter', sans-serif !important;
+  white-space: nowrap !important;
+  word-break: normal !important;
+  hyphens: none !important;
 }
 
 /* Buttons & Filters: Inter 500-600 */
@@ -2309,18 +2422,27 @@ button,
 /* Deadlines Table */
 .student-deadlines-table-wrap {
   flex: 1;
-  overflow-x: auto;
+  overflow-x: auto !important;
   -webkit-overflow-scrolling: touch;
   margin-bottom: 10px;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
 }
 .student-deadlines-table-wrap::-webkit-scrollbar {
-  display: none !important;
+  height: 6px;
+}
+.student-deadlines-table-wrap::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.student-deadlines-table-wrap::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
 }
 .student-deadlines-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 0;
+  min-width: 680px;
 }
 .student-deadlines-table th {
   text-align: left;
@@ -2331,14 +2453,17 @@ button,
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1.5px solid #f1f5f9;
-  white-space: nowrap;
+  white-space: nowrap !important;
+  word-break: normal !important;
 }
 .student-deadlines-table td {
-  padding: 7px 12px;
+  padding: 8px 12px;
   font-size: 12.5px;
   color: #1e293b;
   border-bottom: 1px solid #f8fafc;
   vertical-align: middle;
+  white-space: nowrap !important;
+  word-break: normal !important;
 }
 .student-deadlines-table tr:hover td {
   background: #f8faff;
@@ -3358,6 +3483,141 @@ button,
 .user-table td > div,
 #userTableWrap td > div {
   white-space: nowrap !important;
+}
+
+/* ── MATERIALS HANDOUT BADGE & VALIDATION STYLES ── */
+.mm-handout-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #b45309;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.pf-error-hint {
+  color: #dc2626;
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.input-err-active {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15) !important;
+  background-color: #fef2f2 !important;
+}
+
+/* ── UNIVERSAL RESPONSIVE TABLE HORIZONTAL SCROLLBAR STYLES ── */
+.score-table,
+.score-table-responsive,
+.census-table-responsive,
+.mm-table-responsive,
+.ca-table-wrap,
+.student-deadlines-table-wrap,
+.notif-table-responsive,
+.roster-table-wrap,
+.report-table-container,
+#userTableWrap {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #cbd5e1 #f1f5f9 !important;
+}
+
+.score-table::-webkit-scrollbar,
+.score-table-responsive::-webkit-scrollbar,
+.census-table-responsive::-webkit-scrollbar,
+.mm-table-responsive::-webkit-scrollbar,
+.ca-table-wrap::-webkit-scrollbar,
+.student-deadlines-table-wrap::-webkit-scrollbar,
+.notif-table-responsive::-webkit-scrollbar,
+.roster-table-wrap::-webkit-scrollbar,
+.report-table-container::-webkit-scrollbar,
+#userTableWrap::-webkit-scrollbar {
+  height: 8px !important;
+  width: 8px !important;
+}
+
+.score-table::-webkit-scrollbar-track,
+.score-table-responsive::-webkit-scrollbar-track,
+.census-table-responsive::-webkit-scrollbar-track,
+.mm-table-responsive::-webkit-scrollbar-track,
+.ca-table-wrap::-webkit-scrollbar-track,
+.student-deadlines-table-wrap::-webkit-scrollbar-track,
+.notif-table-responsive::-webkit-scrollbar-track,
+.roster-table-wrap::-webkit-scrollbar-track,
+.report-table-container::-webkit-scrollbar-track,
+#userTableWrap::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+  border-radius: 4px !important;
+}
+
+.score-table::-webkit-scrollbar-thumb,
+.score-table-responsive::-webkit-scrollbar-thumb,
+.census-table-responsive::-webkit-scrollbar-thumb,
+.mm-table-responsive::-webkit-scrollbar-thumb,
+.ca-table-wrap::-webkit-scrollbar-thumb,
+.student-deadlines-table-wrap::-webkit-scrollbar-thumb,
+.notif-table-responsive::-webkit-scrollbar-thumb,
+.roster-table-wrap::-webkit-scrollbar-thumb,
+.report-table-container::-webkit-scrollbar-thumb,
+#userTableWrap::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+  border-radius: 4px !important;
+}
+
+.score-table::-webkit-scrollbar-thumb:hover,
+.score-table-responsive::-webkit-scrollbar-thumb:hover,
+.census-table-responsive::-webkit-scrollbar-thumb:hover,
+.mm-table-responsive::-webkit-scrollbar-thumb:hover,
+.ca-table-wrap::-webkit-scrollbar-thumb:hover,
+.student-deadlines-table-wrap::-webkit-scrollbar-thumb:hover,
+.notif-table-responsive::-webkit-scrollbar-thumb:hover,
+.roster-table-wrap::-webkit-scrollbar-thumb:hover,
+.report-table-container::-webkit-scrollbar-thumb:hover,
+#userTableWrap::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8 !important;
+}
+
+.roster-table-wrap {
+  width: 100%;
+}
+.roster-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+}
+
+/* ── ADMIN CENSUS PRINT LAYOUT ── */
+@media print {
+  .portal-header, .sidebar, .menu-item, .chat-page-heading, button, .foot-btn-secondary, .add-btn, .table-act-btn {
+    display: none !important;
+  }
+  .admin-census-page {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .admin-census-page .card-grid {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+  }
+  .admin-census-page .info-card {
+    border: 1px solid #cbd5e1 !important;
+    page-break-inside: avoid !important;
+  }
+  .score-table {
+    box-shadow: none !important;
+    border: 1px solid #94a3b8 !important;
+  }
 }
 
 
