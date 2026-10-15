@@ -330,14 +330,40 @@ let materialsData = getCustomMaterialsFromStorage();
 let materialsStrandFilter = '';
 let materialsAdminTab = 'pending';
 let activeSubjectFilter = null; // course.id or null
+let activeSubjectSection = null; // e.g. 'Section A' or 'Section B'
 let activeSubjectSubTab = 'modules'; // 'modules' | 'quizzes' | 'uploads'
 let expandedModuleMap = {}; // { [docId]: boolean }
 
-function setActiveSubjectMaterials(courseId) {
-  activeSubjectFilter = courseId;
+function setActiveSubjectMaterials(courseId, section) {
+  activeSubjectFilter = courseId || null;
+  activeSubjectSection = (courseId && section) ? section : null;
+  window.activeSubjectFilter = activeSubjectFilter;
+  window.activeSubjectSection = activeSubjectSection;
   activeSubjectSubTab = 'modules';
   renderMaterialsContainer();
 }
+window.setActiveSubjectMaterials = setActiveSubjectMaterials;
+window.activeSubjectFilter = null;
+window.activeSubjectSection = null;
+
+function openTeacherCreateQuizForSubject(subject, section) {
+  const url = `quiz-maker.html?subject=${encodeURIComponent(subject || '')}&section=${encodeURIComponent(section || '')}`;
+  const container = document.getElementById('quizMakerContainer');
+  const modal = document.getElementById('quizModal');
+  if (container || modal) {
+    if (typeof openQuizModal === 'function') {
+      openQuizModal();
+      if (typeof quizGen !== 'undefined') {
+        if (subject) quizGen.subject = subject;
+        if (section) quizGen.sections = new Set([section]);
+        if (typeof renderQuizWizard === 'function') renderQuizWizard();
+      }
+    }
+  } else {
+    window.location.href = url;
+  }
+}
+window.openTeacherCreateQuizForSubject = openTeacherCreateQuizForSubject;
 
 function setSubjectSubTab(tab) {
   activeSubjectSubTab = tab;
@@ -360,6 +386,15 @@ function getSubjectLessons(course) {
   if (!course) return [];
   const cTitle = (course.title || '').toLowerCase();
   
+  if (cTitle.includes('prog') || cTitle.includes('programming') || cTitle.includes('computer')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Intro to Programming, Syntax & IDE Setup', cover: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Variables, Data Types, Operators & Expressions', cover: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Conditional Logic & Loops (If/Else, While, For)', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Functions, Arrays & Coding Applications', cover: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
   if (cTitle.includes('pre-calculus') || cTitle.includes('precalculus')) {
     return [
       { id: `${course.id}_l1`, num: '01', title: '01 Platforms and Conic Sections', cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80', items: [] },
@@ -626,12 +661,13 @@ function renderMaterialsList(role) {
             Back to All Subjects
           </button>
           <span class="sh-bc-sep">/</span>
-          <span class="sh-bc-curr">${escHtml(course.title)} (${escHtml(course.code)})</span>
+          <span class="sh-bc-curr">${escHtml(course.title)} (${escHtml(course.code)})${activeSubjectSection ? ` · ${escHtml(activeSubjectSection)}` : ''}</span>
         </div>
 
         <div class="sw-header-card">
           <div class="sw-header-tags">
-            <span class="sh-tag track">SPECIALIZED</span>
+            <span class="sh-tag track">${escHtml((course.track || 'SPECIALIZED').toUpperCase())}</span>
+            ${activeSubjectSection ? `<span class="sh-tag section" style="background:#0284c7;color:#fff;font-weight:700;">${escHtml(activeSubjectSection.toUpperCase())}</span>` : ''}
             <span class="sh-tag strand">${escHtml(course.strand || 'STEM')} STRAND</span>
             <span class="sh-tag sem">${escHtml(course.semester || '1ST SEM')} · ${escHtml(course.gradeLevel || 'GRADE 11')}</span>
           </div>
@@ -645,12 +681,7 @@ function renderMaterialsList(role) {
                 <span>Instructor: <strong>${escHtml(course.instructor || 'Dr. Eleanor Llorente')}</strong></span>
               </div>
             </div>
-            ${(role === 'teacher' || role === 'admin') ? `
-              <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;font-weight:700;font-size:13px;white-space:nowrap;box-shadow:0 4px 12px rgba(2,132,199,0.25);margin-left:auto;">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Upload Handouts
-              </button>
-            ` : ''}
+
           </div>
         </div>
 
@@ -803,11 +834,17 @@ function renderMaterialsList(role) {
                 </div>
               ` : activeSubjectSubTab === 'quizzes' ? `
                 <div class="sw-quizzes-list" style="display:flex;flex-direction:column;gap:10px;">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:gap:10px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
                     <div>
                       <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Quizzes &amp; Assessments</h3>
-                      <span style="font-size:12px;color:var(--text-muted);">Assigned assessments and quizzes for ${escHtml(course.title)}</span>
+                      <span style="font-size:12px;color:var(--text-muted);">Assigned assessments and quizzes for ${escHtml(course.title)}${activeSubjectSection ? ` (${escHtml(activeSubjectSection)})` : ''}</span>
                     </div>
+                    ${(role === 'teacher' || role === 'admin') ? `
+                      <button class="sw-btn primary" onclick="openTeacherCreateQuizForSubject('${escHtml(course.title)}', '${escHtml(activeSubjectSection || '')}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        + Create Quiz for this Subject
+                      </button>
+                    ` : ''}
                   </div>
 
                   ${subjectQuizzes.length ? subjectQuizzes.map(q => {
@@ -853,7 +890,7 @@ function renderMaterialsList(role) {
                       <span style="font-size:12px;color:var(--text-muted);">Supplemental handouts, slide decks, and worksheets uploaded by teachers for ${escHtml(course.title)}</span>
                     </div>
                     ${(role === 'teacher' || role === 'admin') ? `
-                      <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
+                      <button class="sw-btn primary" onclick="openMaterialModal('${course.id}', '${escHtml(activeSubjectSection || '')}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
                         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         + Upload Handouts to this Subject
                       </button>
@@ -993,52 +1030,238 @@ function renderMaterialsList(role) {
     return renderMaterialsManagerPage('admin');
   }
 
-  // ── TEACHER VIEW: SUBJECT CARDS OVERVIEW ──
+  // ── TEACHER VIEW: STI eLMS SECTION-SEPARATED CLASS COMPILATION HUB ──
   if (role === 'teacher') {
-    return `
-      <div class="subjects-materials-wrapper">
-        <div class="subject-chips-bar" id="matChipsBar">
-          <button class="subject-chip ${!activeSubjectFilter ? 'active' : ''}" onclick="setActiveSubjectMaterials(null)">
-            All Handled Subjects
-          </button>
-          ${enrolledCourses.map(c => {
-            const uploads = materialsData.filter(m => isMaterialMatchingCourse(m, c));
-            return `
-            <button class="subject-chip ${activeSubjectFilter === c.id ? 'active' : ''}" onclick="setActiveSubjectMaterials('${c.id}')">
-              ${escHtml(c.title)} <span class="sc-badge">${uploads.length}</span>
-            </button>
-          `;}).join('')}
-        </div>
+    return renderTeacherSubjectsHubHTML(enrolledCourses);
+  }
 
-        <div class="subjects-folder-grid">
-          ${enrolledCourses.map(course => {
-            const teacherUploadsForCourse = materialsData.filter(m => {
-              if (!isMaterialMatchingCourse(m, course)) return false;
-              return m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE?.id || m.uploader_name === CURRENT_PROFILE?.full_name;
-            });
-            return `
-              <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')" title="Open ${escHtml(course.title)}">
-                <div class="sfc-thumb" style="background-image:url('${course.cover}');">
-                  <span class="sfc-code">${escHtml(course.code)}</span>
-                  <span class="sfc-strand">${escHtml(course.strand)}</span>
-                </div>
-                <div class="sfc-body">
-                  <h4 class="sfc-title">${escHtml(course.title)}</h4>
-                  <p class="sfc-instructor">👤 ${escHtml(course.instructor || 'Faculty')}</p>
-                  <div class="sfc-foot">
-                    <span class="sfc-doc-count">
-                      📄 ${teacherUploadsForCourse.length} Handout${teacherUploadsForCourse.length === 1 ? '' : 's'}
-                    </span>
-                    <span class="sfc-open-btn">View Files →</span>
-                  </div>
-                </div>
-              </div>
-            `;
-          }).join('')}
+
+let teacherClassFilter = 'all';
+let teacherClassSearchQuery = '';
+
+function setTeacherClassFilter(filterVal) {
+  teacherClassFilter = filterVal;
+  document.querySelectorAll('#teacherClassChipsBar .subject-chip').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === filterVal);
+  });
+  applyTeacherClassFilter();
+}
+
+function setTeacherClassSearch(query) {
+  teacherClassSearchQuery = (query || '').toLowerCase().trim();
+  const clearBtn = document.getElementById('teacherClassSearchClearBtn');
+  if (clearBtn) clearBtn.style.display = teacherClassSearchQuery ? 'inline-block' : 'none';
+  applyTeacherClassFilter();
+}
+
+function clearTeacherClassSearch() {
+  const inp = document.getElementById('teacherClassSearchInput');
+  if (inp) { inp.value = ''; inp.focus(); }
+  setTeacherClassSearch('');
+}
+
+function applyTeacherClassFilter() {
+  const grid = document.getElementById('teacherClassesFolderGrid');
+  if (!grid) return;
+  const cards = grid.querySelectorAll('.subject-folder-card');
+  const emptyState = document.getElementById('teacherClassesEmptyState');
+  let visibleCount = 0;
+
+  cards.forEach(card => {
+    const cardSection = (card.dataset.section || '').toLowerCase();
+    const cardTrack = (card.dataset.track || '').toLowerCase();
+    const cardSearch = (card.dataset.search || '').toLowerCase();
+
+    let matchesFilter = true;
+    if (teacherClassFilter !== 'all') {
+      const f = teacherClassFilter.toLowerCase();
+      if (f.startsWith('section')) {
+        matchesFilter = (cardSection === f);
+      } else {
+        matchesFilter = (cardTrack === f);
+      }
+    }
+
+    let matchesSearch = true;
+    if (teacherClassSearchQuery) {
+      matchesSearch = cardSearch.includes(teacherClassSearchQuery);
+    }
+
+    if (matchesFilter && matchesSearch) {
+      card.style.display = 'flex';
+      visibleCount++;
+    } else {
+      card.style.display = 'none';
+    }
+  });
+
+  if (emptyState) {
+    emptyState.style.display = (visibleCount === 0) ? 'flex' : 'none';
+  }
+}
+
+function getTeacherHandledClassCards(courses) {
+  const classCards = [];
+  let handledSections = ['Section A', 'Section B'];
+  if (CURRENT_PROFILE && CURRENT_PROFILE.section) {
+    const raw = CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean);
+    if (raw.length > 0) handledSections = raw;
+  }
+
+  courses.forEach(course => {
+    handledSections.forEach((sec, idx) => {
+      let secCode = course.code || 'STEM-1101';
+      if (sec.toLowerCase().includes('b') || sec.endsWith('2')) {
+        secCode = secCode.replace(/1$/, '2');
+        if (!secCode.endsWith('2') && !secCode.endsWith('B')) secCode += '-B';
+      } else if (sec.toLowerCase().includes('a') || sec.endsWith('1')) {
+        if (!secCode.endsWith('1') && !secCode.endsWith('A')) secCode += '-A';
+      }
+
+      classCards.push({
+        ...course,
+        cardKey: `${course.id}__${sec.replace(/\s+/g, '_')}`,
+        baseCourseId: course.id,
+        assignedSection: sec,
+        sectionCode: secCode
+      });
+    });
+  });
+
+  return classCards;
+}
+
+function renderTeacherSubjectsHubHTML(enrolledCourses) {
+  setTimeout(() => applyTeacherClassFilter(), 0);
+  const classCards = getTeacherHandledClassCards(enrolledCourses);
+
+  const secACount = classCards.filter(c => c.assignedSection.toLowerCase() === 'section a').length;
+  const secBCount = classCards.filter(c => c.assignedSection.toLowerCase() === 'section b').length;
+  const specializedCount = classCards.filter(c => c.track === 'Specialized').length;
+  const coreCount = classCards.filter(c => c.track === 'Core').length;
+  const appliedCount = classCards.filter(c => c.track === 'Applied').length;
+
+  return `
+  <div class="materials-page-container">
+    <!-- 1. FACULTY HERO BANNER -->
+    <div class="materials-hero-banner" style="background:linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #0284c7 100%);padding:24px 28px;border-radius:18px;margin-bottom:20px;box-shadow:0 6px 20px rgba(15,23,42,0.15);color:#fff;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;">
+        <div style="display:flex;align-items:center;gap:18px;">
+          <div style="width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:26px;">🏫</div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="background:#38bdf8;color:#0c4a6e;font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.5px;">FACULTY PORTAL</span>
+              <span style="color:rgba(255,255,255,0.85);font-size:12px;font-weight:600;">S.Y. 2026–2027 · STI eLMS Class Structure</span>
+            </div>
+            <h1 style="color:#ffffff;margin:0 0 6px 0;font-size:22px;font-weight:800;letter-spacing:-0.02em;">Handled Classes &amp; Materials Hub</h1>
+            <p style="color:rgba(255,255,255,0.9);margin:0;font-size:13px;max-width:680px;line-height:1.45;">Subjects are separated by handled section (Section A and Section B). Open any class to view curriculum modules, manage quizzes, or upload supplemental handouts.</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="add-btn" onclick="openMaterialModal()" style="background:#ffffff;color:#0284c7;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+            ${typeof iconPlus === 'function' ? iconPlus() : '+'} Upload Handout
+          </button>
+          <button class="add-btn" onclick="typeof openQuizModal === 'function' ? openQuizModal() : window.location.href='quiz-maker.html'" style="background:#38bdf8;color:#082f49;border:none;box-shadow:0 4px 12px rgba(56,189,248,0.25);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+            ${typeof iconPlus === 'function' ? iconPlus() : '+'} AI Quiz Maker
+          </button>
         </div>
       </div>
-    `;
-  }
+    </div>
+
+    <!-- 2. SECTION & TRACK FILTERS + LIVE SEARCH -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
+      <div class="subject-chips-bar" id="teacherClassChipsBar" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button class="subject-chip ${(!teacherClassFilter || teacherClassFilter === 'all') ? 'active' : ''}" data-filter="all" onclick="setTeacherClassFilter('all')" style="cursor:pointer;">
+          All Handled Classes <span class="sc-badge">${classCards.length}</span>
+        </button>
+        <button class="subject-chip ${teacherClassFilter === 'Section A' ? 'active' : ''}" data-filter="Section A" onclick="setTeacherClassFilter('Section A')" style="cursor:pointer;">
+          Section A <span class="sc-badge">${secACount}</span>
+        </button>
+        <button class="subject-chip ${teacherClassFilter === 'Section B' ? 'active' : ''}" data-filter="Section B" onclick="setTeacherClassFilter('Section B')" style="cursor:pointer;">
+          Section B <span class="sc-badge">${secBCount}</span>
+        </button>
+        <button class="subject-chip ${teacherClassFilter === 'Specialized' ? 'active' : ''}" data-filter="Specialized" onclick="setTeacherClassFilter('Specialized')" style="cursor:pointer;">
+          Specialized <span class="sc-badge">${specializedCount}</span>
+        </button>
+        <button class="subject-chip ${teacherClassFilter === 'Core' ? 'active' : ''}" data-filter="Core" onclick="setTeacherClassFilter('Core')" style="cursor:pointer;">
+          Core <span class="sc-badge">${coreCount}</span>
+        </button>
+        <button class="subject-chip ${teacherClassFilter === 'Applied' ? 'active' : ''}" data-filter="Applied" onclick="setTeacherClassFilter('Applied')" style="cursor:pointer;">
+          Applied <span class="sc-badge">${appliedCount}</span>
+        </button>
+      </div>
+
+      <div class="materials-search-wrap" style="min-width:280px;max-width:360px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#3b82f6;flex-shrink:0;">
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input type="text" id="teacherClassSearchInput" placeholder="Search classes, sections, or codes..." value="${escHtml(teacherClassSearchQuery)}" oninput="setTeacherClassSearch(this.value)"/>
+        <button id="teacherClassSearchClearBtn" onclick="clearTeacherClassSearch()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;padding:0 4px;display:${teacherClassSearchQuery ? 'inline-block' : 'none'};" title="Clear search">✕</button>
+      </div>
+    </div>
+
+    <!-- 3. STI eLMS CARDS GRID -->
+    <div class="subjects-folder-grid" id="teacherClassesFolderGrid" style="grid-template-columns:repeat(auto-fill, minmax(295px, 1fr));gap:20px;">
+      ${classCards.map(card => {
+        const lessons = getSubjectLessons(card);
+        const uploadsForClass = materialsData.filter(m => {
+          if (!isMaterialMatchingCourse(m, card)) return false;
+          if (m.section && m.section !== 'All' && !m.section.toLowerCase().includes(card.assignedSection.toLowerCase())) return false;
+          return true;
+        });
+        const quizzesForClass = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
+          if (!q.subject) return false;
+          const s = q.subject.toLowerCase();
+          const t = card.title.toLowerCase();
+          if (!s.includes(t) && !t.includes(s)) return false;
+          if (q.sections && q.sections !== 'All' && !q.sections.toLowerCase().includes(card.assignedSection.toLowerCase())) return false;
+          return true;
+        }) : [];
+
+        const searchKeywords = `${card.title} ${card.sectionCode} ${card.assignedSection} ${card.track || ''} ${card.strand || ''} ${card.description || ''}`.toLowerCase();
+
+        return `
+          <div class="subject-folder-card"
+               data-section="${escHtml(card.assignedSection.toLowerCase())}"
+               data-track="${escHtml((card.track || 'specialized').toLowerCase())}"
+               data-search="${escHtml(searchKeywords)}"
+               onclick="setActiveSubjectMaterials('${card.baseCourseId}', '${card.assignedSection}')"
+               title="Open ${escHtml(card.title)} (${escHtml(card.assignedSection)}) Workspace">
+            <div class="sfc-thumb" style="height:125px;background-image:url('${card.cover || 'assets/slide1.jpg'}');position:relative;">
+              <span class="sfc-code" style="background:#ffffff;color:#0284c7;font-weight:800;border-radius:8px;padding:4px 10px;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,0.18);">${escHtml(card.sectionCode)}</span>
+              <span class="sfc-strand" style="background:#0284c7;color:#ffffff;font-weight:700;border-radius:8px;padding:4px 10px;font-size:11px;">${escHtml(card.track || 'Specialized')}</span>
+            </div>
+            <div class="sfc-body" style="padding:18px;">
+              <h4 class="sfc-title" style="font-size:16px;margin-bottom:6px;">${escHtml(card.title)}</h4>
+              <div style="display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;">
+                <span style="background:#e0f2fe;color:#0369a1;font-weight:700;font-size:11px;padding:2px 8px;border-radius:6px;">Section: ${escHtml(card.assignedSection)}</span>
+                <span style="background:#f1f5f9;color:#475569;font-weight:600;font-size:11px;padding:2px 8px;border-radius:6px;">${escHtml(card.strand || 'STEM')} · ${escHtml(card.gradeLevel || 'Grade 11')}</span>
+              </div>
+              <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                ${escHtml(card.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
+              </p>
+              <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
+                <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:wrap;">
+                  <span style="background:#f1f5f9;padding:3px 7px;border-radius:6px;">📄 ${lessons.length} Modules</span>
+                  <span style="background:#e0f2fe;color:#0369a1;padding:3px 7px;border-radius:6px;">📁 ${uploadsForClass.length} Files</span>
+                  <span style="background:#fef3c7;color:#b45309;padding:3px 7px;border-radius:6px;">📝 ${quizzesForClass.length} Quizzes</span>
+                </div>
+                <span class="sfc-open-btn" style="color:#0284c7;font-weight:700;font-size:12.5px;">Open Workspace →</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+
+    <div id="teacherClassesEmptyState" style="display:none;padding:60px 24px;text-align:center;background:#fff;border-radius:16px;border:1.5px dashed #cbd5e1;flex-direction:column;align-items:center;gap:12px;margin-top:10px;">
+      <div style="width:54px;height:54px;border-radius:14px;background:#f0f9ff;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:26px;">🔍</div>
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f172a;">No handled classes match your search</h3>
+      <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;">Try adjusting your section, track filter, or search keywords.</p>
+      <button class="sw-btn outline" onclick="clearTeacherClassSearch()" style="margin-top:6px;">Reset Filters</button>
+    </div>
+  </div>`;
+}
 
 function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
   setTimeout(() => applyStudentSubjectFilter(), 0);
@@ -1061,10 +1284,10 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
           <div class="subject-folder-card"
                data-track="${escHtml((course.track || 'specialized').toLowerCase())}"
                data-search="${escHtml(searchKeywords)}"
-               onclick="setActiveSubjectMaterials('${course.id}')"
+               onclick="setActiveSubjectMaterials('${course.id}', '${CURRENT_PROFILE?.section || 'Section A'}')"
                title="Open ${escHtml(course.title)} Workspace">
             <div class="sfc-thumb" style="height:125px;background-image:url('${course.cover || 'assets/slide1.jpg'}');">
-              <span class="sfc-code">${escHtml(course.code)}</span>
+              <span class="sfc-code" style="background:#ffffff;color:#0284c7;font-weight:800;border-radius:8px;padding:4px 10px;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,0.18);">${escHtml(course.code || 'STEM-1101')}</span>
               <span class="sfc-strand" style="background:#0284c7;">${escHtml(course.track || 'Specialized')}</span>
             </div>
             <div class="sfc-body" style="padding:18px;">
@@ -3092,7 +3315,7 @@ const materialUploadState = {
   submitting: false 
 };
 
-function openMaterialModal(courseId) {
+function openMaterialModal(courseId, targetSection) {
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
     ? CURRENT_PROFILE.strand.split(',').map(s => s.trim()).filter(Boolean)
     : [];
@@ -3106,6 +3329,8 @@ function openMaterialModal(courseId) {
     : [];
 
   const targetCourseId = courseId || activeSubjectFilter;
+  const chosenSection = targetSection || activeSubjectSection;
+  const initialSectionsSet = chosenSection ? new Set([chosenSection]) : new Set(teacherSections);
   let targetCourse = null;
   if (targetCourseId && typeof COURSES_DATABASE !== 'undefined') {
     targetCourse = COURSES_DATABASE.find(c => c.id === targetCourseId) || null;
@@ -3129,7 +3354,7 @@ function openMaterialModal(courseId) {
     subject: initialSubject, 
     strand: initialStrand, 
     grade_level: initialGrade, 
-    sections: new Set(teacherSections),
+    sections: initialSectionsSet,
     files: [], 
     submitting: false 
   });

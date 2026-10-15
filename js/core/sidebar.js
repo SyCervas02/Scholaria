@@ -63,7 +63,7 @@ function initDashboardShell() {
     a.href = '#';
     a.className = 'menu-item' + (item.page === 'dashboard' ? ' active' : '');
     a.dataset.page = item.page;
-    a.setAttribute('onclick', `event.preventDefault(); renderPage('${item.page}');`);
+    a.setAttribute('onclick', `event.preventDefault(); if('${item.page}'==='materials') { if(typeof setActiveSubjectMaterials==='function') { setActiveSubjectMaterials(null); } else if(typeof window.setActiveSubjectMaterials==='function') { window.setActiveSubjectMaterials(null); } else { if(typeof activeSubjectFilter!=='undefined') activeSubjectFilter=null; window.activeSubjectFilter=null; } } renderPage('${item.page}');`);
     a.innerHTML = item.icon + `<span>${item.label}</span>` + (item.badge ? `<span class="menu-badge">${item.badge}</span>` : '');
     sidebarMenu.appendChild(a);
   });
@@ -2793,15 +2793,6 @@ function teacherPage(page) {
     }
 
     case 'materials': return `
-      <div class="section-hdr"><h2>Materials Manager</h2>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <select class="user-filter-select" onchange="setMaterialsStrandFilter(this.value)">
-            <option value="">All Strands</option>
-            ${STRANDS.map(s => `<option value="${s}" ${materialsStrandFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
-          </select>
-          <button class="add-btn" onclick="openMaterialModal()">${iconPlus()} Upload Material</button>
-        </div>
-      </div>
       <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
 
     case 'quiz': {
@@ -4667,6 +4658,15 @@ let materialsPollTimer = null;
 function renderPage(page) {
   currentPage = page;
   window.currentPage = page;
+  if (page === 'materials') {
+    if (typeof activeSubjectFilter !== 'undefined') activeSubjectFilter = null;
+    if (typeof window.activeSubjectFilter !== 'undefined') window.activeSubjectFilter = null;
+    if (typeof activeSubjectSection !== 'undefined') activeSubjectSection = null;
+    if (typeof window.activeSubjectSection !== 'undefined') window.activeSubjectSection = null;
+    if (typeof activeSubjectSubTab !== 'undefined') activeSubjectSubTab = 'modules';
+    if (typeof window.activeSubjectSubTab !== 'undefined') window.activeSubjectSubTab = 'modules';
+    if (typeof setActiveSubjectMaterials === 'function') setActiveSubjectMaterials(null);
+  }
   document.querySelectorAll('.menu-item').forEach(i => {
     if (i.dataset.page === page) i.classList.add('active');
     else i.classList.remove('active');
@@ -4799,6 +4799,16 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
       item.classList.add('active');
+      if (item.dataset.page === 'materials') {
+        if (typeof setActiveSubjectMaterials === 'function') {
+          setActiveSubjectMaterials(null);
+        } else if (typeof window.setActiveSubjectMaterials === 'function') {
+          window.setActiveSubjectMaterials(null);
+        } else {
+          if (typeof activeSubjectFilter !== 'undefined') activeSubjectFilter = null;
+          window.activeSubjectFilter = null;
+        }
+      }
       renderPage(item.dataset.page);
       if (window.innerWidth <= 900) {
         closeMobileSidebar();

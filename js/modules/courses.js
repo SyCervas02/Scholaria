@@ -67,6 +67,22 @@ const COURSES_DATABASE = [
     documents: []
   },
   {
+    id: 'course-prog1',
+    title: 'Computer Programming 1',
+    code: 'PROG-1101',
+    strand: 'STEM',
+    track: 'Specialized',
+    gradeLevel: 'Grade 11',
+    semester: '1st Sem',
+    progress: 50,
+    modules: 0,
+    instructor: 'Engr. Julian Callanta',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=600&q=80',
+    description: 'Algorithm development, syntax, control structures, loops, functions, and hands-on coding problem solving.',
+    documents: []
+  },
+  {
     id: 'course-empotech',
     title: 'Empowerment Technologies (ICT)',
     code: 'ICT-1101',

@@ -372,6 +372,14 @@ function openQuizModal() {
 
   const defaultGrade = (isTeacher && allowedGrades.length) ? allowedGrades[0] : 'Grade 11';
 
+  const urlParams = (typeof window !== 'undefined' && window.location && window.location.search) ? new URLSearchParams(window.location.search) : null;
+  const prefillSubj = (urlParams ? urlParams.get('subject') : '') || '';
+  const prefillSec = (urlParams ? urlParams.get('section') : '') || '';
+  if (prefillSec) {
+    defaultSections.clear();
+    defaultSections.add(prefillSec);
+  }
+
   Object.assign(quizGen, {
     wizardStep: 1,
     step: 'setup', type: 'standard', 
@@ -379,7 +387,8 @@ function openQuizModal() {
     files: [], 
     totalSizeBytes: 0,
     fileText: '',
-    title: '', subject: '', 
+    title: prefillSubj ? `${prefillSubj} Assessment` : '', 
+    subject: prefillSubj || '', 
     formats: new Set(['mc', 'id']),
     optionsCount: 4,
     count: 'auto',
