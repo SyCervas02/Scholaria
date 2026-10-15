@@ -797,12 +797,32 @@ let massAssignFilterMode = 'unassigned'; // 'unassigned' | 'all'
 let massAssignSearchQuery = '';
 let massAssignGradeFilter = '';
 let massAssignStrandFilter = '';
+let sectionViewTab = 'active'; // 'active' | 'archived'
+
+function setSectionViewTab(tab) {
+  sectionViewTab = tab;
+  filterSectionsView();
+}
 
 function renderSectionsTabContent() {
   const unassignedStudents = registeredUsers.filter(u => u.role === 'student' && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—'));
-  const targetDefaultSection = managedSections[0]?.name || 'Section A';
+  const targetDefaultSection = managedSections.find(s => !s.isArchived)?.name || managedSections[0]?.name || 'Section A';
+  const activeCount = managedSections.filter(s => !s.isArchived).length;
+  const archivedCount = managedSections.filter(s => s.isArchived).length;
 
   return `
+    <!-- ── ACTIVE VS ARCHIVED SECTION TABS ── -->
+    <div style="display:flex;align-items:center;margin-bottom:16px;">
+      <div style="display:inline-flex;background:#f1f5f9;padding:4px;border-radius:12px;gap:6px;border:1px solid #e2e8f0;">
+        <button type="button" class="anc-archive-tab ${sectionViewTab === 'active' ? 'active' : ''}" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="setSectionViewTab('active')">
+          🏫 Active Sections (${activeCount})
+        </button>
+        <button type="button" class="anc-archive-tab ${sectionViewTab === 'archived' ? 'active' : ''}" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="setSectionViewTab('archived')">
+          📦 Archived Sections (${archivedCount})
+        </button>
+      </div>
+    </div>
+
     ${unassignedStudents.length > 0 ? `
       <div class="sec-unassigned-banner">
         <div class="sec-unassigned-info">
@@ -821,7 +841,7 @@ function renderSectionsTabContent() {
     <div class="user-search-row">
       <div class="user-search-wrap">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input type="text" id="sectionSearchInput" placeholder="Search section by name, adviser, or room…" value="${escHtml(sectionSearchQuery)}" oninput="filterSectionsView()">
+        <input type="text" id="sectionSearchInput" placeholder="Search by section name only…" value="${escHtml(sectionSearchQuery)}" oninput="filterSectionsView()">
       </div>
 
       <select class="user-filter-select" id="sectionGradeFilterSelect" onchange="filterSectionsView()">
@@ -837,7 +857,6 @@ function renderSectionsTabContent() {
         <option value="ABM" ${sectionStrandFilter === 'ABM' ? 'selected' : ''}>ABM</option>
         <option value="TVL" ${sectionStrandFilter === 'TVL' ? 'selected' : ''}>TVL</option>
       </select>
-
     </div>
 
     <div class="sections-grid" id="sectionsGridWrap">
@@ -856,16 +875,13 @@ function filterSectionsView() {
 }
 
 function renderSectionCards() {
-  let list = [...managedSections];
+  const isArchivedTab = sectionViewTab === 'archived';
+  let list = managedSections.filter(s => isArchivedTab ? Boolean(s.isArchived) : !s.isArchived);
   const q = sectionSearchQuery.toLowerCase().trim();
 
+  // Search strictly works ONLY for the name of the section - no other factors play in!
   if (q) {
-    list = list.filter(s =>
-      (s.name || '').toLowerCase().includes(q) ||
-      (s.adviser || '').toLowerCase().includes(q) ||
-      (s.room || '').toLowerCase().includes(q) ||
-      (s.strand || '').toLowerCase().includes(q)
-    );
+    list = list.filter(s => (s.name || '').toLowerCase().includes(q));
   }
   if (sectionGradeFilter) {
     list = list.filter(s => s.gradeLevel === sectionGradeFilter);
@@ -877,10 +893,10 @@ function renderSectionCards() {
   if (!list.length) {
     return `
       <div style="grid-column:1/-1;background:#fff;border:1.5px dashed var(--blue-light);border-radius:16px;padding:36px;text-align:center;color:var(--text-muted);">
-        <div style="width:44px;height:44px;margin:0 auto 12px;color:var(--blue-mid);">${iconFolder()}</div>
-        <h4 style="font-size:15px;color:var(--text-primary);margin-bottom:4px;">No Sections Found</h4>
-        <p style="font-size:13px;margin-bottom:16px;">No sections match your search or filter settings.</p>
-        <button class="foot-btn-secondary" onclick="openCreateSectionModal()">${iconPlus()} Create New Section</button>
+        <div style="width:44px;height:44px;margin:0 auto 12px;color:var(--blue-mid);">${isArchivedTab ? iconArchive() : iconFolder()}</div>
+        <h4 style="font-size:15px;color:var(--text-primary);margin-bottom:4px;">${isArchivedTab ? 'No Archived Sections' : 'No Sections Found'}</h4>
+        <p style="font-size:13px;margin-bottom:16px;">${isArchivedTab ? 'There are currently no archived sections.' : (q ? `No section matches "${escHtml(q)}".` : 'No sections match your filter settings.')}</p>
+        ${!isArchivedTab ? `<button class="foot-btn-secondary" onclick="openCreateSectionModal()">${iconPlus()} Create New Section</button>` : ''}
       </div>
     `;
   }
@@ -891,12 +907,17 @@ function renderSectionCards() {
       (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
     );
 
+    const isArchived = Boolean(s.isArchived);
+
     return `
-      <div class="section-card">
+      <div class="section-card" style="${isArchived ? 'opacity:0.92;border-color:#fde68a;background:#fffdfa;' : ''}">
         <div>
           <div class="sec-card-head">
             <div>
-              <div class="sec-card-title">${escHtml(s.name)}</div>
+              <div class="sec-card-title" style="display:flex;align-items:center;gap:8px;">
+                ${escHtml(s.name)}
+                ${isArchived ? `<span class="sec-badge" style="background:#fef3c7;color:#b45309;font-size:11px;padding:2px 8px;font-weight:700;">📦 Archived</span>` : ''}
+              </div>
             </div>
             <span class="sec-badge count">${enrolledStudents.length} Student${enrolledStudents.length !== 1 ? 's' : ''}</span>
           </div>
@@ -909,16 +930,23 @@ function renderSectionCards() {
           <div class="sec-card-details">
             <div><strong>Adviser:</strong> ${escHtml(s.adviser || 'Not Assigned')}</div>
             <div><strong>Room / Location:</strong> ${escHtml(s.room || 'TBD')}</div>
+            ${isArchived && s.archivedAt ? `<div style="color:#b45309;font-size:11.5px;margin-top:4px;">Archived on ${new Date(s.archivedAt).toLocaleDateString()}</div>` : ''}
           </div>
         </div>
 
         <div class="sec-card-actions">
           <button class="sec-btn-roster" onclick="openManageSectionModal('${escHtml(s.name)}')">
-            ${iconUsers()} Manage Section
+            ${iconUsers()} ${isArchived ? 'View Roster' : 'Manage Section'}
           </button>
-          <button class="sec-btn-icon delete" title="Delete Section" onclick="deleteSectionPrompt('${escHtml(s.id)}')">
-            ${iconTrash()}
-          </button>
+          ${isArchived ? `
+            <button class="sec-btn-icon" style="color:#16a34a;" title="Unarchive Section" aria-label="Unarchive Section" onclick="unarchiveSectionPrompt('${escHtml(s.id)}')">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+          ` : `
+            <button class="sec-btn-icon" style="color:#ea580c;" title="Archive Section" aria-label="Archive Section" onclick="archiveSectionPrompt('${escHtml(s.id)}')">
+              ${iconArchive()}
+            </button>
+          `}
         </div>
       </div>
     `;
@@ -1074,7 +1102,7 @@ function refreshSectionAndUserViews() {
   if (userWrap) userWrap.innerHTML = renderUserManagementContent();
 }
 
-function deleteSectionPrompt(secId) {
+function archiveSectionPrompt(secId) {
   const sec = managedSections.find(s => s.id === secId);
   if (!sec) return;
 
@@ -1084,24 +1112,34 @@ function deleteSectionPrompt(secId) {
   );
 
   const confirmMsg = enrolled.length > 0
-    ? `Delete section "${sec.name}"? ${enrolled.length} enrolled student(s) will be unassigned.`
-    : `Delete section "${sec.name}"?`;
+    ? `Archive section "${sec.name}"?\n\nThis section currently has ${enrolled.length} enrolled student(s). Archiving will safely preserve all academic history, student records, and class rosters while moving the section to the archive view. You can unarchive it at any time.`
+    : `Archive section "${sec.name}"?\n\nThe section will be archived. Academic records are preserved and you can unarchive it at any time.`;
 
   if (!confirm(confirmMsg)) return;
 
-  // Unassign students
-  enrolled.forEach(u => {
-    u.section = null;
-    if (u.dbId && typeof db !== 'undefined' && db?.from) {
-      db.from('users').update({ section: null }).eq('id', u.dbId).then(() => {});
-    }
-  });
-
-  managedSections = managedSections.filter(s => s.id !== secId);
+  sec.isArchived = true;
+  sec.archivedAt = new Date().toISOString();
   saveManagedSections();
-  showToast(`Section "${sec.name}" deleted.`, 'info');
+  showToast(`Section "${sec.name}" archived successfully.`, 'info');
 
   refreshSectionAndUserViews();
+}
+
+function unarchiveSectionPrompt(secId) {
+  const sec = managedSections.find(s => s.id === secId);
+  if (!sec) return;
+
+  sec.isArchived = false;
+  sec.unarchivedAt = new Date().toISOString();
+  saveManagedSections();
+  showToast(`Section "${sec.name}" unarchived and active!`, 'success');
+
+  refreshSectionAndUserViews();
+}
+
+function deleteSectionPrompt(secId) {
+  // Sections are strictly archived to preserve historical records, never permanently destroyed
+  archiveSectionPrompt(secId);
 }
 
 /* ── Section Roster Modal ── */
@@ -1695,6 +1733,12 @@ function renderFormatExampleTable() {
 
 function auBuildSingleFromForm() {
   if (!addUser.name.trim()) return { error: 'Please enter a name' };
+  if (!/^[a-zA-Z\sñÑ\-.]+$/.test(addUser.name.trim())) {
+    return { error: 'Name must contain letters only (no numbers or special characters)' };
+  }
+  if (addUser.name.trim().length > 50) {
+    return { error: 'Name exceeds maximum of 50 characters' };
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addUser.email.trim())) return { error: 'Please enter a valid email' };
   const isStudent = addUser.userType === 'student';
   const targetSection = addUser.section || null;
@@ -2349,7 +2393,7 @@ function renderAddUserModal() {
       <div style="margin-top:16px;">
         <div class="gen-field">
           <label>Administrator Full Name *</label>
-          <input type="text" placeholder="e.g. Dr. Eleanor Vance or Juan Santos" value="${escHtml(addUser.name)}" oninput="auUpdateName(this.value)">
+          <input type="text" placeholder="e.g. Dr. Eleanor Vance or Juan Santos" maxlength="50" value="${escHtml(addUser.name)}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateName(this.value);">
         </div>
 
         <div class="gen-field" style="margin-top:12px;">
@@ -2459,8 +2503,8 @@ function renderAddUserModal() {
       <div class="au-divider">Or add individually</div>
 
       <div class="gen-row">
-        <div class="gen-field"><label>Full Name</label><input type="text" placeholder="e.g. Santos, Maria L." value="${escHtml(addUser.name)}" oninput="auUpdateName(this.value)"></div>
-        <div class="gen-field"><label>Email</label><input type="text" placeholder="e.g. student@hwa.edu.ph" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)"></div>
+        <div class="gen-field"><label>Full Name</label><input type="text" placeholder="e.g. Santos, Maria L." maxlength="50" value="${escHtml(addUser.name)}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateName(this.value);"></div>
+        <div class="gen-field"><label>Email</label><input type="text" placeholder="e.g. student@hwa.edu.ph" maxlength="100" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)"></div>
       </div>
 
       ${addUser.pendingUsers.length > 0 ? `

@@ -49,15 +49,40 @@
 .ca-search input { width: 100%; min-width: 0; border: 0; outline: none; background: transparent; padding: 8px 0; color: #101451; font-size: 14px; }
 .ca-search input::placeholder { color: #6775ab; }
 .ca-filters select { min-width: 0; padding: 7px 12px; border: 1px solid #cdd9f6; border-radius: 6px; background: white; color: #101451; font-size: 14px; }
-.ca-table-wrap { overflow: visible; border: 1px solid #e6edff; border-radius: 6px; }
-.ca-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
-.ca-table th { background: #f0f5ff; color: #344978; font-weight: 600; padding: 6px 14px; white-space: nowrap; }
-.ca-table td { padding: 5px 14px; border-top: 1px solid #e7efff; }
-.ca-table th:first-child { width: 34%; }
-.ca-table th:nth-child(2) { width: 22%; }
-.ca-table th:nth-child(3) { width: 16%; }
+.ca-table-wrap {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #e6edff;
+  border-radius: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+.ca-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+.ca-table th {
+  background: #f0f5ff;
+  color: #344978;
+  font-weight: 600;
+  padding: 10px 14px;
+  white-space: nowrap !important;
+  word-break: normal !important;
+}
+.ca-table td {
+  padding: 10px 14px;
+  border-top: 1px solid #e7efff;
+  white-space: nowrap !important;
+  word-break: normal !important;
+}
+.ca-table th:first-child { width: 34%; min-width: 240px; }
+.ca-table th:nth-child(2) { width: 22%; min-width: 180px; }
+.ca-table th:nth-child(3) { width: 16%; min-width: 140px; }
 .ca-table th:nth-child(4),
-.ca-table td:nth-child(4) { width: 28%; min-width: 195px; white-space: nowrap; }
+.ca-table td:nth-child(4) { width: 28%; min-width: 195px; white-space: nowrap !important; }
 .ca-content, .ca-person { display: flex; align-items: center; gap: 20px; }
 .ca-content strong { display: block; font-size: 14px; font-weight: 600; }
 .ca-content small, .ca-person small { display: block; color: #6575aa; font-size: 13px; margin-top: 3px; }
