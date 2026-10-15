@@ -63,7 +63,7 @@ function initDashboardShell() {
     a.href = '#';
     a.className = 'menu-item' + (item.page === 'dashboard' ? ' active' : '');
     a.dataset.page = item.page;
-    a.setAttribute('onclick', `event.preventDefault(); if('${item.page}'==='materials') { if(typeof setActiveSubjectMaterials==='function') { setActiveSubjectMaterials(null); } else if(typeof window.setActiveSubjectMaterials==='function') { window.setActiveSubjectMaterials(null); } else { if(typeof activeSubjectFilter!=='undefined') activeSubjectFilter=null; window.activeSubjectFilter=null; } } renderPage('${item.page}');`);
+    a.setAttribute('onclick', `event.preventDefault(); if('${item.page}'==='materials' && typeof setActiveSubjectMaterials==='function') { setActiveSubjectMaterials(null, null, false); } renderPage('${item.page}');`);
     a.innerHTML = item.icon + `<span>${item.label}</span>` + (item.badge ? `<span class="menu-badge">${item.badge}</span>` : '');
     sidebarMenu.appendChild(a);
   });
@@ -4659,13 +4659,12 @@ function renderPage(page) {
   currentPage = page;
   window.currentPage = page;
   if (page === 'materials') {
-    if (typeof activeSubjectFilter !== 'undefined') activeSubjectFilter = null;
-    if (typeof window.activeSubjectFilter !== 'undefined') window.activeSubjectFilter = null;
-    if (typeof activeSubjectSection !== 'undefined') activeSubjectSection = null;
-    if (typeof window.activeSubjectSection !== 'undefined') window.activeSubjectSection = null;
-    if (typeof activeSubjectSubTab !== 'undefined') activeSubjectSubTab = 'modules';
-    if (typeof window.activeSubjectSubTab !== 'undefined') window.activeSubjectSubTab = 'modules';
-    if (typeof setActiveSubjectMaterials === 'function') setActiveSubjectMaterials(null);
+    if (typeof setActiveSubjectMaterials === 'function') {
+      setActiveSubjectMaterials(null, null, false);
+    } else {
+      window.activeSubjectFilter = null;
+      window.activeSubjectSection = null;
+    }
   }
   document.querySelectorAll('.menu-item').forEach(i => {
     if (i.dataset.page === page) i.classList.add('active');
@@ -4801,12 +4800,10 @@ document.addEventListener('DOMContentLoaded', () => {
       item.classList.add('active');
       if (item.dataset.page === 'materials') {
         if (typeof setActiveSubjectMaterials === 'function') {
-          setActiveSubjectMaterials(null);
-        } else if (typeof window.setActiveSubjectMaterials === 'function') {
-          window.setActiveSubjectMaterials(null);
+          setActiveSubjectMaterials(null, null, false);
         } else {
-          if (typeof activeSubjectFilter !== 'undefined') activeSubjectFilter = null;
           window.activeSubjectFilter = null;
+          window.activeSubjectSection = null;
         }
       }
       renderPage(item.dataset.page);

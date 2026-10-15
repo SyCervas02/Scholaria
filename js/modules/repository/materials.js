@@ -334,13 +334,15 @@ let activeSubjectSection = null; // e.g. 'Section A' or 'Section B'
 let activeSubjectSubTab = 'modules'; // 'modules' | 'quizzes' | 'uploads'
 let expandedModuleMap = {}; // { [docId]: boolean }
 
-function setActiveSubjectMaterials(courseId, section) {
+function setActiveSubjectMaterials(courseId, section, shouldRender = true) {
   activeSubjectFilter = courseId || null;
   activeSubjectSection = (courseId && section) ? section : null;
   window.activeSubjectFilter = activeSubjectFilter;
   window.activeSubjectSection = activeSubjectSection;
   activeSubjectSubTab = 'modules';
-  renderMaterialsContainer();
+  if (shouldRender) {
+    renderMaterialsContainer();
+  }
 }
 window.setActiveSubjectMaterials = setActiveSubjectMaterials;
 window.activeSubjectFilter = null;
@@ -369,6 +371,7 @@ function setSubjectSubTab(tab) {
   activeSubjectSubTab = tab;
   renderMaterialsContainer();
 }
+window.setSubjectSubTab = setSubjectSubTab;
 
 function toggleModuleAccordion(modId) {
   expandedModuleMap[modId] = !expandedModuleMap[modId];
@@ -613,6 +616,11 @@ function renderMaterialsList(role) {
     if (course) {
       const subjectUploads = materialsData.filter(m => {
         if (!isMaterialMatchingCourse(m, course)) return false;
+        if (activeSubjectSection) {
+          const mSec = (m.section || m.target_section || '').toLowerCase();
+          const aSec = activeSubjectSection.toLowerCase();
+          if (mSec && mSec !== 'all' && !mSec.includes(aSec) && !aSec.includes(mSec)) return false;
+        }
         if (role === 'student') {
           return m.status === 'approved' || (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
         }
@@ -625,7 +633,13 @@ function renderMaterialsList(role) {
         if (!q.subject) return false;
         const s = q.subject.toLowerCase();
         const t = course.title.toLowerCase();
-        return s.includes(t) || t.includes(s);
+        if (!s.includes(t) && !t.includes(s)) return false;
+        if (activeSubjectSection) {
+          const qSec = (q.sections || q.section || q.target_section || '').toLowerCase();
+          const aSec = activeSubjectSection.toLowerCase();
+          if (qSec && qSec !== 'all' && !qSec.includes(aSec) && !aSec.includes(qSec)) return false;
+        }
+        return true;
       }) : [];
       const attempts = (typeof getAllRecordedAttempts === 'function')
         ? getAllRecordedAttempts()
@@ -842,7 +856,7 @@ function renderMaterialsList(role) {
                     ${(role === 'teacher' || role === 'admin') ? `
                       <button class="sw-btn primary" onclick="openTeacherCreateQuizForSubject('${escHtml(course.title)}', '${escHtml(activeSubjectSection || '')}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
                         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        + Create Quiz for this Subject
+                        + Create Quiz for ${escHtml(activeSubjectSection || 'this Subject')}
                       </button>
                     ` : ''}
                   </div>
@@ -892,7 +906,7 @@ function renderMaterialsList(role) {
                     ${(role === 'teacher' || role === 'admin') ? `
                       <button class="sw-btn primary" onclick="openMaterialModal('${course.id}', '${escHtml(activeSubjectSection || '')}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
                         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        + Upload Handouts to this Subject
+                        + Upload Handouts to ${escHtml(activeSubjectSection || 'this Subject')}
                       </button>
                     ` : ''}
                   </div>
@@ -936,7 +950,7 @@ function renderMaterialsList(role) {
                         ${(role === 'teacher' || role === 'admin') ? `
                           <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            Upload Handouts to this Subject
+                            Upload Handouts to ${escHtml(activeSubjectSection || 'this Subject')}
                           </button>
                         ` : ''}
                       </div>
@@ -1035,8 +1049,13 @@ function renderMaterialsList(role) {
     return renderTeacherSubjectsHubHTML(enrolledCourses);
   }
 
+  // ── STUDENT VIEW: SUBJECT CARDS COMPILATION HUB ──
+  return renderStudentMaterialsHubHTML(enrolledCourses, studentStrand);
+}
 
+// ── TEACHER COMPILATION HUB (STI eLMS MODEL) STATE & FUNCTIONS ──
 let teacherClassFilter = 'all';
+window.teacherClassFilter = 'all';
 let teacherClassSearchQuery = '';
 
 function setTeacherClassFilter(filterVal) {
@@ -1059,6 +1078,15 @@ function clearTeacherClassSearch() {
   if (inp) { inp.value = ''; inp.focus(); }
   setTeacherClassSearch('');
 }
+
+window.setTeacherClassFilter = setTeacherClassFilter;
+window.setTeacherClassSearch = setTeacherClassSearch;
+window.clearTeacherClassSearch = clearTeacherClassSearch;
+window.applyTeacherClassFilter = applyTeacherClassFilter;
+window.getTeacherHandledClassCards = getTeacherHandledClassCards;
+window.renderTeacherSubjectsHubHTML = renderTeacherSubjectsHubHTML;
+window.renderStudentSubjectsGridHTML = renderStudentSubjectsGridHTML;
+window.renderStudentMaterialsHubHTML = renderStudentMaterialsHubHTML;
 
 function applyTeacherClassFilter() {
   const grid = document.getElementById('teacherClassesFolderGrid');
@@ -1320,9 +1348,8 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
   `;
 }
 
-  // ══════════════════════════════════════════════════════════════
-  // STUDENT VIEW: SUBJECT CARDS COMPILATION HUB (STRICT STRAND FILTER)
-  // ══════════════════════════════════════════════════════════════
+// ── STUDENT COMPILATION HUB HTML ──
+function renderStudentMaterialsHubHTML(enrolledCourses, studentStrand) {
   const specializedCount = enrolledCourses.filter(c => c.track === 'Specialized').length;
   const coreCount = enrolledCourses.filter(c => c.track === 'Core').length;
   const appliedCount = enrolledCourses.filter(c => c.track === 'Applied').length;
