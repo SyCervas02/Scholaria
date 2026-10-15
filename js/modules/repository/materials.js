@@ -356,36 +356,123 @@ function getSubjectLessons(course) {
   
   if (cTitle.includes('pre-calculus') || cTitle.includes('precalculus')) {
     return [
-      { id: `${course.id}_l1`, num: '01', title: '01 Platforms and Conic Sections', cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l2`, num: '02', title: '02 Parabolas, Circles & Ellipses', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l3`, num: '03', title: '03 Hyperbolas and Nonlinear Systems', cover: 'https://images.unsplash.com/photo-1596495578065-6e0763fa1178?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l4`, num: '04', title: '04 Circular & Trigonometric Functions', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
+      {
+        id: `${course.id}_l1`, num: '01', title: '01 Platforms and Conic Sections', cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l1_s1`, title: 'Pre-Calculus: Introduction to Conic Sections & Parabolas', submitted: 'Sep 10, 2026', score: '95/100', due: 'Sep 15, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
+          { id: `${course.id}_l1_s2`, title: 'Handout: Standard Equations of Circles and Ellipses', submitted: 'Sep 17, 2026', score: '92/100', due: 'Sep 22, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      },
+      {
+        id: `${course.id}_l2`, num: '02', title: '02 Parabolas, Circles & Ellipses', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l2_s1`, title: 'Practice Worksheet: Graphing Conic Curves with Eccentricity', submitted: 'Sep 28, 2026', score: '88/100', due: 'Oct 05, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
+          { id: `${course.id}_l2_s2`, title: 'Lecture Notes: Degenerate Conics and Applications', submitted: '-', score: '-', due: 'Oct 18, 2026', status: 'Ongoing', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      },
+      {
+        id: `${course.id}_l3`, num: '03', title: '03 Hyperbolas and Nonlinear Systems', cover: 'https://images.unsplash.com/photo-1596495578065-6e0763fa1178?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l3_s1`, title: 'Module 03 Guide: Asymptotes and Hyperbolic Forms', submitted: '-', score: '-', due: 'Oct 28, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      },
+      {
+        id: `${course.id}_l4`, num: '04', title: '04 Circular & Trigonometric Functions', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l4_s1`, title: 'Reference Sheet: Unit Circle and Fundamental Trigonometric Identities', submitted: '-', score: '-', due: 'Nov 12, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      }
     ];
   }
   
   if (cTitle.includes('biology')) {
     return [
-      { id: `${course.id}_l1`, num: '01', title: '01 Cell Structure, Organelles and Transport', cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l2`, num: '02', title: '02 Biological Macromolecules and Enzymes', cover: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l3`, num: '03', title: '03 Photosynthesis & Energy Transformation', cover: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l4`, num: '04', title: '04 Cellular Respiration & Cell Division', cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=400&q=80', items: [] }
+      {
+        id: `${course.id}_l1`, num: '01', title: '01 Cell Structure, Organelles and Transport', cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l1_s1`, title: 'General Biology 1: Cell Theory, Eukaryotic Organelles & Membrane Systems', submitted: 'Oct 04, 2026', score: '96/100', due: 'Oct 10, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
+          { id: `${course.id}_l1_s2`, title: 'Laboratory Activity Sheet: Osmosis & Diffusion Across Animal Membranes', submitted: 'Oct 09, 2026', score: '90/100', due: 'Oct 15, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
+          { id: `${course.id}_l1_s3`, title: 'Discussion Handout: Mechanisms of Active and Passive Cellular Transport', submitted: '-', score: '-', due: 'Oct 22, 2026', status: 'Ongoing', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      },
+      {
+        id: `${course.id}_l2`, num: '02', title: '02 Biological Macromolecules and Enzymes', cover: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l2_s1`, title: 'Lecture Guide: Carbohydrates, Lipids, Proteins & Nucleic Acids', submitted: '-', score: '-', due: 'Nov 02, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' },
+          { id: `${course.id}_l2_s2`, title: 'Enzyme Catalysis & Activation Energy Review Notes', submitted: '-', score: '-', due: 'Nov 08, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      },
+      {
+        id: `${course.id}_l3`, num: '03', title: '03 Photosynthesis & Energy Transformation', cover: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l3_s1`, title: 'Module Handout: Light Reactions, Calvin Cycle & ATP Synthase', submitted: '-', score: '-', due: 'Nov 18, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      },
+      {
+        id: `${course.id}_l4`, num: '04', title: '04 Cellular Respiration & Cell Division', cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l4_s1`, title: 'Mitosis vs Meiosis Comparative Study Tables & Diagram Sheet', submitted: '-', score: '-', due: 'Dec 02, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      }
     ];
   }
   
   if (cTitle.includes('physics')) {
     return [
-      { id: `${course.id}_l1`, num: '01', title: '01 Vectors, Measurements and Physical Quantities', cover: 'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l2`, num: '02', title: '02 Kinematics: 1D and 2D Motion', cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l3`, num: '03', title: '03 Newton\'s Laws of Motion and Friction', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l4`, num: '04', title: '04 Work, Energy, Momentum and Power', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80', items: [] }
+      {
+        id: `${course.id}_l1`, num: '01', title: '01 Vectors, Measurements and Physical Quantities', cover: 'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l1_s1`, title: 'General Physics 1: Vector Components, Resultants & Dimensional Analysis', submitted: 'Sep 12, 2026', score: '94/100', due: 'Sep 18, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
+          { id: `${course.id}_l1_s2`, title: 'Problem Set 01: Significant Figures & Measurement Uncertainties', submitted: 'Sep 20, 2026', score: '98/100', due: 'Sep 25, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      },
+      {
+        id: `${course.id}_l2`, num: '02', title: '02 Kinematics: 1D and 2D Motion', cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l2_s1`, title: 'Kinematics Equations & Projectile Trajectory Calculation Guide', submitted: 'Oct 02, 2026', score: '86/100', due: 'Oct 10, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      },
+      {
+        id: `${course.id}_l3`, num: '03', title: '03 Newton\'s Laws of Motion and Friction', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l3_s1`, title: 'Free-Body Diagrams and Friction Coefficient Practice Problems', submitted: '-', score: '-', due: 'Oct 26, 2026', status: 'Ongoing', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      },
+      {
+        id: `${course.id}_l4`, num: '04', title: '04 Work, Energy, Momentum and Power', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80',
+        items: [
+          { id: `${course.id}_l4_s1`, title: 'Conservation of Mechanical Energy & Linear Momentum Handout', submitted: '-', score: '-', due: 'Nov 15, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+        ]
+      }
     ];
   }
 
   return [
-    { id: `${course.id}_l1`, num: '01', title: `01 Introduction to ${course.title}`, cover: course.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
-    { id: `${course.id}_l2`, num: '02', title: `02 Core Concepts & Theoretical Principles`, cover: course.cover || 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80', items: [] },
-    { id: `${course.id}_l3`, num: '03', title: `03 Practical Applications & Problem Solving`, cover: course.cover || 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80', items: [] },
-    { id: `${course.id}_l4`, num: '04', title: `04 Module Mastery & Academic Synthesis`, cover: course.cover || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
+    {
+      id: `${course.id}_l1`, num: '01', title: `01 Introduction to ${course.title}`, cover: course.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80',
+      items: [
+        { id: `${course.id}_l1_s1`, title: `${course.title}: Fundamental Concepts & Learning Objectives`, submitted: 'Oct 01, 2026', score: '92/100', due: 'Oct 08, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
+        { id: `${course.id}_l1_s2`, title: 'Curriculum Syllabus and Course Requirements Guide', submitted: 'Oct 05, 2026', score: '100/100', due: 'Oct 12, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+      ]
+    },
+    {
+      id: `${course.id}_l2`, num: '02', title: `02 Core Concepts & Theoretical Principles`, cover: course.cover || 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80',
+      items: [
+        { id: `${course.id}_l2_s1`, title: `${course.title}: Core Theoretical Framework and Notes`, submitted: '-', score: '-', due: 'Oct 24, 2026', status: 'Ongoing', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+      ]
+    },
+    {
+      id: `${course.id}_l3`, num: '03', title: `03 Practical Applications & Problem Solving`, cover: course.cover || 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80',
+      items: [
+        { id: `${course.id}_l3_s1`, title: `${course.title}: Guided Practice Problems & Activity Sheet`, submitted: '-', score: '-', due: 'Nov 10, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+      ]
+    },
+    {
+      id: `${course.id}_l4`, num: '04', title: `04 Module Mastery & Academic Synthesis`, cover: course.cover || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80',
+      items: [
+        { id: `${course.id}_l4_s1`, title: `${course.title}: Synthesis Review Guide and Exam Preparations`, submitted: '-', score: '-', due: 'Nov 28, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
+      ]
+    }
   ];
 }
 
@@ -533,13 +620,20 @@ function updateApprovalBadge() {
 }
 
 function renderMaterialsList(role) {
-  const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
+  const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
   let enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
-    ? (role === 'teacher' ? COURSES_DATABASE.slice() : COURSES_DATABASE.filter(c => typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true))
+    ? (role === 'teacher'
+        ? (materialsStrandFilter ? COURSES_DATABASE.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase()) : COURSES_DATABASE.slice())
+        : COURSES_DATABASE.filter(c => {
+            // STRICT: When student is enrolled in STEM, only STEM subjects are shown!
+            const courseStrand = (c.strand || 'STEM').toUpperCase();
+            if (courseStrand !== studentStrand) return false;
+            return typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true;
+          }))
     : [];
 
   if (role === 'teacher' && typeof materialsStrandFilter !== 'undefined' && materialsStrandFilter) {
-    enrolledCourses = enrolledCourses.filter(c => c.strand === materialsStrandFilter);
+    enrolledCourses = enrolledCourses.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase());
   }
 
   // ── INDIVIDUAL SUBJECT WORKSPACE VIEW (STUDENT & TEACHER PORTAL) ──
@@ -649,14 +743,24 @@ function renderMaterialsList(role) {
                                 <div style="min-width:0;">
                                   <h4 style="margin:0 0 6px 0;font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(lesson.title)}</h4>
                                   <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;">
-                                    <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;">0% Empty</span>
-                                    <span>·</span>
-                                    <span>No files posted yet</span>
+                                    ${(() => {
+                                      const compCount = items.filter(it => (it.status || '').toLowerCase() === 'completed').length;
+                                      const compPct = items.length ? Math.round((compCount / items.length) * 100) : 0;
+                                      return items.length ? `
+                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${compPct === 100 ? '#dcfce7;color:#15803d' : '#e0f2fe;color:#0369a1'};border:1px solid #e2e8f0;">${compPct}% Completed</span>
+                                        <span>·</span>
+                                        <span>${items.length} handout${items.length === 1 ? '' : 's'} available</span>
+                                      ` : `
+                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;">0% Empty</span>
+                                        <span>·</span>
+                                        <span>No files posted yet</span>
+                                      `;
+                                    })()}
                                   </div>
                                 </div>
                               </div>
                               <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-                                <span style="font-size:12px;font-weight:600;color:#64748b;">${items.length} sections</span>
+                                <span style="font-size:12px;font-weight:600;color:#64748b;">${items.length} handouts</span>
                                 <div style="width:28px;height:28px;border-radius:6px;background:#f8fafc;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;color:#64748b;transition:transform 0.2s ease;transform:${isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'};">
                                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                                 </div>
@@ -674,16 +778,27 @@ function renderMaterialsList(role) {
                                         <th style="padding:9px 12px;font-weight:700;">Score</th>
                                         <th style="padding:9px 12px;font-weight:700;">Due</th>
                                         <th style="padding:9px 12px;font-weight:700;">Status</th>
+                                        <th style="padding:9px 12px;font-weight:700;text-align:right;">Action</th>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       ${items.length ? items.map(it => `
                                         <tr style="border-bottom:1px solid #e2e8f0;background:#ffffff;">
-                                          <td style="padding:10px 12px;color:#0f172a;font-weight:600;">${escHtml(it.title)}</td>
+                                          <td style="padding:10px 12px;color:#0f172a;font-weight:600;">
+                                            <div style="display:flex;align-items:center;gap:8px;">
+                                              <span style="font-size:15px;">📄</span>
+                                              <span>${escHtml(it.title)}</span>
+                                            </div>
+                                          </td>
                                           <td style="padding:10px 12px;color:#64748b;">${escHtml(it.submitted || '-')}</td>
                                           <td style="padding:10px 12px;color:#64748b;">${escHtml(it.score || '-')}</td>
                                           <td style="padding:10px 12px;color:#64748b;">${escHtml(it.due || '-')}</td>
-                                          <td style="padding:10px 12px;"><span class="sw-status-pill">${escHtml(it.status || 'Pending')}</span></td>
+                                          <td style="padding:10px 12px;"><span class="sw-status-pill ${it.status === 'Completed' ? 'done' : (it.status === 'Ongoing' ? 'ongoing' : '')}">${escHtml(it.status || 'Pending')}</span></td>
+                                          <td style="padding:10px 12px;text-align:right;">
+                                            <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
+                                              <span>⬇</span> Download
+                                            </a>
+                                          </td>
                                         </tr>
                                       `).join('') : `
                                         <tr>
@@ -964,84 +1079,119 @@ function renderMaterialsList(role) {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // STUDENT VIEW: MATERIALS OVERVIEW TABLE & WIDGETS (IMAGE 1)
+  // STUDENT VIEW: SUBJECT CARDS COMPILATION HUB (STRICT STRAND FILTER)
   // ══════════════════════════════════════════════════════════════
+  let displayCourses = enrolledCourses.slice();
+
+  // 1. Filter by track (Specialized, Core, Applied)
+  if (typeof studentMatTrackFilter !== 'undefined' && studentMatTrackFilter && studentMatTrackFilter !== 'all') {
+    displayCourses = displayCourses.filter(c => (c.track || '').toLowerCase() === studentMatTrackFilter.toLowerCase());
+  }
+
+  // 2. Filter by search query
+  const sq = (studentMatSearchQuery || '').trim().toLowerCase();
+  if (sq) {
+    displayCourses = displayCourses.filter(c =>
+      (c.title || '').toLowerCase().includes(sq) ||
+      (c.code || '').toLowerCase().includes(sq) ||
+      (c.instructor || '').toLowerCase().includes(sq) ||
+      (c.description || '').toLowerCase().includes(sq)
+    );
+  }
+
+  const specializedCount = enrolledCourses.filter(c => c.track === 'Specialized').length;
+  const coreCount = enrolledCourses.filter(c => c.track === 'Core').length;
+  const appliedCount = enrolledCourses.filter(c => c.track === 'Applied').length;
+
   return `
   <div class="materials-page-container">
     <!-- 1. HERO BANNER -->
-    <div class="materials-hero-banner">
-      <div class="materials-hero-left">
-        <div class="materials-hero-icon">📁</div>
+    <div class="materials-hero-banner" style="background:linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);padding:24px 28px;border-radius:18px;margin-bottom:20px;box-shadow:0 6px 20px rgba(30,58,138,0.15);">
+      <div class="materials-hero-left" style="display:flex;align-items:center;gap:18px;">
+        <div class="materials-hero-icon" style="width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center;font-size:26px;color:#fff;">📚</div>
         <div class="materials-hero-text">
-          <h1>My Materials</h1>
-          <p>Access your learning materials, files, and resources for each subject.</p>
-        </div>
-      </div>
-      <div class="student-hero-right">
-        <div class="student-hero-quote">
-          "Small steps every day lead to big results."
-        </div>
-        <div class="student-hero-art">
-          <svg width="84" height="68" viewBox="0 0 100 80" fill="none">
-            <path d="M15 55L45 70L85 50L55 35L15 55Z" fill="#1e40af"/>
-            <path d="M15 55L15 62L45 77L45 70L15 55Z" fill="#1d4ed8"/>
-            <path d="M45 70L45 77L85 57L85 50L45 70Z" fill="#3b82f6"/>
-            <path d="M20 42L50 57L88 38L58 23L20 42Z" fill="#d97706"/>
-            <path d="M20 42L20 49L50 64L50 57L20 42Z" fill="#b45309"/>
-            <path d="M50 57L50 64L88 45L88 38L50 57Z" fill="#f59e0b"/>
-            <path d="M25 28L55 43L92 25L62 10L25 28Z" fill="#2563eb"/>
-            <path d="M25 28L25 35L55 50L55 43L25 28Z" fill="#1d4ed8"/>
-            <path d="M55 43L55 50L92 32L92 25L55 43Z" fill="#60a5fa"/>
-            <path d="M30 31L53 42L85 27L62 15L30 31Z" fill="#93c5fd" opacity="0.4"/>
-          </svg>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="background:#fef08a;color:#854d0e;font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.5px;">${escHtml(studentStrand)} STRAND</span>
+            <span style="color:rgba(255,255,255,0.85);font-size:12px;font-weight:600;">S.Y. 2026–2027 · Academic Portal</span>
+          </div>
+          <h1 style="color:#ffffff;margin:0 0 6px 0;font-size:22px;font-weight:800;letter-spacing:-0.02em;">My Academic Materials</h1>
+          <p style="color:rgba(255,255,255,0.9);margin:0;font-size:13px;max-width:680px;line-height:1.45;">Select any enrolled subject below to open its dedicated workspace — separating official modules &amp; handouts, quizzes, and teacher supplementary files.</p>
         </div>
       </div>
     </div>
 
-    <!-- 2. FILTER ROW (IMAGE 3) -->
-    <div class="materials-filter-row-1" style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
-      <div class="materials-search-wrap" style="flex:1;min-width:260px;">
+    <!-- 2. TRACK FILTERS & LIVE SEARCH -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
+      <div class="subject-chips-bar" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button class="subject-chip ${(!studentMatTrackFilter || studentMatTrackFilter === 'all') ? 'active' : ''}" onclick="setStudentMatTrack('all')" style="cursor:pointer;">
+          All ${escHtml(studentStrand)} Subjects <span class="sc-badge">${enrolledCourses.length}</span>
+        </button>
+        <button class="subject-chip ${studentMatTrackFilter === 'Specialized' ? 'active' : ''}" onclick="setStudentMatTrack('Specialized')" style="cursor:pointer;">
+          Specialized <span class="sc-badge">${specializedCount}</span>
+        </button>
+        <button class="subject-chip ${studentMatTrackFilter === 'Core' ? 'active' : ''}" onclick="setStudentMatTrack('Core')" style="cursor:pointer;">
+          Core <span class="sc-badge">${coreCount}</span>
+        </button>
+        <button class="subject-chip ${studentMatTrackFilter === 'Applied' ? 'active' : ''}" onclick="setStudentMatTrack('Applied')" style="cursor:pointer;">
+          Applied <span class="sc-badge">${appliedCount}</span>
+        </button>
+      </div>
+
+      <div class="materials-search-wrap" style="min-width:280px;max-width:360px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#3b82f6;flex-shrink:0;">
           <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
         </svg>
-        <input type="text" id="studentMatSearchInput" placeholder="Search materials, subjects, or keywords..." value="${escHtml(studentMatSearchQuery)}" oninput="setStudentMatSearch(this.value)"/>
+        <input type="text" id="studentMatSearchInput" placeholder="Search subjects, codes, or instructors..." value="${escHtml(studentMatSearchQuery)}" oninput="setStudentMatSearch(this.value)"/>
+        ${studentMatSearchQuery ? `<button onclick="setStudentMatSearch('');const inp = document.getElementById('studentMatSearchInput'); if(inp) inp.value='';" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;padding:0 4px;" title="Clear search">✕</button>` : ''}
       </div>
-
-      <!-- All Subjects Dropdown -->
-      <select class="materials-select-btn" onchange="setStudentMatSubject(this.value)" style="min-width:145px;">
-        <option value="all" ${studentMatSubjectFilter === 'all' ? 'selected' : ''}>📅 All Subjects</option>
-        <option value="Pre-Calculus" ${studentMatSubjectFilter === 'Pre-Calculus' ? 'selected' : ''}>Pre-Calculus</option>
-        <option value="General Biology 1" ${studentMatSubjectFilter === 'General Biology 1' ? 'selected' : ''}>General Biology 1</option>
-        <option value="General Physics 1" ${studentMatSubjectFilter === 'General Physics 1' ? 'selected' : ''}>General Physics 1</option>
-        <option value="General Chemistry 1" ${studentMatSubjectFilter === 'General Chemistry 1' ? 'selected' : ''}>General Chemistry 1</option>
-        <option value="Empowerment Technologies (ICT)" ${studentMatSubjectFilter === 'Empowerment Technologies (ICT)' ? 'selected' : ''}>Empowerment Technologies (ICT)</option>
-        <option value="Earth and Life Science" ${studentMatSubjectFilter === 'Earth and Life Science' ? 'selected' : ''}>Earth and Life Science</option>
-        <option value="Practical Research 1" ${studentMatSubjectFilter === 'Practical Research 1' ? 'selected' : ''}>Practical Research 1</option>
-      </select>
-
-      <!-- All Types Dropdown -->
-      <select class="materials-select-btn" onchange="setStudentMatType(this.value)" style="min-width:130px;">
-        <option value="all" ${studentMatTypeFilter === 'all' ? 'selected' : ''}>📄 All Types</option>
-        <option value="Module" ${studentMatTypeFilter === 'Module' ? 'selected' : ''}>Module</option>
-        <option value="PDF" ${studentMatTypeFilter === 'PDF' ? 'selected' : ''}>PDF Documents</option>
-        <option value="Video" ${studentMatTypeFilter === 'Video' ? 'selected' : ''}>Video</option>
-        <option value="Notes" ${studentMatTypeFilter === 'Notes' ? 'selected' : ''}>Notes</option>
-        <option value="File" ${studentMatTypeFilter === 'File' ? 'selected' : ''}>File</option>
-      </select>
-
-      <!-- All Months Dropdown -->
-      <select class="materials-select-btn" onchange="setStudentMatMonth(this.value)" style="min-width:130px;">
-        <option value="all" ${studentMatMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
-        <option value="9" ${studentMatMonthFilter === '9' ? 'selected' : ''}>September 2025</option>
-        <option value="10" ${studentMatMonthFilter === '10' ? 'selected' : ''}>October 2025</option>
-        <option value="11" ${studentMatMonthFilter === '11' ? 'selected' : ''}>November 2025</option>
-      </select>
     </div>
 
-    <!-- 3. MAIN SPLIT 2-COLUMN VIEW (IMAGE 3) -->
-    <div class="materials-overview-split" id="studentMatSplitWrap">
-      ${renderStudentMaterialsSplitContent()}
-    </div>
+    <!-- 3. SUBJECT CARDS COMPILATION GRID -->
+    ${displayCourses.length ? `
+      <div class="subjects-folder-grid" style="grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));gap:20px;">
+        ${displayCourses.map(course => {
+          const teacherUploadsForCourse = materialsData.filter(m => isMaterialMatchingCourse(m, course) && m.status === 'approved');
+          const courseLessons = getSubjectLessons(course);
+          const courseQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
+            if (!q.subject) return false;
+            const s = q.subject.toLowerCase();
+            const t = course.title.toLowerCase();
+            return s.includes(t) || t.includes(s);
+          }) : [];
+
+          return `
+            <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')" title="Open ${escHtml(course.title)} Workspace">
+              <div class="sfc-thumb" style="height:125px;background-image:url('${course.cover || 'assets/slide1.jpg'}');">
+                <span class="sfc-code">${escHtml(course.code)}</span>
+                <span class="sfc-strand" style="background:#0284c7;">${escHtml(course.track || 'Specialized')}</span>
+              </div>
+              <div class="sfc-body" style="padding:18px;">
+                <h4 class="sfc-title" style="font-size:16px;margin-bottom:6px;">${escHtml(course.title)}</h4>
+                <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                  ${escHtml(course.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
+                </p>
+                <p class="sfc-instructor" style="margin-bottom:12px;">👤 <span>Instructor: <strong>${escHtml(course.instructor || 'Faculty')}</strong></span></p>
+
+                <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
+                  <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:wrap;">
+                    <span style="background:#f1f5f9;padding:3px 7px;border-radius:6px;">📄 ${courseLessons.length} Modules</span>
+                    ${courseQuizzes.length ? `<span style="background:#fef3c7;color:#b45309;padding:3px 7px;border-radius:6px;">📝 ${courseQuizzes.length} Quiz${courseQuizzes.length === 1 ? '' : 'zes'}</span>` : ''}
+                  </div>
+                  <span class="sfc-open-btn" style="color:#0284c7;font-weight:700;font-size:12.5px;">Open Workspace →</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : `
+      <div style="padding:60px 24px;text-align:center;background:#fff;border-radius:16px;border:1.5px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:10px;">
+        <div style="width:54px;height:54px;border-radius:14px;background:#f0f9ff;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:26px;">🔍</div>
+        <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f172a;">No ${escHtml(studentStrand)} subjects found</h3>
+        <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;">No subjects matched "${escHtml(studentMatSearchQuery)}" under the selected filter. Try adjusting your track filter or search terms.</p>
+        <button class="sw-btn outline" onclick="setStudentMatTrack('all');setStudentMatSearch('');" style="margin-top:6px;">Reset Filters</button>
+      </div>
+    `}
   </div>`;
 }
 
@@ -1343,6 +1493,7 @@ function renderStudentMaterialsSplitContent() {
 }
 
 // ── STUDENT MATERIALS STATE & REPOSITORY DATA (IMAGE 3) ──
+let studentMatTrackFilter = 'all';
 let studentMatSearchQuery = '';
 let studentMatSubjectFilter = 'all';
 let studentMatTypeFilter = 'all';
@@ -1350,6 +1501,11 @@ let studentMatMonthFilter = 'all';
 let studentMatSort = 'newest';
 let studentMatViewMode = 'grid';
 let studentMatViewAll = false;
+
+function setStudentMatTrack(track) {
+  studentMatTrackFilter = track;
+  renderMaterialsContainer();
+}
 
 function toggleStudentMatViewAll() {
   studentMatViewAll = !studentMatViewAll;
@@ -1641,14 +1797,14 @@ function resetStudentMatFilters() {
 }
 
 function updateStudentMaterialsUI() {
-  const splitWrap = document.getElementById('studentMatSplitWrap');
-  if (splitWrap) {
-    splitWrap.innerHTML = renderStudentMaterialsSplitContent();
-    return;
-  }
   const container = document.getElementById('materialsListWrap');
   if (container) {
     container.innerHTML = renderMaterialsList('student');
+    return;
+  }
+  const splitWrap = document.getElementById('studentMatSplitWrap');
+  if (splitWrap) {
+    splitWrap.innerHTML = renderStudentMaterialsSplitContent();
   }
 }
 

@@ -174,18 +174,11 @@ function scrollCoursesGrid(direction) {
 }
 
 function isCourseOpenForStudent(course) {
-  const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
+  const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
+  const courseStrand = (course.strand || 'STEM').toUpperCase();
 
-  // If course is marked Core or Applied, open for all
-  if (course.track === 'Core' || course.track === 'Applied' || course.strand === 'CORE' || course.strand === 'GENERAL') return true;
-
-  // IF STUDENT IS ENROLLED IN STEM: ONLY STEM SUBJECTS ARE OPEN
-  if (studentStrand === 'STEM') {
-    return course.strand === 'STEM';
-  }
-
-  // Otherwise check if course strand matches student strand
-  return course.strand === studentStrand;
+  // Strict strand check: student only sees subjects belonging to their enrolled strand (e.g. STEM)
+  return courseStrand === studentStrand;
 }
 
 function handleCourseClick(courseId) {
