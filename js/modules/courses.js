@@ -67,6 +67,22 @@ const COURSES_DATABASE = [
     documents: []
   },
   {
+    id: 'course-prog1',
+    title: 'Computer Programming 1',
+    code: 'PROG-1101',
+    strand: 'STEM',
+    track: 'Specialized',
+    gradeLevel: 'Grade 11',
+    semester: '1st Sem',
+    progress: 50,
+    modules: 0,
+    instructor: 'Engr. Julian Callanta',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=600&q=80',
+    description: 'Algorithm development, syntax, control structures, loops, functions, and hands-on coding problem solving.',
+    documents: []
+  },
+  {
     id: 'course-empotech',
     title: 'Empowerment Technologies (ICT)',
     code: 'ICT-1101',
@@ -174,18 +190,11 @@ function scrollCoursesGrid(direction) {
 }
 
 function isCourseOpenForStudent(course) {
-  const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
+  const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
+  const courseStrand = (course.strand || 'STEM').toUpperCase();
 
-  // If course is marked Core or Applied, open for all
-  if (course.track === 'Core' || course.track === 'Applied' || course.strand === 'CORE' || course.strand === 'GENERAL') return true;
-
-  // IF STUDENT IS ENROLLED IN STEM: ONLY STEM SUBJECTS ARE OPEN
-  if (studentStrand === 'STEM') {
-    return course.strand === 'STEM';
-  }
-
-  // Otherwise check if course strand matches student strand
-  return course.strand === studentStrand;
+  // Strict strand check: student only sees subjects belonging to their enrolled strand (e.g. STEM)
+  return courseStrand === studentStrand;
 }
 
 function handleCourseClick(courseId) {

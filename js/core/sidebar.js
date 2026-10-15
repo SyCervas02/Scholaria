@@ -63,7 +63,7 @@ function initDashboardShell() {
     a.href = '#';
     a.className = 'menu-item' + (item.page === 'dashboard' ? ' active' : '');
     a.dataset.page = item.page;
-    a.setAttribute('onclick', `event.preventDefault(); renderPage('${item.page}');`);
+    a.setAttribute('onclick', `event.preventDefault(); if('${item.page}'==='materials' && typeof setActiveSubjectMaterials==='function') { setActiveSubjectMaterials(null, null, false); } renderPage('${item.page}');`);
     a.innerHTML = item.icon + `<span>${item.label}</span>` + (item.badge ? `<span class="menu-badge">${item.badge}</span>` : '');
     sidebarMenu.appendChild(a);
   });
@@ -568,26 +568,30 @@ function buildRealClassRecordEntries() {
         if (attempt.score_percentage !== undefined && attempt.score_percentage !== null) {
           scorePct = Math.round(Number(attempt.score_percentage));
         } else if (attempt.score !== undefined && attempt.total_items) {
-          scorePct = Math.round((attempt.score / attempt.total_items) * 100);
+          scorePct = Math.round((Number(attempt.score) / Number(attempt.total_items)) * 100);
         } else if (attempt.score !== undefined) {
           scorePct = Math.round(Number(attempt.score));
         }
         isLive = true;
         hasRealData = true;
       } else if (customData[q.id] !== undefined) {
-        scorePct = Number(customData[q.id]);
+        const parsed = Number(customData[q.id]);
+        if (!isNaN(parsed)) scorePct = parsed;
         hasRealData = true;
       }
 
-      if (scorePct !== null) {
+      if (scorePct !== null && !isNaN(scorePct) && isFinite(scorePct)) {
+        scorePct = Math.min(100, Math.max(0, scorePct));
         validScoresSum += scorePct;
         validScoresCount++;
+      } else {
+        scorePct = null;
       }
 
       quizScores[q.id] = { scorePct, isLive };
     });
 
-    let avg = validScoresCount > 0 ? Number((validScoresSum / validScoresCount).toFixed(2)) : null;
+    let avg = validScoresCount > 0 ? Math.min(100, Math.max(0, Number((validScoresSum / validScoresCount).toFixed(2)))) : null;
 
     if (studAttempts.length > 0) {
       hasRealData = true;
@@ -598,17 +602,18 @@ function buildRealClassRecordEntries() {
         if (sa.score_percentage !== undefined && sa.score_percentage !== null) {
           p = Number(sa.score_percentage);
         } else if (sa.score !== undefined && sa.total_items) {
-          p = (sa.score / sa.total_items) * 100;
+          p = (Number(sa.score) / Number(sa.total_items)) * 100;
         } else if (sa.score !== undefined) {
           p = Number(sa.score);
         }
-        if (p !== null && !isNaN(p)) {
+        if (p !== null && !isNaN(p) && isFinite(p)) {
+          p = Math.min(100, Math.max(0, p));
           attSum += p;
           attCnt++;
         }
       });
       if (attCnt > 0) {
-        avg = Number((attSum / attCnt).toFixed(2));
+        avg = Math.min(100, Math.max(0, Number((attSum / attCnt).toFixed(2))));
       }
     }
 
@@ -644,16 +649,17 @@ function buildSectionSummaryEntries() {
     }
     const secData = sectionMap.get(sec);
     secData.studentsCount++;
-    if (st.avg !== null) {
-      secData.scoresSum += st.avg;
+    if (st.avg !== null && !isNaN(st.avg) && isFinite(st.avg)) {
+      const numAvg = Math.min(100, Math.max(0, Number(st.avg)));
+      secData.scoresSum += numAvg;
       secData.scoresCount++;
-      if (st.avg >= 75) secData.passingCount++;
+      if (numAvg >= 75) secData.passingCount++;
     }
   });
 
   return Array.from(sectionMap.values()).map(sec => {
-    const classAvg = sec.scoresCount > 0 ? Number((sec.scoresSum / sec.scoresCount).toFixed(2)) : null;
-    const passRate = sec.scoresCount > 0 ? Math.round((sec.passingCount / sec.scoresCount) * 100) : null;
+    const classAvg = sec.scoresCount > 0 ? Math.min(100, Math.max(0, Number((sec.scoresSum / sec.scoresCount).toFixed(2)))) : null;
+    const passRate = sec.scoresCount > 0 ? Math.min(100, Math.max(0, Math.round((sec.passingCount / sec.scoresCount) * 100))) : null;
     return {
       ...sec,
       classAvg,
@@ -1042,19 +1048,17 @@ function buildProfilePage(role) {
             <strong id="pfFullNamePreview" style="color:var(--blue);font-weight:700;">${escHtml(currentFullName)}</strong>
           </div>
 
-          <div style="font-size:11.5px;color:var(--text-muted);line-height:1.4;background:rgba(238,242,255,0.6);padding:8px 12px;border-radius:8px;border-left:3px solid var(--blue);display:flex;align-items:center;gap:8px;">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--blue)" stroke-width="2" style="flex-shrink:0;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span><strong>Vital Information Protected:</strong> Full name is an official school record and cannot be edited in My Profile. For legal name corrections, please contact the administrator or registrar.</span>
+          <div style="font-size:11.5px;color:#d97706;background:#fffbeb;padding:8px 12px;border-radius:8px;border:1px solid #fde68a;display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Names are strictly verified against school enrollment records and locked against unauthorized edits. Contact the registrar for legal name modifications.</span>
           </div>
 
-          <!-- BIO -->
           <div class="pf-field">
             <label>About Me / Bio</label>
-            <textarea id="pfBio" maxlength="300" placeholder="Share a few words about your academic goals, interests, or teaching focus...">${escHtml(p.bio || '')}</textarea>
+            <textarea id="pfBio" placeholder="Share a few words about your academic goals, interests, or teaching focus...">${escHtml(p.bio || '')}</textarea>
           </div>
 
-          <!-- STATUS & MOTTO -->
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:12px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;">
             <div class="pf-field">
               <label>Current Status</label>
               <select id="pfOnlineStatus">
@@ -1067,12 +1071,12 @@ function buildProfilePage(role) {
 
             <div class="pf-field">
               <label>Status Message / Motto</label>
-              <input type="text" id="pfStatusMsg" maxlength="60" value="${escHtml(p.status_message || '')}" placeholder="e.g. Studying for Finals 📚" />
+              <input type="text" id="pfStatusMsg" value="${escHtml(p.status_message || '')}" placeholder="e.g. Studying for Finals 📚" />
             </div>
           </div>
         </div>
 
-        <!-- CARD 2: CONTACT INFORMATION & PHONE VALIDATION -->
+        <!-- CARD 2: CONTACT DETAILS & MOBILE NUMBERS -->
         <div class="profile-card">
           <div class="profile-card-hdr">
             <h3>
@@ -1950,35 +1954,54 @@ function studentPage(page) {
             </div>
 
             <div class="news-bulletin-list">
-              <div class="news-bulletin-item" onclick="renderPage('announcements')">
-                <div class="news-item-top">
-                  <span class="news-tag emergency">SUSPENSION / EMERGENCY</span>
-                  <span class="news-tag-new">NEW</span>
-                  <span class="news-time">4d ago</span>
-                </div>
-                <div class="news-item-title">Super Typhoon Class Suspension &amp; Asynchronous Shift</div>
-                <div class="news-item-snippet">Due to severe weather conditions and local government advisories, all face-to-face classes for Senior High School are SUSPENDED...</div>
-              </div>
+              ${(() => {
+                const activeNews = allAnc
+                  .filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft && !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()))
+                  .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                  .slice(0, 3);
 
-              <div class="news-bulletin-item" onclick="renderPage('announcements')">
-                <div class="news-item-top">
-                  <span class="news-tag academic">ACADEMIC</span>
-                  <span class="news-tag-new">NEW</span>
-                  <span class="news-time">4d ago</span>
-                </div>
-                <div class="news-item-title">Q1 Midterm Examination Schedule Shift</div>
-                <div class="news-item-snippet">Notice to all Grade 11 and Grade 12 students: In light of the recent class suspension, the First Quarter Midterm Examination schedule has been adjusted...</div>
-              </div>
+                if (!activeNews.length) {
+                  return `
+                    <div class="news-bulletin-item" onclick="renderPage('announcements')">
+                      <div class="news-item-top">
+                        <span class="news-tag academic">ACADEMIC</span>
+                        <span class="news-time">Today</span>
+                      </div>
+                      <div class="news-item-title">Welcome to Scholaria Portal</div>
+                      <div class="news-item-snippet">Check back here for official school announcements, typhoon class suspensions, and department bulletins.</div>
+                    </div>
+                  `;
+                }
 
-              <div class="news-bulletin-item" onclick="renderPage('announcements')">
-                <div class="news-item-top">
-                  <span class="news-tag event">SCHOOL EVENTS</span>
-                  <span class="news-tag-new">NEW</span>
-                  <span class="news-time">4d ago</span>
-                </div>
-                <div class="news-item-title">Senior High School Foundation Day Assembly</div>
-                <div class="news-item-snippet">Imus National High School / Senior High Department will celebrate its Annual Foundation Week next month! Student Council activities, strand exhibits...</div>
-              </div>
+                return activeNews.map(anc => {
+                  const isUnread = !readAnc.has(String(anc.id));
+                  const timeAgo = (() => {
+                    const diff = Date.now() - new Date(anc.timestamp).getTime();
+                    const mins = Math.floor(diff / 60000);
+                    const hrs  = Math.floor(diff / 3600000);
+                    const days = Math.floor(diff / 86400000);
+                    if (days > 0) return `${days}d ago`;
+                    if (hrs > 0)  return `${hrs}h ago`;
+                    if (mins > 0) return `${mins}m ago`;
+                    return 'Just now';
+                  })();
+
+                  const tagClass = anc.category === 'emergency' ? 'emergency' : anc.category === 'academic' ? 'academic' : 'event';
+                  const tagLabel = anc.category === 'emergency' ? 'SUSPENSION / EMERGENCY' : anc.category === 'academic' ? 'ACADEMIC' : anc.category === 'event' ? 'SCHOOL EVENTS' : 'ANNOUNCEMENT';
+
+                  return `
+                    <div class="news-bulletin-item" onclick="openAnnouncementDetailModal('${anc.id}')" style="cursor:pointer;" title="Click to read announcement">
+                      <div class="news-item-top">
+                        <span class="news-tag ${tagClass}">${tagLabel}</span>
+                        ${isUnread ? '<span class="news-tag-new">NEW</span>' : ''}
+                        <span class="news-time">${timeAgo}</span>
+                      </div>
+                      <div class="news-item-title">${escHtml(anc.title)}</div>
+                      <div class="news-item-snippet">${escHtml((anc.message || '').replace(/\n/g, ' '))}</div>
+                    </div>
+                  `;
+                }).join('');
+              })()}
             </div>
           </div>
 
@@ -2155,17 +2178,29 @@ function studentPage(page) {
 
         <!-- METRIC HIGHLIGHT CARDS -->
         <div class="card-grid" style="gap:12px;margin-bottom:0;">
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon" style="width:38px;height:38px;">${iconQuiz()}</div><div><div class="ic-sub">Assigned Quizzes</div><div class="ic-num" style="font-size:24px;">${totalCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Total assessments for your grade & strand</p>
+          <div class="stat-filter-card ${studentQuizFilterStatus === '' ? 'active' : ''}" onclick="setStudentQuizFilterStatus('')" title="Click to view all assigned quizzes">
+            <div class="ic-icon">${iconQuiz()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Assigned Quizzes</div>
+              <div class="ic-num">${totalCount}</div>
+              <p>Total assessments for your grade & strand</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon gold" style="width:38px;height:38px;">${iconClock()}</div><div><div class="ic-sub">Pending to Take</div><div class="ic-num gold" style="font-size:24px;">${pendingCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">${pendingCount > 0 ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} awaiting your submission` : 'All caught up! 🎉'}</p>
+          <div class="stat-filter-card ${studentQuizFilterStatus === 'pending' ? 'active' : ''}" onclick="setStudentQuizFilterStatus('pending')" title="Click to filter quizzes pending to take">
+            <div class="ic-icon gold">${iconClock()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Pending to Take</div>
+              <div class="ic-num gold">${pendingCount}</div>
+              <p>${pendingCount > 0 ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} awaiting your submission` : 'All caught up! 🎉'}</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon green" style="width:38px;height:38px;">${iconCheck()}</div><div><div class="ic-sub">Completed</div><div class="ic-num green" style="font-size:24px;">${completedCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">${totalCount > 0 ? `${Math.round((completedCount / totalCount) * 100)}% completion rate` : 'No quizzes yet'}</p>
+          <div class="stat-filter-card ${studentQuizFilterStatus === 'completed' ? 'active' : ''}" onclick="setStudentQuizFilterStatus('completed')" title="Click to filter completed quizzes">
+            <div class="ic-icon green">${iconCheck()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Completed</div>
+              <div class="ic-num green">${completedCount}</div>
+              <p>${totalCount > 0 ? `${Math.round((completedCount / totalCount) * 100)}% completion rate` : 'No quizzes yet'}</p>
+            </div>
           </div>
         </div>
 
@@ -2433,17 +2468,29 @@ function studentPage(page) {
 
       <!-- SUMMARY HIGHLIGHT CARDS -->
       <div class="card-grid" style="margin-bottom:20px;">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconQuiz()}</div><div><div class="ic-sub">Assigned Quizzes</div><div class="ic-num">${quizList.length}</div></div></div>
-          <p>Total quizzes for your strand & section</p>
+        <div class="stat-filter-card ${studentProgressTab === 'all' ? 'active' : ''}" onclick="setStudentProgressTab('all')">
+          <div class="ic-icon">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Assigned Quizzes</div>
+            <div class="ic-num">${quizList.length}</div>
+            <p>Total quizzes for your strand</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${typeof iconApproval === 'function' ? iconApproval() : iconProgress()}</div><div><div class="ic-sub">Completed</div><div class="ic-num gold">${completedCount}</div></div></div>
-          <p>${quizList.length ? `${Math.round((completedCount / quizList.length) * 100)}% completion rate` : 'No quizzes assigned'}</p>
+        <div class="stat-filter-card ${studentProgressTab === 'completed' ? 'active' : ''}" onclick="setStudentProgressTab('completed')">
+          <div class="ic-icon gold">${typeof iconApproval === 'function' ? iconApproval() : iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Completed</div>
+            <div class="ic-num gold">${completedCount}</div>
+            <p>${quizList.length ? `${Math.round((completedCount / quizList.length) * 100)}% completion rate` : 'No quizzes assigned'}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Overall Average</div><div class="ic-num green">${overallAvg !== null ? overallAvg + '%' : '—'}</div></div></div>
-          <p>${overallAvg !== null ? (overallAvg >= 75 ? 'Passing Standing' : 'Needs Improvement') : 'Take quizzes to view average'}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Overall Average</div>
+            <div class="ic-num green">${overallAvg !== null ? overallAvg + '%' : '—'}</div>
+            <p>${overallAvg !== null ? (overallAvg >= 75 ? 'Passing Standing' : 'Needs Improvement') : 'Take quizzes to view average'}</p>
+          </div>
         </div>
         ${(() => {
           if (studentProgressSubject !== 'all') {
@@ -2463,34 +2510,30 @@ function studentPage(page) {
             const subAvg = subScoreCount > 0 ? (subScoreSum / subScoreCount).toFixed(2) : null;
 
             return `
-            <div class="info-card" style="border: 1.5px solid #818cf8; background: linear-gradient(180deg, #ffffff 0%, #f5f7ff 100%);">
-              <div class="ic-head">
-                <div class="ic-icon" style="background:#e0e7ff;color:#4338ca;">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                </div>
-                <div style="min-width:0;flex:1;">
-                  <div class="ic-sub" style="color:#4338ca;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(subName)}">${escHtml(subName.toUpperCase())} AVG</div>
-                  <div class="ic-num" style="color:#3730a3;">${subAvg !== null ? subAvg + '%' : '—'}</div>
-                </div>
+            <div class="info-card horizontal-card" style="border: 1.5px solid #818cf8; background: linear-gradient(180deg, #ffffff 0%, #f5f7ff 100%);">
+              <div class="ic-icon" style="background:#e0e7ff;color:#4338ca;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
               </div>
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:6px;font-size:12px;color:var(--text-muted);">
-                <span>${subCompleted}/${subTotal} completed</span>
-                <button type="button" onclick="event.stopPropagation();setStudentProgressSubject('all');" style="background:#e0e7ff;border:none;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;color:#3730a3;cursor:pointer;transition:0.2s;" onmouseover="this.style.background='#c7d2fe'" onmouseout="this.style.background='#e0e7ff'" title="Return to all subjects">✕ All</button>
+              <div class="ic-content" style="min-width:0;flex:1;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div class="ic-sub" style="color:#4338ca;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(subName)}">${escHtml(subName.toUpperCase())} AVG</div>
+                  <button type="button" onclick="event.stopPropagation();setStudentProgressSubject('all');" style="background:#e0e7ff;border:none;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;color:#3730a3;cursor:pointer;transition:0.2s;" onmouseover="this.style.background='#c7d2fe'" onmouseout="this.style.background='#e0e7ff'" title="Return to all subjects">✕ All</button>
+                </div>
+                <div class="ic-num" style="color:#3730a3;">${subAvg !== null ? subAvg + '%' : '—'}</div>
+                <p>${subCompleted}/${subTotal} completed</p>
               </div>
             </div>`;
           } else {
             return `
-            <div class="info-card" style="cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;" onclick="setStudentProgressTab('${pendingCount > 0 ? 'pending' : 'all'}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
-              <div class="ic-head">
-                <div class="ic-icon" style="background:#fef3c7;color:#d97706;">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                </div>
-                <div>
-                  <div class="ic-sub">Pending Quizzes</div>
-                  <div class="ic-num" style="color:#d97706;">${pendingCount}</div>
-                </div>
+            <div class="stat-filter-card ${studentProgressTab === 'pending' ? 'active' : ''}" onclick="setStudentProgressTab('${pendingCount > 0 ? 'pending' : 'all'}')">
+              <div class="ic-icon" style="background:#fef3c7;color:#d97706;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               </div>
-              <p>${pendingCount > 0 ? `${pendingCount} awaiting completion · Click to view` : 'All assigned quizzes done! 🎉'}</p>
+              <div class="ic-content">
+                <div class="ic-sub">Pending Quizzes</div>
+                <div class="ic-num" style="color:#d97706;">${pendingCount}</div>
+                <p>${pendingCount > 0 ? `${pendingCount} awaiting completion` : 'All assigned quizzes done! 🎉'}</p>
+              </div>
             </div>`;
           }
         })()}
@@ -2682,21 +2725,37 @@ function teacherPage(page) {
         </div>
       </div>
       <div class="card-grid">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">My Classes</div><div class="ic-num">${myStrands.length || 3}</div></div></div>
-          <p>${myStrands.length ? escHtml(myStrands.join(', ')) : 'ICT, CS, TVL — Grade 11 & 12'}</p>
+        <div class="stat-filter-card" onclick="renderPage('classrec')" style="cursor:pointer;">
+          <div class="ic-icon">${iconUsers()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">My Classes</div>
+            <div class="ic-num">${myStrands.length || 3}</div>
+            <p>${myStrands.length ? escHtml(myStrands.join(', ')) : 'ICT, CS, TVL — Grade 11 & 12'}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconFolder()}</div><div><div class="ic-sub">Materials Uploaded</div><div class="ic-num gold">${myMaterials.length || 12}</div></div></div>
-          <p>${myPendingMaterials || 0} pending admin approval</p>
+        <div class="stat-filter-card" onclick="renderPage('materials')" style="cursor:pointer;">
+          <div class="ic-icon gold">${iconFolder()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Materials Uploaded</div>
+            <div class="ic-num gold">${myMaterials.length || 12}</div>
+            <p>${myPendingMaterials || 0} pending admin approval</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconQuiz()}</div><div><div class="ic-sub">Active Quizzes</div><div class="ic-num green">${myActiveQuizzes.length}</div></div></div>
-          <p>${myQuizzes.length} total across all handled subjects</p>
+        <div class="stat-filter-card" onclick="renderPage('quiz')" style="cursor:pointer;">
+          <div class="ic-icon green">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Active Quizzes</div>
+            <div class="ic-num green">${myActiveQuizzes.length}</div>
+            <p>${myQuizzes.length} total across all handled subjects</p>
+          </div>
         </div>
-        <div class="info-card" onclick="renderPage('announcements')" style="cursor:pointer;transition:all 0.2s;border:1px solid ${unreadCount > 0 ? '#fca5a5' : 'rgba(37,99,235,0.08)'};" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 10px 25px -5px rgba(0,0,0,0.05)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-          <div class="ic-head"><div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div><div><div class="ic-sub">Unread News</div><div class="ic-num" style="color:#dc2626;">${unreadCount}</div></div></div>
-          <p>School announcements & events</p>
+        <div class="stat-filter-card" onclick="renderPage('announcements')" style="cursor:pointer;border-color:${unreadCount > 0 ? '#fca5a5' : '#e2e8f0'};">
+          <div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div>
+          <div class="ic-content">
+            <div class="ic-sub">Unread News</div>
+            <div class="ic-num" style="color:#dc2626;">${unreadCount}</div>
+            <p>School announcements & events</p>
+          </div>
         </div>
       </div>
       <div id="coursesWidgetContainer">
@@ -2734,15 +2793,6 @@ function teacherPage(page) {
     }
 
     case 'materials': return `
-      <div class="section-hdr"><h2>Materials Manager</h2>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <select class="user-filter-select" onchange="setMaterialsStrandFilter(this.value)">
-            <option value="">All Strands</option>
-            ${STRANDS.map(s => `<option value="${s}" ${materialsStrandFilter === s ? 'selected' : ''}>${s}</option>`).join('')}
-          </select>
-          <button class="add-btn" onclick="openMaterialModal()">${iconPlus()} Upload Material</button>
-        </div>
-      </div>
       <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
 
     case 'quiz': {
@@ -2780,6 +2830,13 @@ function teacherPage(page) {
       if (typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus) {
         filtered = filtered.filter(q => String(q.status || '').toLowerCase() === quizManagerFilterStatus.toLowerCase());
       }
+      if (typeof quizManagerFilterType !== 'undefined' && quizManagerFilterType) {
+        if (quizManagerFilterType === 'interactive') {
+          filtered = filtered.filter(q => q.type === 'interactive' || q.quiz_type === 'interactive');
+        } else if (quizManagerFilterType === 'standard') {
+          filtered = filtered.filter(q => q.type !== 'interactive' && q.quiz_type !== 'interactive');
+        }
+      }
       if (typeof quizManagerFilterSubject !== 'undefined' && quizManagerFilterSubject) {
         filtered = filtered.filter(q => String(q.subject || '').toLowerCase() === quizManagerFilterSubject.toLowerCase());
       }
@@ -2806,21 +2863,37 @@ function teacherPage(page) {
 
         <!-- METRIC CARDS -->
         <div class="card-grid" style="gap:12px;margin-bottom:0;">
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon" style="width:38px;height:38px;">${iconQuiz()}</div><div><div class="ic-sub">Total Quizzes</div><div class="ic-num" style="font-size:24px;">${totalCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Assigned to SHS students</p>
+          <div class="stat-filter-card ${!quizManagerFilterStatus && !quizManagerFilterType ? 'active' : ''}" onclick="setQuizManagerFilterStatus(''); setQuizManagerFilterType('');">
+            <div class="ic-icon">${iconQuiz()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Total Quizzes</div>
+              <div class="ic-num">${totalCount}</div>
+              <p>Assigned to SHS students</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon green" style="width:38px;height:38px;">${iconCheck()}</div><div><div class="ic-sub">Active / Ongoing</div><div class="ic-num green" style="font-size:24px;">${activeCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Accepting student submissions</p>
+          <div class="stat-filter-card ${quizManagerFilterStatus === 'active' && !quizManagerFilterType ? 'active' : ''}" onclick="setQuizManagerFilterStatus('active'); setQuizManagerFilterType('');">
+            <div class="ic-icon green">${iconCheck()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Active / Ongoing</div>
+              <div class="ic-num green">${activeCount}</div>
+              <p>Accepting student submissions</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon gold" style="width:38px;height:38px;">${iconClock()}</div><div><div class="ic-sub">Pending Approval</div><div class="ic-num gold" style="font-size:24px;">${pendingCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Awaiting Admin content review</p>
+          <div class="stat-filter-card ${quizManagerFilterStatus === 'pending' && !quizManagerFilterType ? 'active' : ''}" onclick="setQuizManagerFilterStatus('pending'); setQuizManagerFilterType('');">
+            <div class="ic-icon gold">${iconClock()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Pending Approval</div>
+              <div class="ic-num gold">${pendingCount}</div>
+              <p>Awaiting Admin content review</p>
+            </div>
           </div>
-          <div class="info-card" style="padding:14px 18px;gap:8px;">
-            <div class="ic-head"><div class="ic-icon" style="width:38px;height:38px;background:#e0f2fe;color:#0284c7;">${iconGamepad()}</div><div><div class="ic-sub">Interactive Games</div><div class="ic-num" style="font-size:24px;color:#0284c7;">${interactiveCount}</div></div></div>
-            <p style="margin:0;font-size:12px;">Gamified student quizzes</p>
+          <div class="stat-filter-card ${quizManagerFilterType === 'interactive' ? 'active' : ''}" onclick="setQuizManagerFilterStatus(''); setQuizManagerFilterType('interactive');">
+            <div class="ic-icon" style="background:#e0f2fe;color:#0284c7;">${iconGamepad()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Interactive Games</div>
+              <div class="ic-num" style="color:#0284c7;">${interactiveCount}</div>
+              <p>Gamified student quizzes</p>
+            </div>
           </div>
         </div>
 
@@ -3016,21 +3089,37 @@ function teacherPage(page) {
 
       <!-- PERFORMANCE STAT CARDS -->
       <div class="card-grid" style="margin-bottom:20px;">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">Submissions</div><div class="ic-num">${attemptCount}</div></div></div>
-          <p>${analysisSectionFilter ? `Filtered for ${escHtml(analysisSectionFilter)}` : 'Across all class sections'}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon">${iconUsers()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Submissions</div>
+            <div class="ic-num">${attemptCount}</div>
+            <p>${analysisSectionFilter ? `Filtered for ${escHtml(analysisSectionFilter)}` : 'Across all class sections'}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Class Average</div><div class="ic-num green">${avgScore !== null ? avgScore + '%' : '—'}</div></div></div>
-          <p>${passRate !== null ? `${passRate}% passing rate (≥ 75%)` : 'No attempts recorded'}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Class Average</div>
+            <div class="ic-num green">${avgScore !== null ? avgScore + '%' : '—'}</div>
+            <p>${passRate !== null ? `${passRate}% passing rate (≥ 75%)` : 'No attempts recorded'}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconChart()}</div><div><div class="ic-sub">Score Range</div><div class="ic-num gold">${highestScore !== null ? `${highestScore}% / ${lowestScore}%` : '—'}</div></div></div>
-          <p>Highest vs lowest student score</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon gold">${iconChart()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Score Range</div>
+            <div class="ic-num gold compact">${highestScore !== null ? `${highestScore}% / ${lowestScore}%` : '—'}</div>
+            <p>Highest vs lowest student score</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconQuiz()}</div><div><div class="ic-sub">Total Items</div><div class="ic-num">${rows.length}</div></div></div>
-          <p>${selectedQuiz.type === 'interactive' ? '🎮 Interactive Mode' : '📝 Standard Assessment'}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Total Items</div>
+            <div class="ic-num">${rows.length}</div>
+            <p>${selectedQuiz.type === 'interactive' ? '🎮 Interactive Mode' : '📝 Standard Assessment'}</p>
+          </div>
         </div>
       </div>
 
@@ -3103,10 +3192,10 @@ function teacherPage(page) {
 
       const totalStudentsCount = allHandledStudents.length;
       const quizzesCount = quizzes.length;
-      const validStudentAvgs = filteredEntries.map(e => e.avg).filter(a => a !== null);
-      const overallAvg = validStudentAvgs.length ? Number((validStudentAvgs.reduce((a, b) => a + b, 0) / validStudentAvgs.length).toFixed(2)) : null;
+      const validStudentAvgs = filteredEntries.map(e => (e.avg !== null && !isNaN(e.avg)) ? Math.min(100, Math.max(0, Number(e.avg))) : null).filter(a => a !== null);
+      const overallAvg = validStudentAvgs.length ? Math.min(100, Math.max(0, Number((validStudentAvgs.reduce((a, b) => Number(a) + Number(b), 0) / validStudentAvgs.length).toFixed(2)))) : null;
       const passingStudentsCount = validStudentAvgs.filter(a => a >= 75).length;
-      const overallPassingRate = validStudentAvgs.length ? Math.round((passingStudentsCount / validStudentAvgs.length) * 100) : null;
+      const overallPassingRate = validStudentAvgs.length ? Math.min(100, Math.max(0, Math.round((passingStudentsCount / validStudentAvgs.length) * 100))) : null;
 
       // MODE 1: MAIN CLASS RECORD PAGE (SECTIONS ONLY)
       if (!classRecExpandedSection) {
@@ -3132,26 +3221,38 @@ function teacherPage(page) {
 
         <!-- SUMMARY HIGHLIGHT CARDS -->
         <div class="card-grid" style="margin-bottom:20px;">
-          <div class="info-card">
-            <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">Handled Sections</div><div class="ic-num">${sectionSummaries.length}</div></div></div>
-            <p>Active class sections</p>
+          <div class="info-card horizontal-card">
+            <div class="ic-icon">${iconUsers()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Handled Sections</div>
+              <div class="ic-num">${sectionSummaries.length}</div>
+              <p>Active class sections</p>
+            </div>
           </div>
-          <div class="info-card">
-            <div class="ic-head"><div class="ic-icon gold">${iconQuiz()}</div><div><div class="ic-sub">Total Students</div><div class="ic-num gold">${totalStudentsCount}</div></div></div>
-            <p>Enrolled student roster</p>
+          <div class="info-card horizontal-card">
+            <div class="ic-icon gold">${iconQuiz()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Total Students</div>
+              <div class="ic-num gold">${totalStudentsCount}</div>
+              <p>Enrolled student roster</p>
+            </div>
           </div>
-          <div class="info-card">
-            <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Combined Class Average</div><div class="ic-num green">${overallAvg !== null ? overallAvg + '%' : '—'}</div></div></div>
-            <p>${overallPassingRate !== null ? overallPassingRate + '% passing rate' : 'No attempt scores recorded yet'}</p>
+          <div class="info-card horizontal-card">
+            <div class="ic-icon green">${iconProgress()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Combined Class Average</div>
+              <div class="ic-num green">${overallAvg !== null ? overallAvg.toFixed(2) + '%' : '—'}</div>
+              <p>${overallPassingRate !== null ? overallPassingRate + '% passing rate' : 'No attempt scores recorded yet'}</p>
+            </div>
           </div>
         </div>
 
         <!-- SECTION LEVEL MAIN TABLE -->
-        <div class="score-table score-table-responsive" style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
-          <table style="min-width:850px;width:100%;border-collapse:collapse;">
+        <div class="score-table">
+          <table>
             <thead>
               <tr>
-                <th style="white-space:nowrap;">Section Name</th>
+                <th>Section Name</th>
                 <th>Subject / Strand</th>
                 <th>Enrolled Students</th>
                 <th>Passing Rate</th>
@@ -3231,27 +3332,39 @@ function teacherPage(page) {
 
       <!-- SECTION ROSTER CARDS -->
       <div class="card-grid" style="margin-bottom:20px;">
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon">${iconUsers()}</div><div><div class="ic-sub">Section Roster</div><div class="ic-num">${filteredEntries.length}</div></div></div>
-          <p>Students in ${escHtml(classRecExpandedSection)}</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon">${iconUsers()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Section Roster</div>
+            <div class="ic-num">${filteredEntries.length}</div>
+            <p>Students in ${escHtml(classRecExpandedSection)}</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon gold">${iconQuiz()}</div><div><div class="ic-sub">Quizzes Evaluated</div><div class="ic-num gold">${quizzes.length}</div></div></div>
-          <p>Active quiz assessments</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon gold">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Quizzes Evaluated</div>
+            <div class="ic-num gold">${quizzes.length}</div>
+            <p>Active quiz assessments</p>
+          </div>
         </div>
-        <div class="info-card">
-          <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Section Average</div><div class="ic-num green">${currentSecData.classAvg !== null && currentSecData.classAvg !== undefined ? currentSecData.classAvg.toFixed(2) + '%' : (overallAvg !== null ? overallAvg + '%' : '—')}</div></div></div>
-          <p>Combined section performance</p>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Section Average</div>
+            <div class="ic-num green">${currentSecData.classAvg !== null && currentSecData.classAvg !== undefined ? Number(currentSecData.classAvg).toFixed(2) + '%' : (overallAvg !== null ? Number(overallAvg).toFixed(2) + '%' : '—')}</div>
+            <p>Combined section performance</p>
+          </div>
         </div>
       </div>
 
       ${classRecSubView === 'combined' ? `
         <!-- COMBINED SINGLE OVERALL PERCENTAGE GRADE VIEW -->
-        <div class="score-table score-table-responsive" style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
-          <table style="min-width:850px;width:100%;border-collapse:collapse;">
+        <div class="score-table">
+          <table>
             <thead>
               <tr>
-                <th style="white-space:nowrap;">Student</th>
+                <th>Student</th>
                 <th>Section</th>
                 <th>Subject</th>
                 <th>Quizzes Completed</th>
@@ -3288,33 +3401,33 @@ function teacherPage(page) {
         </div>
       ` : `
         <!-- FULL QUIZ MATRIX COLUMNS VIEW -->
-        <div class="score-table score-table-responsive" style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
-          <table style="min-width:${Math.max(880, 420 + quizzes.length * 120)}px;width:100%;border-collapse:collapse;">
+        <div class="score-table">
+          <table>
             <thead>
               <tr>
-                <th style="white-space:nowrap;">Student</th>
-                <th style="white-space:nowrap;">Section</th>
-                <th style="white-space:nowrap;">Subject</th>
-                ${quizzes.map(q => `<th style="white-space:nowrap;">${escHtml(q.title)}</th>`).join('')}
-                <th style="white-space:nowrap;">Average</th>
+                <th>Student</th>
+                <th>Section</th>
+                <th>Subject</th>
+                ${quizzes.map(q => `<th>${escHtml(q.title)}</th>`).join('')}
+                <th>Average</th>
               </tr>
             </thead>
             <tbody>
               ${filteredEntries.length ? filteredEntries.map(e => `
                 <tr>
-                  <td style="white-space:nowrap;"><strong>${escHtml(e.name)}</strong> ${e.hasRealData ? '<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;">Live</span>' : ''}</td>
-                  <td style="white-space:nowrap;"><span class="user-role-badge student">${escHtml(e.section)}</span></td>
-                  <td style="white-space:nowrap;">${escHtml(e.subject)}</td>
+                  <td><strong>${escHtml(e.name)}</strong> ${e.hasRealData ? '<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;">Live</span>' : ''}</td>
+                  <td><span class="user-role-badge student">${escHtml(e.section)}</span></td>
+                  <td>${escHtml(e.subject)}</td>
                   ${quizzes.map(q => {
                     const qs = e.quizScores[q.id];
                     if (!qs || qs.scorePct === null) {
-                      return `<td class="score-val" style="color:var(--text-muted);white-space:nowrap;">—</td>`;
+                      return `<td class="score-val" style="color:var(--text-muted);">—</td>`;
                     }
-                    return `<td class="score-val ${qs.scorePct >= 88 ? 'good' : qs.scorePct < 75 ? 'low' : ''}" style="white-space:nowrap;">${qs.scorePct}%${qs.isLive ? ' <span style="font-size:9px;color:#059669;">✓</span>' : ''}</td>`;
+                    return `<td class="score-val ${qs.scorePct >= 88 ? 'good' : qs.scorePct < 75 ? 'low' : ''}">${qs.scorePct}%${qs.isLive ? ' <span style="font-size:9px;color:#059669;">✓</span>' : ''}</td>`;
                   }).join('')}
-                  <td class="score-val ${e.avg !== null && e.avg >= 85 ? 'good' : e.avg !== null && e.avg < 75 ? 'low' : ''}" style="white-space:nowrap;">${e.avg !== null ? e.avg.toFixed(2) + '%' : '—'}</td>
+                  <td class="score-val ${e.avg !== null && e.avg >= 85 ? 'good' : e.avg !== null && e.avg < 75 ? 'low' : ''}">${e.avg !== null ? e.avg.toFixed(2) + '%' : '—'}</td>
                 </tr>`).join('')
-                : `<tr><td colspan="${4 + quizzes.length}" style="text-align:center;color:var(--text-muted);padding:20px;white-space:nowrap;">No student records found in ${escHtml(classRecExpandedSection)}.</td></tr>`}
+                : `<tr><td colspan="${4 + quizzes.length}" style="text-align:center;color:var(--text-muted);padding:20px;">No student records found in ${escHtml(classRecExpandedSection)}.</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -3728,7 +3841,7 @@ function adminPage(page) {
     }
 
     case 'materials': return `
-      <div id="materialsListWrap">${renderMaterialsManagerPage('admin')}</div>`;
+      <div id="materialsListWrap">${renderMaterialsList('admin')}</div>`;
 
     case 'approval': return `<div class="ca-page" id="approvalListWrap">${renderApprovalMaterialRows()}</div>`;
 
@@ -4539,10 +4652,20 @@ function buildChatPage(role) {
 
 /* ── PAGE ROUTER & POLL TIMER ── */
 let currentPage = 'dashboard';
+window.currentPage = 'dashboard';
 let materialsPollTimer = null;
 
 function renderPage(page) {
   currentPage = page;
+  window.currentPage = page;
+  if (page === 'materials') {
+    if (typeof setActiveSubjectMaterials === 'function') {
+      setActiveSubjectMaterials(null, null, false);
+    } else {
+      window.activeSubjectFilter = null;
+      window.activeSubjectSection = null;
+    }
+  }
   document.querySelectorAll('.menu-item').forEach(i => {
     if (i.dataset.page === page) i.classList.add('active');
     else i.classList.remove('active');
@@ -4553,8 +4676,8 @@ function renderPage(page) {
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
 
-  if (page === 'users' || page === 'classrec' || page === 'reports') loadUsersFromDB();
-  if (page === 'classrec' || page === 'reports') loadClassRecAttempts();
+  if (page === 'users' || page === 'classrec') loadUsersFromDB();
+  if (page === 'classrec') loadClassRecAttempts();
   if (page === 'quiz') loadQuizzesFromDB();
   if (page === 'quizzes' || page === 'progress') { loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
   if (page === 'analysis') loadQuizzesFromDB();
@@ -4675,6 +4798,14 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
       item.classList.add('active');
+      if (item.dataset.page === 'materials') {
+        if (typeof setActiveSubjectMaterials === 'function') {
+          setActiveSubjectMaterials(null, null, false);
+        } else {
+          window.activeSubjectFilter = null;
+          window.activeSubjectSection = null;
+        }
+      }
       renderPage(item.dataset.page);
       if (window.innerWidth <= 900) {
         closeMobileSidebar();
