@@ -1172,10 +1172,10 @@ function renderTeacherSubjectsHubHTML(enrolledCourses) {
   return `
   <div class="materials-page-container">
     <!-- 1. FACULTY HERO BANNER -->
-    <div class="materials-hero-banner" style="background:linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #0284c7 100%);padding:24px 28px;border-radius:18px;margin-bottom:20px;box-shadow:0 6px 20px rgba(15,23,42,0.15);color:#fff;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;">
-        <div style="display:flex;align-items:center;gap:18px;">
-          <div style="width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:26px;">🏫</div>
+    <div class="materials-hero-banner" style="background:linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #0284c7 100%);padding:24px 28px;border-radius:18px;margin-bottom:20px;box-shadow:0 6px 20px rgba(15,23,42,0.15);color:#fff;width:100%;box-sizing:border-box;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;width:100%;">
+        <div style="display:flex;align-items:center;gap:18px;flex:1;min-width:300px;">
+          <div style="width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">🏫</div>
           <div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
               <span style="background:#38bdf8;color:#0c4a6e;font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.5px;">FACULTY PORTAL</span>
@@ -1185,11 +1185,11 @@ function renderTeacherSubjectsHubHTML(enrolledCourses) {
             <p style="color:rgba(255,255,255,0.9);margin:0;font-size:13px;max-width:680px;line-height:1.45;">Subjects are separated by handled section (Section A and Section B). Open any class to view curriculum modules, manage quizzes, or upload supplemental handouts.</p>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <button class="add-btn" onclick="openMaterialModal()" style="background:#ffffff;color:#0284c7;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-left:auto;justify-content:flex-end;">
+          <button class="add-btn" onclick="openMaterialModal()" style="background:#ffffff;color:#0284c7;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
             ${typeof iconPlus === 'function' ? iconPlus() : '+'} Upload Handout
           </button>
-          <button class="add-btn" onclick="typeof openQuizModal === 'function' ? openQuizModal() : window.location.href='quiz-maker.html'" style="background:#38bdf8;color:#082f49;border:none;box-shadow:0 4px 12px rgba(56,189,248,0.25);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+          <button class="add-btn" onclick="typeof openQuizModal === 'function' ? openQuizModal() : window.location.href='quiz-maker.html'" style="background:#38bdf8;color:#082f49;border:none;box-shadow:0 4px 12px rgba(56,189,248,0.25);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
             ${typeof iconPlus === 'function' ? iconPlus() : '+'} AI Quiz Maker
           </button>
         </div>
