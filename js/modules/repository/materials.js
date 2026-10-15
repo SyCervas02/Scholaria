@@ -596,17 +596,27 @@ function renderMaterialsList(role) {
         ? getAllRecordedAttempts()
         : ((typeof myQuizAttempts !== 'undefined') ? myQuizAttempts : []);
 
-      const allLessonItems = lessons.flatMap(l => l.items || []);
-      const totalSubjectMat = allLessonItems.length + subjectUploads.length;
-      const subjCompleted = allLessonItems.filter(it => (it.status || '').toLowerCase() === 'completed').length;
-      const subjInProgress = allLessonItems.filter(it => (it.status || '').toLowerCase() === 'ongoing').length;
-      const subjPending = Math.max(0, totalSubjectMat - subjCompleted - subjInProgress);
+      const completedQuizzesCount = subjectQuizzes.filter(q => {
+        return attempts.some(a => {
+          if (!a) return false;
+          const aQid = String(a.quiz_id || '').toLowerCase().trim();
+          const qId = String(q.id || '').toLowerCase().trim();
+          if (aQid && aQid === qId) return true;
+          if (a.quiz_title && q.title && String(a.quiz_title).trim().toLowerCase() === String(q.title).trim().toLowerCase()) return true;
+          return false;
+        });
+      }).length;
+
+      const pendingQuizzesCount = Math.max(0, subjectQuizzes.length - completedQuizzesCount);
+      const totalSubjectMat = lessons.length + subjectUploads.length;
+
+      const quizProgressPct = subjectQuizzes.length > 0
+        ? Math.round((completedQuizzesCount / subjectQuizzes.length) * 100)
+        : 100;
+
       const sC = 238.76;
-      const sCompLen = totalSubjectMat > 0 ? (subjCompleted / totalSubjectMat) * sC : 0;
-      const sProgLen = totalSubjectMat > 0 ? (subjInProgress / totalSubjectMat) * sC : 0;
-      const sPendLen = totalSubjectMat > 0 ? (subjPending / totalSubjectMat) * sC : 0;
-      const sProgOffset = -sCompLen;
-      const sPendOffset = -(sCompLen + sProgLen);
+      const sCompLen = (quizProgressPct / 100) * sC;
+      const sPendLen = sC - sCompLen;
 
       return `
       <div class="sw-workspace">
@@ -915,31 +925,34 @@ function renderMaterialsList(role) {
                   <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" stroke-width="9"/>
                   <!-- Completed (Green) -->
                   ${sCompLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sCompLen.toFixed(2)} ${sC}" stroke-dashoffset="0"/>` : ''}
-                  <!-- In Progress (Orange) -->
-                  ${sProgLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#ea580c" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sProgLen.toFixed(2)} ${sC}" stroke-dashoffset="${sProgOffset.toFixed(2)}"/>` : ''}
                   <!-- Pending (Amber) -->
-                  ${sPendLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#d97706" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sPendLen.toFixed(2)} ${sC}" stroke-dashoffset="${sPendOffset.toFixed(2)}"/>` : ''}
+                  ${(pendingQuizzesCount > 0 && sPendLen > 0) ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#d97706" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sPendLen.toFixed(2)} ${sC}" stroke-dashoffset="-${sCompLen.toFixed(2)}"/>` : ''}
                 </svg>
-                <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
-                  <span style="font-size:28px;font-weight:800;color:#0f172a;line-height:1;">${totalSubjectMat}</span>
+                <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                  <span style="font-size:24px;font-weight:800;color:#0f172a;line-height:1;">${quizProgressPct}%</span>
+                  <span style="font-size:9px;font-weight:700;color:#64748b;margin-top:2px;">${pendingQuizzesCount === 0 ? 'COMPLETE' : 'PROGRESS'}</span>
                 </div>
               </div>
-              <span style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:0.6px;text-transform:uppercase;text-align:center;display:block;margin-top:6px;margin-bottom:12px;">MATERIALS</span>
+              <span style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:0.6px;text-transform:uppercase;text-align:center;display:block;margin-top:6px;margin-bottom:12px;">ACADEMIC OVERVIEW</span>
               <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;"></span> Completed</span>
-                  <strong style="color:#0f172a;">${subjCompleted}</strong>
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#16a34a;"></span> Quizzes Completed</span>
+                  <strong style="color:#0f172a;">${completedQuizzesCount} / ${subjectQuizzes.length}</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#ea580c;"></span> In Progress</span>
-                  <strong style="color:#0f172a;">${subjInProgress}</strong>
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:${pendingQuizzesCount > 0 ? '#d97706' : '#16a34a'};"></span> Quizzes Pending</span>
+                  <strong style="color:${pendingQuizzesCount > 0 ? '#d97706' : '#16a34a'};">${pendingQuizzesCount}</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#d97706;"></span> Pending</span>
-                  <strong style="color:#0f172a;">${subjPending}</strong>
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#0284c7;"></span> Teacher Handouts</span>
+                  <strong style="color:#0f172a;">${subjectUploads.length}</strong>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#8b5cf6;"></span> Modules Available</span>
+                  <strong style="color:#0f172a;">${lessons.length}</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;padding-top:6px;border-top:1px solid #f1f5f9;">
-                  <span style="display:inline-flex;align-items:center;gap:6px;color:#0284c7;font-weight:700;"><span style="width:8px;height:8px;border-radius:50%;background:#0284c7;"></span> Total Materials</span>
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#0284c7;font-weight:700;"><span style="width:8px;height:8px;border-radius:50%;background:#0284c7;"></span> Total Learning Files</span>
                   <strong style="color:#0284c7;">${totalSubjectMat}</strong>
                 </div>
               </div>
