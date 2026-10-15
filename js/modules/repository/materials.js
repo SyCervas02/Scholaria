@@ -497,10 +497,25 @@ let isFetchingMaterials = false;
 function renderMaterialsContainer() {
   const container = document.getElementById('materialsListWrap');
   if (container) {
+    const prevInp = document.getElementById('studentMatSearchInput');
+    const hadFocus = (document.activeElement === prevInp);
+    const selStart = prevInp ? prevInp.selectionStart : null;
+    const selEnd = prevInp ? prevInp.selectionEnd : null;
+
     if (ROLE === 'admin') {
       container.innerHTML = renderMaterialsManagerPage('admin');
     } else {
       container.innerHTML = renderMaterialsList(ROLE);
+    }
+
+    if (hadFocus) {
+      const newInp = document.getElementById('studentMatSearchInput');
+      if (newInp) {
+        newInp.focus();
+        if (selStart !== null && selEnd !== null) {
+          try { newInp.setSelectionRange(selStart, selEnd); } catch(e) {}
+        }
+      }
     }
   }
   const approvalContainer = document.getElementById('approvalListWrap');
@@ -1078,9 +1093,7 @@ function renderMaterialsList(role) {
     `;
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // STUDENT VIEW: SUBJECT CARDS COMPILATION HUB (STRICT STRAND FILTER)
-  // ══════════════════════════════════════════════════════════════
+function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
   let displayCourses = enrolledCourses.slice();
 
   // 1. Filter by track (Specialized, Core, Applied)
@@ -1099,6 +1112,60 @@ function renderMaterialsList(role) {
     );
   }
 
+  if (!displayCourses.length) {
+    return `
+      <div style="padding:60px 24px;text-align:center;background:#fff;border-radius:16px;border:1.5px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:10px;">
+        <div style="width:54px;height:54px;border-radius:14px;background:#f0f9ff;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:26px;">🔍</div>
+        <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f172a;">No ${escHtml(studentStrand)} subjects found</h3>
+        <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;">No subjects matched "${escHtml(studentMatSearchQuery)}" under the selected filter. Try adjusting your track filter or search terms.</p>
+        <button class="sw-btn outline" onclick="clearStudentMatSearch()" style="margin-top:6px;">Reset Filters</button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="subjects-folder-grid" style="grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));gap:20px;">
+      ${displayCourses.map(course => {
+        const teacherUploadsForCourse = materialsData.filter(m => isMaterialMatchingCourse(m, course) && m.status === 'approved');
+        const courseLessons = getSubjectLessons(course);
+        const courseQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
+          if (!q.subject) return false;
+          const s = q.subject.toLowerCase();
+          const t = course.title.toLowerCase();
+          return s.includes(t) || t.includes(s);
+        }) : [];
+
+        return `
+          <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')" title="Open ${escHtml(course.title)} Workspace">
+            <div class="sfc-thumb" style="height:125px;background-image:url('${course.cover || 'assets/slide1.jpg'}');">
+              <span class="sfc-code">${escHtml(course.code)}</span>
+              <span class="sfc-strand" style="background:#0284c7;">${escHtml(course.track || 'Specialized')}</span>
+            </div>
+            <div class="sfc-body" style="padding:18px;">
+              <h4 class="sfc-title" style="font-size:16px;margin-bottom:6px;">${escHtml(course.title)}</h4>
+              <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                ${escHtml(course.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
+              </p>
+              <p class="sfc-instructor" style="margin-bottom:12px;">👤 <span>Instructor: <strong>${escHtml(course.instructor || 'Faculty')}</strong></span></p>
+
+              <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
+                <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:wrap;">
+                  <span style="background:#f1f5f9;padding:3px 7px;border-radius:6px;">📄 ${courseLessons.length} Modules</span>
+                  ${courseQuizzes.length ? `<span style="background:#fef3c7;color:#b45309;padding:3px 7px;border-radius:6px;">📝 ${courseQuizzes.length} Quiz${courseQuizzes.length === 1 ? '' : 'zes'}</span>` : ''}
+                </div>
+                <span class="sfc-open-btn" style="color:#0284c7;font-weight:700;font-size:12.5px;">Open Workspace →</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+  // ══════════════════════════════════════════════════════════════
+  // STUDENT VIEW: SUBJECT CARDS COMPILATION HUB (STRICT STRAND FILTER)
+  // ══════════════════════════════════════════════════════════════
   const specializedCount = enrolledCourses.filter(c => c.track === 'Specialized').length;
   const coreCount = enrolledCourses.filter(c => c.track === 'Core').length;
   const appliedCount = enrolledCourses.filter(c => c.track === 'Applied').length;
@@ -1123,16 +1190,16 @@ function renderMaterialsList(role) {
     <!-- 2. TRACK FILTERS & LIVE SEARCH -->
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
       <div class="subject-chips-bar" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <button class="subject-chip ${(!studentMatTrackFilter || studentMatTrackFilter === 'all') ? 'active' : ''}" onclick="setStudentMatTrack('all')" style="cursor:pointer;">
+        <button class="subject-chip ${(!studentMatTrackFilter || studentMatTrackFilter === 'all') ? 'active' : ''}" data-track="all" onclick="setStudentMatTrack('all')" style="cursor:pointer;">
           All ${escHtml(studentStrand)} Subjects <span class="sc-badge">${enrolledCourses.length}</span>
         </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Specialized' ? 'active' : ''}" onclick="setStudentMatTrack('Specialized')" style="cursor:pointer;">
+        <button class="subject-chip ${studentMatTrackFilter === 'Specialized' ? 'active' : ''}" data-track="Specialized" onclick="setStudentMatTrack('Specialized')" style="cursor:pointer;">
           Specialized <span class="sc-badge">${specializedCount}</span>
         </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Core' ? 'active' : ''}" onclick="setStudentMatTrack('Core')" style="cursor:pointer;">
+        <button class="subject-chip ${studentMatTrackFilter === 'Core' ? 'active' : ''}" data-track="Core" onclick="setStudentMatTrack('Core')" style="cursor:pointer;">
           Core <span class="sc-badge">${coreCount}</span>
         </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Applied' ? 'active' : ''}" onclick="setStudentMatTrack('Applied')" style="cursor:pointer;">
+        <button class="subject-chip ${studentMatTrackFilter === 'Applied' ? 'active' : ''}" data-track="Applied" onclick="setStudentMatTrack('Applied')" style="cursor:pointer;">
           Applied <span class="sc-badge">${appliedCount}</span>
         </button>
       </div>
@@ -1142,56 +1209,14 @@ function renderMaterialsList(role) {
           <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
         </svg>
         <input type="text" id="studentMatSearchInput" placeholder="Search subjects, codes, or instructors..." value="${escHtml(studentMatSearchQuery)}" oninput="setStudentMatSearch(this.value)"/>
-        ${studentMatSearchQuery ? `<button onclick="setStudentMatSearch('');const inp = document.getElementById('studentMatSearchInput'); if(inp) inp.value='';" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;padding:0 4px;" title="Clear search">✕</button>` : ''}
+        <button id="studentMatSearchClearBtn" onclick="clearStudentMatSearch()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;padding:0 4px;display:${studentMatSearchQuery ? 'inline-block' : 'none'};" title="Clear search">✕</button>
       </div>
     </div>
 
     <!-- 3. SUBJECT CARDS COMPILATION GRID -->
-    ${displayCourses.length ? `
-      <div class="subjects-folder-grid" style="grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));gap:20px;">
-        ${displayCourses.map(course => {
-          const teacherUploadsForCourse = materialsData.filter(m => isMaterialMatchingCourse(m, course) && m.status === 'approved');
-          const courseLessons = getSubjectLessons(course);
-          const courseQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
-            if (!q.subject) return false;
-            const s = q.subject.toLowerCase();
-            const t = course.title.toLowerCase();
-            return s.includes(t) || t.includes(s);
-          }) : [];
-
-          return `
-            <div class="subject-folder-card" onclick="setActiveSubjectMaterials('${course.id}')" title="Open ${escHtml(course.title)} Workspace">
-              <div class="sfc-thumb" style="height:125px;background-image:url('${course.cover || 'assets/slide1.jpg'}');">
-                <span class="sfc-code">${escHtml(course.code)}</span>
-                <span class="sfc-strand" style="background:#0284c7;">${escHtml(course.track || 'Specialized')}</span>
-              </div>
-              <div class="sfc-body" style="padding:18px;">
-                <h4 class="sfc-title" style="font-size:16px;margin-bottom:6px;">${escHtml(course.title)}</h4>
-                <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
-                  ${escHtml(course.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
-                </p>
-                <p class="sfc-instructor" style="margin-bottom:12px;">👤 <span>Instructor: <strong>${escHtml(course.instructor || 'Faculty')}</strong></span></p>
-
-                <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
-                  <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:wrap;">
-                    <span style="background:#f1f5f9;padding:3px 7px;border-radius:6px;">📄 ${courseLessons.length} Modules</span>
-                    ${courseQuizzes.length ? `<span style="background:#fef3c7;color:#b45309;padding:3px 7px;border-radius:6px;">📝 ${courseQuizzes.length} Quiz${courseQuizzes.length === 1 ? '' : 'zes'}</span>` : ''}
-                  </div>
-                  <span class="sfc-open-btn" style="color:#0284c7;font-weight:700;font-size:12.5px;">Open Workspace →</span>
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    ` : `
-      <div style="padding:60px 24px;text-align:center;background:#fff;border-radius:16px;border:1.5px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:10px;">
-        <div style="width:54px;height:54px;border-radius:14px;background:#f0f9ff;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:26px;">🔍</div>
-        <h3 style="margin:0;font-size:16px;font-weight:700;color:#0f172a;">No ${escHtml(studentStrand)} subjects found</h3>
-        <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;">No subjects matched "${escHtml(studentMatSearchQuery)}" under the selected filter. Try adjusting your track filter or search terms.</p>
-        <button class="sw-btn outline" onclick="setStudentMatTrack('all');setStudentMatSearch('');" style="margin-top:6px;">Reset Filters</button>
-      </div>
-    `}
+    <div id="studentSubjectsGridWrap">
+      ${renderStudentSubjectsGridHTML(enrolledCourses, studentStrand)}
+    </div>
   </div>`;
 }
 
@@ -1504,6 +1529,29 @@ let studentMatViewAll = false;
 
 function setStudentMatTrack(track) {
   studentMatTrackFilter = track;
+
+  // 1. Update active state of chip buttons without destroying page
+  document.querySelectorAll('.subject-chips-bar .subject-chip').forEach(btn => {
+    const t = btn.dataset.track;
+    if (t === track) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+
+  // 2. If subject grid is mounted, update only the grid so input is preserved
+  const gridWrap = document.getElementById('studentSubjectsGridWrap');
+  if (gridWrap) {
+    const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
+    const enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
+      ? COURSES_DATABASE.filter(c => {
+          const cStrand = (c.strand || 'STEM').toUpperCase();
+          if (cStrand !== studentStrand) return false;
+          return typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true;
+        })
+      : [];
+    gridWrap.innerHTML = renderStudentSubjectsGridHTML(enrolledCourses, studentStrand);
+    return;
+  }
+
   renderMaterialsContainer();
 }
 
@@ -1757,7 +1805,37 @@ const STUDENT_DEFAULT_MATERIALS = [
 
 function setStudentMatSearch(query) {
   studentMatSearchQuery = (query || '').toLowerCase();
+
+  const clearBtn = document.getElementById('studentMatSearchClearBtn');
+  if (clearBtn) {
+    clearBtn.style.display = studentMatSearchQuery ? 'inline-block' : 'none';
+  }
+
+  const gridWrap = document.getElementById('studentSubjectsGridWrap');
+  if (gridWrap) {
+    const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
+    const enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
+      ? COURSES_DATABASE.filter(c => {
+          const cStrand = (c.strand || 'STEM').toUpperCase();
+          if (cStrand !== studentStrand) return false;
+          return typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true;
+        })
+      : [];
+    gridWrap.innerHTML = renderStudentSubjectsGridHTML(enrolledCourses, studentStrand);
+    return;
+  }
+
   updateStudentMaterialsUI();
+}
+
+function clearStudentMatSearch() {
+  studentMatSearchQuery = '';
+  const inp = document.getElementById('studentMatSearchInput');
+  if (inp) {
+    inp.value = '';
+    inp.focus();
+  }
+  setStudentMatSearch('');
 }
 
 function setStudentMatSubject(subj) {
