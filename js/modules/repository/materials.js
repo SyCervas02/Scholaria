@@ -205,7 +205,10 @@ function cleanupLegacyDummyStorage() {
           const t = String(m.title || m.fileName || '').trim().toLowerCase();
           if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
           return true;
-        });
+        }).map(m => ({
+          ...m,
+          status: 'approved' // Auto-approve teacher uploads so they reflect immediately for students
+        }));
         localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(cleaned));
       }
     }
@@ -240,7 +243,10 @@ function getCustomMaterialsFromStorage() {
       const t = String(m.title || m.fileName || '').trim().toLowerCase();
       if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
       return true;
-    });
+    }).map(m => ({
+      ...m,
+      status: m.status || 'approved'
+    }));
   } catch (e) {
     return [];
   }
@@ -356,123 +362,36 @@ function getSubjectLessons(course) {
   
   if (cTitle.includes('pre-calculus') || cTitle.includes('precalculus')) {
     return [
-      {
-        id: `${course.id}_l1`, num: '01', title: '01 Platforms and Conic Sections', cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l1_s1`, title: 'Pre-Calculus: Introduction to Conic Sections & Parabolas', submitted: 'Sep 10, 2026', score: '95/100', due: 'Sep 15, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
-          { id: `${course.id}_l1_s2`, title: 'Handout: Standard Equations of Circles and Ellipses', submitted: 'Sep 17, 2026', score: '92/100', due: 'Sep 22, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      },
-      {
-        id: `${course.id}_l2`, num: '02', title: '02 Parabolas, Circles & Ellipses', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l2_s1`, title: 'Practice Worksheet: Graphing Conic Curves with Eccentricity', submitted: 'Sep 28, 2026', score: '88/100', due: 'Oct 05, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
-          { id: `${course.id}_l2_s2`, title: 'Lecture Notes: Degenerate Conics and Applications', submitted: '-', score: '-', due: 'Oct 18, 2026', status: 'Ongoing', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      },
-      {
-        id: `${course.id}_l3`, num: '03', title: '03 Hyperbolas and Nonlinear Systems', cover: 'https://images.unsplash.com/photo-1596495578065-6e0763fa1178?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l3_s1`, title: 'Module 03 Guide: Asymptotes and Hyperbolic Forms', submitted: '-', score: '-', due: 'Oct 28, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      },
-      {
-        id: `${course.id}_l4`, num: '04', title: '04 Circular & Trigonometric Functions', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l4_s1`, title: 'Reference Sheet: Unit Circle and Fundamental Trigonometric Identities', submitted: '-', score: '-', due: 'Nov 12, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      }
+      { id: `${course.id}_l1`, num: '01', title: '01 Platforms and Conic Sections', cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Parabolas, Circles & Ellipses', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Hyperbolas and Nonlinear Systems', cover: 'https://images.unsplash.com/photo-1596495578065-6e0763fa1178?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Circular & Trigonometric Functions', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
     ];
   }
   
   if (cTitle.includes('biology')) {
     return [
-      {
-        id: `${course.id}_l1`, num: '01', title: '01 Cell Structure, Organelles and Transport', cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l1_s1`, title: 'General Biology 1: Cell Theory, Eukaryotic Organelles & Membrane Systems', submitted: 'Oct 04, 2026', score: '96/100', due: 'Oct 10, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
-          { id: `${course.id}_l1_s2`, title: 'Laboratory Activity Sheet: Osmosis & Diffusion Across Animal Membranes', submitted: 'Oct 09, 2026', score: '90/100', due: 'Oct 15, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
-          { id: `${course.id}_l1_s3`, title: 'Discussion Handout: Mechanisms of Active and Passive Cellular Transport', submitted: '-', score: '-', due: 'Oct 22, 2026', status: 'Ongoing', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      },
-      {
-        id: `${course.id}_l2`, num: '02', title: '02 Biological Macromolecules and Enzymes', cover: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l2_s1`, title: 'Lecture Guide: Carbohydrates, Lipids, Proteins & Nucleic Acids', submitted: '-', score: '-', due: 'Nov 02, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' },
-          { id: `${course.id}_l2_s2`, title: 'Enzyme Catalysis & Activation Energy Review Notes', submitted: '-', score: '-', due: 'Nov 08, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      },
-      {
-        id: `${course.id}_l3`, num: '03', title: '03 Photosynthesis & Energy Transformation', cover: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l3_s1`, title: 'Module Handout: Light Reactions, Calvin Cycle & ATP Synthase', submitted: '-', score: '-', due: 'Nov 18, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      },
-      {
-        id: `${course.id}_l4`, num: '04', title: '04 Cellular Respiration & Cell Division', cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l4_s1`, title: 'Mitosis vs Meiosis Comparative Study Tables & Diagram Sheet', submitted: '-', score: '-', due: 'Dec 02, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      }
+      { id: `${course.id}_l1`, num: '01', title: '01 Cell Structure, Organelles and Transport', cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Biological Macromolecules and Enzymes', cover: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Photosynthesis & Energy Transformation', cover: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Cellular Respiration & Cell Division', cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=400&q=80', items: [] }
     ];
   }
   
   if (cTitle.includes('physics')) {
     return [
-      {
-        id: `${course.id}_l1`, num: '01', title: '01 Vectors, Measurements and Physical Quantities', cover: 'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l1_s1`, title: 'General Physics 1: Vector Components, Resultants & Dimensional Analysis', submitted: 'Sep 12, 2026', score: '94/100', due: 'Sep 18, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
-          { id: `${course.id}_l1_s2`, title: 'Problem Set 01: Significant Figures & Measurement Uncertainties', submitted: 'Sep 20, 2026', score: '98/100', due: 'Sep 25, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      },
-      {
-        id: `${course.id}_l2`, num: '02', title: '02 Kinematics: 1D and 2D Motion', cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l2_s1`, title: 'Kinematics Equations & Projectile Trajectory Calculation Guide', submitted: 'Oct 02, 2026', score: '86/100', due: 'Oct 10, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      },
-      {
-        id: `${course.id}_l3`, num: '03', title: '03 Newton\'s Laws of Motion and Friction', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l3_s1`, title: 'Free-Body Diagrams and Friction Coefficient Practice Problems', submitted: '-', score: '-', due: 'Oct 26, 2026', status: 'Ongoing', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      },
-      {
-        id: `${course.id}_l4`, num: '04', title: '04 Work, Energy, Momentum and Power', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80',
-        items: [
-          { id: `${course.id}_l4_s1`, title: 'Conservation of Mechanical Energy & Linear Momentum Handout', submitted: '-', score: '-', due: 'Nov 15, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-        ]
-      }
+      { id: `${course.id}_l1`, num: '01', title: '01 Vectors, Measurements and Physical Quantities', cover: 'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Kinematics: 1D and 2D Motion', cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Newton\'s Laws of Motion and Friction', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Work, Energy, Momentum and Power', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80', items: [] }
     ];
   }
 
   return [
-    {
-      id: `${course.id}_l1`, num: '01', title: `01 Introduction to ${course.title}`, cover: course.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80',
-      items: [
-        { id: `${course.id}_l1_s1`, title: `${course.title}: Fundamental Concepts & Learning Objectives`, submitted: 'Oct 01, 2026', score: '92/100', due: 'Oct 08, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' },
-        { id: `${course.id}_l1_s2`, title: 'Curriculum Syllabus and Course Requirements Guide', submitted: 'Oct 05, 2026', score: '100/100', due: 'Oct 12, 2026', status: 'Completed', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-      ]
-    },
-    {
-      id: `${course.id}_l2`, num: '02', title: `02 Core Concepts & Theoretical Principles`, cover: course.cover || 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80',
-      items: [
-        { id: `${course.id}_l2_s1`, title: `${course.title}: Core Theoretical Framework and Notes`, submitted: '-', score: '-', due: 'Oct 24, 2026', status: 'Ongoing', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-      ]
-    },
-    {
-      id: `${course.id}_l3`, num: '03', title: `03 Practical Applications & Problem Solving`, cover: course.cover || 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80',
-      items: [
-        { id: `${course.id}_l3_s1`, title: `${course.title}: Guided Practice Problems & Activity Sheet`, submitted: '-', score: '-', due: 'Nov 10, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-      ]
-    },
-    {
-      id: `${course.id}_l4`, num: '04', title: `04 Module Mastery & Academic Synthesis`, cover: course.cover || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80',
-      items: [
-        { id: `${course.id}_l4_s1`, title: `${course.title}: Synthesis Review Guide and Exam Preparations`, submitted: '-', score: '-', due: 'Nov 28, 2026', status: 'Pending', file_url: 'SURVEY FORMS - Scholaria.pdf' }
-      ]
-    }
+    { id: `${course.id}_l1`, num: '01', title: `01 Introduction to ${course.title}`, cover: course.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
+    { id: `${course.id}_l2`, num: '02', title: `02 Core Concepts & Theoretical Principles`, cover: course.cover || 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80', items: [] },
+    { id: `${course.id}_l3`, num: '03', title: `03 Practical Applications & Problem Solving`, cover: course.cover || 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80', items: [] },
+    { id: `${course.id}_l4`, num: '04', title: `04 Module Mastery & Academic Synthesis`, cover: course.cover || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
   ];
 }
 
@@ -592,10 +511,12 @@ async function loadMaterialsFromDB() {
   }));
 
   if (ROLE === 'student') {
-    const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
+    const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
     materialsData = filteredMerged.filter(m => {
-      if (m.status && m.status !== 'approved') return false;
-      if (m.strand && m.strand !== studentStrand && m.strand !== 'CORE' && m.strand !== 'GENERAL') return false;
+      const isTeacher = (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
+      if (m.status && m.status !== 'approved' && !isTeacher) return false;
+      const mStrand = (m.strand || '').toUpperCase();
+      if (mStrand && mStrand !== studentStrand && mStrand !== 'CORE' && mStrand !== 'GENERAL' && mStrand !== 'ALL') return false;
       return true;
     });
   } else {
@@ -657,8 +578,9 @@ function renderMaterialsList(role) {
     if (course) {
       const subjectUploads = materialsData.filter(m => {
         if (!isMaterialMatchingCourse(m, course)) return false;
-        if (role === 'student') return m.status === 'approved';
-        if (role === 'teacher') return m.status === 'approved' || m.uploaded_by === CURRENT_PROFILE?.id || m.uploader_name === CURRENT_PROFILE?.full_name;
+        if (role === 'student') {
+          return m.status === 'approved' || (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
+        }
         return true;
       });
 
@@ -674,9 +596,10 @@ function renderMaterialsList(role) {
         ? getAllRecordedAttempts()
         : ((typeof myQuizAttempts !== 'undefined') ? myQuizAttempts : []);
 
-      const totalSubjectMat = lessons.length + subjectUploads.length;
-      const subjCompleted = Math.min(lessons.length, Math.round(totalSubjectMat * 0.6));
-      const subjInProgress = Math.max(0, Math.round(totalSubjectMat * 0.25));
+      const allLessonItems = lessons.flatMap(l => l.items || []);
+      const totalSubjectMat = allLessonItems.length + subjectUploads.length;
+      const subjCompleted = allLessonItems.filter(it => (it.status || '').toLowerCase() === 'completed').length;
+      const subjInProgress = allLessonItems.filter(it => (it.status || '').toLowerCase() === 'ongoing').length;
       const subjPending = Math.max(0, totalSubjectMat - subjCompleted - subjInProgress);
       const sC = 238.76;
       const sCompLen = totalSubjectMat > 0 ? (subjCompleted / totalSubjectMat) * sC : 0;
@@ -744,6 +667,19 @@ function renderMaterialsList(role) {
                       <span style="font-size:12px;color:var(--text-muted);">Curriculum modules, syllabus guides, and official study handouts for ${escHtml(course.title)}</span>
                     </div>
                   </div>
+
+                  ${subjectUploads.length > 0 ? `
+                    <div style="margin-bottom:14px;padding:12px 16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:20px;">📁</span>
+                        <div>
+                          <div style="font-size:13px;color:#0369a1;font-weight:700;">${subjectUploads.length} Supplemental Handout${subjectUploads.length === 1 ? '' : 's'} Uploaded by Faculty</div>
+                          <div style="font-size:11.5px;color:#0284c7;">Available to view and download in the Teacher Uploads tab.</div>
+                        </div>
+                      </div>
+                      <button class="sw-btn primary" onclick="setSubjectSubTab('uploads')" style="padding:6px 14px;font-size:12px;border-radius:8px;font-weight:700;">View Teacher Uploads →</button>
+                    </div>
+                  ` : ''}
 
                   ${lessons.length ? `
                     <div class="sw-lessons-list" style="display:flex;flex-direction:column;gap:14px;">
@@ -817,7 +753,7 @@ function renderMaterialsList(role) {
                                         </tr>
                                       `).join('') : `
                                         <tr>
-                                          <td colspan="5" style="padding:32px 16px;text-align:center;background:#ffffff;border-radius:8px;">
+                                          <td colspan="6" style="padding:32px 16px;text-align:center;background:#ffffff;border-radius:8px;">
                                             <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
                                               <span style="font-size:24px;">📦</span>
                                               <div style="font-size:13.5px;font-weight:700;color:#0f172a;">Empty — No files uploaded for this lesson yet.</div>
@@ -890,7 +826,10 @@ function renderMaterialsList(role) {
                             Review
                           </button>
                         ` : `
-                          <button class="take-btn" ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'style="background:linear-gradient(135deg,#0284c7,#8b5cf6);"' : ''} onclick="${(q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}">${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}</button>
+                          <button class="take-btn" onclick="${(q.type === 'interactive' || q.quiz_type === 'interactive') ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}" style="padding:7px 16px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;border-radius:8px;background:${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'linear-gradient(135deg,#0284c7,#8b5cf6)' : 'linear-gradient(135deg,#0284c7,#0369a1)'};color:#ffffff;border:none;box-shadow:0 2px 6px rgba(2,132,199,0.25);cursor:pointer;transition:all 0.15s ease;">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz'}
+                          </button>
                         `}
                       </div>
                     `;
@@ -1025,13 +964,8 @@ function renderMaterialsList(role) {
                     <span style="color:#94a3b8;font-size:14px;">›</span>
                   </div>
                 `).join('') || `
-                  <div class="sw-todo-item" onclick="renderPage('quizzes')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;cursor:pointer;">
-                    <span class="sw-todo-icon" style="font-size:18px;">🎮</span>
-                    <div class="sw-todo-info" style="flex:1;">
-                      <h5 style="margin:0 0 2px 0;font-size:13px;font-weight:700;color:#0f172a;">qwqwqwqwq</h5>
-                      <span style="font-size:11.5px;color:#64748b;">12 items · Pending</span>
-                    </div>
-                    <span style="color:#94a3b8;font-size:14px;">›</span>
+                  <div style="padding:14px 10px;text-align:center;color:#64748b;font-size:12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+                    ✓ All caught up! No pending assessments for this subject.
                   </div>
                 `}
               </div>
@@ -1100,6 +1034,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
     <div class="subjects-folder-grid" id="studentSubjectsFolderGrid" style="grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));gap:20px;">
       ${enrolledCourses.map(course => {
         const courseLessons = getSubjectLessons(course);
+        const courseUploads = materialsData.filter(m => isMaterialMatchingCourse(m, course));
         const courseQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
           if (!q.subject) return false;
           const s = q.subject.toLowerCase();
@@ -1129,6 +1064,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
               <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
                 <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:wrap;">
                   <span style="background:#f1f5f9;padding:3px 7px;border-radius:6px;">📄 ${courseLessons.length} Modules</span>
+                  ${courseUploads.length ? `<span style="background:#e0f2fe;color:#0369a1;padding:3px 7px;border-radius:6px;">📁 ${courseUploads.length} File${courseUploads.length === 1 ? '' : 's'}</span>` : ''}
                   ${courseQuizzes.length ? `<span style="background:#fef3c7;color:#b45309;padding:3px 7px;border-radius:6px;">📝 ${courseQuizzes.length} Quiz${courseQuizzes.length === 1 ? '' : 'zes'}</span>` : ''}
                 </div>
                 <span class="sfc-open-btn" style="color:#0284c7;font-weight:700;font-size:12.5px;">Open Workspace →</span>
@@ -3424,7 +3360,7 @@ function renderMaterialModal() {
         <input type="file" id="materialFileInput" accept=".pdf,.doc,.docx,.ppt,.pptx" multiple style="display:none" onchange="muHandleFileInput(this)">
       `}
     </div>
-    ${ROLE === 'teacher' ? `<div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;"><span style="color:#d97706;font-weight:700;">ℹ</span> Submitted handouts will go to <strong>Content Approval</strong> for Admin review before becoming visible to students.</div>` : ''}
+    ${ROLE === 'teacher' ? `<div style="font-size:11.5px;color:#0369a1;display:flex;align-items:center;gap:6px;"><span style="color:#0284c7;font-weight:700;">✓</span> Handouts will be immediately published and available to your students.</div>` : ''}
   `;
 
   const hasFiles = s.files.length > 0;
@@ -3487,7 +3423,7 @@ async function submitMaterialUpload() {
   // Persist each file in scholaria_custom_materials_v1 in localStorage so materials are NEVER lost
   const uploaderName = CURRENT_PROFILE?.full_name || (ROLE === 'admin' ? 'Administrator' : 'Teacher');
   const uploaderRole = ROLE === 'admin' ? 'Admin' : 'Teacher';
-  const targetStatus = (ROLE === 'admin') ? 'approved' : 'pending';
+  const targetStatus = 'approved'; // Instantly approved so uploads reflect immediately for students
 
   s.files.forEach((f, idx) => {
     const srv = serverRecords[idx] || null;
@@ -3531,18 +3467,14 @@ async function submitMaterialUpload() {
   });
 
   const uploadCount = s.files.length;
-  if (ROLE === 'admin') {
-    showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published!` : 'Handout uploaded and published!', 'success');
-  } else {
-    showToast(uploadCount > 1 ? `${uploadCount} handouts submitted for Admin approval!` : 'Handout submitted for Admin approval! Waiting for content review.', 'success');
-    if (typeof addNotification === 'function') {
-      addNotification({
-        targetRole: 'admin',
-        title: 'New Material Pending Review',
-        message: `Teacher ${uploaderName} submitted ${uploadCount > 1 ? `${uploadCount} handouts for "${s.subject}"` : `"${s.title.trim()}"`} for content approval.`,
-        type: 'approval'
-      });
-    }
+  showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
+  if (ROLE !== 'admin' && typeof addNotification === 'function') {
+    addNotification({
+      targetRole: 'admin',
+      title: 'New Material Published',
+      message: `Teacher ${uploaderName} uploaded ${uploadCount > 1 ? `${uploadCount} handouts for "${s.subject}"` : `"${s.title.trim()}"`}.`,
+      type: 'info'
+    });
   }
 
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
