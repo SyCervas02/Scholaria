@@ -1268,13 +1268,10 @@ function renderTeacherSubjectsHubHTML(enrolledCourses) {
               <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
                 ${escHtml(card.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
               </p>
-              <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
-                <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:wrap;">
-                  <span style="background:#f1f5f9;padding:3px 7px;border-radius:6px;">📄 ${lessons.length} Modules</span>
-                  <span style="background:#e0f2fe;color:#0369a1;padding:3px 7px;border-radius:6px;">📁 ${uploadsForClass.length} Files</span>
-                  <span style="background:#fef3c7;color:#b45309;padding:3px 7px;border-radius:6px;">📝 ${quizzesForClass.length} Quizzes</span>
-                </div>
-                <span class="sfc-open-btn" style="color:#0284c7;font-weight:700;font-size:12.5px;">Open Workspace →</span>
+              <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:nowrap;overflow:hidden;">
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${lessons.length} Modules</span>
+                <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📁 ${uploadsForClass.length} Files</span>
+                <span style="background:#fef3c7;color:#b45309;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📝 ${quizzesForClass.length} Quizzes</span>
               </div>
             </div>
           </div>
@@ -1325,13 +1322,10 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
               </p>
               <p class="sfc-instructor" style="margin-bottom:12px;">👤 <span>Instructor: <strong>${escHtml(course.instructor || 'Faculty')}</strong></span></p>
 
-              <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
-                <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:wrap;">
-                  <span style="background:#f1f5f9;padding:3px 7px;border-radius:6px;">📄 ${courseLessons.length} Modules</span>
-                  ${courseUploads.length ? `<span style="background:#e0f2fe;color:#0369a1;padding:3px 7px;border-radius:6px;">📁 ${courseUploads.length} File${courseUploads.length === 1 ? '' : 's'}</span>` : ''}
-                  ${courseQuizzes.length ? `<span style="background:#fef3c7;color:#b45309;padding:3px 7px;border-radius:6px;">📝 ${courseQuizzes.length} Quiz${courseQuizzes.length === 1 ? '' : 'zes'}</span>` : ''}
-                </div>
-                <span class="sfc-open-btn" style="color:#0284c7;font-weight:700;font-size:12.5px;">Open Workspace →</span>
+              <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:nowrap;overflow:hidden;">
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${courseLessons.length} Modules</span>
+                <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📁 ${courseUploads.length} Files</span>
+                <span style="background:#fef3c7;color:#b45309;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📝 ${courseQuizzes.length} Quizzes</span>
               </div>
             </div>
           </div>
