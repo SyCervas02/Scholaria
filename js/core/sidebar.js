@@ -3841,7 +3841,7 @@ function adminPage(page) {
     }
 
     case 'materials': return `
-      <div id="materialsListWrap">${renderMaterialsManagerPage('admin')}</div>`;
+      <div id="materialsListWrap">${renderMaterialsList('admin')}</div>`;
 
     case 'approval': return `<div class="ca-page" id="approvalListWrap">${renderApprovalMaterialRows()}</div>`;
 

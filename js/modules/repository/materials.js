@@ -386,6 +386,41 @@ function toggleLessonAccordion(lessonId) {
 }
 
 function getSubjectLessons(course) {
+  const lessons = getRawSubjectLessons(course);
+  if (!lessons || !lessons.length || !Array.isArray(lessons)) return lessons || [];
+
+  lessons.forEach(lesson => {
+    lesson.items = lesson.items || [];
+    if (typeof materialsData !== "undefined" && Array.isArray(materialsData)) {
+      const matchingUploads = materialsData.filter(m => {
+        if (!m || m.status !== "approved") return false;
+        const courseMatch = (m.course_id && course && m.course_id === course.id) || (course && typeof isMaterialMatchingCourse === "function" && isMaterialMatchingCourse(m, course));
+        if (!courseMatch) return false;
+        const lMatch = (m.lesson_id && (m.lesson_id === lesson.id || m.lesson_id === lesson.num)) ||
+                      (m.lesson_num && m.lesson_num === lesson.num) ||
+                      (m.lesson_title && m.lesson_title.toLowerCase().includes(lesson.num.toLowerCase()));
+        return !!lMatch;
+      });
+
+      matchingUploads.forEach(u => {
+        if (!lesson.items.some(existing => existing.id === u.id)) {
+          lesson.items.push({
+            id: u.id,
+            title: u.title || u.fileName || "Curriculum Handout",
+            type: u.type || (u.file_type && u.file_type.includes("word") ? "DOCX" : (u.file_type && u.file_type.includes("presentation") ? "PPTX" : "PDF")),
+            score: "-",
+            due: u.date_formatted || "Official Handout",
+            status: "Completed",
+            file_url: u.file_url || "SURVEY FORMS - Scholaria.pdf"
+          });
+        }
+      });
+    }
+  });
+
+  return lessons;
+}
+function getRawSubjectLessons(course) {
   if (!course) return [];
   const cTitle = (course.title || '').toLowerCase();
   
@@ -425,12 +460,13 @@ function getSubjectLessons(course) {
     ];
   }
 
-  return [
+  const defaultLessons = [
     { id: `${course.id}_l1`, num: '01', title: `01 Introduction to ${course.title}`, cover: course.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
     { id: `${course.id}_l2`, num: '02', title: `02 Core Concepts & Theoretical Principles`, cover: course.cover || 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80', items: [] },
     { id: `${course.id}_l3`, num: '03', title: `03 Practical Applications & Problem Solving`, cover: course.cover || 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80', items: [] },
     { id: `${course.id}_l4`, num: '04', title: `04 Module Mastery & Academic Synthesis`, cover: course.cover || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
   ];
+  return defaultLessons;
 }
 
 function setMaterialsAdminTab(tab) {
@@ -459,11 +495,7 @@ function renderMaterialsContainer() {
     const selStart = prevInp ? prevInp.selectionStart : null;
     const selEnd = prevInp ? prevInp.selectionEnd : null;
 
-    if (ROLE === 'admin') {
-      container.innerHTML = renderMaterialsManagerPage('admin');
-    } else {
-      container.innerHTML = renderMaterialsList(ROLE);
-    }
+    container.innerHTML = renderMaterialsList(ROLE);
 
     if (hadFocus) {
       const newInp = document.getElementById('studentMatSearchInput');
@@ -1040,13 +1072,9 @@ function renderMaterialsList(role) {
     }
   }
 
-  if (role === 'admin') {
-    return renderMaterialsManagerPage('admin');
-  }
-
-  // ── TEACHER VIEW: STI eLMS SECTION-SEPARATED CLASS COMPILATION HUB ──
-  if (role === 'teacher') {
-    return renderTeacherSubjectsHubHTML(enrolledCourses);
+  // ── TEACHER & ADMIN VIEW: STI eLMS SECTION-SEPARATED CLASS COMPILATION HUB ──
+  if (role === 'teacher' || role === 'admin') {
+    return renderTeacherSubjectsHubHTML(enrolledCourses, role);
   }
 
   // ── STUDENT VIEW: SUBJECT CARDS COMPILATION HUB ──
@@ -1128,10 +1156,18 @@ function applyTeacherClassFilter() {
   }
 }
 
-function getTeacherHandledClassCards(courses) {
+function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'undefined' ? ROLE : 'teacher')) {
   const classCards = [];
   let handledSections = ['Section A', 'Section B'];
-  if (CURRENT_PROFILE && CURRENT_PROFILE.section) {
+
+  if (currentRole === 'admin') {
+    if (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) {
+      const nonArch = managedSections.filter(s => !s.isArchived).map(s => s.name);
+      if (nonArch.length) handledSections = nonArch;
+    } else if (typeof SECTIONS !== 'undefined' && Array.isArray(SECTIONS) && SECTIONS.length) {
+      handledSections = SECTIONS.slice();
+    }
+  } else if (CURRENT_PROFILE && CURRENT_PROFILE.section) {
     const raw = CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean);
     if (raw.length > 0) handledSections = raw;
   }
@@ -1159,39 +1195,41 @@ function getTeacherHandledClassCards(courses) {
   return classCards;
 }
 
-function renderTeacherSubjectsHubHTML(enrolledCourses) {
+function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE !== 'undefined' ? ROLE : 'teacher')) {
   setTimeout(() => applyTeacherClassFilter(), 0);
-  const classCards = getTeacherHandledClassCards(enrolledCourses);
+  const classCards = getTeacherHandledClassCards(enrolledCourses, activeRole);
 
-  const secACount = classCards.filter(c => c.assignedSection.toLowerCase() === 'section a').length;
-  const secBCount = classCards.filter(c => c.assignedSection.toLowerCase() === 'section b').length;
+  const distinctSections = [...new Set(classCards.map(c => c.assignedSection))].sort();
   const specializedCount = classCards.filter(c => c.track === 'Specialized').length;
   const coreCount = classCards.filter(c => c.track === 'Core').length;
   const appliedCount = classCards.filter(c => c.track === 'Applied').length;
+  const isAdmin = (activeRole === 'admin');
 
   return `
   <div class="materials-page-container">
-    <!-- 1. FACULTY HERO BANNER -->
-    <div class="materials-hero-banner" style="background:linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #0284c7 100%);padding:24px 28px;border-radius:18px;margin-bottom:20px;box-shadow:0 6px 20px rgba(15,23,42,0.15);color:#fff;width:100%;box-sizing:border-box;">
+    <!-- 1. HERO BANNER -->
+    <div class="materials-hero-banner" style="background:${isAdmin ? 'linear-gradient(135deg, #1e1b4b 0%, #312e81 45%, #4338ca 100%)' : 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #0284c7 100%)'};padding:24px 28px;border-radius:18px;margin-bottom:20px;box-shadow:0 6px 20px rgba(15,23,42,0.15);color:#fff;width:100%;box-sizing:border-box;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;width:100%;">
         <div style="display:flex;align-items:center;gap:18px;flex:1;min-width:300px;">
-          <div style="width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">🏫</div>
+          <div style="width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">${isAdmin ? '🏛️' : '🏫'}</div>
           <div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-              <span style="background:#38bdf8;color:#0c4a6e;font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.5px;">FACULTY PORTAL</span>
-              <span style="color:rgba(255,255,255,0.85);font-size:12px;font-weight:600;">S.Y. 2026–2027 · STI eLMS Class Structure</span>
+              <span style="background:${isAdmin ? '#c7d2fe' : '#38bdf8'};color:${isAdmin ? '#312e81' : '#0c4a6e'};font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.5px;">${isAdmin ? 'ADMINISTRATOR PORTAL' : 'FACULTY PORTAL'}</span>
+              <span style="color:rgba(255,255,255,0.85);font-size:12px;font-weight:600;">S.Y. 2026–2027 · ${isAdmin ? 'Master Curriculum Repository' : 'STI eLMS Class Structure'}</span>
             </div>
-            <h1 style="color:#ffffff;margin:0 0 6px 0;font-size:22px;font-weight:800;letter-spacing:-0.02em;">Handled Classes &amp; Materials Hub</h1>
-            <p style="color:rgba(255,255,255,0.9);margin:0;font-size:13px;max-width:680px;line-height:1.45;">Subjects are separated by handled section (Section A and Section B). Open any class to view curriculum modules, manage quizzes, or upload supplemental handouts.</p>
+            <h1 style="color:#ffffff;margin:0 0 6px 0;font-size:22px;font-weight:800;letter-spacing:-0.02em;">${isAdmin ? 'Academic Classes &amp; Materials Repository' : 'Handled Classes &amp; Materials Hub'}</h1>
+            <p style="color:rgba(255,255,255,0.9);margin:0;font-size:13px;max-width:680px;line-height:1.45;">${isAdmin ? 'Master curriculum manager across all sections and strands. Upload official module handouts, manage class resources, and review student progress.' : 'Subjects are separated by handled section (Section A and Section B). Open any class to view curriculum modules, manage quizzes, or upload supplemental handouts.'}</p>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-left:auto;justify-content:flex-end;">
-          <button class="add-btn" onclick="openMaterialModal()" style="background:#ffffff;color:#0284c7;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
+          <button class="add-btn" onclick="openMaterialModal()" style="background:#ffffff;color:${isAdmin ? '#4338ca' : '#0284c7'};border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
             ${typeof iconPlus === 'function' ? iconPlus() : '+'} Upload Handout
           </button>
-          <button class="add-btn" onclick="typeof openQuizModal === 'function' ? openQuizModal() : window.location.href='quiz-maker.html'" style="background:#38bdf8;color:#082f49;border:none;box-shadow:0 4px 12px rgba(56,189,248,0.25);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
-            ${typeof iconPlus === 'function' ? iconPlus() : '+'} AI Quiz Maker
-          </button>
+          ${!isAdmin ? `
+            <button class="add-btn" onclick="typeof openQuizModal === 'function' ? openQuizModal() : window.location.href='quiz-maker.html'" style="background:#38bdf8;color:#082f49;border:none;box-shadow:0 4px 12px rgba(56,189,248,0.25);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
+              ${typeof iconPlus === 'function' ? iconPlus() : '+'} AI Quiz Maker
+            </button>
+          ` : ''}
         </div>
       </div>
     </div>
@@ -1200,14 +1238,16 @@ function renderTeacherSubjectsHubHTML(enrolledCourses) {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
       <div class="subject-chips-bar" id="teacherClassChipsBar" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <button class="subject-chip ${(!teacherClassFilter || teacherClassFilter === 'all') ? 'active' : ''}" data-filter="all" onclick="setTeacherClassFilter('all')" style="cursor:pointer;">
-          All Handled Classes <span class="sc-badge">${classCards.length}</span>
+          ${isAdmin ? 'All Classes' : 'All Handled Classes'} <span class="sc-badge">${classCards.length}</span>
         </button>
-        <button class="subject-chip ${teacherClassFilter === 'Section A' ? 'active' : ''}" data-filter="Section A" onclick="setTeacherClassFilter('Section A')" style="cursor:pointer;">
-          Section A <span class="sc-badge">${secACount}</span>
-        </button>
-        <button class="subject-chip ${teacherClassFilter === 'Section B' ? 'active' : ''}" data-filter="Section B" onclick="setTeacherClassFilter('Section B')" style="cursor:pointer;">
-          Section B <span class="sc-badge">${secBCount}</span>
-        </button>
+        ${distinctSections.map(sec => {
+          const secMatches = classCards.filter(c => c.assignedSection.toLowerCase() === sec.toLowerCase()).length;
+          return `
+            <button class="subject-chip ${teacherClassFilter.toLowerCase() === sec.toLowerCase() ? 'active' : ''}" data-filter="${escHtml(sec)}" onclick="setTeacherClassFilter('${escHtml(sec)}')" style="cursor:pointer;">
+              ${escHtml(sec)} <span class="sc-badge">${secMatches}</span>
+            </button>
+          `;
+        }).join('')}
         <button class="subject-chip ${teacherClassFilter === 'Specialized' ? 'active' : ''}" data-filter="Specialized" onclick="setTeacherClassFilter('Specialized')" style="cursor:pointer;">
           Specialized <span class="sc-badge">${specializedCount}</span>
         </button>
@@ -3336,7 +3376,7 @@ const materialUploadState = {
   submitting: false 
 };
 
-function openMaterialModal(courseId, targetSection) {
+function openMaterialModal(courseId, targetSection, targetLessonId) {
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
     ? CURRENT_PROFILE.strand.split(',').map(s => s.trim()).filter(Boolean)
     : [];
@@ -3442,6 +3482,7 @@ function muUpdateGradeLevel(value) {
 
 function muUpdateSubject(value) {
   materialUploadState.subject = value;
+  materialUploadState.lesson_id = null;
   if (value && (!materialUploadState.strand || !materialUploadState.grade_level)) {
     for (const [str, grades] of Object.entries(SUBJECTS_BY_STRAND_AND_GRADE)) {
       for (const [gLevel, list] of Object.entries(grades)) {
@@ -3586,6 +3627,29 @@ function renderMaterialModal() {
         </select>
       </div>
     </div>
+    ${(() => {
+      let matchedCourse = null;
+      if (typeof COURSES_DATABASE !== 'undefined') {
+        if (s.course_id) matchedCourse = COURSES_DATABASE.find(c => c.id === s.course_id);
+        if (!matchedCourse && s.subject) {
+          matchedCourse = COURSES_DATABASE.find(c => (c.title || '').toLowerCase() === s.subject.toLowerCase() || (c.title && s.subject.toLowerCase().includes(c.title.toLowerCase())));
+        }
+      }
+      const availableLessons = matchedCourse ? getSubjectLessons(matchedCourse) : [];
+      return `
+        <div class="gen-field" style="margin-top:4px;">
+          <label>Target Topic / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(Select a specific lesson or general supplementary)</span></label>
+          <select onchange="muUpdateField('lesson_id', this.value)">
+            <option value="" ${!s.lesson_id ? 'selected' : ''}>📁 General Supplementary (Appears in Teacher Uploads Tab)</option>
+            ${availableLessons.map(l => `
+              <option value="${escHtml(l.id || l.num)}" ${s.lesson_id === (l.id || l.num) ? 'selected' : ''}>
+                📖 ${escHtml(l.title)} (Curriculum Lesson)
+              </option>
+            `).join('')}
+          </select>
+        </div>
+      `;
+    })()}
     <div class="gen-field">
       <label>Files to Upload <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(You can select multiple handouts, modules, or slides)</span></label>
       ${s.files.length > 0 ? `
