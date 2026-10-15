@@ -816,7 +816,7 @@ function renderMaterialsList(role) {
                                               ${(role === 'teacher' || role === 'admin') ? `
                                                 <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;">
                                                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                                  + Upload Handout to this Lesson
+                                                  Upload Handout to this Lesson
                                                 </button>
                                               ` : ''}
                                             </div>
@@ -856,7 +856,7 @@ function renderMaterialsList(role) {
                     ${(role === 'teacher' || role === 'admin') ? `
                       <button class="sw-btn primary" onclick="openTeacherCreateQuizForSubject('${escHtml(course.title)}', '${escHtml(activeSubjectSection || '')}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
                         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        + Create Quiz for ${escHtml(activeSubjectSection || 'this Subject')}
+                        Create Quiz for ${escHtml(activeSubjectSection || 'this Subject')}
                       </button>
                     ` : ''}
                   </div>
@@ -906,7 +906,7 @@ function renderMaterialsList(role) {
                     ${(role === 'teacher' || role === 'admin') ? `
                       <button class="sw-btn primary" onclick="openMaterialModal('${course.id}', '${escHtml(activeSubjectSection || '')}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
                         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                        + Upload Handouts to ${escHtml(activeSubjectSection || 'this Subject')}
+                        Upload Handouts to ${escHtml(activeSubjectSection || 'this Subject')}
                       </button>
                     ` : ''}
                   </div>
