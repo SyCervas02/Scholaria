@@ -19,6 +19,8 @@
   <!-- CDN Dependencies -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/vendor_html2pdf.bundle.min.js"></script>
@@ -223,6 +225,38 @@
       </div>
       <div class="modal-body" id="massAssignBody"></div>
       <div class="modal-foot" id="massAssignFoot"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="roomModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h3 id="roomModalTitle">Create Campus Room</h3>
+          <span id="roomModalSubtitle">Register a lecture room, laboratory, or hall for scheduling</span>
+        </div>
+        <button class="modal-x" onclick="closeRoomModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="roomModalBody"></div>
+      <div class="modal-foot" id="roomModalFoot"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="assignSectionRoomModal">
+    <div class="modal-card" style="max-width:680px;">
+      <div class="modal-head">
+        <div>
+          <h3 id="assignSectionRoomTitle">Assign Section Schedule</h3>
+          <span id="assignSectionRoomSubtitle">Configure class schedule and room assignment with AM/PM time validation</span>
+        </div>
+        <button class="modal-x" onclick="closeAssignSectionRoomModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="assignSectionRoomBody"></div>
+      <div class="modal-foot" id="assignSectionRoomFoot"></div>
     </div>
   </div>
 
@@ -706,6 +740,7 @@
   <script src="js/modules/chat/chat.js?v=20005"></script>
   <script src="js/modules/admin/user-management.js?v=20045"></script>
   <script src="js/modules/admin/report-generator.js?v=20005"></script>
+  <script src="js/modules/admin/rooms-management.js?v=20001"></script>
   <script src="js/modules/courses.js?v=20005"></script>
   <script src="js/core/sidebar.js?v=20045"></script>
   <script src="js/core/search.js?v=20015"></script>

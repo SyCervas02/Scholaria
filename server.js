@@ -62,7 +62,8 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // Redirect root to login page
 app.get('/', (req, res) => {
@@ -1674,6 +1675,71 @@ function extractQuestionsFromText(params) {
   }
   return questions;
 }
+
+// --- Image OCR & Academic Extraction Endpoint (Gemini Vision) ---
+app.post('/api/quiz/extract-image', quizLimiter, async (req, res) => {
+  try {
+    const { imageBase64, mimeType, fileName } = req.body;
+    if (!imageBase64) return res.status(400).json({ error: 'Missing imageBase64' });
+
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'dummy_gemini_key') {
+      return res.status(503).json({ error: 'Gemini API not configured' });
+    }
+
+    const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
+    const actualMime = mimeType || 'image/jpeg';
+
+    const candidateModels = [
+      'gemini-2.5-flash',
+      'gemini-1.5-flash',
+      'gemini-flash-latest',
+      'gemini-3.5-flash'
+    ];
+
+    for (const model of candidateModels) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(35000),
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  {
+                    text: "You are an accurate academic OCR tool. Transcribe all readable text, notes, equations, bullet points, headers, definitions, and questions found in this image. Do not add conversational commentary or meta-text. Just output the clean extracted text."
+                  },
+                  {
+                    inlineData: {
+                      mimeType: actualMime,
+                      data: cleanBase64
+                    }
+                  }
+                ]
+              }]
+            })
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (text && text.trim()) {
+            return res.json({ text: text.trim(), source: 'gemini-vision', model });
+          }
+        }
+      } catch (mErr) {
+        console.warn(`[ImageExtract] Model ${model} failed:`, mErr.message);
+      }
+    }
+
+    return res.status(500).json({ error: 'Failed to extract text using vision models' });
+  } catch (err) {
+    console.error('[ImageExtract] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
   const errors = validateQuizRequest(req.body);

@@ -28,6 +28,7 @@ const SIDEBAR = {
     { page: 'approval',   label: 'Content Approval', icon: iconApproval() },
     { page: 'users',      label: 'User Management',  icon: iconUsers() },
     { page: 'sections',   label: 'Sections',         icon: iconSections() },
+    { page: 'rooms',      label: 'Rooms',            icon: iconRooms() },
     { page: 'reports',    label: 'Reports',          icon: iconChart() },
     { page: 'notifications', label: 'Notifications', icon: iconNotif() },
     { page: 'announcements', label: 'Announcements', icon: iconAnnouncement() },
@@ -3512,6 +3513,42 @@ function adminPage(page) {
         return String(aud);
       }
 
+      if (typeof window.navigateToUploadedMaterial !== 'function') {
+        window.navigateToUploadedMaterial = function(courseId, subject, section, materialId) {
+          let targetCourse = null;
+          if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
+            if (courseId) {
+              targetCourse = COURSES_DATABASE.find(c => c.id === courseId);
+            }
+            if (!targetCourse && subject) {
+              const sLow = String(subject).toLowerCase().trim();
+              targetCourse = COURSES_DATABASE.find(c => (c.title || '').toLowerCase().trim() === sLow || (c.code || '').toLowerCase().trim() === sLow);
+            }
+          }
+          const cId = targetCourse ? targetCourse.id : (courseId || (typeof COURSES_DATABASE !== 'undefined' && COURSES_DATABASE[0] ? COURSES_DATABASE[0].id : null));
+          const sec = section && section !== 'All' ? section : 'Section A';
+
+          if (cId && typeof setActiveSubjectMaterials === 'function') {
+            setActiveSubjectMaterials(cId, sec, false);
+          }
+          if (typeof setSubjectSubTab === 'function') {
+            setSubjectSubTab('uploads');
+          }
+          if (typeof renderPage === 'function') {
+            renderPage('materials');
+          }
+          if (typeof showToast === 'function') {
+            showToast(`Redirected to ${targetCourse ? targetCourse.title : (subject || 'Subject')} (${sec}) — Uploads tab`, 'info');
+          }
+        };
+      }
+
+      const recentUploadedMaterials = (typeof materialsData !== 'undefined' ? materialsData : [])
+        .filter(m => m && (m.title || m.fileName))
+        .slice()
+        .sort((a, b) => new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0))
+        .slice(0, 6);
+
       const recentApproved = [
         ...materialsData.filter(m => m.status === 'approved').map(m => ({
           id: m.id, kind: 'material', title: m.title || m.fileName, type: m.content_type || 'Material', by: m.uploaded_by_name || 'Faculty', at: m.created_at
@@ -3696,34 +3733,88 @@ function adminPage(page) {
             `}
           </div>
 
-          <!-- RECENTLY APPROVED CONTENT CARD -->
+          <!-- RECENTLY UPLOADED MATERIALS TRACKER WIDGET -->
           <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
               <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:#dcfce7;color:#15803d;display:flex;align-items:center;justify-content:center;font-size:16px;">
-                  ✓
+                <div style="width:34px;height:34px;border-radius:10px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                  📁
                 </div>
                 <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Recently Approved Content</h3>
-                  <span style="font-size:11.5px;color:var(--text-muted);">Published instructional materials and quizzes</span>
+                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Recently Uploaded Materials</h3>
+                  <span style="font-size:11.5px;color:var(--text-muted);">Real-time audit log: tracks who, when, &amp; where handouts were uploaded</span>
                 </div>
               </div>
               <a href="javascript:void(0)" onclick="renderPage('materials')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;">
-                View Materials &rarr;
+                Materials Hub &rarr;
               </a>
             </div>
 
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              ${recentApproved.length ? recentApproved.map(item => `
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-radius:10px;border:1px solid #f1f5f9;gap:12px;">
-                  <div style="min-width:0;">
-                    <strong style="font-size:13px;color:#0f172a;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(item.title)}</strong>
-                    <span style="font-size:11.5px;color:var(--text-muted);">${item.type} &middot; Teacher: ${escHtml(item.by)} &middot; Approved ${new Date(item.at).toLocaleDateString()}</span>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              ${recentUploadedMaterials.length ? recentUploadedMaterials.map(m => {
+                const uploaderName = m.uploaded_by_name || m.uploader_name || 'Faculty';
+                const uploaderRole = m.uploader_role || 'Teacher';
+                const uploadWhen = formatTimeAgo(m.created_at) || m.date_formatted || 'Recent';
+                const subjectName = m.subject || m.course_name || 'General Subject';
+                const sectionName = m.section || m.target_section || 'All Sections';
+                const strandName = m.strand || '';
+                const ext = (m.fileName || m.title || '').split('.').pop().toLowerCase();
+                const typeLabel = (m.type || ext || 'PDF').toUpperCase();
+                
+                const locArgs = escHtml(JSON.stringify(String(m.course_id || '')) + ',' + JSON.stringify(String(subjectName)) + ',' + JSON.stringify(String(sectionName)) + ',' + JSON.stringify(String(m.id)));
+                
+                let badgeBg = '#fee2e2', badgeCol = '#dc2626';
+                if (typeLabel.includes('DOC')) { badgeBg = '#e0e7ff'; badgeCol = '#4338ca'; }
+                else if (typeLabel.includes('PPT')) { badgeBg = '#ffedd5'; badgeCol = '#c2410c'; }
+                else if (['PNG','JPG','JPEG','WEBP','IMAGE'].includes(typeLabel)) { badgeBg = '#ecfdf5'; badgeCol = '#047857'; }
+
+                return `
+                <div style="padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;cursor:pointer;transition:all 0.15s ease;" onmouseover="this.style.borderColor='var(--blue)';this.style.background='#f0f9ff';" onmouseout="this.style.borderColor='#e2e8f0';this.style.background='#f8fafc';" onclick="navigateToUploadedMaterial(${locArgs})" title="Click to redirect to ${escHtml(subjectName)} (${escHtml(sectionName)})">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+                    <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1;">
+                      <div style="width:38px;height:38px;border-radius:8px;background:${badgeBg};color:${badgeCol};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;letter-spacing:0.5px;">
+                        ${escHtml(typeLabel.slice(0, 4))}
+                      </div>
+                      <div style="min-width:0;flex:1;">
+                        <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                          ${escHtml(m.title || m.fileName)}
+                        </h4>
+                        
+                        <!-- WHO & WHEN -->
+                        <div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;">
+                          <span>👤 <strong>${escHtml(uploaderName)}</strong></span>
+                          <span style="background:${uploaderRole.toLowerCase() === 'admin' ? '#ede9fe' : '#e0e7ff'};color:${uploaderRole.toLowerCase() === 'admin' ? '#6d28d9' : '#3730a3'};padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;">${escHtml(uploaderRole)}</span>
+                          <span>&middot;</span>
+                          <span>🕒 ${uploadWhen}</span>
+                          ${m.size ? `<span>&middot;</span><span style="background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:10.5px;">${escHtml(m.size)}</span>` : ''}
+                        </div>
+                        
+                        <!-- WHERE (SUBJECT & SECTION) -->
+                        <div style="font-size:11px;color:#0369a1;background:#e0f2fe;padding:2px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:6px;font-weight:600;">
+                          <span>📍 ${escHtml(subjectName)}</span>
+                          <span>&middot;</span>
+                          <span>Section: <strong>${escHtml(sectionName)}</strong></span>
+                          ${strandName ? `<span>&middot;</span><span>${escHtml(strandName)}</span>` : ''}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;" onclick="event.stopPropagation()">
+                      <button class="table-act-btn take" onclick="previewSubjectUploadedMaterial('${m.id}')" style="padding:5px 9px;font-size:11.5px;white-space:nowrap;">
+                        Preview
+                      </button>
+                      <button class="table-act-btn" onclick="navigateToUploadedMaterial(${locArgs})" style="background:#0284c7;color:#fff;border:none;padding:5px 9px;font-size:11.5px;font-weight:700;white-space:nowrap;">
+                        Redirect &rarr;
+                      </button>
+                    </div>
                   </div>
-                  <span class="status-pill done" style="font-size:11px;padding:2px 8px;flex-shrink:0;">Live &middot; Approved</span>
+                </div>`;
+              }).join('') : `
+                <div style="text-align:center;padding:26px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
+                  <span style="font-size:32px;display:block;margin-bottom:6px;">📂</span>
+                  <strong style="font-size:13.5px;color:#0f172a;display:block;margin-bottom:3px;">No Materials Uploaded Yet</strong>
+                  <p style="font-size:12px;color:var(--text-muted);margin:0;">When teachers or admins upload handouts, they will be logged here in real-time with uploader, timestamp, and location redirection.</p>
                 </div>
-              `).join('') : `
-                <p style="padding:16px;text-align:center;color:var(--text-muted);font-size:12.5px;margin:0;">No recently approved materials.</p>
               `}
             </div>
           </div>
@@ -3863,6 +3954,18 @@ function adminPage(page) {
       </div>
       <div id="sectionManagementContentWrap">
         ${typeof renderSectionsTabContent === 'function' ? renderSectionsTabContent() : ''}
+      </div>`;
+
+    case 'rooms': return `
+      <div class="section-hdr">
+        <div>
+          <h2>Room Management & Scheduling</h2>
+          <span style="font-size:12px;color:var(--text-muted);">Manage campus classrooms, assign section time slots, and prevent schedule conflicts</span>
+        </div>
+        <button class="add-btn" onclick="openCreateRoomModal()">${iconPlus()} Add New Room</button>
+      </div>
+      <div id="roomsManagementContentWrap">
+        ${typeof renderRoomsTabContent === 'function' ? renderRoomsTabContent() : ''}
       </div>`;
 
     case 'reports': {
@@ -4111,10 +4214,15 @@ function exportAdminCensusCSV() {
 
   csv += '--- LONGITUDINAL ENROLMENT & FACULTY COMPARATIVE CENSUS ---\n';
   csv += 'Academic Year,Status,Total Students,Active Teachers,Student-Teacher Ratio,Sections,STEM,HUMSS,ABM,TVL/ICT,Passing Rate,YoY Growth\n';
-  csv += 'S.Y. 2023-2024,Finalized,342,14,1:24,8,118,90,82,52,98.2%,Baseline\n';
-  csv += 'S.Y. 2024-2025,Finalized,418,18,1:23,10,148,112,96,62,98.8%,+22.2%\n';
-  csv += 'S.Y. 2025-2026,Finalized,476,21,1:23,12,172,130,106,68,99.1%,+13.9%\n';
-  csv += `S.Y. 2026-2027 (Current),Active Current,${totalStudents},${totalTeachers},${ratio},${secCount},${stemCount},${humssCount},${abmCount},${tvlCount},99.4%,Active\n\n`;
+  let savedHistoricalArchives = [];
+  try {
+    const raw = localStorage.getItem('scholaria_historical_census_archives');
+    if (raw) savedHistoricalArchives = JSON.parse(raw);
+  } catch (_) {}
+  savedHistoricalArchives.forEach(h => {
+    csv += `"${h.year}","${h.status || 'Finalized'}",${h.students},${h.teachers},"${h.ratio}",${h.sections},${h.stem},${h.humss},${h.abm},${h.tvl},"${h.passingRate}","${h.growth}"\n`;
+  });
+  csv += `S.Y. 2026-2027 (Current),Active Current,${totalStudents},${totalTeachers},${ratio},${secCount},${stemCount},${humssCount},${abmCount},${tvlCount},${typeof overallPassingRate !== 'undefined' ? overallPassingRate : 'N/A'},Active\n\n`;
 
   csv += '--- CURRENT ACADEMIC YEAR SECTION ROSTER CENSUS ---\n';
   csv += 'Section Name,Grade Level,Strand,Class Adviser,Enrolled Students,Capacity Limit,Utilization\n';
@@ -4182,77 +4290,38 @@ function renderAdminClassRecordCensus() {
   const gr12Count = activeStudents.filter(s => (s.grade_level || s.grade || '').includes('12')).length;
   const otherGradeCount = Math.max(0, activeStudents.length - (gr11Count + gr12Count));
 
-  // Historical comparative breakdown data
-  const historicalCensus = [
-    {
-      year: 'S.Y. 2023–2024',
-      isCurrent: false,
-      students: 342,
-      teachers: 14,
-      ratio: '1 : 24',
-      sections: 8,
-      stem: 118,
-      humss: 90,
-      abm: 82,
-      tvl: 52,
-      passingRate: '98.2%',
-      growth: 'Baseline',
-      growthClass: 'neutral',
-      status: 'Finalized'
-    },
-    {
-      year: 'S.Y. 2024–2025',
-      isCurrent: false,
-      students: 418,
-      teachers: 18,
-      ratio: '1 : 23',
-      sections: 10,
-      stem: 148,
-      humss: 112,
-      abm: 96,
-      tvl: 62,
-      passingRate: '98.8%',
-      growth: '+22.2%',
-      growthClass: 'high',
-      status: 'Finalized'
-    },
-    {
-      year: 'S.Y. 2025–2026',
-      isCurrent: false,
-      students: 476,
-      teachers: 21,
-      ratio: '1 : 23',
-      sections: 12,
-      stem: 172,
-      humss: 130,
-      abm: 106,
-      tvl: 68,
-      passingRate: '99.1%',
-      growth: '+13.9%',
-      growthClass: 'high',
-      status: 'Finalized'
-    },
-    {
-      year: 'S.Y. 2026–2027',
-      isCurrent: true,
-      students: currentYearTotalStudents,
-      teachers: currentYearTotalTeachers,
-      ratio: currentYearRatio,
-      sections: (typeof managedSections !== 'undefined' ? managedSections.length : 12),
-      stem: strandCounts.STEM,
-      humss: strandCounts.HUMSS,
-      abm: strandCounts.ABM,
-      tvl: strandCounts.TVL,
-      passingRate: '99.4%',
-      growth: currentYearTotalStudents >= 476
-        ? `+${(((currentYearTotalStudents - 476) / 476) * 100).toFixed(1)}%`
-        : 'Active S.Y.',
-      growthClass: 'high',
-      status: 'Current Active'
-    }
-  ];
+  // Real Passing Rate calculated from student performance
+  const allEntries = typeof buildRealClassRecordEntries === 'function' ? buildRealClassRecordEntries() : [];
+  const validAvgs = allEntries.map(e => e.avg).filter(a => a !== null && !isNaN(a));
+  const passingStudentsCount = validAvgs.filter(a => a >= 75).length;
+  const overallPassingRate = validAvgs.length ? `${Math.round((passingStudentsCount / validAvgs.length) * 100)}%` : '—';
 
-  const maxYearStudents = Math.max(...historicalCensus.map(h => h.students), 500);
+  // Real Archived Historical Census (if previously archived in the system)
+  let savedHistoricalArchives = [];
+  try {
+    const raw = localStorage.getItem('scholaria_historical_census_archives');
+    if (raw) savedHistoricalArchives = JSON.parse(raw);
+  } catch (_) {}
+
+  const currentYearEntry = {
+    year: 'S.Y. 2026–2027',
+    isCurrent: true,
+    students: currentYearTotalStudents,
+    teachers: currentYearTotalTeachers,
+    ratio: currentYearRatio,
+    sections: (typeof managedSections !== 'undefined' ? managedSections.length : 0),
+    stem: strandCounts.STEM,
+    humss: strandCounts.HUMSS,
+    abm: strandCounts.ABM,
+    tvl: strandCounts.TVL,
+    passingRate: overallPassingRate,
+    growth: 'Active S.Y.',
+    growthClass: 'high',
+    status: 'Current Active'
+  };
+
+  const historicalCensus = [...savedHistoricalArchives, currentYearEntry];
+  const maxYearStudents = Math.max(...historicalCensus.map(h => h.students), 10);
 
   // Section summary metrics
   const sectionsList = typeof managedSections !== 'undefined' ? managedSections : [];
@@ -4361,57 +4430,65 @@ function renderAdminClassRecordCensus() {
             </div>
             <div>
               <div class="ic-sub">Passing & Retention</div>
-              <div class="ic-num" style="color:#7c3aed;">99.4%</div>
+              <div class="ic-num" style="color:#7c3aed;">${overallPassingRate}</div>
             </div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-top:2px;">
-            <span style="color:var(--text-muted);">DepEd Quality Metric</span>
-            <span style="color:#6d28d9;background:#f5f3ff;font-weight:700;padding:2px 7px;border-radius:6px;font-size:11px;">Exemplary</span>
+            <span style="color:var(--text-muted);">Academic Performance</span>
+            <span style="color:#6d28d9;background:#f5f3ff;font-weight:700;padding:2px 7px;border-radius:6px;font-size:11px;">DepEd Standard</span>
           </div>
         </div>
       </div>
 
-      <!-- LONGITUDINAL COMPARATIVE BREAKDOWN OF ALL PREVIOUS YEARS -->
+      <!-- LONGITUDINAL COMPARATIVE BREAKDOWN OF PREVIOUS YEARS -->
       <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:24px;box-shadow:var(--shadow);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px;">
           <div>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="color:#0284c7;font-size:18px;">📈</span>
               <h3 style="font-size:17px;font-weight:800;color:var(--text-primary);margin:0;">
-                Comparative Longitudinal Enrolment Breakdown (All Previous Years)
+                Comparative Longitudinal Enrolment Breakdown
               </h3>
             </div>
             <p style="font-size:12.5px;color:var(--text-secondary);margin:4px 0 0 0;">
-              Side-by-side historical audit comparing current S.Y. 2026–2027 against S.Y. 2023–2024, 2024–2025, and 2025–2026.
+              Longitudinal institutional audit comparing enrolment records, faculty counts, and academic metrics across academic years.
             </p>
           </div>
           <span style="font-size:12px;color:var(--text-muted);font-weight:600;background:#f8fafc;padding:5px 12px;border-radius:8px;border:1px solid #e2e8f0;">
-            4-Year Comparative Range
+            ${savedHistoricalArchives.length > 0 ? `${historicalCensus.length}-Year Comparative Range` : 'Current Academic Year'}
           </span>
         </div>
 
-        <!-- VISUAL GROWTH BAR PROGRESSION -->
-        <div style="background:#f8fafc;border-radius:14px;padding:16px 20px;border:1px solid #e2e8f0;margin-bottom:20px;display:flex;flex-direction:column;gap:12px;">
-          ${historicalCensus.map(h => {
-            const pct = Math.round((h.students / maxYearStudents) * 100);
-            return `
-              <div>
-                <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;margin-bottom:5px;">
-                  <span style="font-weight:700;color:${h.isCurrent ? '#0284c7' : '#1e293b'};display:inline-flex;align-items:center;gap:6px;">
-                    ${escHtml(h.year)}
-                    ${h.isCurrent ? '<span style="font-size:10px;background:#0284c7;color:#fff;padding:1px 6px;border-radius:4px;font-weight:700;">CURRENT</span>' : ''}
-                  </span>
-                  <span style="font-weight:700;color:#0f172a;">
-                    ${h.students} Students <span style="font-weight:500;color:var(--text-muted);">(${h.growth})</span>
-                  </span>
+        ${savedHistoricalArchives.length === 0 ? `
+          <div style="background:#f8fafc;border-radius:14px;padding:22px;border:1.5px dashed #cbd5e1;margin-bottom:20px;text-align:center;color:var(--text-muted);">
+            <div style="font-size:24px;margin-bottom:6px;">📊</div>
+            <strong style="font-size:13.5px;color:var(--text-primary);display:block;margin-bottom:4px;">Current Academic Year (S.Y. 2026–2027) Active</strong>
+            <p style="font-size:12px;max-width:540px;margin:0 auto;">Longitudinal year-over-year comparisons will automatically generate as each subsequent academic year concludes and is archived.</p>
+          </div>
+        ` : `
+          <!-- VISUAL GROWTH BAR PROGRESSION -->
+          <div style="background:#f8fafc;border-radius:14px;padding:16px 20px;border:1px solid #e2e8f0;margin-bottom:20px;display:flex;flex-direction:column;gap:12px;">
+            ${historicalCensus.map(h => {
+              const pct = Math.round((h.students / maxYearStudents) * 100);
+              return `
+                <div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;margin-bottom:5px;">
+                    <span style="font-weight:700;color:${h.isCurrent ? '#0284c7' : '#1e293b'};display:inline-flex;align-items:center;gap:6px;">
+                      ${escHtml(h.year)}
+                      ${h.isCurrent ? '<span style="font-size:10px;background:#0284c7;color:#fff;padding:1px 6px;border-radius:4px;font-weight:700;">CURRENT</span>' : ''}
+                    </span>
+                    <span style="font-weight:700;color:#0f172a;">
+                      ${h.students} Students <span style="font-weight:500;color:var(--text-muted);">(${h.growth})</span>
+                    </span>
+                  </div>
+                  <div style="height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden;position:relative;">
+                    <div style="height:100%;width:${pct}%;background:${h.isCurrent ? 'linear-gradient(90deg,#0284c7,#38bdf8)' : '#94a3b8'};border-radius:6px;transition:width 0.4s ease;"></div>
+                  </div>
                 </div>
-                <div style="height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden;position:relative;">
-                  <div style="height:100%;width:${pct}%;background:${h.isCurrent ? 'linear-gradient(90deg,#0284c7,#38bdf8)' : '#94a3b8'};border-radius:6px;transition:width 0.4s ease;"></div>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
+              `;
+            }).join('')}
+          </div>
+        `}
 
         <!-- FULL COMPARATIVE AUDIT TABLE -->
         <div class="score-table score-table-responsive" style="box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">

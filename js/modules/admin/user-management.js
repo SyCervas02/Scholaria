@@ -1,13 +1,5 @@
-const DEFAULT_SEED_USERS = [
-  { name: 'Student John Doe', id: 'HWA-2026-002', dbId: 'seed_stud_1', role: 'student', gradeLevel: 'Grade 11', strand: 'STEM', section: 'Section A', createdAt: '2026-08-19', permanentlyMuted: true, strikes: 1 },
-  { name: 'Esguerra, Michael N.', id: 'HWA-2026-001', dbId: 'seed_stud_2', role: 'student', gradeLevel: 'Grade 11', strand: 'STEM', section: 'Section A', createdAt: '2026-07-21' },
-  { name: 'Joseph Andrew Asis', id: 'HWA-DEMO-001', dbId: 'seed_stud_3', role: 'student', gradeLevel: 'Grade 12', strand: 'STEM', section: 'Section A', createdAt: '2026-07-04' },
-  { name: 'Cervas, Symon Pete T.', id: 'HWA-2024-002', dbId: 'seed_stud_4', role: 'student', gradeLevel: 'Grade 12', strand: 'HUMSS', section: 'Section A', createdAt: '2026-06-29' }
-];
-
-const DEFAULT_SEED_ADMINS = [
-  { name: 'Senior High School Head Administrator', id: 'HWA-A-2026-001', dbId: 'seed_admin_1', role: 'admin', email: 'admin@hwa.edu.ph', createdAt: '2026-01-10T08:00:00Z', lastActive: new Date().toISOString() }
-];
+const DEFAULT_SEED_USERS = [];
+const DEFAULT_SEED_ADMINS = [];
 
 const CREDENTIAL_SLIP_STORAGE_KEY = 'scholaria_credential_slip_records';
 const ADMIN_HANDOUTS_STORAGE_KEY = 'scholaria_admin_handout_records';
@@ -1676,6 +1668,70 @@ function auToggleFormatExample() {
   label.textContent = (isOpen ? 'See' : 'Hide') + ' example spreadsheet format';
 }
 
+function downloadBulkUserTemplate() {
+  const isStudent = addUser.userType === 'student';
+  const roleName = isStudent ? 'Student' : 'Teacher';
+  const fileName = `Scholaria_${roleName}_Bulk_Template.xlsx`;
+
+  const headers = isStudent
+    ? ['Name', 'Email', 'Strand', 'Grade Level', 'Section']
+    : ['Name', 'Email', 'Subjects', 'Section'];
+
+  const sampleRows = isStudent
+    ? [
+        ['Dela Cruz, Juan P.', 'juan.delacruz@sample.edu.ph', 'STEM', 'Grade 11', 'Section A'],
+        ['Reyes, Ana Marie T.', 'ana.reyes@sample.edu.ph', 'ABM', 'Grade 12', 'Section B'],
+        ['Santos, Pedro L.', 'pedro.santos@sample.edu.ph', 'HUMSS', 'Grade 11', '']
+      ]
+    : [
+        ['Garcia, Ramon C.', 'ramon.garcia@sample.edu.ph', 'General Mathematics, Pre-Calculus', 'Section A'],
+        ['Torres, Liza M.', 'liza.torres@sample.edu.ph', 'Practical Research 1, Statistics', 'Section B'],
+        ['Fernandez, Paul B.', 'paul.fernandez@sample.edu.ph', 'Empowerment Technologies', '']
+      ];
+
+  if (typeof XLSX !== 'undefined') {
+    try {
+      const wsData = [headers, ...sampleRows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // Auto-fit column widths
+      ws['!cols'] = headers.map((h, i) => {
+        const maxLen = Math.max(h.length, ...sampleRows.map(r => String(r[i] || '').length));
+        return { wch: Math.max(maxLen + 4, 16) };
+      });
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, isStudent ? 'Students' : 'Teachers');
+      XLSX.writeFile(wb, fileName);
+      if (typeof showToast === 'function') {
+        showToast(`Downloaded editable template: ${fileName}`, 'success');
+      }
+      return;
+    } catch (e) {
+      console.warn('XLSX export failed, using CSV fallback:', e);
+    }
+  }
+
+  // Fallback to downloadable CSV if XLSX isn't loaded
+  const csvLines = [
+    headers.join(','),
+    ...sampleRows.map(r => r.map(c => `"${(c || '').replace(/"/g, '""')}"`).join(','))
+  ];
+  const blob = new Blob([csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName.replace('.xlsx', '.csv');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (typeof showToast === 'function') {
+    showToast(`Downloaded editable template: ${fileName.replace('.xlsx', '.csv')}`, 'success');
+  }
+}
+window.downloadBulkUserTemplate = downloadBulkUserTemplate;
+
 function renderFormatExampleTable() {
   const isStudent = addUser.userType === 'student';
   const columns = isStudent
@@ -1707,8 +1763,18 @@ function renderFormatExampleTable() {
 
   return `
     <div class="au-format-wrap">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;background:#f0fdf4;border:1px solid #bbf7d0;padding:10px 14px;border-radius:10px;">
+        <div style="font-size:12px;color:#166534;font-weight:600;display:flex;align-items:center;gap:7px;">
+          <span>📊</span>
+          <span>Download this official spreadsheet template, fill in your roster, and upload it back.</span>
+        </div>
+        <button type="button" class="sw-btn" onclick="downloadBulkUserTemplate()" style="background:#16a34a;color:#ffffff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;box-shadow:0 2px 6px rgba(22,163,74,0.25);white-space:nowrap;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download Editable Excel (.xlsx)
+        </button>
+      </div>
       <div class="au-format-note">
-        Upload a spreadsheet with these column headers in row 1. Only <b>Name</b> and <b>Email</b> are required; <b>Section is optional</b> and students can be mass-assigned to sections anytime in the <b>Sections & Rosters</b> tab.
+        Upload a spreadsheet with these column headers in row 1. Only <b>Name</b> and <b>Email</b> are required; <b>Section is optional</b> and students can be mass-assigned to sections anytime in the <b>Sections &amp; Rosters</b> tab.
       </div>
       <div class="au-format-table-scroll">
         <table class="au-format-table">
@@ -1723,9 +1789,12 @@ function renderFormatExampleTable() {
           </tbody>
         </table>
       </div>
-      <div class="au-format-legend">
-        <span><i class="sw-req"></i> Required</span>
-        <span><i class="sw-opt"></i> Optional — falls back to Unassigned or chips above</span>
+      <div class="au-format-legend" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span><i class="sw-req"></i> Required</span>
+          <span><i class="sw-opt"></i> Optional — falls back to Unassigned or chips above</span>
+        </div>
+        <a href="javascript:void(0)" onclick="downloadBulkUserTemplate()" style="color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;">Download .xlsx template &rarr;</a>
       </div>
     </div>
   `;
@@ -2493,10 +2562,16 @@ function renderAddUserModal() {
         <div class="dz-sub">Columns: Name, Email (Required) · Strand, Grade Level, Section (Optional) — Max 50MB only</div>
       </label>
       <input type="file" id="auBulkInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="auHandleBulkFile(this)">
-      <button type="button" class="au-format-toggle" id="auFormatExampleBtn" onclick="auToggleFormatExample()">
-        <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-        <span id="auFormatExampleLabel">See example spreadsheet format</span>
-      </button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="au-format-toggle" id="auFormatExampleBtn" onclick="auToggleFormatExample()" style="margin:0;">
+          <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          <span id="auFormatExampleLabel">See example spreadsheet format</span>
+        </button>
+        <button type="button" onclick="downloadBulkUserTemplate()" style="background:#f0fdf4;color:#15803d;border:1.5px solid #bbf7d0;padding:6px 14px;border-radius:10px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;transition:all 0.15s ease;" onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download Editable Excel (.xlsx)
+        </button>
+      </div>
       <div id="auFormatExampleWrap" style="display:none">${renderFormatExampleTable()}</div>
       `}
 

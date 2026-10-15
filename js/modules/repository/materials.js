@@ -373,6 +373,45 @@ function setSubjectSubTab(tab) {
 }
 window.setSubjectSubTab = setSubjectSubTab;
 
+let adminUploadScope = 'all'; // 'all' | 'mine'
+window.adminUploadScope = 'all';
+
+function setAdminUploadScope(scope) {
+  adminUploadScope = scope;
+  window.adminUploadScope = scope;
+  renderMaterialsContainer();
+}
+window.setAdminUploadScope = setAdminUploadScope;
+
+function navigateToUploadedMaterial(courseId, subject, section, materialId) {
+  let targetCourse = null;
+  if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
+    if (courseId) {
+      targetCourse = COURSES_DATABASE.find(c => c.id === courseId);
+    }
+    if (!targetCourse && subject) {
+      const sLow = String(subject).toLowerCase().trim();
+      targetCourse = COURSES_DATABASE.find(c => (c.title || '').toLowerCase().trim() === sLow || (c.code || '').toLowerCase().trim() === sLow);
+    }
+  }
+  const cId = targetCourse ? targetCourse.id : (courseId || (typeof COURSES_DATABASE !== 'undefined' && COURSES_DATABASE[0] ? COURSES_DATABASE[0].id : null));
+  const sec = section && section !== 'All' ? section : 'Section A';
+
+  if (cId && typeof setActiveSubjectMaterials === 'function') {
+    setActiveSubjectMaterials(cId, sec, false);
+  }
+  if (typeof setSubjectSubTab === 'function') {
+    setSubjectSubTab('uploads');
+  }
+  if (typeof renderPage === 'function') {
+    renderPage('materials');
+  }
+  if (typeof showToast === 'function') {
+    showToast(`Redirected to ${targetCourse ? targetCourse.title : (subject || 'Subject')} (${sec}) — Uploads tab`, 'info');
+  }
+}
+window.navigateToUploadedMaterial = navigateToUploadedMaterial;
+
 function toggleModuleAccordion(modId) {
   expandedModuleMap[modId] = !expandedModuleMap[modId];
   renderMaterialsContainer();
@@ -932,7 +971,7 @@ function renderMaterialsList(role) {
                 <div class="sw-uploads-wrap">
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
                     <div>
-                      <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Teacher Uploads</h3>
+                      <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">${role === 'admin' ? 'Curriculum Handouts &amp; Uploads' : 'Teacher Uploads'}</h3>
                       <span style="font-size:12px;color:var(--text-muted);">Supplemental handouts, slide decks, and worksheets uploaded by teachers for ${escHtml(course.title)}</span>
                     </div>
                     ${(role === 'teacher' || role === 'admin') ? `
@@ -943,8 +982,24 @@ function renderMaterialsList(role) {
                     ` : ''}
                   </div>
 
-                  <div class="file-list">
-                    ${subjectUploads.length ? subjectUploads.map(m => `
+                  
+                    ${role === 'admin' ? `
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;background:#f8fafc;padding:6px 12px;border-radius:10px;border:1px solid #e2e8f0;width:fit-content;">
+                        <span style="font-size:11.5px;font-weight:700;color:#64748b;">Filter View:</span>
+                        <button type="button" class="sw-btn ${window.adminUploadScope !== 'mine' ? 'primary' : 'outline'}" onclick="setAdminUploadScope('all')" style="padding:4px 10px;font-size:11.5px;border-radius:6px;cursor:pointer;">
+                          All Handouts (${subjectUploads.length})
+                        </button>
+                        <button type="button" class="sw-btn ${window.adminUploadScope === 'mine' ? 'primary' : 'outline'}" onclick="setAdminUploadScope('mine')" style="padding:4px 10px;font-size:11.5px;border-radius:6px;cursor:pointer;background:${window.adminUploadScope === 'mine' ? '#4338ca' : '#ffffff'};color:${window.adminUploadScope === 'mine' ? '#ffffff' : '#4338ca'};border-color:#c7d2fe;font-weight:700;">
+                          👤 My Materials Only (${subjectUploads.filter(m => (CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id) || (m.uploader_role||'').toLowerCase().includes('admin') || (m.uploaded_by_name||'').toLowerCase().includes('admin')).length})
+                        </button>
+                      </div>
+                    ` : ''}
+                    <div class="file-list">
+                    ${(() => {
+                      const finalUploads = (role === 'admin' && window.adminUploadScope === 'mine')
+                        ? subjectUploads.filter(m => (CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id) || (m.uploader_role||'').toLowerCase().includes('admin') || (m.uploaded_by_name||'').toLowerCase().includes('admin'))
+                        : subjectUploads;
+                      return finalUploads.length ? finalUploads.map(m => `
                       <div class="file-row">
                         <div class="file-icon ${fileIconClass(m.file_type)}">${fileIconSvg()}</div>
                         <div class="file-info">
@@ -986,7 +1041,8 @@ function renderMaterialsList(role) {
                           </button>
                         ` : ''}
                       </div>
-                    `}
+                    `;
+                  })()}
                   </div>
                 </div>
               `
@@ -1136,6 +1192,9 @@ function applyTeacherClassFilter() {
       } else {
         matchesFilter = (cardTrack === f);
       }
+      if (f === 'my-materials') {
+        matchesFilter = (card.dataset.hasAdminMaterials === 'true');
+      }
     }
 
     let matchesSearch = true;
@@ -1150,6 +1209,11 @@ function applyTeacherClassFilter() {
       card.style.display = 'none';
     }
   });
+
+  const adminPanel = document.getElementById('adminMyMaterialsGridPanel');
+  if (adminPanel) {
+    adminPanel.style.display = (teacherClassFilter === 'my-materials') ? 'block' : 'none';
+  }
 
   if (emptyState) {
     emptyState.style.display = (visibleCount === 0) ? 'flex' : 'none';
@@ -1195,6 +1259,205 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
   return classCards;
 }
 
+
+function getMaterialFormatBadge(type, fileName) {
+  const t = (type || (fileName ? fileName.split('.').pop() : 'PDF')).toUpperCase();
+  let bg = '#fee2e2', color = '#dc2626', label = 'PDF';
+  if (t === 'PDF') { bg = '#fee2e2'; color = '#dc2626'; label = 'PDF'; }
+  else if (t === 'DOCX' || t === 'DOC') { bg = '#dbeafe'; color = '#1d4ed8'; label = 'DOCX'; }
+  else if (t === 'PPTX' || t === 'PPT') { bg = '#ffedd5'; color = '#c2410c'; label = 'PPTX'; }
+  else if (['PNG', 'JPG', 'JPEG', 'WEBP', 'IMG', 'IMAGE'].includes(t)) { bg = '#dcfce7'; color = '#15803d'; label = 'IMAGE'; }
+  else if (t === 'TXT') { bg = '#f1f5f9'; color = '#475569'; label = 'TXT'; }
+  else { bg = '#ede9fe'; color = '#6d28d9'; label = t.slice(0, 4); }
+  return '<span style="background:' + bg + ';color:' + color + ';font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:5px;letter-spacing:0.4px;">' + label + '</span>';
+}
+
+function renderAdminApprovedHandoutRow(m) {
+  const isTeacher = (m.uploader_role || '').toLowerCase().includes('teacher') || 
+                    (m.uploaded_by_name || '').toLowerCase().includes('teacher') || 
+                    (m.uploader_name || '').toLowerCase().includes('teacher');
+  const uploaderRole = isTeacher ? 'Teacher' : 'Admin';
+  const uploaderName = m.uploaded_by_name || m.uploader_name || (isTeacher ? 'Faculty Instructor' : 'Administrator');
+  const approverName = m.approved_by_name || (isTeacher ? 'Academic Admin' : uploaderName);
+
+  const title = m.title || m.fileName || 'Curriculum Handout';
+  const formatBadge = getMaterialFormatBadge(m.type, m.fileName);
+  const size = m.size || 'Official Handout';
+  const date = m.date_formatted || (m.created_at ? new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Verified');
+  const section = m.section || 'All Sections';
+  const subject = m.subject || 'General Curriculum';
+  const strandGrade = [m.strand, m.grade_level].filter(Boolean).join(' · ') || 'SHS Curriculum';
+
+  return '<tr data-material-id="' + escHtml(m.id) + '" data-origin="' + uploaderRole.toLowerCase() + '" data-section="' + escHtml(section.toLowerCase()) + '" data-search="' + escHtml((title + ' ' + (m.fileName || '') + ' ' + subject + ' ' + section + ' ' + uploaderName + ' ' + approverName).toLowerCase()) + '">' +
+    '<td>' +
+      '<div style="display:flex;align-items:flex-start;gap:10px;">' +
+        '<div style="margin-top:2px;">' + formatBadge + '</div>' +
+        '<div style="min-width:0;">' +
+          '<div style="font-weight:700;color:var(--text-primary);font-size:13.5px;margin-bottom:2px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(title) + '">' + escHtml(title) + '</div>' +
+          '<div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">' +
+            '<span style="max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="' + escHtml(m.fileName || title) + '">' + escHtml(m.fileName || title) + '</span>' +
+            '<span>&middot;</span>' +
+            '<span>' + escHtml(size) + '</span>' +
+            '<span>&middot;</span>' +
+            '<span>' + escHtml(date) + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</td>' +
+    '<td>' +
+      '<div style="font-weight:600;color:var(--text-primary);font-size:13px;">' + escHtml(subject) + '</div>' +
+      '<div style="font-size:11.5px;color:var(--text-muted);">' + escHtml(strandGrade) + '</div>' +
+    '</td>' +
+    '<td>' +
+      '<span style="background:#f1f5f9;color:#334155;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:6px;display:inline-block;">' +
+        escHtml(section) +
+      '</span>' +
+    '</td>' +
+    '<td>' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<span class="role-tag ' + uploaderRole.toLowerCase() + '">' + uploaderRole + '</span>' +
+        '<span style="font-weight:600;color:var(--text-primary);font-size:13px;">' + escHtml(uploaderName) + '</span>' +
+      '</div>' +
+    '</td>' +
+    '<td>' +
+      '<div style="display:inline-flex;align-items:center;gap:6px;color:#15803d;font-weight:600;font-size:12.5px;">' +
+        '<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#dcfce7;color:#16a34a;font-size:11px;flex-shrink:0;">✓</span>' +
+        '<span>' + escHtml(approverName) + '</span>' +
+      '</div>' +
+    '</td>' +
+    '<td>' +
+      '<div style="display:inline-flex;align-items:center;gap:8px;">' +
+        '<button class="table-act-btn preview" onclick="previewSubjectUploadedMaterial(\'' + escHtml(m.id) + '\')" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" title="Instant Handout Preview">' +
+          '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' +
+          'Preview' +
+        '</button>' +
+        '<button class="table-act-btn download" onclick="downloadMaterial(\'' + escHtml(m.id) + '\')" style="background:#f8fafc;color:#334155;border:1px solid #cbd5e1;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" title="Download Handout">' +
+          '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
+          'Download' +
+        '</button>' +
+        '<button class="table-act-btn delete" onclick="deleteMaterial(\'' + escHtml(m.id) + '\')" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:7px;padding:6px 9px;font-size:12px;font-weight:700;cursor:pointer;" title="Delete Handout">' +
+          '🗑️' +
+        '</button>' +
+      '</div>' +
+    '</td>' +
+  '</tr>';
+}
+
+function renderAdminApprovedHandoutsTableHTML() {
+  const approvedList = materialsData.filter(m => m && m.status === 'approved' && (m.title || m.fileName));
+  const distinctSections = [...new Set(approvedList.map(m => m.section).filter(Boolean))].sort();
+
+  return '<div class="admin-approved-materials-panel" style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:16px;padding:22px;margin-bottom:26px;box-shadow:var(--shadow);">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">' +
+      '<div style="display:flex;align-items:center;gap:12px;">' +
+        '<div style="width:42px;height:42px;border-radius:12px;background:#eef2ff;color:#4338ca;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">📋</div>' +
+        '<div>' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<h3 style="margin:0;font-size:17px;font-weight:800;color:var(--text-primary);">Institutional Approved Handouts Repository</h3>' +
+            '<span id="adminApprovedCountBadge" style="background:#dcfce7;color:#15803d;font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:20px;">' + approvedList.length + ' Approved</span>' +
+          '</div>' +
+          '<div style="font-size:12.5px;color:var(--text-muted);margin-top:2px;">Showing verified and published module handouts from teachers &amp; administrators. Unapproved handouts are excluded.</div>' +
+        '</div>' +
+      '</div>' +
+      '<button class="add-btn" onclick="openMaterialModal()" style="background:#4338ca;color:#ffffff;border:none;box-shadow:0 4px 12px rgba(67,56,202,0.25);font-weight:700;padding:8px 16px;font-size:12.5px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;">' +
+        (typeof iconPlus === 'function' ? iconPlus() : '+') + ' Upload Handout' +
+      '</button>' +
+    '</div>' +
+    '<div class="user-search-row" style="margin-bottom:14px;gap:10px;flex-wrap:wrap;">' +
+      '<div class="user-search-wrap" style="flex:1;min-width:240px;">' +
+        '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>' +
+        '<input type="text" id="adminApprovedSearchInput" placeholder="Search handouts by title, filename, subject, uploader, or approver..." oninput="filterAdminApprovedHandouts()">' +
+      '</div>' +
+      '<select class="user-filter-select" id="adminApprovedOriginFilter" onchange="filterAdminApprovedHandouts()">' +
+        '<option value="">All Uploaders (Faculty &amp; Admins)</option>' +
+        '<option value="teacher">Faculty / Teachers Only</option>' +
+        '<option value="admin">Administrators Only</option>' +
+      '</select>' +
+      '<select class="user-filter-select" id="adminApprovedSectionFilter" onchange="filterAdminApprovedHandouts()">' +
+        '<option value="">All Sections</option>' +
+        distinctSections.map(s => '<option value="' + escHtml(s.toLowerCase()) + '">' + escHtml(s) + '</option>').join('') +
+      '</select>' +
+      '<select class="user-filter-select" id="adminApprovedSortFilter" onchange="filterAdminApprovedHandouts()">' +
+        '<option value="newest">Newest First</option>' +
+        '<option value="oldest">Oldest First</option>' +
+        '<option value="az">Title (A-Z)</option>' +
+      '</select>' +
+    '</div>' +
+    '<div class="user-table" id="adminApprovedTableWrap" style="max-height:480px;overflow-y:auto;">' +
+      '<table style="width:100%;border-collapse:collapse;min-width:980px;">' +
+        '<thead>' +
+          '<tr>' +
+            '<th style="position:sticky;top:0;z-index:2;">Handout &amp; Document</th>' +
+            '<th style="position:sticky;top:0;z-index:2;">Subject &amp; Strand</th>' +
+            '<th style="position:sticky;top:0;z-index:2;">Target Section</th>' +
+            '<th style="position:sticky;top:0;z-index:2;">Uploaded By (Origin)</th>' +
+            '<th style="position:sticky;top:0;z-index:2;">Approved By</th>' +
+            '<th style="position:sticky;top:0;z-index:2;">Actions</th>' +
+          '</tr>' +
+        '</thead>' +
+        '<tbody id="adminApprovedTableBody">' +
+          (approvedList.length ? approvedList.map(m => renderAdminApprovedHandoutRow(m)).join('') : '') +
+        '</tbody>' +
+      '</table>' +
+      '<div id="adminApprovedNoResults" style="' + (approvedList.length === 0 ? '' : 'display:none;') + 'padding:36px;text-align:center;color:var(--text-muted);font-size:13px;">' +
+        '<div style="font-size:26px;margin-bottom:8px;">📄</div>' +
+        '<strong>No approved handouts found</strong>' +
+        '<div style="font-size:12px;margin-top:4px;">Either no handouts have been approved yet, or no items match your active search filters.</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function filterAdminApprovedHandouts() {
+  const q = (document.getElementById('adminApprovedSearchInput')?.value || '').trim().toLowerCase();
+  const origin = (document.getElementById('adminApprovedOriginFilter')?.value || '').toLowerCase();
+  const sec = (document.getElementById('adminApprovedSectionFilter')?.value || '').toLowerCase();
+  const sort = document.getElementById('adminApprovedSortFilter')?.value || 'newest';
+
+  const tbody = document.getElementById('adminApprovedTableBody');
+  const noRes = document.getElementById('adminApprovedNoResults');
+  const countBadge = document.getElementById('adminApprovedCountBadge');
+  if (!tbody) return;
+
+  let approved = materialsData.filter(m => m && m.status === 'approved' && (m.title || m.fileName));
+
+  if (q) {
+    approved = approved.filter(m => {
+      const isTeacher = (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
+      const uploader = m.uploaded_by_name || m.uploader_name || (isTeacher ? 'Teacher' : 'Admin');
+      const approver = m.approved_by_name || 'Administrator';
+      const haystack = ('' + (m.title || '') + ' ' + (m.fileName || '') + ' ' + (m.subject || '') + ' ' + (m.section || '') + ' ' + uploader + ' ' + approver).toLowerCase();
+      return haystack.includes(q);
+    });
+  }
+
+  if (origin) {
+    approved = approved.filter(m => {
+      const isTeacher = (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
+      return origin === 'teacher' ? isTeacher : !isTeacher;
+    });
+  }
+
+  if (sec) {
+    approved = approved.filter(m => (m.section || '').toLowerCase().includes(sec));
+  }
+
+  if (sort === 'az') {
+    approved.sort((a, b) => (a.title || a.fileName || '').localeCompare(b.title || b.fileName || ''));
+  } else if (sort === 'oldest') {
+    approved.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+  } else {
+    approved.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  }
+
+  tbody.innerHTML = approved.map(m => renderAdminApprovedHandoutRow(m)).join('');
+  if (noRes) noRes.style.display = approved.length === 0 ? 'block' : 'none';
+  if (countBadge) countBadge.textContent = approved.length + ' Approved';
+}
+window.filterAdminApprovedHandouts = filterAdminApprovedHandouts;
+window.renderAdminApprovedHandoutsTableHTML = renderAdminApprovedHandoutsTableHTML;
+window.renderAdminApprovedHandoutRow = renderAdminApprovedHandoutRow;
+
 function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE !== 'undefined' ? ROLE : 'teacher')) {
   setTimeout(() => applyTeacherClassFilter(), 0);
   const classCards = getTeacherHandledClassCards(enrolledCourses, activeRole);
@@ -1204,6 +1467,14 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
   const coreCount = classCards.filter(c => c.track === 'Core').length;
   const appliedCount = classCards.filter(c => c.track === 'Applied').length;
   const isAdmin = (activeRole === 'admin');
+  const adminMaterials = materialsData.filter(m => {
+    if (!m) return false;
+    if (CURRENT_PROFILE && m.uploaded_by && m.uploaded_by === CURRENT_PROFILE.id) return true;
+    const r = (m.uploader_role || '').toLowerCase();
+    const n = (m.uploaded_by_name || m.uploader_name || '').toLowerCase();
+    return r.includes('admin') || n.includes('admin');
+  });
+  const myAdminMaterialsCount = adminMaterials.length;
 
   return `
   <div class="materials-page-container">
@@ -1234,12 +1505,16 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
       </div>
     </div>
 
-    <!-- 2. SECTION & TRACK FILTERS + LIVE SEARCH -->
+    <!-- 2. INSTITUTIONAL APPROVED HANDOUTS REPOSITORY (USER MANAGEMENT STYLE) -->
+    ${isAdmin ? renderAdminApprovedHandoutsTableHTML() : ''}
+
+    <!-- 3. SECTION & TRACK FILTERS + LIVE SEARCH -->
     <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
       <div class="subject-chips-bar" id="teacherClassChipsBar" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <button class="subject-chip ${(!teacherClassFilter || teacherClassFilter === 'all') ? 'active' : ''}" data-filter="all" onclick="setTeacherClassFilter('all')" style="cursor:pointer;">
           ${isAdmin ? 'All Classes' : 'All Handled Classes'} <span class="sc-badge">${classCards.length}</span>
         </button>
+        
         ${distinctSections.map(sec => {
           const secMatches = classCards.filter(c => c.assignedSection.toLowerCase() === sec.toLowerCase()).length;
           return `
@@ -1270,6 +1545,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
 
     <!-- 3. STI eLMS CARDS GRID -->
     <div class="subjects-folder-grid" id="teacherClassesFolderGrid" style="grid-template-columns:repeat(auto-fill, minmax(295px, 1fr));gap:20px;">
+      
       ${classCards.map(card => {
         const lessons = getSubjectLessons(card);
         const uploadsForClass = materialsData.filter(m => {
@@ -1286,6 +1562,13 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
           return true;
         }) : [];
 
+        const hasAdminMaterials = uploadsForClass.some(m => {
+          if (CURRENT_PROFILE && m.uploaded_by && m.uploaded_by === CURRENT_PROFILE.id) return true;
+          const r = (m.uploader_role || '').toLowerCase();
+          const n = (m.uploaded_by_name || m.uploader_name || '').toLowerCase();
+          return r.includes('admin') || n.includes('admin');
+        });
+
         const searchKeywords = `${card.title} ${card.sectionCode} ${card.assignedSection} ${card.track || ''} ${card.strand || ''} ${card.description || ''}`.toLowerCase();
 
         return `
@@ -1293,6 +1576,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
                data-section="${escHtml(card.assignedSection.toLowerCase())}"
                data-track="${escHtml((card.track || 'specialized').toLowerCase())}"
                data-search="${escHtml(searchKeywords)}"
+               data-has-admin-materials="${hasAdminMaterials ? 'true' : 'false'}"
                onclick="setActiveSubjectMaterials('${card.baseCourseId}', '${card.assignedSection}')"
                title="Open ${escHtml(card.title)} (${escHtml(card.assignedSection)}) Workspace">
             <div class="sfc-thumb" style="height:125px;background-image:url('${card.cover || 'assets/slide1.jpg'}');position:relative;">
@@ -1764,248 +2048,7 @@ function toggleStudentMatViewAll() {
   updateStudentMaterialsUI();
 }
 
-const STUDENT_DEFAULT_MATERIALS = [
-  {
-    id: 'mat-precalc-mod3',
-    title: 'Pre-Calculus Module 3',
-    subject: 'Pre-Calculus',
-    subjColor: 'purple',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Dr. Eleanor Llorente',
-    dateAdded: 'Sep 5, 2025 10:10 AM',
-    status: 'Completed',
-    meta: '12 files • 4.2 MB',
-    cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-cell-struct',
-    title: 'Cell Structure and Function',
-    subject: 'General Biology 1',
-    subjColor: 'green',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Prof. Maria Reyes',
-    dateAdded: 'Sep 4, 2025 02:30 PM',
-    status: 'Completed',
-    meta: '8 files • 3.1 MB',
-    cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-physics-em',
-    title: 'Electromagnetism Lesson',
-    subject: 'General Physics 1',
-    subjColor: 'orange',
-    file_type: 'ppt',
-    type: 'PPT',
-    formatClass: 'ppt',
-    instructor: 'Dr. Arthur Cruz',
-    dateAdded: 'Sep 3, 2025 09:15 AM',
-    status: 'In Progress',
-    meta: '15 files • 6.8 MB',
-    cover: 'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-chem-org',
-    title: 'Organic Chemistry Notes',
-    subject: 'General Chemistry 1',
-    subjColor: 'green',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Dr. Patricia Mendoza',
-    dateAdded: 'Sep 2, 2025 11:00 AM',
-    status: 'Pending',
-    meta: '10 files • 5.4 MB',
-    cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-research-guide',
-    title: 'Research Paper Guidelines',
-    subject: 'Practical Research 1',
-    subjColor: 'blue',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Dr. Eleanor Llorente',
-    dateAdded: 'Sep 1, 2025 04:20 PM',
-    status: 'Completed',
-    meta: '14 files • 3.5 MB',
-    cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-ict-word',
-    title: 'Microsoft Office - Word Basics',
-    subject: 'Empowerment Technologies (ICT)',
-    subjColor: 'pink',
-    file_type: 'docx',
-    type: 'DOCX',
-    formatClass: 'docx',
-    instructor: 'Engr. Julian Callanta',
-    dateAdded: 'Aug 29, 2025 08:45 AM',
-    status: 'Completed',
-    meta: '12 files • 3.7 MB',
-    cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-earth-tectonics',
-    title: 'Plate Tectonics and Earthquakes',
-    subject: 'Earth and Life Science',
-    subjColor: 'blue',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Prof. Gabriel Santos',
-    dateAdded: 'Aug 28, 2025 01:10 PM',
-    status: 'In Progress',
-    meta: '9 files • 4.6 MB',
-    cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-entrep-plan',
-    title: 'Business Plan Components',
-    subject: 'Entrepreneurship',
-    subjColor: 'orange',
-    file_type: 'ppt',
-    type: 'PPT',
-    formatClass: 'ppt',
-    instructor: 'Ms. Clara Asis',
-    dateAdded: 'Aug 27, 2025 10:30 AM',
-    status: 'Completed',
-    meta: '11 files • 2.9 MB',
-    cover: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-bio-genetics',
-    title: 'Genetics and Heredity',
-    subject: 'General Biology 1',
-    subjColor: 'green',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Prof. Maria Reyes',
-    dateAdded: 'Aug 25, 2025 03:00 PM',
-    status: 'Pending',
-    meta: '7 files • 3.8 MB',
-    cover: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-math-quad',
-    title: 'Quadratic Equations',
-    subject: 'General Mathematics',
-    subjColor: 'green',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Dr. Wilfredo Santos',
-    dateAdded: 'Aug 24, 2025 11:15 AM',
-    status: 'Completed',
-    meta: '10 files • 2.6 MB',
-    cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-write-guide',
-    title: 'Academic Writing Guide',
-    subject: 'Reading and Writing Skills',
-    subjColor: 'purple',
-    file_type: 'docx',
-    type: 'DOCX',
-    formatClass: 'docx',
-    instructor: 'Ms. Liza Navarro',
-    dateAdded: 'Aug 22, 2025 09:40 AM',
-    status: 'Completed',
-    meta: '6 files • 1.8 MB',
-    cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-stem-guide',
-    title: 'STEM Project Guide',
-    subject: 'STEM',
-    subjColor: 'cyan',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Engr. Daniel Cruz',
-    dateAdded: 'Aug 20, 2025 02:15 PM',
-    status: 'In Progress',
-    meta: '13 files • 5.2 MB',
-    cover: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-oral-speech',
-    title: 'Speech Presentation Tips',
-    subject: 'Oral Communication',
-    subjColor: 'pink',
-    file_type: 'ppt',
-    type: 'PPT',
-    formatClass: 'ppt',
-    instructor: 'Ms. Clara Asis',
-    dateAdded: 'Aug 18, 2025 10:00 AM',
-    status: 'Completed',
-    meta: '8 files • 3.4 MB',
-    cover: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-chem-bonding',
-    title: 'Chemical Bonding Principles',
-    subject: 'General Chemistry 1',
-    subjColor: 'green',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Dr. Patricia Mendoza',
-    dateAdded: 'Aug 16, 2025 01:45 PM',
-    status: 'Pending',
-    meta: '11 files • 4.1 MB',
-    cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-trig-identities',
-    title: 'Trigonometric Identities Handout',
-    subject: 'Pre-Calculus',
-    subjColor: 'purple',
-    file_type: 'pdf',
-    type: 'PDF',
-    formatClass: 'pdf',
-    instructor: 'Dr. Eleanor Llorente',
-    dateAdded: 'Aug 14, 2025 09:20 AM',
-    status: 'In Progress',
-    meta: '9 files • 2.8 MB',
-    cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  },
-  {
-    id: 'mat-arts-ph',
-    title: 'Contemporary Philippine Arts',
-    subject: 'Contemporary Philippine Arts from the Regions',
-    subjColor: 'orange',
-    file_type: 'ppt',
-    type: 'PPT',
-    formatClass: 'ppt',
-    instructor: 'Ms. Clara Asis',
-    dateAdded: 'Aug 12, 2025 11:30 AM',
-    status: 'Completed',
-    meta: '7 files • 5.1 MB',
-    cover: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80',
-    file_url: 'SURVEY FORMS - Scholaria.pdf'
-  }
-];
+const STUDENT_DEFAULT_MATERIALS = [];
 
 function applyStudentSubjectFilter() {
   const grid = document.getElementById('studentSubjectsFolderGrid');
@@ -3152,12 +3195,16 @@ async function approveMaterial(id) {
   const localIdx = localList.findIndex(m => String(m.id) === String(id));
   if (localIdx >= 0) {
     localList[localIdx].status = 'approved';
+    localList[localIdx].approved_by = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.id) || 'admin';
+    localList[localIdx].approved_by_name = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'Administrator';
     localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(localList));
   }
   // 2. Update in-memory materialsData
   const memItem = materialsData.find(m => String(m.id) === String(id));
   if (memItem) {
     memItem.status = 'approved';
+    memItem.approved_by = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.id) || 'admin';
+    memItem.approved_by_name = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'Administrator';
   }
 
   const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
@@ -3770,6 +3817,8 @@ async function submitMaterialUpload() {
       uploaded_by_name: uploaderName,
       uploader_role: uploaderRole,
       uploaded_by: CURRENT_PROFILE?.id || 'local_user',
+      approved_by: CURRENT_PROFILE?.id || 'admin',
+      approved_by_name: ROLE === 'admin' ? uploaderName : 'System Administrator',
       file_type: f.type || 'application/pdf',
       type: typeLabel,
       status: targetStatus,

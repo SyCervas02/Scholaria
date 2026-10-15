@@ -4,16 +4,25 @@ const STRANDS = ['STEM', 'HUMSS', 'ABM', 'TVL'];
 const GRADE_LEVELS = ['Grade 11', 'Grade 12'];
 
 const DEFAULT_MANAGED_SECTIONS = [
-  { id: 'sec-a', name: 'Section A', gradeLevel: 'Grade 11', strand: 'STEM', adviser: 'Adviser Garcia', room: 'Room 301' },
-  { id: 'sec-b', name: 'Section B', gradeLevel: 'Grade 11', strand: 'HUMSS', adviser: 'Adviser Torres', room: 'Room 302' },
-  { id: 'sec-c', name: 'Section C', gradeLevel: 'Grade 12', strand: 'STEM', adviser: 'Adviser Ramos', room: 'Room 401' },
-  { id: 'sec-d', name: 'Section D', gradeLevel: 'Grade 12', strand: 'ABM', adviser: 'Adviser Reyes', room: 'Room 402' }
+  { id: 'sec-a', name: 'Section A', gradeLevel: 'Grade 11', strand: 'STEM', adviser: '', room: '' },
+  { id: 'sec-b', name: 'Section B', gradeLevel: 'Grade 11', strand: 'HUMSS', adviser: '', room: '' },
+  { id: 'sec-c', name: 'Section C', gradeLevel: 'Grade 12', strand: 'STEM', adviser: '', room: '' },
+  { id: 'sec-d', name: 'Section D', gradeLevel: 'Grade 12', strand: 'ABM', adviser: '', room: '' }
 ];
 
 let managedSections = (() => {
   try {
     const saved = localStorage.getItem('scholaria_managed_sections');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(s => {
+          if (s.room && (s.room.startsWith('Room 30') || s.room.startsWith('Room 40'))) s.room = '';
+          if (s.adviser && s.adviser.startsWith('Adviser ')) s.adviser = '';
+        });
+        return parsed;
+      }
+    }
   } catch (e) {
     console.warn('Could not read saved sections:', e);
   }
@@ -61,79 +70,195 @@ function initialsFor(fullName) {
   return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?';
 }
 
-/* ── STRICT TEXTBOX VALIDATION UTILITIES (SYSTEM-WIDE) ── */
+/* ── STRICT TEXTBOX VALIDATION & DATABASE PROTECTION ENGINE (SYSTEM-WIDE) ── */
 
 /**
- * Strictly blocks numbers and special characters from being typed into name fields.
- * Only allows letters (a-z, A-Z), spaces, hyphens, and periods (for initials).
+ * Categorizes inputs across the system:
+ * 1. Search bars: Focus on main titles / variables, unrestricted character set, capped at 100 max chars.
+ * 2. Number-only inputs: Phone, capacity, LRN, age, percent, etc. Blocks non-digits and caps length (e.g. phone: 11, capacity: 4).
+ * 3. Letter-only inputs: First name, last name, middle initial, etc. Blocks numbers & symbols, caps name length.
+ * 4. General text / Textareas: Strictly caps length to prevent database overflow (e.g. typing a hundred 9s or huge spam strings).
  */
-function allowLettersOnly(e) {
-  if (e.ctrlKey || e.altKey || e.metaKey || ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End'].includes(e.key)) {
-    return true;
+
+function isSearchInputField(el) {
+  if (!el || !el.tagName) return false;
+  if (el.type === 'search') return true;
+  const idStr = (el.id || '').toLowerCase();
+  const classStr = (el.className || '').toLowerCase();
+  const placeholderStr = (el.placeholder || '').toLowerCase();
+  const nameStr = (el.name || '').toLowerCase();
+  return idStr.includes('search') || classStr.includes('search') || placeholderStr.includes('search') ||
+         idStr.includes('filter') || classStr.includes('filter') || placeholderStr.includes('filter') ||
+         nameStr.includes('search') || nameStr.includes('query');
+}
+
+function isNumberOnlyInputField(el) {
+  if (!el || !el.tagName) return false;
+  if (isSearchInputField(el)) return false;
+  if (el.type === 'number' || el.inputMode === 'numeric') return true;
+  if (el.dataset && el.dataset.type === 'number') return true;
+  const idStr = (el.id || '').toLowerCase();
+  const classStr = (el.className || '').toLowerCase();
+  const placeholderStr = (el.placeholder || '').toLowerCase();
+  const nameStr = (el.name || '').toLowerCase();
+  
+  const numKeywords = ['phone', 'mobile', 'contact', 'lrn', 'capacity', 'seats', 'score', 'points', 'age', 'year', 'qty', 'count', 'limit', 'duration', 'percent', 'pct'];
+  return numKeywords.some(kw => idStr.includes(kw) || classStr.includes(kw) || placeholderStr.includes(kw) || nameStr.includes(kw));
+}
+
+function isLetterOnlyInputField(el) {
+  if (!el || !el.tagName) return false;
+  if (isSearchInputField(el)) return false;
+  if (el.dataset && (el.dataset.type === 'alphanumeric' || el.dataset.type === 'text' || el.dataset.type === 'any')) return false;
+  if (el.dataset && el.dataset.type === 'letters') return true;
+  const idStr = (el.id || '').toLowerCase();
+  const classStr = (el.className || '').toLowerCase();
+  const placeholderStr = (el.placeholder || '').toLowerCase();
+  const nameStr = (el.name || '').toLowerCase();
+  
+  // Explicit exemptions: Room names, building names, sections, subjects, titles, codes allow numbers
+  if (idStr.includes('room') || idStr.includes('building') || idStr.includes('rfname') || idStr.includes('section') || idStr.includes('course') || idStr.includes('subject') || idStr.includes('title')) return false;
+  if (idStr.includes('username') || idStr.includes('user_id') || idStr.includes('school_id')) return false;
+  
+  // Specific letter-only keywords for person names
+  const letterKeywords = ['firstname', 'first_name', 'lastname', 'last_name', 'middlename', 'middle_name', 'middleinitial', 'middle_initial', 'initial', 'advisercustom', 'adviser_custom', 'author_name'];
+  const hasExactShortName = ['fname', 'lname', 'mname'].some(k => idStr === k || nameStr === k || idStr.endsWith('_' + k) || idStr.endsWith('-' + k));
+  return hasExactShortName || letterKeywords.some(kw => idStr.includes(kw) || classStr.includes(kw) || placeholderStr.includes(kw) || nameStr.includes(kw));
+}
+
+function getSafeMaxInputLimit(el) {
+  if (isSearchInputField(el)) return 100;
+  if (isNumberOnlyInputField(el)) {
+    const idStr = (el.id || '').toLowerCase();
+    const placeholderStr = (el.placeholder || '').toLowerCase();
+    if (idStr.includes('phone') || idStr.includes('mobile') || idStr.includes('contact') || placeholderStr.includes('09')) return 11;
+    if (idStr.includes('lrn')) return 12;
+    if (idStr.includes('age') || idStr.includes('percent') || idStr.includes('pct')) return 3;
+    if (idStr.includes('year')) return 4;
+    if (idStr.includes('capacity') || idStr.includes('seats')) return 4; // up to 9999
+    if (idStr.includes('score') || idStr.includes('points') || idStr.includes('duration')) return 5;
+    return 8; // generic number max 8 to prevent typing a hundred 9's
   }
-  // Block digits 0-9 and special characters
-  if (!/^[a-zA-Z\sñÑ\-.]+$/.test(e.key)) {
-    e.preventDefault();
-    return false;
+  if (isLetterOnlyInputField(el)) {
+    const idStr = (el.id || '').toLowerCase();
+    if (idStr.includes('initial') || idStr.includes('mi')) return 4;
+    return 40;
   }
-  return true;
+  if (el.tagName === 'TEXTAREA') return 1000;
+  const type = (el.type || 'text').toLowerCase();
+  if (type === 'email') return 80;
+  if (type === 'password') return 64;
+  return 100;
 }
 
 /**
- * Sanitizes input for name fields (oninput / onpaste).
- * Strips any numbers and special characters immediately.
+ * Universal Keydown Interceptor
  */
+function handleUniversalKeydown(e) {
+  const el = e.target;
+  if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return;
+  if (el.readOnly || el.disabled || el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button' || el.type === 'submit') return;
+
+  const isNav = e.ctrlKey || e.altKey || e.metaKey || ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End', 'Escape'].includes(e.key);
+
+  // 1. NUMBER-ONLY INPUTS: block any non-digit
+  if (isNumberOnlyInputField(el)) {
+    if (!isNav && !/^[0-9]$/.test(e.key)) {
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // 2. LETTER-ONLY INPUTS: block numbers and special symbols
+  if (isLetterOnlyInputField(el)) {
+    if (!isNav && !/^[a-zA-Z\sñÑ\-.]+$/.test(e.key)) {
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // 3. ENFORCE SAFE MAX LIMIT: avoid database overflow (e.g. holding key for hundred 9s)
+  if (!isNav && el.value) {
+    const max = getSafeMaxInputLimit(el);
+    const hasSelection = typeof el.selectionStart === 'number' && el.selectionEnd > el.selectionStart;
+    if (!hasSelection && el.value.length >= max) {
+      e.preventDefault();
+    }
+  }
+}
+
+/**
+ * Universal Input / Paste Sanitizer
+ */
+function handleUniversalSanitize(e) {
+  const el = e.target;
+  if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return;
+  if (el.readOnly || el.disabled || el.type === 'checkbox' || el.type === 'radio' || el.type === 'file') return;
+
+  const max = getSafeMaxInputLimit(el);
+  let val = el.value || '';
+
+  if (isNumberOnlyInputField(el)) {
+    const cleaned = val.replace(/\D/g, '');
+    val = cleaned.slice(0, max);
+    if (el.value !== val) el.value = val;
+    return;
+  }
+
+  if (isLetterOnlyInputField(el)) {
+    const cleaned = val.replace(/[^a-zA-Z\sñÑ\-.]/g, '');
+    val = cleaned.slice(0, max);
+    if (el.value !== val) el.value = val;
+    return;
+  }
+
+  if (val.length > max) {
+    el.value = val.slice(0, max);
+  }
+}
+
+// Attach universal listeners globally
+if (typeof document !== 'undefined') {
+  document.addEventListener('keydown', handleUniversalKeydown, true);
+  document.addEventListener('input', handleUniversalSanitize, true);
+  document.addEventListener('paste', () => setTimeout(() => handleUniversalSanitize({ target: document.activeElement }), 0), true);
+}
+
+/**
+ * Legacy standalone helpers for direct inline attributes
+ */
+function allowLettersOnly(e) {
+  if (e.ctrlKey || e.altKey || e.metaKey || ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End'].includes(e.key)) return true;
+  if (!/^[a-zA-Z\sñÑ\-.]+$/.test(e.key)) { e.preventDefault(); return false; }
+  return true;
+}
+
 function sanitizeNameInput(el) {
   if (!el) return;
   const original = el.value;
   const cleaned = original.replace(/[^a-zA-Z\sñÑ\-.]/g, '');
-  if (original !== cleaned) {
-    el.value = cleaned;
-  }
+  if (original !== cleaned) el.value = cleaned;
 }
 
-/**
- * Strictly allows ONLY digits (0-9) to be typed into phone number textboxes.
- */
 function allowDigitsOnly(e) {
-  if (e.ctrlKey || e.altKey || e.metaKey || ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End'].includes(e.key)) {
-    return true;
-  }
-  if (!/^[0-9]$/.test(e.key)) {
-    e.preventDefault();
-    return false;
-  }
+  if (e.ctrlKey || e.altKey || e.metaKey || ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End'].includes(e.key)) return true;
+  if (!/^[0-9]$/.test(e.key)) { e.preventDefault(); return false; }
   return true;
 }
 
-/**
- * Sanitizes phone input textboxes (oninput / onpaste).
- * Strictly allows numbers only and enforces maximum of 11 characters.
- */
 function sanitizePhoneInput(el) {
   if (!el) return;
   let digits = el.value.replace(/\D/g, '');
-  if (digits.length > 11) {
-    digits = digits.slice(0, 11);
-  }
-  if (el.value !== digits) {
-    el.value = digits;
-  }
+  if (digits.length > 11) digits = digits.slice(0, 11);
+  if (el.value !== digits) el.value = digits;
 }
 
-/**
- * Strictly validates Philippine mobile number format:
- * Must be exactly 11 digits starting with "09" (e.g., 09123456789).
- */
 function isValidPhilippineMobile(num) {
   if (!num) return false;
   const clean = String(num).trim().replace(/\D/g, '');
   return /^09\d{9}$/.test(clean);
 }
 
-/**
- * Real-time validator helper for phone textboxes with visual error hint.
- */
 function validatePhoneField(el, errId) {
   if (!el) return true;
   const val = (el.value || '').trim();
@@ -227,6 +352,7 @@ function iconChart()   { return `<svg viewBox="0 0 24 24" fill="none" stroke="cu
 function iconRecord()  { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`; }
 function iconApproval(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`; }
 function iconSections(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`; }
+function iconRooms()   { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M3 7v14M21 7v14M6 21V10a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v11M10 14h4M9 21v-4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4"/></svg>`; }
 function iconNotif()   { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>`; }
 function iconAnnouncement() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><line x1="9" y1="10" x2="15" y2="10"/></svg>`; }
 function iconUsers()   { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`; }

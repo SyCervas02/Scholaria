@@ -939,7 +939,7 @@
         <img src="assets/logo.png" alt="Haven of Wisdom Academy" class="footer-brand-logo">
         <div>
           <div class="footer-brand-title">Haven Of Wisdom Academy</div>
-          <div class="footer-brand-desc">Scholaria E-Learning Portal Â· Alapan, Imus, Cavite</div>
+          <div class="footer-brand-desc">Scholaria E-Learning Portal &middot; Alapan, Imus, Cavite</div>
         </div>
       </div>
       <div class="footer-meta">
@@ -1071,7 +1071,7 @@
                 <div class="field">
                     <label>6-Digit Authenticator Code</label>
                     <div class="input-wrap">
-                        <input type="text" id="totp-code" class="code-field" placeholder="â€¢ â€¢ â€¢ â€¢ â€¢ â€¢" maxlength="6" inputmode="numeric" onkeydown="if(event.key==='Enter') verifyTotpCode()">
+                        <input type="text" id="totp-code" class="code-field" placeholder="&bull; &bull; &bull; &bull; &bull; &bull;" maxlength="6" inputmode="numeric" onkeydown="if(event.key==='Enter') verifyTotpCode()">
                     </div>
                     <div class="field-error" id="totp-code-err"></div>
                 </div>
@@ -1355,7 +1355,7 @@
 
         const btn = document.getElementById('totpSubmitBtn');
         btn.disabled = true;
-        btn.textContent = 'Verifyingâ€¦';
+        btn.textContent = 'Verifying...';
 
         try {
             const { data, error } = await db.auth.mfa.challengeAndVerify({
@@ -1385,7 +1385,7 @@
             return;
         }
         const links = document.querySelectorAll('.demoLink');
-        links.forEach(l => { l.textContent = 'Loading demoâ€¦'; l.classList.add('disabled'); });
+        links.forEach(l => { l.textContent = 'Loading demo...'; l.classList.add('disabled'); });
         try {
             const res = await fetch(`${API_BASE}/api/auth/demo-login`, {
                 method: 'POST',
@@ -1397,7 +1397,7 @@
                 return;
             }
             if (res.status === 429) {
-                showToast('Too many requests â€” please wait a few seconds', 'error');
+                showToast('Too many requests &mdash; please wait a few seconds', 'error');
                 return;
             }
             if (!res.ok) { showToast('Demo login is temporarily unavailable', 'error'); return; }
@@ -1416,6 +1416,9 @@
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('deactivated') === '1') {
             showToast('This account has been deactivated. Permissions revoked by administration.', 'error');
+        }
+        if (urlParams.get('afk') === '1') {
+            showToast('Session expired: You have been logged out due to 10 minutes of inactivity.', 'error');
         }
         const { data } = await db.auth.getSession();
         if (data?.session) {

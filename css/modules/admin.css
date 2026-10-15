@@ -824,4 +824,512 @@ table.au-format-table tr:nth-child(even) td.req-cell { background: #fef3c7; }
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ROOM MANAGEMENT & TIMETABLE SCHEDULING STYLES
+   ═══════════════════════════════════════════════════════════════ */
+
+.rooms-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.rooms-stat-card {
+  background: #ffffff;
+  border: 1.5px solid var(--blue-light);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  transition: transform 0.15s ease;
+}
+
+.rooms-stat-card:hover {
+  transform: translateY(-1px);
+}
+
+.rsc-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rsc-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.rsc-num {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.rsc-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* ── DRAGGABLE SECTIONS TRAY (AESTHETIC HORIZONTAL SCROLLBAR) ── */
+.sec-tray-wrapper {
+  background: #ffffff;
+  border: 1.5px solid var(--blue-light);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.sec-tray-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sec-tray-scroll {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sec-tray-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.sec-tray-scroll::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-radius: 4px;
+}
+
+.sec-tray-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.sec-tray-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.sec-drag-pill {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: grab;
+  user-select: none;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.sec-drag-pill:hover {
+  border-color: var(--blue);
+  background: #eff6ff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(37,99,235,0.08);
+}
+
+.sec-drag-pill:active {
+  cursor: grabbing;
+}
+
+.sdp-handle {
+  color: #94a3b8;
+  font-size: 13px;
+  letter-spacing: -2px;
+  font-weight: 800;
+}
+
+.sdp-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.sdp-info strong {
+  font-size: 12.5px;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.sdp-info span {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.sdp-assign-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sdp-assign-btn:hover {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+/* ── ROOMS CARDS GRID ── */
+.rooms-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.room-card {
+  background: #ffffff;
+  border: 1.5px solid var(--blue-light);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  transition: all 0.2s ease;
+}
+
+.room-card:hover {
+  border-color: var(--blue-mid);
+  box-shadow: 0 6px 18px rgba(37,99,235,.07);
+}
+
+.rc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rc-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.rc-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.rc-badge-type {
+  font-size: 11px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  padding: 2px 7px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.rc-location {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rc-capacity-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1e40af;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+/* ── DROPZONE ── */
+.rc-dropzone {
+  border: 1.5px dashed #cbd5e1;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 8px;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  transition: all 0.15s ease;
+}
+
+.rc-dropzone.dragover {
+  border-color: var(--blue);
+  background: #eff6ff;
+  color: var(--blue);
+  transform: scale(1.01);
+}
+
+/* ── SCHEDULES TIMELINE (AESTHETIC VERTICAL SCROLLBAR) ── */
+.rc-schedules-wrap {
+  border-top: 1px dashed var(--blue-light);
+  padding-top: 10px;
+  margin-bottom: 14px;
+}
+
+.rc-sched-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.rc-sched-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.rc-status-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+
+.rc-status-pill.available {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.rc-status-pill.occupied {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.rc-sched-list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.rc-sched-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.rc-sched-list::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.rc-sched-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.rc-sched-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.rc-sched-empty {
+  padding: 16px 8px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.rc-sched-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rc-sched-time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rc-time-tag {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.2px;
+}
+
+.rc-days-tag {
+  font-size: 10.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.rc-sched-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.rc-sec-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rc-subj-name {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rc-sched-del {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.rc-sched-del:hover {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.rc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--blue-light);
+  padding-top: 12px;
+}
+
+.rc-btn-assign {
+  flex: 1;
+  background: var(--blue);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.rc-btn-assign:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* ── CONFLICT ALERT BOX ── */
+.assign-conflict-alert {
+  background: #fff1f2;
+  border: 1.5px solid #fecdd3;
+  color: #9f1239;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+/* ── FLEXIBLE DAY SCHEDULE SELECTOR BUTTONS ── */
+.asf-preset-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.asf-preset-btn:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.asf-day-btn {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.asf-day-btn:hover:not(.active) {
+  background: #e2e8f0 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+.asf-day-btn.active:hover {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+}
+
+
 

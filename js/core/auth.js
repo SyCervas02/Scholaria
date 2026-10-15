@@ -49,6 +49,37 @@ async function guardSessionAndInit() {
     db.from('users').update({ last_active_at: new Date().toISOString() }).eq('id', profile.id).then();
   } catch (_) {}
   initDashboardShell();
+  startAfkSessionTracker();
+}
+
+/* ── UNIVERSAL 10-MINUTE AFK SESSION EXPIRATION ── */
+const AFK_TIMEOUT_MS = 10 * 60 * 1000; // Exactly 10 minutes (600,000 ms)
+let afkSessionTimer = null;
+
+function resetAfkTimer() {
+  if (afkSessionTimer) clearTimeout(afkSessionTimer);
+  afkSessionTimer = setTimeout(triggerAfkSessionTimeout, AFK_TIMEOUT_MS);
+}
+
+async function triggerAfkSessionTimeout() {
+  try {
+    if (typeof resetChatState === 'function') resetChatState();
+    if (typeof db !== 'undefined' && db && db.auth) {
+      await db.auth.signOut();
+    }
+  } catch (_) {}
+
+  const isAdm = (typeof ROLE !== 'undefined' && ROLE === 'admin') || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role === 'admin');
+  const targetLogin = isAdm ? 'admin-login.html?afk=1' : 'login.html?afk=1';
+  window.location.href = targetLogin;
+}
+
+function startAfkSessionTracker() {
+  const activityEvents = ['mousemove', 'mousedown', 'keydown', 'keypress', 'touchstart', 'scroll', 'click', 'wheel'];
+  activityEvents.forEach(evt => {
+    window.addEventListener(evt, resetAfkTimer, { passive: true });
+  });
+  resetAfkTimer();
 }
 
 guardSessionAndInit();

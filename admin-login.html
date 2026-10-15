@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Haven Of Wisdom Academy â€“ Admin Portal</title>
+    <title>Haven Of Wisdom Academy &mdash; Admin Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -796,7 +796,7 @@
         <img src="assets/logo.png" alt="Haven of Wisdom Academy Logo" class="portal-brand-logo">
         <div class="portal-brand-text">
           <span class="portal-brand-title">Haven Of Wisdom Academy</span>
-          <span class="portal-brand-sub">Scholaria â€¢ Admin Portal</span>
+          <span class="portal-brand-sub">Scholaria &bull; Admin Portal</span>
         </div>
       </a>
       <div class="portal-nav-right">
@@ -885,7 +885,7 @@
         <img src="assets/logo.png" alt="Haven of Wisdom Academy" class="footer-brand-logo">
         <div>
           <div class="footer-brand-title">Haven Of Wisdom Academy</div>
-          <div class="footer-brand-desc">Scholaria E-Learning Portal Â· Administrative Office Â· Alapan, Imus, Cavite</div>
+          <div class="footer-brand-desc">Scholaria E-Learning Portal &middot; Administrative Office &middot; Alapan, Imus, Cavite</div>
         </div>
       </div>
       <div class="footer-meta">
@@ -916,7 +916,7 @@
                     >
                     <div class="logo-text">
                         <h1>Haven Of Wisdom</h1>
-                        <span>Academy Â· Admin Portal</span>
+                        <span>Academy &bull; Admin Portal</span>
                     </div>
                 </div>
                 <button class="back-pill" id="backBtn" onclick="showAdminLoginView()" style="display:none;">
@@ -1185,7 +1185,7 @@
 
     async function handleDemoLogin() {
         const links = document.querySelectorAll('.demoLink');
-        links.forEach(l => { l.textContent = 'Loading demoâ€¦'; l.classList.add('disabled'); });
+        links.forEach(l => { l.textContent = 'Loading demo...'; l.classList.add('disabled'); });
         try {
             const res = await fetch(`${API_BASE}/api/auth/demo-login`, {
                 method: 'POST',
@@ -1197,7 +1197,7 @@
                 return;
             }
             if (res.status === 429) {
-                showToast('Too many requests â€” please wait a few seconds', 'error');
+                showToast('Too many requests &mdash; please wait a few seconds', 'error');
                 return;
             }
             if (!res.ok) { showToast('Demo login is temporarily unavailable', 'error'); return; }
@@ -1216,6 +1216,9 @@
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('deactivated') === '1') {
             showToast('This administrator account has been deactivated. Permissions revoked.', 'error');
+        }
+        if (urlParams.get('afk') === '1') {
+            showToast('Session expired: You have been logged out due to 10 minutes of inactivity.', 'error');
         }
         const { data } = await db.auth.getSession();
         if (data?.session) {

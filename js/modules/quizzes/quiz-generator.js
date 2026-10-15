@@ -673,13 +673,13 @@ function handleFileInput(input) {
   const selectedFiles = Array.from(input.files || []);
   if (!selectedFiles.length) return;
 
-  const validExts = ['.pdf', '.docx', '.txt'];
+  const validExts = ['.pdf', '.docx', '.pptx', '.txt', '.png', '.jpg', '.jpeg', '.webp'];
   let currentFiles = [...(quizGen.files || [])];
 
   for (const file of selectedFiles) {
     const ext = '.' + file.name.split('.').pop().toLowerCase();
     if (!validExts.includes(ext)) {
-      showToast(`Skipped "${file.name}" — only PDF, DOCX, and TXT files are supported`, 'warning');
+      showToast(`Skipped "${file.name}" — supported: PDF, DOCX, PPTX, TXT, and Images`, 'warning');
       continue;
     }
     // Prevent duplicate files
@@ -743,6 +743,23 @@ async function extractAllFilesText() {
   }
 }
 
+function getQuizFileBadge(fileName) {
+  const ext = (fileName || '').split('.').pop().toLowerCase();
+  if (ext === 'pdf') {
+    return `<span style="background:#fee2e2;color:#dc2626;font-size:10px;font-weight:800;padding:3px 7px;border-radius:6px;border:1px solid #fecaca;letter-spacing:0.5px;">PDF</span>`;
+  }
+  if (ext === 'docx' || ext === 'doc') {
+    return `<span style="background:#e0e7ff;color:#4338ca;font-size:10px;font-weight:800;padding:3px 7px;border-radius:6px;border:1px solid #c7d2fe;letter-spacing:0.5px;">DOCX</span>`;
+  }
+  if (ext === 'pptx' || ext === 'ppt') {
+    return `<span style="background:#ffedd5;color:#c2410c;font-size:10px;font-weight:800;padding:3px 7px;border-radius:6px;border:1px solid #fed7aa;letter-spacing:0.5px;">PPTX</span>`;
+  }
+  if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
+    return `<span style="background:#ecfdf5;color:#047857;font-size:10px;font-weight:800;padding:3px 7px;border-radius:6px;border:1px solid #a7f3d0;letter-spacing:0.5px;">IMG</span>`;
+  }
+  return `<span style="background:#f1f5f9;color:#475569;font-size:10px;font-weight:800;padding:3px 7px;border-radius:6px;border:1px solid #cbd5e1;letter-spacing:0.5px;">TXT</span>`;
+}
+
 function extractSingleFileText(file, ext, maxChars = 20000) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -786,6 +803,98 @@ function extractSingleFileText(file, ext, maxChars = 20000) {
       };
       reader.onerror = reject;
       reader.readAsArrayBuffer(file);
+    } else if (ext === '.pptx') {
+      reader.onload = async () => {
+        try {
+          if (typeof JSZip !== 'undefined') {
+            const zip = await JSZip.loadAsync(reader.result);
+            const slideKeys = Object.keys(zip.files)
+              .filter(k => /^ppt\/slides\/slide\d+\.xml$/i.test(k))
+              .sort((a, b) => {
+                const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+                const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+                return numA - numB;
+              });
+
+            let text = '';
+            for (let i = 0; i < slideKeys.length; i++) {
+              const slideXml = await zip.files[slideKeys[i]].async('text');
+              const matches = slideXml.match(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/gi);
+              let slideText = '';
+              if (matches) {
+                slideText = matches
+                  .map(m => m.replace(/<[^>]+>/g, ''))
+                  .map(t => t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'"))
+                  .join(' ')
+                  .trim();
+              }
+              if (slideText) {
+                text += `[Document: ${file.name} | Slide: ${i + 1}]\n${slideText}\n\n`;
+              }
+              if (text.length > maxChars) break;
+            }
+            resolve(text || `[Document: ${file.name} | Slide: 1]\n${file.name}`);
+          } else {
+            resolve(`[Document: ${file.name} | Slide: 1]\n${file.name}`);
+          }
+        } catch (e) {
+          console.warn('PPTX parsing error:', e);
+          reject(e);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    } else if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
+      reader.onload = async () => {
+        try {
+          const dataUrl = reader.result;
+          let extractedText = '';
+
+          // 1. Try Gemini Vision OCR via server
+          try {
+            const res = await fetch('/api/quiz/extract-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                imageBase64: dataUrl,
+                mimeType: file.type || 'image/jpeg',
+                fileName: file.name
+              })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.text) {
+                extractedText = data.text.trim();
+              }
+            }
+          } catch (netErr) {
+            console.warn('[ImageExtract] Server vision failed/skipped:', netErr);
+          }
+
+          // 2. Client-side Tesseract.js OCR fallback
+          if (!extractedText && typeof Tesseract !== 'undefined') {
+            try {
+              const ocrRes = await Tesseract.recognize(dataUrl, 'eng');
+              if (ocrRes && ocrRes.data && ocrRes.data.text) {
+                extractedText = ocrRes.data.text.trim();
+              }
+            } catch (tessErr) {
+              console.warn('[ImageExtract] Tesseract fallback failed:', tessErr);
+            }
+          }
+
+          if (extractedText) {
+            resolve(`[Document: ${file.name} | Image: 1]\n${extractedText.slice(0, maxChars)}`);
+          } else {
+            resolve(`[Document: ${file.name} | Image: 1]\n${file.name}`);
+          }
+        } catch (e) {
+          console.warn('Image extraction error:', e);
+          reject(e);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     } else {
       resolve('');
     }
@@ -2780,15 +2889,15 @@ function renderQuizModal() {
         <div class="gen-field">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
             <label style="margin-bottom:0;">Source Handouts / Modules <span style="color:#ef4444;">*</span></label>
-            <span style="font-size:11px;font-weight:700;color:var(--text-muted);">PDF, DOCX, TXT · Multiple files supported · Max 50MB total</span>
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);">PDF, DOCX, PPTX, TXT, Images · Multiple files supported · Max 50MB total</span>
           </div>
 
-          <label class="dropzone" for="quizFileInput">
+          <label class="dropzone" for="quizFileInput" ondragover="event.preventDefault(); this.style.borderColor='var(--blue)';" ondragleave="this.style.borderColor='';" ondrop="event.preventDefault(); this.style.borderColor=''; handleFileInput(event.dataTransfer);">
             ${iconUpload()}
-            <div class="dz-title">Click to upload or drag &amp; drop handouts &amp; modules</div>
-            <div class="dz-sub">Select multiple files at once (PDF, DOCX, TXT · Combined limit 50MB only)</div>
+            <div class="dz-title">Click to upload or drag &amp; drop handouts, slides &amp; notes</div>
+            <div class="dz-sub">Supports PDF, DOCX, PPTX (PowerPoint), TXT, and Images (PNG, JPG, WEBP) · Combined limit 50MB</div>
           </label>
-          <input type="file" id="quizFileInput" multiple accept=".pdf,.docx,.txt" style="display:none" onchange="handleFileInput(this)">
+          <input type="file" id="quizFileInput" multiple accept=".pdf,.docx,.pptx,.txt,.png,.jpg,.jpeg,.webp" style="display:none" onchange="handleFileInput(this)">
 
           <!-- Live Capacity Tracker -->
           <div class="qz-upload-capacity-tracker">
@@ -2807,12 +2916,12 @@ function renderQuizModal() {
               return `
               <div class="qz-file-item">
                 <div class="qz-file-info">
-                  <div class="qz-file-icon">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <div class="qz-file-icon" style="display:flex;align-items:center;justify-content:center;background:none;width:auto;height:auto;">
+                    ${getQuizFileBadge(f.name)}
                   </div>
                   <div class="qz-file-details">
                     <h5>${escHtml(f.name)}</h5>
-                    <span>${fMb} MB · Handout ready for citation</span>
+                    <span>${fMb} MB · Ready for assessment &amp; citation</span>
                   </div>
                 </div>
                 <button type="button" class="fc-remove" onclick="removeFile('${escHtml(f.name).replace(/'/g, "\\'")}')" title="Remove this handout">
