@@ -1539,7 +1539,8 @@ function applyTeacherClassFilter() {
   const emptyState = document.getElementById('teacherClassesEmptyState');
 
   const activeGrade = (window.teacherGradeFilter || 'all').toLowerCase().replace(/\s+/g, '');
-  const activeStrand = (window.teacherStrandFilter || 'all').toLowerCase();
+  const strandSelect = document.getElementById('teacherStrandSelect');
+  const activeStrand = strandSelect ? (window.teacherStrandFilter || 'all').toLowerCase() : 'all';
   const activeSection = (window.teacherSectionFilter || 'all').toLowerCase();
   const activeTrack = (window.teacherTrackFilter || 'all').toLowerCase();
   const searchQuery = (window.teacherClassSearchQuery || '').toLowerCase().trim();
@@ -1906,6 +1907,10 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
   const coreCount = classCards.filter(c => c.track === 'Core').length;
   const appliedCount = classCards.filter(c => c.track === 'Applied').length;
   const isAdmin = (activeRole === 'admin');
+  if (!isAdmin) {
+    teacherStrandFilter = 'all';
+    window.teacherStrandFilter = 'all';
+  }
   const adminMaterials = materialsData.filter(m => {
     if (!m) return false;
     if (CURRENT_PROFILE && m.uploaded_by && m.uploaded_by === CURRENT_PROFILE.id) return true;
@@ -1984,7 +1989,8 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
         <option value="Grade 12" ${teacherGradeFilter === 'Grade 12' ? 'selected' : ''}>Grade 12</option>
       </select>
 
-      <!-- STRAND DROPDOWN -->
+      <!-- STRAND DROPDOWN (Admin only - teachers already filter by handled Section A/B) -->
+      ${isAdmin ? `
       <select class="user-filter-select" id="teacherStrandSelect" onchange="setTeacherStrandFilter(this.value)" aria-label="Filter by Strand">
         <option value="all" ${(!teacherStrandFilter || teacherStrandFilter === 'all') ? 'selected' : ''}>All Strands</option>
         <option value="STEM" ${teacherStrandFilter === 'STEM' ? 'selected' : ''}>STEM</option>
@@ -1992,6 +1998,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
         <option value="ABM" ${teacherStrandFilter === 'ABM' ? 'selected' : ''}>ABM</option>
         <option value="TVL" ${teacherStrandFilter === 'TVL' ? 'selected' : ''}>TVL</option>
       </select>
+      ` : ''}
 
       <!-- SECTION DROPDOWN -->
       <select class="user-filter-select" id="teacherSectionSelect" onchange="setTeacherSectionFilter(this.value)" aria-label="Filter by Section">
