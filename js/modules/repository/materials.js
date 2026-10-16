@@ -1232,97 +1232,172 @@ window.getSectionStrand = getSectionStrand;
 
 let teacherStrandFilter = 'all';
 window.teacherStrandFilter = 'all';
+let teacherSectionFilter = 'all';
+window.teacherSectionFilter = 'all';
+let teacherTrackFilter = 'all';
+window.teacherTrackFilter = 'all';
+let teacherClassFilter = 'all';
+window.teacherClassFilter = 'all';
+let teacherClassSearchQuery = '';
+window.teacherClassSearchQuery = '';
 
 function setTeacherStrandFilter(strandVal) {
-  teacherStrandFilter = strandVal;
-  window.teacherStrandFilter = strandVal;
-  teacherClassFilter = 'all';
-  window.teacherClassFilter = 'all';
-
-  document.querySelectorAll('#teacherStrandChipsBar .strand-chip').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.strand.toLowerCase() === strandVal.toLowerCase());
-  });
-
-  document.querySelectorAll('#teacherClassChipsBar .subject-chip').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.filter === 'all');
-  });
-
-  const hint = document.getElementById('strandActiveHint');
-  if (hint) {
-    hint.innerHTML = (strandVal !== 'all')
-      ? 'Filtering strictly to <strong style="color:#0284c7;">' + escHtml(strandVal) + '</strong> curriculum &amp; sections'
-      : 'Showing all curriculum tracks';
-  }
-
+  teacherStrandFilter = strandVal || 'all';
+  window.teacherStrandFilter = teacherStrandFilter;
+  teacherSectionFilter = 'all';
+  window.teacherSectionFilter = 'all';
+  const secSelect = document.getElementById('teacherSectionSelect');
+  if (secSelect) secSelect.value = 'all';
   applyTeacherClassFilter();
 }
 window.setTeacherStrandFilter = setTeacherStrandFilter;
 
-let teacherClassFilter = 'all';
-window.teacherClassFilter = 'all';
-let teacherClassSearchQuery = '';
-
-function setTeacherClassFilter(filterVal) {
-  teacherClassFilter = filterVal;
-  document.querySelectorAll('#teacherClassChipsBar .subject-chip').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.filter === filterVal);
-  });
+function setTeacherSectionFilter(secVal) {
+  teacherSectionFilter = secVal || 'all';
+  window.teacherSectionFilter = teacherSectionFilter;
   applyTeacherClassFilter();
 }
+window.setTeacherSectionFilter = setTeacherSectionFilter;
+
+function setTeacherTrackFilter(trackVal) {
+  teacherTrackFilter = trackVal || 'all';
+  window.teacherTrackFilter = teacherTrackFilter;
+  applyTeacherClassFilter();
+}
+window.setTeacherTrackFilter = setTeacherTrackFilter;
+
+function setTeacherClassFilter(filterVal) {
+  if (!filterVal || filterVal === 'all') {
+    resetAllMaterialsFilters();
+    return;
+  }
+  if (filterVal.toLowerCase().startsWith('section')) {
+    setTeacherSectionFilter(filterVal);
+  } else {
+    setTeacherTrackFilter(filterVal);
+  }
+}
+window.setTeacherClassFilter = setTeacherClassFilter;
+
+function resetAllMaterialsFilters() {
+  teacherStrandFilter = 'all';
+  window.teacherStrandFilter = 'all';
+  teacherSectionFilter = 'all';
+  window.teacherSectionFilter = 'all';
+  teacherTrackFilter = 'all';
+  window.teacherTrackFilter = 'all';
+  teacherClassFilter = 'all';
+  window.teacherClassFilter = 'all';
+  teacherClassSearchQuery = '';
+  window.teacherClassSearchQuery = '';
+
+  const strandSelect = document.getElementById('teacherStrandSelect');
+  if (strandSelect) strandSelect.value = 'all';
+  const secSelect = document.getElementById('teacherSectionSelect');
+  if (secSelect) secSelect.value = 'all';
+  const trackSelect = document.getElementById('teacherTrackSelect');
+  if (trackSelect) trackSelect.value = 'all';
+  const searchInp = document.getElementById('teacherClassSearchInput');
+  if (searchInp) searchInp.value = '';
+  const clearBtn = document.getElementById('teacherClassSearchClearBtn');
+  if (clearBtn) clearBtn.style.display = 'none';
+
+  applyTeacherClassFilter();
+}
+window.resetAllMaterialsFilters = resetAllMaterialsFilters;
 
 function setTeacherClassSearch(query) {
   teacherClassSearchQuery = (query || '').toLowerCase().trim();
+  window.teacherClassSearchQuery = teacherClassSearchQuery;
   const clearBtn = document.getElementById('teacherClassSearchClearBtn');
   if (clearBtn) clearBtn.style.display = teacherClassSearchQuery ? 'inline-block' : 'none';
   applyTeacherClassFilter();
 }
+window.setTeacherClassSearch = setTeacherClassSearch;
 
 function clearTeacherClassSearch() {
   const inp = document.getElementById('teacherClassSearchInput');
   if (inp) { inp.value = ''; inp.focus(); }
   setTeacherClassSearch('');
 }
-
-window.setTeacherClassFilter = setTeacherClassFilter;
-window.setTeacherClassSearch = setTeacherClassSearch;
 window.clearTeacherClassSearch = clearTeacherClassSearch;
-window.applyTeacherClassFilter = applyTeacherClassFilter;
-window.getTeacherHandledClassCards = getTeacherHandledClassCards;
-window.renderTeacherSubjectsHubHTML = renderTeacherSubjectsHubHTML;
-window.renderStudentSubjectsGridHTML = renderStudentSubjectsGridHTML;
-window.renderStudentMaterialsHubHTML = renderStudentMaterialsHubHTML;
+
+function updateSectionDropdownOptions(activeStrand) {
+  const select = document.getElementById('teacherSectionSelect');
+  if (!select) return;
+
+  const currentVal = (window.teacherSectionFilter || 'all').toLowerCase();
+  const options = select.querySelectorAll('option[data-section-strand]');
+  let isCurrentStillValid = (currentVal === 'all');
+
+  options.forEach(opt => {
+    const optStrand = (opt.dataset.sectionStrand || '').toLowerCase();
+    if (activeStrand === 'all' || optStrand === activeStrand || optStrand === 'all') {
+      opt.style.display = '';
+      opt.disabled = false;
+      if (opt.value.toLowerCase() === currentVal) isCurrentStillValid = true;
+    } else {
+      opt.style.display = 'none';
+      opt.disabled = true;
+    }
+  });
+
+  if (!isCurrentStillValid) {
+    select.value = 'all';
+    window.teacherSectionFilter = 'all';
+  } else {
+    select.value = window.teacherSectionFilter;
+  }
+}
+window.updateSectionDropdownOptions = updateSectionDropdownOptions;
 
 function applyTeacherClassFilter() {
   const grid = document.getElementById('teacherClassesFolderGrid');
   if (!grid) return;
   const cards = grid.querySelectorAll('.subject-folder-card');
   const emptyState = document.getElementById('teacherClassesEmptyState');
+
+  const activeStrand = (window.teacherStrandFilter || 'all').toLowerCase();
+  const activeSection = (window.teacherSectionFilter || 'all').toLowerCase();
+  const activeTrack = (window.teacherTrackFilter || 'all').toLowerCase();
+  const searchQuery = (window.teacherClassSearchQuery || '').toLowerCase().trim();
+
   let visibleCount = 0;
 
   cards.forEach(card => {
     const cardSection = (card.dataset.section || '').toLowerCase();
     const cardTrack = (card.dataset.track || '').toLowerCase();
     const cardSearch = (card.dataset.search || '').toLowerCase();
+    const cardStrand = (card.dataset.strand || '').toLowerCase();
+    const cardSecStrand = (card.dataset.sectionStrand || '').toLowerCase();
 
-    let matchesFilter = true;
-    if (teacherClassFilter !== 'all') {
-      const f = teacherClassFilter.toLowerCase();
-      if (f.startsWith('section')) {
-        matchesFilter = (cardSection === f);
-      } else {
-        matchesFilter = (cardTrack === f);
-      }
-      if (f === 'my-materials') {
-        matchesFilter = (card.dataset.hasAdminMaterials === 'true');
-      }
+    // 1. STRAND MATCH: When STEM is picked, only STEM subjects and STEM sections show!
+    let matchesStrand = true;
+    if (activeStrand !== 'all') {
+      const isSecMatch = (cardSecStrand === activeStrand || cardSecStrand === 'all');
+      const isCourseMatch = (cardStrand === activeStrand || cardTrack === 'core' || cardTrack === 'applied' || cardStrand === 'all');
+      matchesStrand = isSecMatch && isCourseMatch;
     }
 
+    // 2. SECTION MATCH:
+    let matchesSection = true;
+    if (activeSection !== 'all') {
+      matchesSection = (cardSection === activeSection);
+    }
+
+    // 3. TRACK MATCH (Specialized, Core, Applied):
+    let matchesTrack = true;
+    if (activeTrack !== 'all') {
+      matchesTrack = (cardTrack === activeTrack);
+    }
+
+    // 4. SEARCH MATCH:
     let matchesSearch = true;
-    if (teacherClassSearchQuery) {
-      matchesSearch = cardSearch.includes(teacherClassSearchQuery);
+    if (searchQuery) {
+      matchesSearch = cardSearch.includes(searchQuery);
     }
 
-    if (matchesFilter && matchesSearch) {
+    if (matchesStrand && matchesSection && matchesTrack && matchesSearch) {
       card.style.display = 'flex';
       visibleCount++;
     } else {
@@ -1330,15 +1405,20 @@ function applyTeacherClassFilter() {
     }
   });
 
-  const adminPanel = document.getElementById('adminMyMaterialsGridPanel');
-  if (adminPanel) {
-    adminPanel.style.display = (teacherClassFilter === 'my-materials') ? 'block' : 'none';
+  // Dynamically update section dropdown to hide non-matching sections
+  updateSectionDropdownOptions(activeStrand);
+
+  // Live count badge
+  const countBadge = document.getElementById('activeClassesCountBadge');
+  if (countBadge) {
+    countBadge.textContent = `${visibleCount} ${visibleCount === 1 ? 'Class' : 'Classes'}`;
   }
 
   if (emptyState) {
     emptyState.style.display = (visibleCount === 0) ? 'flex' : 'none';
   }
 }
+window.applyTeacherClassFilter = applyTeacherClassFilter;
 
 function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'undefined' ? ROLE : 'teacher')) {
   const classCards = [];
@@ -1663,33 +1743,63 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
     <!-- 2. INSTITUTIONAL APPROVED HANDOUTS REPOSITORY (USER MANAGEMENT STYLE) -->
     ${isAdmin ? renderAdminApprovedHandoutsTableHTML() : ''}
 
-    <!-- 3. SECTION & TRACK FILTERS + LIVE SEARCH -->
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
-      <div class="subject-chips-bar" id="teacherClassChipsBar" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <button class="subject-chip ${(!teacherClassFilter || teacherClassFilter === 'all') ? 'active' : ''}" data-filter="all" onclick="setTeacherClassFilter('all')" style="cursor:pointer;">
-          ${isAdmin ? 'All Classes' : 'All Handled Classes'} <span class="sc-badge">${classCards.length}</span>
-        </button>
-        
-        ${distinctSections.map(sec => {
-          const secMatches = classCards.filter(c => c.assignedSection.toLowerCase() === sec.toLowerCase()).length;
-          return `
-            <button class="subject-chip ${teacherClassFilter.toLowerCase() === sec.toLowerCase() ? 'active' : ''}" data-filter="${escHtml(sec)}" onclick="setTeacherClassFilter('${escHtml(sec)}')" style="cursor:pointer;">
-              ${escHtml(sec)} <span class="sc-badge">${secMatches}</span>
-            </button>
-          `;
-        }).join('')}
-        <button class="subject-chip ${teacherClassFilter === 'Specialized' ? 'active' : ''}" data-filter="Specialized" onclick="setTeacherClassFilter('Specialized')" style="cursor:pointer;">
-          Specialized <span class="sc-badge">${specializedCount}</span>
-        </button>
-        <button class="subject-chip ${teacherClassFilter === 'Core' ? 'active' : ''}" data-filter="Core" onclick="setTeacherClassFilter('Core')" style="cursor:pointer;">
-          Core <span class="sc-badge">${coreCount}</span>
-        </button>
-        <button class="subject-chip ${teacherClassFilter === 'Applied' ? 'active' : ''}" data-filter="Applied" onclick="setTeacherClassFilter('Applied')" style="cursor:pointer;">
-          Applied <span class="sc-badge">${appliedCount}</span>
-        </button>
+    <!-- 3. STRAND, SECTION & TRACK DROPDOWN FILTERS TOOLBAR -->
+    <div class="materials-filter-toolbar" style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:14px;padding:14px 18px;margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(15,23,42,0.04);">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex:1;">
+        <!-- 1. STRAND DROPDOWN -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Strand</label>
+          <select id="teacherStrandSelect" class="mat-filter-select" onchange="setTeacherStrandFilter(this.value)">
+            <option value="all" ${(!teacherStrandFilter || teacherStrandFilter === 'all') ? 'selected' : ''}>🏛️ All Strands</option>
+            <option value="STEM" ${teacherStrandFilter === 'STEM' ? 'selected' : ''}>🧬 STEM</option>
+            <option value="HUMSS" ${teacherStrandFilter === 'HUMSS' ? 'selected' : ''}>📚 HUMSS</option>
+            <option value="ABM" ${teacherStrandFilter === 'ABM' ? 'selected' : ''}>💼 ABM</option>
+            <option value="TVL" ${teacherStrandFilter === 'TVL' ? 'selected' : ''}>🔧 TVL</option>
+          </select>
+        </div>
+
+        <!-- 2. SECTION DROPDOWN -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Section</label>
+          <select id="teacherSectionSelect" class="mat-filter-select" onchange="setTeacherSectionFilter(this.value)">
+            <option value="all">👥 All Sections</option>
+            ${distinctSections.map(sec => {
+              const secStrand = getSectionStrand(sec);
+              return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand})</option>`;
+            }).join('')}
+          </select>
+        </div>
+
+        <!-- 3. TRACK DROPDOWN (Specialized, Core, Applied) -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Subject Track</label>
+          <select id="teacherTrackSelect" class="mat-filter-select" onchange="setTeacherTrackFilter(this.value)">
+            <option value="all" ${(!teacherTrackFilter || teacherTrackFilter === 'all') ? 'selected' : ''}>📑 All Tracks</option>
+            <option value="Specialized" ${teacherTrackFilter === 'Specialized' ? 'selected' : ''}>⭐ Specialized</option>
+            <option value="Core" ${teacherTrackFilter === 'Core' ? 'selected' : ''}>📘 Core Subjects</option>
+            <option value="Applied" ${teacherTrackFilter === 'Applied' ? 'selected' : ''}>🔬 Applied</option>
+          </select>
+        </div>
+
+        <!-- COUNT BADGE -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;font-weight:800;color:transparent;text-transform:uppercase;letter-spacing:0.5px;">Count</label>
+          <div id="activeClassesCountBadge" style="padding:7px 12px;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;font-size:12.5px;font-weight:700;color:#0284c7;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;height:36px;box-sizing:border-box;">
+            ${classCards.length} Classes
+          </div>
+        </div>
+
+        <!-- RESET BUTTON -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;font-weight:800;color:transparent;text-transform:uppercase;letter-spacing:0.5px;">Reset</label>
+          <button type="button" onclick="resetAllMaterialsFilters()" style="padding:7px 12px;background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;font-size:12.5px;font-weight:700;color:#475569;cursor:pointer;display:inline-flex;align-items:center;gap:5px;height:36px;box-sizing:border-box;transition:all 0.15s ease;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f8fafc'" title="Reset all filters">
+            ↺ Reset
+          </button>
+        </div>
       </div>
 
-      <div class="materials-search-wrap" style="min-width:280px;max-width:360px;">
+      <!-- SEARCH INPUT -->
+      <div class="materials-search-wrap" style="min-width:260px;max-width:320px;align-self:flex-end;margin-bottom:0;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#3b82f6;flex-shrink:0;">
           <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
         </svg>
