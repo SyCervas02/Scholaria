@@ -2306,39 +2306,79 @@ function openSubjectMaterials(courseId) {
 }
 
 function renderCoursesWidgetHTML() {
+  const isTeacher = (typeof ROLE !== 'undefined' ? ROLE : (CURRENT_PROFILE?.role || 'student')) === 'teacher';
   const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
+  const teacherStrands = (isTeacher && CURRENT_PROFILE?.strand)
+    ? CURRENT_PROFILE.strand.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+    : [];
 
-  // Get all courses enrolled for the student
-  const enrolledList = COURSES_DATABASE.filter(c => isCourseOpenForStudent(c));
+  let enrolledList = [];
+  if (isTeacher) {
+    if (teacherStrands.length > 0) {
+      enrolledList = COURSES_DATABASE.filter(c => teacherStrands.includes((c.strand || '').toUpperCase()) || (c.track || '').toLowerCase() === 'core');
+    } else {
+      enrolledList = COURSES_DATABASE.slice();
+    }
+  } else {
+    enrolledList = COURSES_DATABASE.filter(c => isCourseOpenForStudent(c));
+  }
 
   return `
-    <div class="courses-widget-container">
-      <div class="cw-header">
-        <div>
-          <h3>My Enrolled Subjects</h3>
-          <p>DepEd Official Senior High School Curriculum (${studentStrand} Strand · S.Y. 2026–2027)</p>
+    <div class="courses-widget" style="background:#ffffff;border-radius:18px;padding:22px;box-shadow:0 1px 8px rgba(15,23,42,0.06), 0 4px 20px rgba(37,99,235,0.05);border:1.5px solid #e8f0fe;margin-bottom:24px;">
+      <div class="cw-hdr" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+        <div class="cw-title-wrap" style="display:flex;flex-direction:column;gap:4px;">
+          <h3 class="cw-title" style="margin:0;font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">${isTeacher ? 'My Handled Subjects' : 'My Enrolled Subjects'}</h3>
+          <p class="cw-subtitle" style="margin:0;font-size:12.5px;color:#64748b;font-weight:500;">${isTeacher ? `DepEd Senior High School Curriculum (${teacherStrands.length ? teacherStrands.join(', ') : 'STEM, HUMSS'} · S.Y. 2026–2027)` : `DepEd Official Senior High School Curriculum (${studentStrand} Strand · S.Y. 2026–2027)`}</p>
         </div>
-        <div class="cw-controls">
-          <button class="cw-nav-btn prev" onclick="scrollCoursesGrid('left')" title="Scroll left">&#8249;</button>
-          <button class="cw-nav-btn next" onclick="scrollCoursesGrid('right')" title="Scroll right">&#8250;</button>
+        <div class="cw-nav-btns" style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="cw-slide-btn prev" onclick="scrollCoursesGrid('left')" title="Scroll left" aria-label="Previous subjects" style="width:36px;height:36px;border-radius:50%;background:#ffffff;border:1.5px solid #e2e8f0;color:#64748b;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <button type="button" class="cw-slide-btn next" onclick="scrollCoursesGrid('right')" title="Scroll right" aria-label="Next subjects" style="width:36px;height:36px;border-radius:50%;background:#ffffff;border:1.5px solid #e2e8f0;color:#64748b;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
       </div>
-      <div class="cw-cards-grid" id="cwCardsGrid">
+      <div class="cw-cards-grid" id="cwCardsGrid" style="display:flex;gap:18px;overflow-x:auto;scroll-behavior:smooth;padding:6px 2px 14px 2px;scrollbar-width:thin;">
         ${enrolledList.map(c => `
-          <div class="cw-subject-card" onclick="handleCourseClick('${c.id}')" title="View ${escHtml(c.title)} Modules">
-            <div class="cw-card-thumb" style="background-image:url('${c.cover}');">
-              <span class="cw-badge-code">${c.code}</span>
-              <span class="cw-badge-track">${c.track}</span>
-            </div>
-            <div class="cw-card-body">
-              <h4 class="cw-card-title">${escHtml(c.title)}</h4>
-              <p class="cw-card-inst">${escHtml(c.instructor)}</p>
-              <div class="cw-progress-bar-wrap">
-                <div class="cw-progress-fill" style="width:${c.progress}%;"></div>
+          <div class="cw-card cw-subject-card" onclick="handleCourseClick('${c.id}')" title="View ${escHtml(c.title)} Modules" style="width:280px;min-width:280px;max-width:280px;flex-shrink:0;background:#ffffff;border:1.5px solid #e2e8f0;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 10px rgba(15,23,42,0.05);cursor:pointer;transition:all 0.2s ease;">
+            <div class="cw-thumb" style="height:140px;width:100%;position:relative;overflow:hidden;background-image:url('${c.cover || 'assets/slide1.jpg'}');background-size:cover;background-position:center;display:flex;flex-direction:column;justify-content:space-between;padding:10px;">
+              <div class="cw-thumb-gradient" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,23,42,0.45) 0%,rgba(15,23,42,0) 45%,rgba(15,23,42,0.7) 100%);pointer-events:none;"></div>
+              <div class="cw-thumb-top" style="display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2;">
+                <span class="cw-track-badge" style="background:rgba(15,23,42,0.75);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;text-transform:uppercase;">${escHtml(c.track || 'Core')}</span>
+                <span class="cw-strand-badge" style="background:rgba(255,255,255,0.95);color:#0284c7;font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:12px;border:1px solid rgba(2,132,199,0.25);">${escHtml(c.strand || 'STEM')}</span>
               </div>
-              <div class="cw-card-meta">
-                <span>${c.modules} Modules</span>
-                <span>${c.progress}% Finished</span>
+              <div class="cw-thumb-bottom" style="position:relative;z-index:2;">
+                <span class="cw-sem-tag" style="color:#ffffff;font-size:11px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.6);">${escHtml(c.semester || '1st Sem')} · ${escHtml(c.gradeLevel || 'Grade 11')}</span>
+              </div>
+            </div>
+            <div class="cw-card-body" style="padding:16px;display:flex;flex-direction:column;gap:10px;flex:1;">
+              <div class="cw-code-row" style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="cw-course-code" style="font-size:11px;font-weight:800;color:#0284c7;letter-spacing:0.5px;">${escHtml(c.code)}</span>
+                <span class="cw-mod-chip" style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#64748b;background:#f8fafc;padding:2px 8px;border-radius:8px;border:1px solid #e2e8f0;">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                  ${c.modules || 4} Modules
+                </span>
+              </div>
+              <h4 class="cw-card-title" style="margin:0;font-size:14.5px;font-weight:700;color:#0f172a;line-height:1.35;height:40px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escHtml(c.title)}</h4>
+              <div class="cw-instructor-row" style="display:flex;align-items:center;gap:8px;">
+                <div class="cw-avatar" style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#0284c7,#38bdf8);color:#fff;font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${c.instructor ? c.instructor.charAt(0) : 'F'}</div>
+                <span class="cw-instructor-name" style="font-size:12px;font-weight:600;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.instructor || 'Faculty')}</span>
+              </div>
+              <div class="cw-progress-section" style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+                <div class="cw-progress-info" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;">
+                  <span class="cw-progress-text" style="color:#64748b;">${isTeacher ? 'Coverage' : 'Progress'}</span>
+                  <span class="cw-progress-pct" style="color:#0284c7;">${c.progress || 0}%</span>
+                </div>
+                <div class="cw-progress-bar-track" style="width:100%;height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden;">
+                  <div class="cw-progress-bar-fill" style="height:100%;background:linear-gradient(90deg,#0284c7,#38bdf8);border-radius:99px;width:${c.progress || 0}%;"></div>
+                </div>
+              </div>
+              <div class="cw-card-foot" style="padding-top:10px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:flex-end;margin-top:auto;">
+                <span class="cw-view-link" style="font-size:12px;font-weight:700;color:#0284c7;display:flex;align-items:center;gap:4px;">
+                  Open Subject
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                </span>
               </div>
             </div>
           </div>

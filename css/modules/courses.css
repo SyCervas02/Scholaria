@@ -150,7 +150,8 @@
   display: none; /* Chrome, Safari, Edge */
 }
 
-.cw-card {
+.cw-card, .cw-subject-card {
+  min-width: 280px;
   width: 290px;
   flex-shrink: 0;
   background: #ffffff;
