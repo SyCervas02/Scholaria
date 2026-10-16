@@ -1212,6 +1212,52 @@ function renderMaterialsList(role) {
 }
 
 // ── TEACHER COMPILATION HUB (STI eLMS MODEL) STATE & FUNCTIONS ──
+function getSectionStrand(secName) {
+  if (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) {
+    const found = managedSections.find(s => (s.name || '').toLowerCase().trim() === (secName || '').toLowerCase().trim());
+    if (found && found.strand) return found.strand.toUpperCase().trim();
+  }
+  const sLow = (secName || '').toLowerCase().trim();
+  if (sLow.includes('stem')) return 'STEM';
+  if (sLow.includes('humss')) return 'HUMSS';
+  if (sLow.includes('abm')) return 'ABM';
+  if (sLow.includes('tvl')) return 'TVL';
+  if (sLow === 'section a') return 'STEM';
+  if (sLow === 'section b') return 'HUMSS';
+  if (sLow === 'section c') return 'STEM';
+  if (sLow === 'section d') return 'ABM';
+  return 'STEM';
+}
+window.getSectionStrand = getSectionStrand;
+
+let teacherStrandFilter = 'all';
+window.teacherStrandFilter = 'all';
+
+function setTeacherStrandFilter(strandVal) {
+  teacherStrandFilter = strandVal;
+  window.teacherStrandFilter = strandVal;
+  teacherClassFilter = 'all';
+  window.teacherClassFilter = 'all';
+
+  document.querySelectorAll('#teacherStrandChipsBar .strand-chip').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.strand.toLowerCase() === strandVal.toLowerCase());
+  });
+
+  document.querySelectorAll('#teacherClassChipsBar .subject-chip').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.filter === 'all');
+  });
+
+  const hint = document.getElementById('strandActiveHint');
+  if (hint) {
+    hint.innerHTML = (strandVal !== 'all')
+      ? 'Filtering strictly to <strong style="color:#0284c7;">' + escHtml(strandVal) + '</strong> curriculum &amp; sections'
+      : 'Showing all curriculum tracks';
+  }
+
+  applyTeacherClassFilter();
+}
+window.setTeacherStrandFilter = setTeacherStrandFilter;
+
 let teacherClassFilter = 'all';
 window.teacherClassFilter = 'all';
 let teacherClassSearchQuery = '';
@@ -1312,12 +1358,24 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
 
   courses.forEach(course => {
     handledSections.forEach((sec, idx) => {
+      const secStrand = getSectionStrand(sec);
+
+      // If a subject is Specialized, only pair it with sections matching its strand!
+      if (course.track === 'Specialized' && course.strand && course.strand !== 'All') {
+        if (secStrand !== 'All' && course.strand.toUpperCase() !== secStrand.toUpperCase()) {
+          return; // Skip specialized subjects belonging to a different strand
+        }
+      }
+
       let secCode = course.code || 'STEM-1101';
       if (sec.toLowerCase().includes('b') || sec.endsWith('2')) {
         secCode = secCode.replace(/1$/, '2');
         if (!secCode.endsWith('2') && !secCode.endsWith('B')) secCode += '-B';
       } else if (sec.toLowerCase().includes('a') || sec.endsWith('1')) {
         if (!secCode.endsWith('1') && !secCode.endsWith('A')) secCode += '-A';
+      } else {
+        const letter = sec.replace(/^Section\s*/i, '').charAt(0) || 'X';
+        secCode = `${secCode}-${letter}`;
       }
 
       classCards.push({
@@ -1325,7 +1383,8 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
         cardKey: `${course.id}__${sec.replace(/\s+/g, '_')}`,
         baseCourseId: course.id,
         assignedSection: sec,
-        sectionCode: secCode
+        sectionCode: secCode,
+        sectionStrand: secStrand
       });
     });
   });
@@ -1549,6 +1608,28 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
     return r.includes('admin') || n.includes('admin');
   });
   const myAdminMaterialsCount = adminMaterials.length;
+
+  const totalAllCards = classCards.length;
+  const totalStemCards = classCards.filter(c => {
+    const sStrand = (c.strand || '').toUpperCase();
+    const secStrand = (c.sectionStrand || '').toUpperCase();
+    return secStrand === 'STEM' && (sStrand === 'STEM' || c.track === 'Core' || c.track === 'Applied');
+  }).length;
+  const totalHumssCards = classCards.filter(c => {
+    const sStrand = (c.strand || '').toUpperCase();
+    const secStrand = (c.sectionStrand || '').toUpperCase();
+    return secStrand === 'HUMSS' && (sStrand === 'HUMSS' || c.track === 'Core' || c.track === 'Applied');
+  }).length;
+  const totalAbmCards = classCards.filter(c => {
+    const sStrand = (c.strand || '').toUpperCase();
+    const secStrand = (c.sectionStrand || '').toUpperCase();
+    return secStrand === 'ABM' && (sStrand === 'ABM' || c.track === 'Core' || c.track === 'Applied');
+  }).length;
+  const totalTvlCards = classCards.filter(c => {
+    const sStrand = (c.strand || '').toUpperCase();
+    const secStrand = (c.sectionStrand || '').toUpperCase();
+    return secStrand === 'TVL' && (sStrand === 'TVL' || c.track === 'Core' || c.track === 'Applied');
+  }).length;
 
   return `
   <div class="materials-page-container">

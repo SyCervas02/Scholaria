@@ -85,6 +85,66 @@
   color: #ffffff;
 }
 
+/* ── STRAND CHIPS FILTER BAR ── */
+.strand-chip {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: inherit;
+}
+.strand-chip:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+}
+.strand-chip.active {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(2, 132, 199, 0.25);
+}
+.strand-chip .sc-badge {
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+.strand-chip.active .sc-badge {
+  background: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+.strand-chip[data-strand="STEM"].active {
+  background: #0284c7;
+  border-color: #0284c7;
+}
+.strand-chip[data-strand="HUMSS"].active {
+  background: #d97706;
+  border-color: #d97706;
+  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.25);
+}
+.strand-chip[data-strand="ABM"].active {
+  background: #059669;
+  border-color: #059669;
+  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);
+}
+.strand-chip[data-strand="TVL"].active {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  box-shadow: 0 3px 10px rgba(124, 58, 237, 0.25);
+}
+
 /* ── SUBJECT FOLDER GRID (ALL SUBJECTS VIEW) ── */
 .subjects-folder-grid {
   display: grid;
