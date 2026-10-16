@@ -1080,9 +1080,9 @@ function renderMaterialsList(role) {
                                       ${items.length ? items.map(it => `
                                         <tr style="border-bottom:1px solid #e2e8f0;background:#ffffff;">
                                           <td style="padding:10px 12px;color:#0f172a;font-weight:600;">
-                                            <div style="display:flex;align-items:center;gap:8px;">
+                                            <div style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="previewSubjectUploadedMaterial('${it.id}')" title="Click to preview ${escHtml(it.title)}">
                                               <span style="font-size:15px;">📄</span>
-                                              <span>${escHtml(it.title)}</span>
+                                              <span style="color:#0f172a;transition:color 0.15s ease;" onmouseover="this.style.color='#0284c7';this.style.textDecoration='underline'" onmouseout="this.style.color='#0f172a';this.style.textDecoration='none'">${escHtml(it.title)}</span>
                                             </div>
                                           </td>
                                           <td style="padding:10px 12px;color:#64748b;">${escHtml(it.submitted || '-')}</td>
@@ -1091,6 +1091,10 @@ function renderMaterialsList(role) {
                                           <td style="padding:10px 12px;"><span class="sw-status-pill ${it.status === 'Completed' ? 'done' : (it.status === 'Ongoing' ? 'ongoing' : '')}">${escHtml(it.status || 'Pending')}</span></td>
                                           <td style="padding:10px 12px;text-align:right;">
                                             <div style="display:inline-flex;align-items:center;gap:6px;justify-content:flex-end;">
+                                              <button type="button" class="sw-btn outline" onclick="event.stopPropagation(); previewSubjectUploadedMaterial('${it.id}')" style="padding:4px 10px;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;transition:all 0.15s ease;" title="Instant Handout Preview">
+                                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                Preview
+                                              </button>
                                               <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
                                                 <span>⬇</span> Download
                                               </a>
@@ -3302,9 +3306,33 @@ function downloadSubjectPdf(courseId, docId) {
 }
 
 async function previewSubjectUploadedMaterial(id) {
-  const m = materialsData.find(mat => String(mat.id) === String(id)) || 
+  let m = materialsData.find(mat => String(mat.id) === String(id)) || 
             getCustomMaterialsFromStorage().find(mat => String(mat.id) === String(id)) ||
             (typeof STUDENT_DEFAULT_MATERIALS !== 'undefined' ? STUDENT_DEFAULT_MATERIALS.find(mat => String(mat.id) === String(id)) : null);
+
+  if (!m && typeof COURSES_DATABASE !== 'undefined') {
+    for (const c of COURSES_DATABASE) {
+      const lessons = getSubjectLessons(c);
+      for (const l of lessons) {
+        const item = (l.items || []).find(it => String(it.id) === String(id) || String(it.title).toLowerCase() === String(id).toLowerCase());
+        if (item) {
+          m = {
+            id: item.id,
+            title: item.title,
+            fileName: item.fileName || item.title,
+            subject: c.title,
+            file_url: item.file_url || 'SURVEY FORMS - Scholaria.pdf',
+            file_type: 'application/pdf',
+            type: item.type || 'PDF',
+            date_formatted: item.due || item.submitted || 'Recent',
+            uploaded_by_name: item.score || 'Curriculum Handout'
+          };
+          break;
+        }
+      }
+      if (m) break;
+    }
+  }
   if (!m) {
     showToast('Learning material not found', 'error');
     return;
@@ -4418,3 +4446,7 @@ async function submitMaterialUpload() {
 
   loadMaterialsFromDB().catch(() => {});
 }
+
+window.previewSubjectUploadedMaterial = previewSubjectUploadedMaterial;
+window.deleteMaterial = deleteMaterial;
+window.downloadMaterial = downloadMaterial;
