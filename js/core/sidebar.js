@@ -1400,6 +1400,141 @@ function updateStudentDeadlinesWidget() {
   }
 }
 
+// Presentation helpers: all dashboard links use the existing role navigation.
+function dashboardIcon(name) {
+  const paths = {
+    book: '<path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1Zm0 0v15"/>',
+    quiz: '<rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4V2h6v2M9 10l2 2 4-4M9 16h6"/>',
+    news: '<path d="m3 10 14-6v16L3 14v-4ZM7 15l2 7h3l-2-6M21 8v8"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 2v6M17 2v6M3 10h18M7 14h1m4 0h1m4 0h1M7 18h1m4 0h1"/>',
+    shield: '<path d="m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6l8-4Z M12 5v14M6 8h12"/>',
+    sum: '<path d="M18 4H6l8 8-8 8h12"/>',
+    leaf: '<path d="M19 3C6 2 2 9 6 16s15 0 13-13ZM4 21 16 7"/>',
+    chart: '<path d="M3 20h18M5 16l5-6 4 3 6-9"/>',
+    chat: '<path d="M21 11a9 9 0 0 1-13 8l-5 2 1-5a9 9 0 1 1 17-5Z"/>',
+    atom: '<ellipse cx="12" cy="12" rx="10" ry="4"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)"/><circle cx="12" cy="12" r="1"/>',
+    links: '<rect x="3" y="3" width="15" height="13" rx="3"/><path d="M7 20h14V8M7 7h7M7 11h4"/>'
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.book}</svg>`;
+}
+
+function dashboardSubjectIcon(subject) {
+  const value = String(subject).toLowerCase();
+  const name = value.includes('cyber') ? 'shield' : value.includes('math') ? 'sum' : value.includes('bio') ? 'leaf' : value.includes('calc') ? 'chart' : value.includes('oral') ? 'chat' : value.includes('stem') ? 'atom' : 'book';
+  return dashboardIcon(name);
+}
+
+function dashboardDeadlineLabel(deadline) {
+  const parts = String(deadline).match(/^(.*?)\s+(\d{1,2}:\d{2}\s*[AP]M)$/i);
+  return `<span class="dashboard-date">${dashboardIcon('calendar')}<span>${escHtml(parts ? parts[1] : deadline)}${parts ? `<small>${escHtml(parts[2])}</small>` : ''}</span></span>`;
+}
+
+function renderDashboardQuickLinks(role) {
+  const pages = role === 'teacher' ? ['materials', 'quiz', 'classrec', 'chats'] : ['materials', 'quizzes', 'progress', 'chats'];
+  return `<section class="dashboard-quick-links"><h3><span>${dashboardIcon('links')}</span>Quick Links</h3><div class="dashboard-shortcut-grid">${pages.map(page => {
+    const item = SIDEBAR[role].find(entry => entry.page === page);
+    return `<button type="button" class="dashboard-shortcut" onclick="${page === 'materials' ? "if(typeof setActiveSubjectMaterials==='function') setActiveSubjectMaterials(null); " : ''}renderPage('${page}')"><span class="dashboard-shortcut-icon">${item.icon}</span><span>${item.label}</span></button>`;
+  }).join('')}</div></section>`;
+}
+
+let studentSubjectShelfTab = 'enrolled';
+
+function getStudentDashboardSubjects(tab = 'enrolled') {
+  if (typeof COURSES_DATABASE === 'undefined' || typeof isCourseOpenForStudent !== 'function') return [];
+  const gradeNumber = value => Number(String(value || '').match(/\d+/)?.[0]) || null;
+  const grade = gradeNumber(CURRENT_PROFILE?.grade_level || CURRENT_PROFILE?.gradeLevel);
+  return COURSES_DATABASE.filter(course => {
+    if (!isCourseOpenForStudent(course)) return false;
+    const courseGrade = gradeNumber(course.gradeLevel);
+    const completed = course.status === 'completed' || (grade && courseGrade && courseGrade < grade);
+    if (tab === 'completed') return Boolean(completed);
+    return !completed && (!grade || !courseGrade || courseGrade === grade);
+  });
+}
+
+function setStudentSubjectShelfTab(tab) {
+  if (!['enrolled', 'completed'].includes(tab)) return;
+  studentSubjectShelfTab = tab;
+  const shelf = document.querySelector('.dashboard-subject-shelf');
+  if (!shelf) return;
+  shelf.outerHTML = renderStudentSubjectShelf();
+  document.querySelector('.subject-shelf-tabs [aria-pressed="true"]')?.focus({ preventScroll: true });
+}
+
+function renderStudentSubjectShelf() {
+  const courses = getStudentDashboardSubjects(studentSubjectShelfTab);
+  const completed = studentSubjectShelfTab === 'completed';
+  return `<section class="dashboard-subject-shelf" aria-labelledby="studentSubjectsTitle">
+    <header><div><h3 id="studentSubjectsTitle">My Subjects</h3><p>${completed ? 'Previous-grade subjects and completed courses.' : 'Browse subjects for your current grade level.'}</p></div>
+      <div class="subject-shelf-controls"><button type="button" aria-label="Previous subjects" onclick="scrollStudentSubjectShelf(-1)">&#8592;</button><button type="button" aria-label="Next subjects" onclick="scrollStudentSubjectShelf(1)">&#8594;</button></div>
+    </header>
+    <div class="subject-shelf-tabs" role="group" aria-label="Subject status">
+      <button type="button" aria-pressed="${!completed}" onclick="setStudentSubjectShelfTab('enrolled')">Enrolled <span>${getStudentDashboardSubjects('enrolled').length}</span></button>
+      <button type="button" aria-pressed="${completed}" onclick="setStudentSubjectShelfTab('completed')">Completed <span>${getStudentDashboardSubjects('completed').length}</span></button>
+    </div>
+    <div class="subject-shelf-track" id="studentSubjectShelf" tabindex="0" role="region" aria-label="${completed ? 'Completed' : 'Enrolled'} subjects, scroll horizontally">
+      ${courses.length ? courses.map(course => `<button type="button" class="subject-shelf-card" onclick="handleCourseClick(${escHtml(JSON.stringify(course.id))})">
+        <img class="subject-shelf-cover" src="${escHtml(course.cover || 'assets/slide1.jpg')}" alt="" loading="lazy" onerror="this.onerror=null;this.src='assets/slide1.jpg'">
+        <span class="subject-shelf-top"><span class="subject-shelf-icon">${dashboardSubjectIcon(course.title)}</span><span>${escHtml(course.code || course.track || 'Subject')}</span></span>
+        <strong title="${escHtml(course.title)}">${escHtml(course.title)}</strong><span class="subject-shelf-meta">${escHtml(course.gradeLevel || '')}${course.semester ? ' · ' + escHtml(course.semester) : ''}</span>
+        <span class="subject-shelf-foot"><span>${escHtml(course.instructor || 'Faculty')}</span><span>Open subject &#8594;</span></span>
+      </button>`).join('') : `<p class="dashboard-widget-empty">${completed ? 'No previous-grade or completed subjects available yet.' : 'No enrolled subjects available for your grade level yet.'}</p>`}
+    </div>
+  </section>`;
+}
+
+function scrollStudentSubjectShelf(direction) {
+  const track = document.getElementById('studentSubjectShelf');
+  if (!track) return;
+  track.scrollBy({ left: direction * 272, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+
+function renderStudentEssentials() {
+  const attempted = new Set(myQuizAttempts.map(attempt => String(attempt.quiz_id)));
+  const upcoming = customQuizzes.filter(quiz => isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !attempted.has(String(quiz.id)) && new Date(quiz.dueDate || quiz.due_date).getTime() >= Date.now())
+    .sort((a,b) => new Date(a.dueDate || a.due_date) - new Date(b.dueDate || b.due_date));
+  const next = upcoming[0];
+  const profile = CURRENT_PROFILE || {};
+  return `<section class="dashboard-essentials"><header><h3>${dashboardIcon('book')} Student Essentials</h3></header>
+    <div class="student-academic-details"><h4>Academic Details</h4><dl>
+      <div><dt>Strand</dt><dd>${escHtml(profile.strand || 'Not assigned')}</dd></div>
+      <div><dt>Grade level</dt><dd>${escHtml(profile.grade_level || profile.gradeLevel || 'Not assigned')}</dd></div>
+      <div><dt>Section</dt><dd>${escHtml(profile.section || 'Not assigned')}</dd></div>
+    </dl><button type="button" class="dashboard-text-link" onclick="renderPage('profile')">View my profile &#8594;</button></div>
+    <div class="student-next-deadline"><h4>Next Deadline</h4>${next ? `<strong>${escHtml(next.title || 'Quiz')}</strong><p>${escHtml(next.subject || 'Assessment')}</p><time datetime="${escHtml(next.dueDate || next.due_date)}">${escHtml(new Date(next.dueDate || next.due_date).toLocaleString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))}</time>` : '<p>No upcoming quiz deadlines. Check your materials for other class tasks.</p>'}
+      <button type="button" class="dashboard-text-link" onclick="renderPage('quizzes')">View assessments &#8594;</button></div>
+  </section>`;
+}
+
+function renderStudentAssessmentOverview() {
+  const attempts = myQuizAttempts.slice().sort((a,b) => (Date.parse(b.submitted_at) || 0) - (Date.parse(a.submitted_at) || 0));
+  const completed = new Set(attempts.map(attempt => String(attempt.quiz_id)));
+  const now = Date.now();
+  const weekEnd = now + 7 * 24 * 60 * 60 * 1000;
+  const dueSoon = customQuizzes.filter(quiz => {
+    const due = new Date(quiz.dueDate || quiz.due_date).getTime();
+    return isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !completed.has(String(quiz.id)) && due >= now && due <= weekEnd;
+  }).length;
+  return `<section class="dashboard-assessment-overview" aria-labelledby="assessmentOverviewTitle">
+    <header><h3 id="assessmentOverviewTitle">${dashboardIcon('chart')} Assessment Overview</h3><p>A quick look at your assessment activity.</p></header>
+    <dl class="assessment-overview-stats"><div><dt>Completed quizzes</dt><dd>${completed.size}</dd></div><div><dt>Due in the next 7 days</dt><dd>${dueSoon}</dd></div></dl>
+    <h4>Recent Results</h4><div class="assessment-recent-results">${attempts.length ? attempts.slice(0,3).map(attempt => {
+      const quiz = customQuizzes.find(item => String(item.id) === String(attempt.quiz_id));
+      const score = Number(attempt.score);
+      const total = Number(attempt.total_items);
+      const result = attempt.score != null && Number.isFinite(score) && Number.isFinite(total) && total > 0 ? Math.round(score / total * 100) + '%' : 'Submitted';
+      const submitted = new Date(attempt.submitted_at || '');
+      return `<div class="assessment-result-row"><div><strong>${escHtml(quiz?.title || 'Completed assessment')}</strong><span>${escHtml(quiz?.subject || 'Assessment')}${Number.isNaN(submitted.getTime()) ? '' : ' ? ' + escHtml(submitted.toLocaleDateString('en-US',{month:'short',day:'numeric'}))}</span></div><span class="assessment-result-score">${result}</span></div>`;
+    }).join('') : '<p class="dashboard-widget-empty">Your results will appear here after you submit an assessment.</p>'}</div>
+    <button type="button" class="assessment-progress-link" onclick="renderPage('progress')">View my progress <span aria-hidden="true">&#8594;</span></button>
+  </section>`;
+}
+
+function renderStudentDashboardActivity() {
+  const activity = typeof getNotificationsForCurrentUser === 'function' ? getNotificationsForCurrentUser().slice().sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0,3) : [];
+  return `<section class="dashboard-recent-activity"><header><h4>Recent Activity</h4><button type="button" class="dashboard-text-link" onclick="renderPage('notifications')">View all &#8594;</button></header>${activity.length ? activity.map(item => `<button type="button" class="dashboard-activity-item" onclick="handleNotifItemClick(${escHtml(JSON.stringify(String(item.id)))})"><strong>${escHtml(item.title || 'Notification')}</strong><span>${escHtml(item.message || '')}</span></button>`).join('') : '<p class="dashboard-widget-empty">No recent activity yet.</p>'}</section>`;
+}
+
 function renderStudentDeadlinesWidgetHTML() {
   const allQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []);
   const visibleQuizzes = allQuizzes.filter(q =>
@@ -1685,7 +1820,7 @@ function renderStudentDeadlinesWidgetHTML() {
     <div class="student-deadlines-header">
       <div class="deadlines-title-wrap">
         <h3>
-          <span>📋</span> Your Tasks &amp; Quizzes
+          <span class="dashboard-heading-icon">${dashboardIcon('calendar')}</span> Your Tasks &amp; Quizzes
           ${dueCount > 0 ? `
           <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;margin-left:6px;">
             ${dueCount} Active Due
@@ -1755,7 +1890,7 @@ function renderStudentDeadlinesWidgetHTML() {
           </tr>
         </thead>
         <tbody>
-          ${(displayTasks.slice(0, 5)).map(t => {
+          ${(displayTasks.slice(0, 7)).map(t => {
             const clickHandler = t.quizId
               ? (t.isCompleted ? `openReviewAttempt('${t.quizId}')` : `openTakeQuizModal('${t.quizId}')`)
               : `showToast('Assessment details for ${escHtml(t.title)}', 'info')`;
@@ -1766,7 +1901,7 @@ function renderStudentDeadlinesWidgetHTML() {
               <td>
                 <div class="subject-badge-cell">
                   <div class="subj-icon-box" style="background:${t.iconBg};">
-                    ${t.icon}
+                    ${dashboardSubjectIcon(t.subject)}
                   </div>
                   <span style="font-weight:700;color:#0f172a;font-size:13px;">${escHtml(t.subject)}</span>
                 </div>
@@ -1786,9 +1921,7 @@ function renderStudentDeadlinesWidgetHTML() {
 
               <!-- Deadline -->
               <td>
-                <span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:#475569;font-weight:500;">
-                  📅 ${escHtml(t.deadline)}
-                </span>
+                ${dashboardDeadlineLabel(t.deadline)}
               </td>
 
               <!-- Status -->
@@ -1826,7 +1959,7 @@ function studentPage(page) {
       const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : 63;
 
       const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function' 
-        ? COURSES_DATABASE.filter(c => isCourseOpenForStudent(c)).length 
+        ? getStudentDashboardSubjects('enrolled').length
         : 14;
 
       const completedQuizzesCount = myQuizAttempts.length || 7;
@@ -1885,7 +2018,7 @@ function studentPage(page) {
       <div class="student-stat-cards-grid">
         <div class="student-stat-card" onclick="if(typeof setActiveSubjectMaterials==='function') setActiveSubjectMaterials(null); renderPage('materials');" style="cursor:pointer;" title="View all enrolled subjects">
           <div class="stat-card-icon blue">
-            ${iconFolder()}
+            ${dashboardIcon('book')}
           </div>
           <div class="stat-card-info">
             <div class="stat-card-label">Enrolled Subjects</div>
@@ -1897,7 +2030,7 @@ function studentPage(page) {
 
         <div class="student-stat-card" onclick="renderPage('quizzes')" style="cursor:pointer;" title="View available quizzes">
           <div class="stat-card-icon orange">
-            ${iconQuiz()}
+            ${dashboardIcon('quiz')}
           </div>
           <div class="stat-card-info">
             <div class="stat-card-label">Available Quizzes</div>
@@ -1921,7 +2054,7 @@ function studentPage(page) {
 
         <div class="student-stat-card" onclick="renderPage('announcements')" style="cursor:pointer;" title="View school bulletins">
           <div class="stat-card-icon pink">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            ${dashboardIcon('news')}
           </div>
           <div class="stat-card-info">
             <div class="stat-card-label">Unread News</div>
@@ -1936,6 +2069,7 @@ function studentPage(page) {
       <div class="student-dashboard-split">
         <!-- LEFT COLUMN: YOUR TASKS & QUIZZES -->
         <div class="student-main-left">
+          ${renderStudentSubjectShelf()}
           <div id="studentDeadlinesWidgetContainer">
             ${renderStudentDeadlinesWidgetHTML()}
           </div>
@@ -1947,7 +2081,7 @@ function studentPage(page) {
           <div class="news-bulletin-container">
             <div class="news-bulletin-header">
               <h3>
-                <span>📢</span> Recent News &amp; Bulletins
+                <span class="dashboard-heading-icon">${dashboardIcon('news')}</span> Recent News &amp; Activity
               </h3>
               <a href="javascript:void(0)" onclick="renderPage('announcements')" class="view-all-link">
                 View All →
@@ -1964,6 +2098,7 @@ function studentPage(page) {
                 if (!activeNews.length) {
                   return `
                     <div class="news-bulletin-item" onclick="renderPage('announcements')">
+                      <span class="dashboard-news-icon academic">${dashboardIcon('book')}</span>
                       <div class="news-item-top">
                         <span class="news-tag academic">ACADEMIC</span>
                         <span class="news-time">Today</span>
@@ -1992,6 +2127,7 @@ function studentPage(page) {
 
                   return `
                     <div class="news-bulletin-item" onclick="openAnnouncementDetailModal('${anc.id}')" style="cursor:pointer;" title="Click to read announcement">
+                      <span class="dashboard-news-icon ${tagClass}">${dashboardIcon(anc.category === 'academic' ? 'book' : 'news')}</span>
                       <div class="news-item-top">
                         <span class="news-tag ${tagClass}">${tagLabel}</span>
                         ${isUnread ? '<span class="news-tag-new">NEW</span>' : ''}
@@ -2004,10 +2140,15 @@ function studentPage(page) {
                 }).join('');
               })()}
             </div>
+            ${renderStudentDashboardActivity()}
           </div>
 
+          ${renderStudentEssentials()}
+          ${renderStudentAssessmentOverview()}
+        </div>
+      </div>
           <!-- WIDGET 2: MY PROGRESS SUMMARY WIDGET -->
-          <div class="student-progress-card">
+          <div class="student-progress-card dashboard-progress-detail">
             <div class="student-progress-card-header">
               <h3>
                 <span style="color:#0284c7;">📊</span> My Progress
@@ -2056,8 +2197,6 @@ function studentPage(page) {
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
       `;
     }
@@ -2759,10 +2898,12 @@ function teacherPage(page) {
           </div>
         </div>
       </div>
+      <div class="teacher-dashboard-split">
+      <div class="teacher-dashboard-main">
       <div id="coursesWidgetContainer">
         ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
       </div>
-      <div style="margin-top:28px;">
+      <div class="dashboard-assessments-panel">
         <div class="section-hdr">
           <h2>Active Quizzes & Assessments</h2>
           <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
@@ -2790,6 +2931,9 @@ function teacherPage(page) {
           }).join('')
             : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No active quizzes right now. Create a new quiz in Quiz Manager to assign to your students.</p>`}
         </div>
+      </div>
+      </div>
+      <aside class="teacher-dashboard-side">${renderDashboardQuickLinks('teacher')}</aside>
       </div>`;
     }
 
@@ -3663,7 +3807,7 @@ function adminPage(page) {
       </div>
 
       <!-- 3. SPLIT 2-COLUMN MAIN CONTENT (APPROVALS / CONTENT & ANNOUNCEMENTS WIDGET) -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr));gap:22px;align-items:start;">
+      <div class="admin-dashboard-split" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr));gap:22px;align-items:start;">
         
         <!-- LEFT COLUMN: CONTENT REQUIRING APPROVAL & RECENTLY APPROVED -->
         <div style="display:flex;flex-direction:column;gap:22px;">
@@ -3895,7 +4039,7 @@ function adminPage(page) {
           </div>
 
           <!-- QUICK ADMINISTRATIVE SHORTCUTS CARD -->
-          <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
+          <div class="dashboard-admin-shortcuts" style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
               <div style="width:34px;height:34px;border-radius:10px;background:#f3e8ff;color:#9333ea;display:flex;align-items:center;justify-content:center;font-size:16px;">
                 ⚡
@@ -4749,7 +4893,9 @@ function renderPage(page) {
   });
   const mainContent = document.getElementById('mainContent');
   if (!mainContent) return;
+  mainContent.dataset.page = page;
   mainContent.innerHTML = getPageContent(ROLE, page);
+  if (page === 'dashboard') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
 
@@ -4832,7 +4978,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sidebar) sidebar.classList.remove('open');
     if (backdrop) backdrop.classList.remove('active');
     document.body.classList.remove('mobile-menu-open');
-    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', String(window.innerWidth > 900 && !sidebar?.classList.contains('closed')));
   }
 
   const mobileLayout = window.matchMedia('(max-width: 900px)');
@@ -4845,7 +4991,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   if (toggleBtn) {
     toggleBtn.setAttribute('aria-controls', 'sidebar');
-    toggleBtn.setAttribute('aria-expanded', 'false');
+    toggleBtn.setAttribute('aria-expanded', String(window.innerWidth > 900 && !sidebar?.classList.contains('closed')));
     toggleBtn.setAttribute('aria-label', 'Toggle navigation');
   }
 
@@ -4860,6 +5006,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } else {
         sidebar.classList.toggle('closed');
+        toggleBtn.setAttribute('aria-expanded', String(!sidebar.classList.contains('closed')));
       }
     });
   }
