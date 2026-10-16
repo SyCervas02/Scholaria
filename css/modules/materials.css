@@ -1814,3 +1814,28 @@
 
 
 
+
+
+/* Content Approval Interactive Stat Cards */
+.ca-stat {
+  cursor: pointer !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease !important;
+  user-select: none;
+}
+.ca-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+.ca-stat.active {
+  border-width: 2px !important;
+  box-shadow: 0 0 0 2px rgba(67, 56, 202, 0.25), 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+.ca-stat.pending.active {
+  border-color: #f59e0b !important;
+}
+.ca-stat.approved.active {
+  border-color: #10b981 !important;
+}
+.ca-stat.revision.active {
+  border-color: #ef4444 !important;
+}

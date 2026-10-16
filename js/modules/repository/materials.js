@@ -1371,12 +1371,10 @@ function applyTeacherClassFilter() {
     const cardStrand = (card.dataset.strand || '').toLowerCase();
     const cardSecStrand = (card.dataset.sectionStrand || '').toLowerCase();
 
-    // 1. STRAND MATCH: When STEM is picked, only STEM subjects and STEM sections show!
+    // 1. STRAND MATCH: When a strand like STEM/HUMSS/ABM/TVL is picked, strictly isolate matching sections/classes
     let matchesStrand = true;
     if (activeStrand !== 'all') {
-      const isSecMatch = (cardSecStrand === activeStrand || cardSecStrand === 'all');
-      const isCourseMatch = (cardStrand === activeStrand || cardTrack === 'core' || cardTrack === 'applied' || cardStrand === 'all');
-      matchesStrand = isSecMatch && isCourseMatch;
+      matchesStrand = (cardSecStrand === activeStrand || cardStrand === activeStrand);
     }
 
     // 2. SECTION MATCH:
@@ -1437,26 +1435,28 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
   }
 
   courses.forEach(course => {
-    handledSections.forEach((sec, idx) => {
+    handledSections.forEach((sec) => {
       const secStrand = getSectionStrand(sec);
 
-      // If a subject is Specialized, only pair it with sections matching its strand!
-      if (course.track === 'Specialized' && course.strand && course.strand !== 'All') {
-        if (secStrand !== 'All' && course.strand.toUpperCase() !== secStrand.toUpperCase()) {
-          return; // Skip specialized subjects belonging to a different strand
-        }
+      // Section code generator adapted to strand and section letter
+      let secCode = course.code || 'STEM-1101';
+      if (secStrand && secStrand !== 'All') {
+        secCode = secCode.replace(/^(STEM|HUMSS|ABM|TVL)-/, `${secStrand}-`);
       }
 
-      let secCode = course.code || 'STEM-1101';
-      if (sec.toLowerCase().includes('b') || sec.endsWith('2')) {
+      const letterMatch = sec.match(/Section\s*([A-Za-z0-9]+)/i);
+      const secIdentifier = letterMatch ? letterMatch[1].toUpperCase() : sec.trim().charAt(0).toUpperCase();
+
+      if (secIdentifier === 'B') {
         secCode = secCode.replace(/1$/, '2');
-        if (!secCode.endsWith('2') && !secCode.endsWith('B')) secCode += '-B';
-      } else if (sec.toLowerCase().includes('a') || sec.endsWith('1')) {
-        if (!secCode.endsWith('1') && !secCode.endsWith('A')) secCode += '-A';
+        if (!secCode.endsWith('-B')) secCode += '-B';
+      } else if (secIdentifier === 'A') {
+        if (!secCode.endsWith('-A')) secCode += '-A';
       } else {
-        const letter = sec.replace(/^Section\s*/i, '').charAt(0) || 'X';
-        secCode = `${secCode}-${letter}`;
+        if (!secCode.endsWith(`-${secIdentifier}`)) secCode += `-${secIdentifier}`;
       }
+
+      const displayStrand = (secStrand && secStrand !== 'All') ? secStrand : (course.strand || 'General');
 
       classCards.push({
         ...course,
@@ -1464,7 +1464,8 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
         baseCourseId: course.id,
         assignedSection: sec,
         sectionCode: secCode,
-        sectionStrand: secStrand
+        sectionStrand: secStrand,
+        displayStrand: displayStrand
       });
     });
   });
@@ -1743,69 +1744,49 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
     <!-- 2. INSTITUTIONAL APPROVED HANDOUTS REPOSITORY (USER MANAGEMENT STYLE) -->
     ${isAdmin ? renderAdminApprovedHandoutsTableHTML() : ''}
 
-    <!-- 3. STRAND, SECTION & TRACK DROPDOWN FILTERS TOOLBAR -->
-    <div class="materials-filter-toolbar" style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:14px;padding:14px 18px;margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(15,23,42,0.04);">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex:1;">
-        <!-- 1. STRAND DROPDOWN -->
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Strand</label>
-          <select id="teacherStrandSelect" class="mat-filter-select" onchange="setTeacherStrandFilter(this.value)">
-            <option value="all" ${(!teacherStrandFilter || teacherStrandFilter === 'all') ? 'selected' : ''}>🏛️ All Strands</option>
-            <option value="STEM" ${teacherStrandFilter === 'STEM' ? 'selected' : ''}>🧬 STEM</option>
-            <option value="HUMSS" ${teacherStrandFilter === 'HUMSS' ? 'selected' : ''}>📚 HUMSS</option>
-            <option value="ABM" ${teacherStrandFilter === 'ABM' ? 'selected' : ''}>💼 ABM</option>
-            <option value="TVL" ${teacherStrandFilter === 'TVL' ? 'selected' : ''}>🔧 TVL</option>
-          </select>
-        </div>
-
-        <!-- 2. SECTION DROPDOWN -->
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Section</label>
-          <select id="teacherSectionSelect" class="mat-filter-select" onchange="setTeacherSectionFilter(this.value)">
-            <option value="all">👥 All Sections</option>
-            ${distinctSections.map(sec => {
-              const secStrand = getSectionStrand(sec);
-              return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand})</option>`;
-            }).join('')}
-          </select>
-        </div>
-
-        <!-- 3. TRACK DROPDOWN (Specialized, Core, Applied) -->
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <label style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Subject Track</label>
-          <select id="teacherTrackSelect" class="mat-filter-select" onchange="setTeacherTrackFilter(this.value)">
-            <option value="all" ${(!teacherTrackFilter || teacherTrackFilter === 'all') ? 'selected' : ''}>📑 All Tracks</option>
-            <option value="Specialized" ${teacherTrackFilter === 'Specialized' ? 'selected' : ''}>⭐ Specialized</option>
-            <option value="Core" ${teacherTrackFilter === 'Core' ? 'selected' : ''}>📘 Core Subjects</option>
-            <option value="Applied" ${teacherTrackFilter === 'Applied' ? 'selected' : ''}>🔬 Applied</option>
-          </select>
-        </div>
-
-        <!-- COUNT BADGE -->
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <label style="font-size:11px;font-weight:800;color:transparent;text-transform:uppercase;letter-spacing:0.5px;">Count</label>
-          <div id="activeClassesCountBadge" style="padding:7px 12px;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;font-size:12.5px;font-weight:700;color:#0284c7;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;height:36px;box-sizing:border-box;">
-            ${classCards.length} Classes
-          </div>
-        </div>
-
-        <!-- RESET BUTTON -->
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <label style="font-size:11px;font-weight:800;color:transparent;text-transform:uppercase;letter-spacing:0.5px;">Reset</label>
-          <button type="button" onclick="resetAllMaterialsFilters()" style="padding:7px 12px;background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;font-size:12.5px;font-weight:700;color:#475569;cursor:pointer;display:inline-flex;align-items:center;gap:5px;height:36px;box-sizing:border-box;transition:all 0.15s ease;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f8fafc'" title="Reset all filters">
-            ↺ Reset
-          </button>
-        </div>
+    <!-- 3. STRAND, SECTION & TRACK DROPDOWN FILTERS TOOLBAR (MATCHING REPOSITORY FILTER DESIGN) -->
+    <div class="user-search-row" style="margin-bottom:20px;gap:10px;flex-wrap:wrap;align-items:center;">
+      <div class="user-search-wrap" style="flex:1;min-width:240px;">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" id="teacherClassSearchInput" placeholder="Search classes, subjects, sections, or codes..." value="${escHtml(teacherClassSearchQuery || '')}" oninput="setTeacherClassSearch(this.value)">
+        <button type="button" id="teacherClassSearchClearBtn" onclick="clearTeacherClassSearch()" style="${teacherClassSearchQuery ? 'display:block;' : 'display:none;'}position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px;line-height:1;padding:4px;">&times;</button>
       </div>
 
-      <!-- SEARCH INPUT -->
-      <div class="materials-search-wrap" style="min-width:260px;max-width:320px;align-self:flex-end;margin-bottom:0;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#3b82f6;flex-shrink:0;">
-          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-        </svg>
-        <input type="text" id="teacherClassSearchInput" placeholder="Search classes, sections, or codes..." value="${escHtml(teacherClassSearchQuery)}" oninput="setTeacherClassSearch(this.value)"/>
-        <button id="teacherClassSearchClearBtn" onclick="clearTeacherClassSearch()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:14px;padding:0 4px;display:${teacherClassSearchQuery ? 'inline-block' : 'none'};" title="Clear search">✕</button>
+      <!-- STRAND DROPDOWN -->
+      <select class="user-filter-select" id="teacherStrandSelect" onchange="setTeacherStrandFilter(this.value)" aria-label="Filter by Strand">
+        <option value="all" ${(!teacherStrandFilter || teacherStrandFilter === 'all') ? 'selected' : ''}>All Strands</option>
+        <option value="STEM" ${teacherStrandFilter === 'STEM' ? 'selected' : ''}>STEM</option>
+        <option value="HUMSS" ${teacherStrandFilter === 'HUMSS' ? 'selected' : ''}>HUMSS</option>
+        <option value="ABM" ${teacherStrandFilter === 'ABM' ? 'selected' : ''}>ABM</option>
+        <option value="TVL" ${teacherStrandFilter === 'TVL' ? 'selected' : ''}>TVL</option>
+      </select>
+
+      <!-- SECTION DROPDOWN -->
+      <select class="user-filter-select" id="teacherSectionSelect" onchange="setTeacherSectionFilter(this.value)" aria-label="Filter by Section">
+        <option value="all">All Sections</option>
+        ${distinctSections.map(sec => {
+          const secStrand = getSectionStrand(sec);
+          return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand})</option>`;
+        }).join('')}
+      </select>
+
+      <!-- TRACK DROPDOWN -->
+      <select class="user-filter-select" id="teacherTrackSelect" onchange="setTeacherTrackFilter(this.value)" aria-label="Filter by Track">
+        <option value="all" ${(!teacherTrackFilter || teacherTrackFilter === 'all') ? 'selected' : ''}>All Tracks</option>
+        <option value="Specialized" ${teacherTrackFilter === 'Specialized' ? 'selected' : ''}>Specialized</option>
+        <option value="Core" ${teacherTrackFilter === 'Core' ? 'selected' : ''}>Core Subjects</option>
+        <option value="Applied" ${teacherTrackFilter === 'Applied' ? 'selected' : ''}>Applied</option>
+      </select>
+
+      <!-- ACTIVE CLASSES BADGE -->
+      <div id="activeClassesCountBadge" style="padding:9px 13px;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;font-size:13px;font-weight:700;color:#0284c7;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;box-sizing:border-box;">
+        ${classCards.length} Classes
       </div>
+
+      <!-- RESET BUTTON -->
+      <button type="button" class="user-filter-select" onclick="resetAllMaterialsFilters()" style="display:inline-flex;align-items:center;gap:5px;background:#f8fafc;font-weight:700;color:#475569;" title="Reset all filters">
+        &#8634; Reset
+      </button>
     </div>
 
     <!-- 3. STI eLMS CARDS GRID -->
@@ -1840,6 +1821,8 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
           <div class="subject-folder-card"
                data-section="${escHtml(card.assignedSection.toLowerCase())}"
                data-track="${escHtml((card.track || 'specialized').toLowerCase())}"
+               data-strand="${escHtml((card.strand || '').toLowerCase())}"
+               data-section-strand="${escHtml((card.sectionStrand || '').toLowerCase())}"
                data-search="${escHtml(searchKeywords)}"
                data-has-admin-materials="${hasAdminMaterials ? 'true' : 'false'}"
                onclick="setActiveSubjectMaterials('${card.baseCourseId}', '${card.assignedSection}')"
@@ -1852,7 +1835,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
               <h4 class="sfc-title" style="font-size:16px;margin-bottom:6px;">${escHtml(card.title)}</h4>
               <div style="display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;">
                 <span style="background:#e0f2fe;color:#0369a1;font-weight:700;font-size:11px;padding:2px 8px;border-radius:6px;">Section: ${escHtml(card.assignedSection)}</span>
-                <span style="background:#f1f5f9;color:#475569;font-weight:600;font-size:11px;padding:2px 8px;border-radius:6px;">${escHtml(card.strand || 'STEM')} · ${escHtml(card.gradeLevel || 'Grade 11')}</span>
+                <span style="background:#f1f5f9;color:#475569;font-weight:600;font-size:11px;padding:2px 8px;border-radius:6px;">${escHtml(card.displayStrand || card.sectionStrand || card.strand || 'General')} · ${escHtml(card.gradeLevel || 'Grade 11')}</span>
               </div>
               <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
                 ${escHtml(card.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
@@ -3408,7 +3391,7 @@ function renderApprovalMaterialRows() {
   }).join('');
   return `<div class="ca-heading"><h2>Content Approval</h2><div class="ca-heading-actions"><button class="ca-button ca-primary" onclick="refreshApprovalView()">${iconRefresh()} Refresh</button></div></div>
     <div class="ca-banner"><h3>Approval Queue</h3><p>All materials and quizzes submitted by teachers require your approval before they become visible to students.</p></div>
-    <div class="ca-stats">${[['pending','Pending review','clock'],['approved','Approved','check'],['revision','Needs revision','file']].map(([status,label,icon]) => `<div class="ca-stat ${status}"><div class="ca-stat-icon">${approvalIcon(icon)}</div><div><span>${label}</span><strong>${counts(status)}</strong></div></div>`).join('')}</div>
+    <div class="ca-stats">${[['pending','Pending review','clock'],['approved','Approved','check'],['revision','Needs revision','file']].map(([status,label,icon]) => `<div class="ca-stat ${status} ${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')" role="button" tabindex="0" title="Click to filter ${label}"><div class="ca-stat-icon">${approvalIcon(icon)}</div><div><span>${label}</span><strong>${counts(status)}</strong></div></div>`).join('')}</div>
     <div class="ca-panel"><div class="ca-tabs" aria-label="Submission status">${[['pending',`Pending (${counts('pending')})`],['approved','Approved'],['revision','Needs revision'],['archived',`Archive (${counts('archived')})`]].map(([status,label]) => `<button aria-pressed="${approvalView.tab === status}" class="${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')">${label}</button>`).join('')}</div>
     <div class="ca-filters"><label class="ca-search">${approvalIcon('search')}<input id="caSearch" aria-label="Search submissions" placeholder="Search submissions..." value="${escHtml(approvalView.search)}" oninput="setApprovalView('search',this.value)"></label><select aria-label="Content type" onchange="setApprovalView('type',this.value)"><option value="">All content types</option>${options('type')}</select><select aria-label="Subject" onchange="setApprovalView('subject',this.value)"><option value="">All subjects</option>${options('subject')}</select></div>
     <div class="ca-table-wrap"><table class="ca-table"><thead><tr><th scope="col">Content</th><th scope="col">Submitted by</th><th scope="col">Date submitted</th><th scope="col">Actions</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="ca-empty">No submissions found.</td></tr>'}</tbody></table></div>
