@@ -428,21 +428,85 @@ function toggleLessonAccordion(lessonId) {
   renderMaterialsContainer();
 }
 
+function extractMaterialLessonNum(m) {
+  if (!m) return null;
+  if (m.lesson_num) {
+    const p = parseInt(m.lesson_num, 10);
+    if (!isNaN(p)) return p;
+  }
+  if (m.lesson_id) {
+    const mIdMatch = String(m.lesson_id).match(/(?:_l|^0*|lesson[_-]?)(\d+)$/i);
+    if (mIdMatch) {
+      const p = parseInt(mIdMatch[1], 10);
+      if (!isNaN(p)) return p;
+    }
+  }
+  const text = `${m.title || ''} ${m.fileName || ''} ${m.lesson_title || ''}`;
+  const mMatch = text.match(/(?:^|[\b_ \-\[])(?:lesson|module|handout|chap|chapter|l)?\s*0*(\d+)/i);
+  if (mMatch && mMatch[1]) {
+    const p = parseInt(mMatch[1], 10);
+    if (!isNaN(p)) return p;
+  }
+  return null;
+}
+
+function isTeacherMaterial(m) {
+  if (!m) return false;
+  if (m.is_curriculum === true) return false;
+  const r = (m.uploader_role || m.uploaded_by_role || '').toLowerCase();
+  const n = (m.uploaded_by_name || m.uploader_name || '').toLowerCase();
+  if (r.includes('admin') || r.includes('curriculum')) return false;
+  if (n.includes('admin') || n.includes('jacky doe')) return false;
+
+  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && (CURRENT_PROFILE.role === 'admin' || ROLE === 'admin')) {
+    if (m.uploaded_by && CURRENT_PROFILE.id && String(m.uploaded_by) === String(CURRENT_PROFILE.id)) return false;
+    if (n && CURRENT_PROFILE.full_name && n === CURRENT_PROFILE.full_name.toLowerCase()) return false;
+  }
+  return true;
+}
+
 function getSubjectLessons(course) {
   const lessons = getRawSubjectLessons(course);
   if (!lessons || !lessons.length || !Array.isArray(lessons)) return lessons || [];
 
-  lessons.forEach(lesson => {
+  lessons.forEach((lesson, lIdx) => {
     lesson.items = lesson.items || [];
     if (typeof materialsData !== "undefined" && Array.isArray(materialsData)) {
+      const lessonNumInt = parseInt(lesson.num, 10);
+
       const matchingUploads = materialsData.filter(m => {
         if (!m || m.status !== "approved") return false;
-        const courseMatch = (m.course_id && course && m.course_id === course.id) || (course && typeof isMaterialMatchingCourse === "function" && isMaterialMatchingCourse(m, course));
+        const courseMatch = (m.course_id && course && (m.course_id === course.id || String(m.course_id) === String(course.id))) ||
+                            (course && typeof isMaterialMatchingCourse === "function" && isMaterialMatchingCourse(m, course));
         if (!courseMatch) return false;
-        const lMatch = (m.lesson_id && (m.lesson_id === lesson.id || m.lesson_id === lesson.num)) ||
-                      (m.lesson_num && m.lesson_num === lesson.num) ||
-                      (m.lesson_title && m.lesson_title.toLowerCase().includes(lesson.num.toLowerCase()));
-        return !!lMatch;
+
+        // 1. Direct ID or exact num match
+        if (m.lesson_id && (m.lesson_id === lesson.id || m.lesson_id === lesson.num)) return true;
+        if (m.lesson_num && (m.lesson_num === lesson.num || parseInt(m.lesson_num, 10) === lessonNumInt)) return true;
+        if (m.lesson_title && m.lesson_title.toLowerCase().includes(lesson.num.toLowerCase())) return true;
+
+        // 2. Extracted lesson number from title or filename (e.g. 01_Handout_1(26) -> 1 === lessonNumInt)
+        const extractedNum = extractMaterialLessonNum(m);
+        if (extractedNum !== null && !isNaN(lessonNumInt) && extractedNum === lessonNumInt) {
+          return true;
+        }
+
+        // 3. Keyword match from title if lesson keywords exist in material title
+        if (lesson.title) {
+          const cleanLessonTopic = lesson.title.replace(/^\d+[\s\-_.]*/, '').trim().toLowerCase();
+          const matText = `${m.title || ''} ${m.fileName || ''}`.toLowerCase();
+          if (cleanLessonTopic.length > 5 && matText.includes(cleanLessonTopic.slice(0, 15))) {
+            return true;
+          }
+        }
+
+        // 4. Admin official curriculum fallback: if uploaded by admin and no specific lesson number was found in any lesson
+        const isAdminUpload = !isTeacherMaterial(m);
+        if (isAdminUpload && extractedNum === null && lIdx === 0) {
+          return true;
+        }
+
+        return false;
       });
 
       matchingUploads.forEach(u => {
@@ -451,7 +515,8 @@ function getSubjectLessons(course) {
             id: u.id,
             title: u.title || u.fileName || "Curriculum Handout",
             type: u.type || (u.file_type && u.file_type.includes("word") ? "DOCX" : (u.file_type && u.file_type.includes("presentation") ? "PPTX" : "PDF")),
-            score: "-",
+            score: (u.uploader_name && !u.uploader_name.toLowerCase().includes('admin')) ? u.uploader_name : "Official Admin Handout",
+            submitted: u.date_formatted || "Oct 16, 2026",
             due: u.date_formatted || "Official Handout",
             status: "Completed",
             file_url: u.file_url || "SURVEY FORMS - Scholaria.pdf"
@@ -828,6 +893,7 @@ function renderMaterialsList(role) {
     if (course) {
       const subjectUploads = materialsData.filter(m => {
         if (!isMaterialMatchingCourse(m, course)) return false;
+        if (!isTeacherMaterial(m)) return false;
         if (activeSubjectSection) {
           const mSec = (m.section || m.target_section || '').toLowerCase();
           const aSec = activeSubjectSection.toLowerCase();
@@ -933,6 +999,12 @@ function renderMaterialsList(role) {
                       <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Modules &amp; Handouts</h3>
                       <span style="font-size:12px;color:var(--text-muted);">Curriculum modules, syllabus guides, and official study handouts for ${escHtml(course.title)}</span>
                     </div>
+                    ${(role === 'admin') ? `
+                      <button class="sw-btn primary" onclick="openMaterialModal('${course.id}', '${escHtml(activeSubjectSection || '')}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Upload Curriculum Handout
+                      </button>
+                    ` : ''}
                   </div>
 
                   ${subjectUploads.length > 0 ? `
@@ -978,7 +1050,12 @@ function renderMaterialsList(role) {
                                 </div>
                               </div>
                               <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
-                                <span style="font-size:12px;font-weight:600;color:#64748b;">${items.length} handouts</span>
+                                ${(role === 'admin') ? `
+                                  <button type="button" class="sw-btn outline" onclick="event.stopPropagation(); openMaterialModal('${course.id}', '${escHtml(activeSubjectSection || '')}', '${lesson.id}')" style="padding:4px 10px;font-size:11.5px;border-radius:8px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">
+                                    <span>+</span> Add Handout
+                                  </button>
+                                ` : ''}
+                                <span style="font-size:12px;font-weight:600;color:#64748b;">${items.length} handout${items.length === 1 ? '' : 's'}</span>
                                 <div style="width:28px;height:28px;border-radius:6px;background:#f8fafc;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;color:#64748b;transition:transform 0.2s ease;transform:${isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'};">
                                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                                 </div>
@@ -1013,9 +1090,16 @@ function renderMaterialsList(role) {
                                           <td style="padding:10px 12px;color:#64748b;">${escHtml(it.due || '-')}</td>
                                           <td style="padding:10px 12px;"><span class="sw-status-pill ${it.status === 'Completed' ? 'done' : (it.status === 'Ongoing' ? 'ongoing' : '')}">${escHtml(it.status || 'Pending')}</span></td>
                                           <td style="padding:10px 12px;text-align:right;">
-                                            <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
-                                              <span>⬇</span> Download
-                                            </a>
+                                            <div style="display:inline-flex;align-items:center;gap:6px;justify-content:flex-end;">
+                                              <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
+                                                <span>⬇</span> Download
+                                              </a>
+                                              ${(role === 'admin') ? `
+                                                <button type="button" onclick="event.stopPropagation(); deleteMaterial('${it.id}')" style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:6px;background:#fff1f2;border:1px solid #fecdd3;color:#e11d48;font-size:11.5px;font-weight:700;cursor:pointer;" title="Delete Handout">
+                                                  🗑
+                                                </button>
+                                              ` : ''}
+                                            </div>
                                           </td>
                                         </tr>
                                       `).join('') : `
@@ -1026,7 +1110,7 @@ function renderMaterialsList(role) {
                                               <div style="font-size:13.5px;font-weight:700;color:#0f172a;">Empty — No files uploaded for this lesson yet.</div>
                                               <div style="font-size:12px;color:#64748b;max-width:440px;">Learning handouts and module materials for this lesson will appear here once published.</div>
                                               ${(role === 'admin') ? `
-                                                <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;">
+                                                <button class="sw-btn primary" onclick="openMaterialModal('${course.id}', '${escHtml(activeSubjectSection || '')}', '${lesson.id}')" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;">
                                                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                                   Upload Handout to this Lesson
                                                 </button>
@@ -1112,10 +1196,10 @@ function renderMaterialsList(role) {
                 <div class="sw-uploads-wrap">
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
                     <div>
-                      <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">${role === 'admin' ? 'Curriculum Handouts &amp; Uploads' : 'Teacher Uploads'}</h3>
-                      <span style="font-size:12px;color:var(--text-muted);">Supplemental handouts, slide decks, and worksheets uploaded by teachers for ${escHtml(course.title)}</span>
+                      <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Teacher Uploads</h3>
+                      <span style="font-size:12px;color:var(--text-muted);">Supplemental handouts, slide decks, and worksheets uploaded by faculty for ${escHtml(course.title)}</span>
                     </div>
-                    ${(role === 'teacher' || role === 'admin') ? `
+                    ${(role === 'teacher') ? `
                       <button class="sw-btn primary" onclick="openMaterialModal('${course.id}', '${escHtml(activeSubjectSection || '')}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;font-size:12.5px;">
                         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                         Upload Handouts to ${escHtml(activeSubjectSection || 'this Subject')}
@@ -1123,19 +1207,7 @@ function renderMaterialsList(role) {
                     ` : ''}
                   </div>
 
-                  
-                    ${role === 'admin' ? `
-                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;background:#f8fafc;padding:6px 12px;border-radius:10px;border:1px solid #e2e8f0;width:fit-content;">
-                        <span style="font-size:11.5px;font-weight:700;color:#64748b;">Filter View:</span>
-                        <button type="button" class="sw-btn ${window.adminUploadScope !== 'mine' ? 'primary' : 'outline'}" onclick="setAdminUploadScope('all')" style="padding:4px 10px;font-size:11.5px;border-radius:6px;cursor:pointer;">
-                          All Handouts (${subjectUploads.length})
-                        </button>
-                        <button type="button" class="sw-btn ${window.adminUploadScope === 'mine' ? 'primary' : 'outline'}" onclick="setAdminUploadScope('mine')" style="padding:4px 10px;font-size:11.5px;border-radius:6px;cursor:pointer;background:${window.adminUploadScope === 'mine' ? '#4338ca' : '#ffffff'};color:${window.adminUploadScope === 'mine' ? '#ffffff' : '#4338ca'};border-color:#c7d2fe;font-weight:700;">
-                          👤 My Materials Only (${subjectUploads.filter(m => (CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id) || (m.uploader_role||'').toLowerCase().includes('admin') || (m.uploaded_by_name||'').toLowerCase().includes('admin')).length})
-                        </button>
-                      </div>
-                    ` : ''}
-                    <div class="file-list">
+                  <div class="file-list">
                     ${(() => {
                       const finalUploads = (role === 'admin' && window.adminUploadScope === 'mine')
                         ? subjectUploads.filter(m => (CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id) || (m.uploader_role||'').toLowerCase().includes('admin') || (m.uploaded_by_name||'').toLowerCase().includes('admin'))
@@ -3862,11 +3934,18 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
     initialGrade = targetCourse.gradeLevel || initialGrade;
   }
 
+  const courseLessons = targetCourse ? getSubjectLessons(targetCourse) : [];
+  let initialLessonId = targetLessonId || null;
+  if (!initialLessonId && ROLE === 'admin' && courseLessons.length > 0) {
+    initialLessonId = courseLessons[0]?.id || courseLessons[0]?.num || null;
+  }
+
   Object.assign(materialUploadState, { 
     course_id: targetCourse ? targetCourse.id : null,
     course_title: targetCourse ? targetCourse.title : null,
     course_code: targetCourse ? targetCourse.code : null,
-    title: targetCourse ? `${targetCourse.title} Supplementary Handout` : '', 
+    lesson_id: initialLessonId,
+    title: targetCourse ? (ROLE === 'admin' ? `${targetCourse.title} Curriculum Handout` : `${targetCourse.title} Supplementary Handout`) : '', 
     subject: initialSubject, 
     strand: initialStrand, 
     grade_level: initialGrade, 
@@ -4103,12 +4182,16 @@ function renderMaterialModal() {
       const availableLessons = courseObj ? getSubjectLessons(courseObj) : [];
       return `
         <div class="gen-field" style="margin-top:4px;">
-          <label>Target Topic / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(Select a specific lesson or general supplementary)</span></label>
+          <label>Target Lesson / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${ROLE === 'admin' ? '(Admin curriculum handouts appear inside the module box under Modules & Handouts)' : '(Select a specific lesson or general supplementary)'}</span></label>
           <select onchange="muUpdateField('lesson_id', this.value)">
-            <option value="" ${!s.lesson_id ? 'selected' : ''}>📁 General Supplementary (Appears in Teacher Uploads Tab)</option>
+            ${ROLE === 'admin' ? `
+              <option value="" ${!s.lesson_id ? 'selected' : ''}>📖 Auto-detect from file (e.g. 01_Handout → Lesson 01)</option>
+            ` : `
+              <option value="" ${!s.lesson_id ? 'selected' : ''}>📁 General Supplementary (Appears in Teacher Uploads Tab)</option>
+            `}
             ${availableLessons.map(l => `
               <option value="${escHtml(l.id || l.num)}" ${s.lesson_id === (l.id || l.num) ? 'selected' : ''}>
-                📖 ${escHtml(l.title)} (Curriculum Lesson)
+                📖 ${escHtml(l.title)}
               </option>
             `).join('')}
           </select>
@@ -4213,21 +4296,63 @@ async function submitMaterialUpload() {
   const uploaderRole = ROLE === 'admin' ? 'Admin' : 'Teacher';
   const targetStatus = 'approved'; // Instantly approved so uploads reflect immediately for students
 
+  // Determine course lessons for auto-assignment if needed
+  let courseForLessons = null;
+  if (typeof COURSES_DATABASE !== 'undefined') {
+    courseForLessons = COURSES_DATABASE.find(c => c.id === s.course_id || (s.subject && c.title && c.title.toLowerCase().trim() === s.subject.toLowerCase().trim()));
+  }
+  const cLessons = courseForLessons ? getSubjectLessons(courseForLessons) : [];
+
   s.files.forEach((f, idx) => {
     const srv = serverRecords[idx] || null;
     const itemTitle = s.files.length === 1 ? s.title.trim() : (f.name.replace(/\.[^.]+$/, '') || s.title.trim());
     const ext = f.name.split('.').pop() || 'pdf';
     const typeLabel = ext.toUpperCase();
 
+    // Determine lesson assignment for the handout
+    let assignedLessonId = s.lesson_id || null;
+    let assignedLessonNum = null;
+    let assignedLessonTitle = null;
+
+    if (!assignedLessonId) {
+      const detectedNum = extractMaterialLessonNum({ title: itemTitle, fileName: f.name });
+      if (detectedNum !== null && cLessons.length > 0) {
+        const foundL = cLessons.find(l => parseInt(l.num, 10) === detectedNum);
+        if (foundL) {
+          assignedLessonId = foundL.id;
+          assignedLessonNum = foundL.num;
+          assignedLessonTitle = foundL.title;
+        }
+      }
+    }
+
+    // For admin, default to first lesson if unassigned
+    if (ROLE === 'admin' && !assignedLessonId && cLessons.length > 0) {
+      assignedLessonId = cLessons[0].id;
+      assignedLessonNum = cLessons[0].num;
+      assignedLessonTitle = cLessons[0].title;
+    }
+
+    if (assignedLessonId && !assignedLessonNum && cLessons.length > 0) {
+      const foundL = cLessons.find(l => l.id === assignedLessonId || l.num === assignedLessonId);
+      if (foundL) {
+        assignedLessonNum = foundL.num;
+        assignedLessonTitle = foundL.title;
+      }
+    }
+
     const localRecord = {
       id: srv ? srv.id : `local_${Date.now()}_${idx}`,
       title: itemTitle,
       fileName: f.name,
-      category: 'Handout',
-      tag: 'Handout',
+      category: ROLE === 'admin' ? 'Curriculum' : 'Handout',
+      tag: ROLE === 'admin' ? 'Curriculum' : 'Handout',
       subject: s.subject.trim(),
       course_id: s.course_id || activeSubjectFilter || null,
       course_code: s.course_code || null,
+      lesson_id: assignedLessonId,
+      lesson_num: assignedLessonNum,
+      lesson_title: assignedLessonTitle,
       strand: s.strand.trim(),
       grade_level: s.grade_level.trim(),
       section: targetSection,
@@ -4237,6 +4362,7 @@ async function submitMaterialUpload() {
       uploaded_by: CURRENT_PROFILE?.id || 'local_user',
       approved_by: CURRENT_PROFILE?.id || 'admin',
       approved_by_name: ROLE === 'admin' ? uploaderName : 'System Administrator',
+      is_curriculum: ROLE === 'admin',
       file_type: f.type || 'application/pdf',
       type: typeLabel,
       status: targetStatus,
@@ -4254,6 +4380,10 @@ async function submitMaterialUpload() {
     } else {
       materialsData.unshift(localRecord);
     }
+
+    if (ROLE === 'admin' && assignedLessonId) {
+      expandedLessonMap[assignedLessonId] = true;
+    }
   });
 
   const uploadCount = s.files.length;
@@ -4269,12 +4399,12 @@ async function submitMaterialUpload() {
 
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
 
-  // If inside subject or course was targeted, ensure activeSubjectSubTab is 'uploads'
+  // If inside subject or course was targeted, ensure activeSubjectSubTab routes to modules for admin
   if (activeSubjectFilter || s.course_id) {
     if (!activeSubjectFilter && s.course_id) {
       activeSubjectFilter = s.course_id;
     }
-    activeSubjectSubTab = 'uploads';
+    activeSubjectSubTab = (ROLE === 'admin') ? 'modules' : 'uploads';
   } else if (ROLE === 'admin') {
     // For admin, reset filters so the newly uploaded handout appears immediately at the top
     materialsActiveTab = 'all';
