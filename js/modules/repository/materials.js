@@ -461,14 +461,25 @@ function getSubjectLessons(course) {
 }
 function getRawSubjectLessons(course) {
   if (!course) return [];
+  if (typeof course === 'string') course = { title: course, id: 'course-' + course.toLowerCase().replace(/[^a-z0-9]+/g, '-') };
+  if (!course.id) course.id = 'course-' + (course.title || 'subj').toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const cTitle = (course.title || '').toLowerCase();
   
-  if (cTitle.includes('prog') || cTitle.includes('programming') || cTitle.includes('computer')) {
+  if (cTitle.includes('general math') || cTitle.includes('gen math') || cTitle === 'general mathematics' || cTitle === 'math') {
     return [
-      { id: `${course.id}_l1`, num: '01', title: '01 Intro to Programming, Syntax & IDE Setup', cover: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l2`, num: '02', title: '02 Variables, Data Types, Operators & Expressions', cover: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l3`, num: '03', title: '03 Conditional Logic & Loops (If/Else, While, For)', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80', items: [] },
-      { id: `${course.id}_l4`, num: '04', title: '04 Functions, Arrays & Coding Applications', cover: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80', items: [] }
+      { id: `${course.id}_l1`, num: '01', title: '01 Functions and Their Graphs (Linear, Quadratic & Piecewise)', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Rational, Exponential & Logarithmic Functions', cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Simple & Compound Interest, Annuities & Amortization', cover: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Basic Logic, Truth Tables & Categorical Syllogisms', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('statistics') || cTitle.includes('stat') || cTitle.includes('probability')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Random Variables & Probability Distributions', cover: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Normal Distribution, Mean, Variance & Z-Scores', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Sampling Techniques & Sampling Distributions', cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Estimation of Parameters, Hypothesis Testing & Correlation', cover: 'https://images.unsplash.com/photo-1543286386-713bdd548da4?auto=format&fit=crop&w=400&q=80', items: [] }
     ];
   }
 
@@ -478,6 +489,15 @@ function getRawSubjectLessons(course) {
       { id: `${course.id}_l2`, num: '02', title: '02 Parabolas, Circles & Ellipses', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
       { id: `${course.id}_l3`, num: '03', title: '03 Hyperbolas and Nonlinear Systems', cover: 'https://images.unsplash.com/photo-1596495578065-6e0763fa1178?auto=format&fit=crop&w=400&q=80', items: [] },
       { id: `${course.id}_l4`, num: '04', title: '04 Circular & Trigonometric Functions', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('basic calculus') || cTitle.includes('calculus')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Limits & Continuity of Algebraic & Transcendental Functions', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Derivatives, Tangent Lines & Differentiation Rules', cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Applications of Derivatives (Optimization & Rates)', cover: 'https://images.unsplash.com/photo-1596495578065-6e0763fa1178?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Antiderivatives & the Fundamental Theorem of Calculus', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
     ];
   }
   
@@ -496,6 +516,60 @@ function getRawSubjectLessons(course) {
       { id: `${course.id}_l2`, num: '02', title: '02 Kinematics: 1D and 2D Motion', cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=80', items: [] },
       { id: `${course.id}_l3`, num: '03', title: '03 Newton\'s Laws of Motion and Friction', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
       { id: `${course.id}_l4`, num: '04', title: '04 Work, Energy, Momentum and Power', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('chemistry') || cTitle.includes('chem')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Matter, Atoms, Molecules, Ions & Periodic Trends', cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Stoichiometry & Chemical Formulas Calculations', cover: 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Electronic Structure & Chemical Bonding', cover: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Thermochemistry, Gases & Intermolecular Forces', cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('earth') || cTitle.includes('life science')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Earth Systems, Subsystems & Origin of the Universe', cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Minerals, Rocks & Internal/Surface Geologic Processes', cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Historical Geology, Fossils & Early Evolution of Life', cover: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Ecology, Biomes, Energy Flow & Ecosystem Dynamics', cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('reading') || cTitle.includes('writing')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Reading & Evaluating Patterns of Written Development', cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Text and Context Connections (Intertextuality & Hypertext)', cover: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Critical Reading, Claim Formulations & Textual Evidence', cover: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Academic & Professional Purpose Document Composition', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('oral') || cTitle.includes('communication')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Nature, Elements & Models of Communication', cover: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Intercultural Communication & Speech Contexts', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Speech Styles, Speech Acts & Communicative Strategies', cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Principles of Speech Writing & Effective Delivery', cover: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('empowerment') || cTitle.includes('ict')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 ICT Environment, Online Safety & Netiquette', cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Productivity Tools & Cloud Collaboration Systems', cover: 'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Imaging, Graphic Design Principles & Infographics', cover: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Web Prototyping & Online Platforms for Social Change', cover: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('research')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Nature of Inquiry & Research Problem Formulation', cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Review of Related Literature & Conceptual Framework', cover: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Research Design, Sampling & Data Collection Instruments', cover: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Data Analysis, Findings Synthesis & Recommendations', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] }
     ];
   }
 
@@ -884,7 +958,7 @@ function renderMaterialsList(role) {
                                               <span style="font-size:24px;">📦</span>
                                               <div style="font-size:13.5px;font-weight:700;color:#0f172a;">Empty — No files uploaded for this lesson yet.</div>
                                               <div style="font-size:12px;color:#64748b;max-width:440px;">Learning handouts and module materials for this lesson will appear here once published.</div>
-                                              ${(role === 'teacher' || role === 'admin') ? `
+                                              ${(role === 'admin') ? `
                                                 <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;">
                                                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                                   Upload Handout to this Lesson
@@ -3676,13 +3750,23 @@ function renderMaterialModal() {
     </div>
     ${(() => {
       let matchedCourse = null;
-      if (typeof COURSES_DATABASE !== 'undefined') {
+      if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
         if (s.course_id) matchedCourse = COURSES_DATABASE.find(c => c.id === s.course_id);
         if (!matchedCourse && s.subject) {
-          matchedCourse = COURSES_DATABASE.find(c => (c.title || '').toLowerCase() === s.subject.toLowerCase() || (c.title && s.subject.toLowerCase().includes(c.title.toLowerCase())));
+          const sNorm = s.subject.toLowerCase().trim();
+          matchedCourse = COURSES_DATABASE.find(c => {
+            const cNorm = (c.title || '').toLowerCase().trim();
+            return cNorm === sNorm || cNorm.includes(sNorm) || sNorm.includes(cNorm);
+          });
         }
       }
-      const availableLessons = matchedCourse ? getSubjectLessons(matchedCourse) : [];
+      const courseObj = matchedCourse || (s.subject ? {
+        id: 'course-' + s.subject.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        title: s.subject,
+        strand: s.strand || 'STEM',
+        gradeLevel: s.grade_level || 'Grade 11'
+      } : null);
+      const availableLessons = courseObj ? getSubjectLessons(courseObj) : [];
       return `
         <div class="gen-field" style="margin-top:4px;">
           <label>Target Topic / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(Select a specific lesson or general supplementary)</span></label>
