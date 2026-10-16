@@ -1,7 +1,7 @@
 /* ── COURSES MODULE — HAVEN OF WISDOM ACADEMY ENROLLED SUBJECTS & INDIVIDUAL PDF MODULES ── */
 
 const COURSES_DATABASE = [
-  // ── STEM STRAND SUBJECTS ──
+  // ── STEM STRAND SPECIALIZED SUBJECTS (Strictly for STEM Sections like Section A, C, E) ──
   {
     id: 'course-pre-calc',
     title: 'Pre-Calculus',
@@ -32,6 +32,22 @@ const COURSES_DATABASE = [
     status: 'enrolled',
     cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=600&q=80',
     description: 'Study of cell structure, cellular processes, biological molecules, and energy transformation.',
+    documents: []
+  },
+  {
+    id: 'course-basic-calc',
+    title: 'Basic Calculus',
+    code: 'STEM-1103',
+    strand: 'STEM',
+    track: 'Specialized',
+    gradeLevel: 'Grade 11',
+    semester: '2nd Sem',
+    progress: 20,
+    modules: 0,
+    instructor: 'Dr. Eleanor Llorente',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80',
+    description: 'Limits, continuity, and differential calculus with mathematical applications.',
     documents: []
   },
   {
@@ -66,6 +82,8 @@ const COURSES_DATABASE = [
     description: 'Matter, atomic structure, chemical bonding, stoichiometry, and thermochemistry.',
     documents: []
   },
+
+  // ── CORE & APPLIED SUBJECTS (DepEd Mandated for ALL Strands: STEM, HUMSS, ABM, TVL) ──
   {
     id: 'course-gen-math',
     title: 'General Mathematics',
@@ -115,19 +133,19 @@ const COURSES_DATABASE = [
     documents: []
   },
   {
-    id: 'course-empotech',
-    title: 'Empowerment Technologies (ICT)',
-    code: 'ICT-1101',
+    id: 'course-oral-comm',
+    title: 'Oral Communication in Context',
+    code: 'ENG-1101',
     strand: 'All',
-    track: 'Applied',
+    track: 'Core',
     gradeLevel: 'Grade 11',
     semester: '1st Sem',
-    progress: 75,
+    progress: 100,
     modules: 0,
-    instructor: 'Engr. Julian Callanta',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80',
-    description: 'Information and communication technology tools, digital safety, and web prototyping.',
+    instructor: 'Prof. Teresa Santos',
+    status: 'completed',
+    cover: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80',
+    description: 'Speech styles, communication barriers, speech writing, and delivery strategies.',
     documents: []
   },
   {
@@ -147,22 +165,6 @@ const COURSES_DATABASE = [
     documents: []
   },
   {
-    id: 'course-basic-calc',
-    title: 'Basic Calculus',
-    code: 'STEM-1103',
-    strand: 'STEM',
-    track: 'Specialized',
-    gradeLevel: 'Grade 11',
-    semester: '2nd Sem',
-    progress: 20,
-    modules: 0,
-    instructor: 'Dr. Eleanor Llorente',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80',
-    description: 'Limits, continuity, and differential calculus with mathematical applications.',
-    documents: []
-  },
-  {
     id: 'course-mil',
     title: 'Media & Information Literacy',
     code: 'MIL-1201',
@@ -179,19 +181,19 @@ const COURSES_DATABASE = [
     documents: []
   },
   {
-    id: 'course-oral-comm',
-    title: 'Oral Communication in Context',
-    code: 'ENG-1101',
+    id: 'course-empotech',
+    title: 'Empowerment Technologies (ICT)',
+    code: 'ICT-1101',
     strand: 'All',
-    track: 'Core',
+    track: 'Applied',
     gradeLevel: 'Grade 11',
     semester: '1st Sem',
-    progress: 100,
+    progress: 75,
     modules: 0,
-    instructor: 'Prof. Teresa Santos',
-    status: 'completed',
-    cover: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80',
-    description: 'Speech styles, communication barriers, speech writing, and delivery strategies.',
+    instructor: 'Engr. Julian Callanta',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80',
+    description: 'Information and communication technology tools, digital safety, and web prototyping.',
     documents: []
   },
   {
@@ -211,7 +213,7 @@ const COURSES_DATABASE = [
     documents: []
   },
 
-  // ── HUMSS STRAND SUBJECTS ──
+  // ── HUMSS STRAND ALLOCATED SPECIALIZED SUBJECTS (Strictly for HUMSS Sections like Section B) ──
   {
     id: 'course-humss-diss',
     title: 'Disciplines and Ideas in the Social Sciences',
@@ -245,8 +247,24 @@ const COURSES_DATABASE = [
     documents: []
   },
   {
+    id: 'course-humss-diass',
+    title: 'Disciplines and Ideas in the Applied Social Sciences',
+    code: 'HUMSS-1103',
+    strand: 'HUMSS',
+    track: 'Specialized',
+    gradeLevel: 'Grade 11',
+    semester: '2nd Sem',
+    progress: 35,
+    modules: 0,
+    instructor: 'Prof. Teresa Santos',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=600&q=80',
+    description: 'Counseling, social work, and communication disciplines and their real-world applications in community development.',
+    documents: []
+  },
+  {
     id: 'course-humss-creative-writing',
-    title: 'Creative Writing',
+    title: 'Creative Writing / Malikhaing Pagsulat',
     code: 'HUMSS-1201',
     strand: 'HUMSS',
     track: 'Specialized',
@@ -260,8 +278,56 @@ const COURSES_DATABASE = [
     description: 'Poetry, fiction, drama, sensory imagery, literary figures, and creative storytelling techniques.',
     documents: []
   },
+  {
+    id: 'course-humss-religions',
+    title: 'Introduction to World Religions and Belief Systems',
+    code: 'HUMSS-1202',
+    strand: 'HUMSS',
+    track: 'Specialized',
+    gradeLevel: 'Grade 12',
+    semester: '1st Sem',
+    progress: 25,
+    modules: 0,
+    instructor: 'Dr. Arthur Cruz',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
+    description: 'Historical contexts, founders, core teachings, and practices of major world religions and belief systems.',
+    documents: []
+  },
+  {
+    id: 'course-humss-nonfiction',
+    title: 'Creative Nonfiction: The Literary Essay',
+    code: 'HUMSS-1203',
+    strand: 'HUMSS',
+    track: 'Specialized',
+    gradeLevel: 'Grade 12',
+    semester: '2nd Sem',
+    progress: 20,
+    modules: 0,
+    instructor: 'Ms. Clara Asis',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?auto=format&fit=crop&w=600&q=80',
+    description: 'Personal essays, memoirs, travelogues, and narrative journalism with literary techniques.',
+    documents: []
+  },
+  {
+    id: 'course-humss-community',
+    title: 'Community Engagement, Solidarity and Citizenship',
+    code: 'HUMSS-1204',
+    strand: 'HUMSS',
+    track: 'Specialized',
+    gradeLevel: 'Grade 12',
+    semester: '2nd Sem',
+    progress: 15,
+    modules: 0,
+    instructor: 'Atty. Roberto Silva',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=600&q=80',
+    description: 'Integration of social science theories in community action, civic participation, and solidarity programs.',
+    documents: []
+  },
 
-  // ── ABM STRAND SUBJECTS ──
+  // ── ABM STRAND ALLOCATED SPECIALIZED SUBJECTS (Strictly for ABM Sections like Section D) ──
   {
     id: 'course-abm-bus-math',
     title: 'Business Math',
@@ -310,8 +376,72 @@ const COURSES_DATABASE = [
     description: 'Principles, functions, and theories of management in business organizations and enterprise dynamics.',
     documents: []
   },
+  {
+    id: 'course-abm-marketing',
+    title: 'Principles of Marketing',
+    code: 'ABM-1104',
+    strand: 'ABM',
+    track: 'Specialized',
+    gradeLevel: 'Grade 11',
+    semester: '2nd Sem',
+    progress: 30,
+    modules: 0,
+    instructor: 'Prof. Carmen Reyes',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1533750516457-a7f992034fec?auto=format&fit=crop&w=600&q=80',
+    description: 'Marketing concepts, consumer analysis, market segmentation, product positioning, and marketing mix strategies.',
+    documents: []
+  },
+  {
+    id: 'course-abm-fabm2',
+    title: 'Fundamentals of Accountancy, Business & Management 2',
+    code: 'ABM-1201',
+    strand: 'ABM',
+    track: 'Specialized',
+    gradeLevel: 'Grade 12',
+    semester: '1st Sem',
+    progress: 40,
+    modules: 0,
+    instructor: 'Prof. Carmen Reyes',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=600&q=80',
+    description: 'Preparation of financial statements for service and merchandising businesses, cash flow, and financial analysis.',
+    documents: []
+  },
+  {
+    id: 'course-abm-applied-econ',
+    title: 'Applied Economics',
+    code: 'ABM-1202',
+    strand: 'ABM',
+    track: 'Specialized',
+    gradeLevel: 'Grade 12',
+    semester: '1st Sem',
+    progress: 35,
+    modules: 0,
+    instructor: 'Dr. Wilfredo Santos',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=600&q=80',
+    description: 'Microeconomics and macroeconomics principles applied to contemporary Philippine economic issues.',
+    documents: []
+  },
+  {
+    id: 'course-abm-finance',
+    title: 'Business Finance',
+    code: 'ABM-1203',
+    strand: 'ABM',
+    track: 'Specialized',
+    gradeLevel: 'Grade 12',
+    semester: '2nd Sem',
+    progress: 20,
+    modules: 0,
+    instructor: 'Prof. Carmen Reyes',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1579532537598-459ecdaf39cc?auto=format&fit=crop&w=600&q=80',
+    description: 'Financial management, capital budgeting, working capital, financial ratio analysis, and investments.',
+    documents: []
+  },
 
-  // ── TVL STRAND SUBJECTS ──
+  // ── TVL / ICT STRAND ALLOCATED SPECIALIZED SUBJECTS (Strictly for TVL Sections) ──
   {
     id: 'course-tvl-css1',
     title: 'Computer Systems Servicing 1',
@@ -343,6 +473,54 @@ const COURSES_DATABASE = [
     cover: 'https://images.unsplash.com/photo-1547658719-da2b51169166?auto=format&fit=crop&w=600&q=80',
     description: 'Client-side web development, HTML5 semantic structure, modern CSS responsive layouts, and interactive UI.',
     documents: []
+  },
+  {
+    id: 'course-tvl-web2',
+    title: 'Web Systems and Technologies 2',
+    code: 'TVL-1201',
+    strand: 'TVL',
+    track: 'Specialized',
+    gradeLevel: 'Grade 12',
+    semester: '1st Sem',
+    progress: 35,
+    modules: 0,
+    instructor: 'Engr. Daniel Cruz',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=600&q=80',
+    description: 'Full-stack application development, RESTful APIs, back-end scripting, and server configuration.',
+    documents: []
+  },
+  {
+    id: 'course-tvl-dbms',
+    title: 'Database Management Systems',
+    code: 'TVL-1202',
+    strand: 'TVL',
+    track: 'Specialized',
+    gradeLevel: 'Grade 12',
+    semester: '1st Sem',
+    progress: 40,
+    modules: 0,
+    instructor: 'Engr. Julian Callanta',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1544383835-bda2bc66a55d?auto=format&fit=crop&w=600&q=80',
+    description: 'Relational database schema design, SQL querying, data integrity constraints, normalization, and ACID transactions.',
+    documents: []
+  },
+  {
+    id: 'course-tvl-cybersec',
+    title: 'Cybersecurity Fundamentals',
+    code: 'TVL-1203',
+    strand: 'TVL',
+    track: 'Specialized',
+    gradeLevel: 'Grade 12',
+    semester: '2nd Sem',
+    progress: 25,
+    modules: 0,
+    instructor: 'Engr. Julian Callanta',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=600&q=80',
+    description: 'Information security principles, threat modeling, network encryption, vulnerability scanning, and cyber defense.',
+    documents: []
   }
 ];
 
@@ -359,8 +537,8 @@ function isCourseOpenForStudent(course) {
   const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
   const courseStrand = (course.strand || 'STEM').toUpperCase();
 
-  // Strict strand check: student only sees subjects belonging to their enrolled strand (e.g. STEM)
-  return courseStrand === studentStrand;
+  // Strict strand check: student sees subjects of their enrolled strand or common Core/Applied subjects
+  return courseStrand === studentStrand || courseStrand === 'ALL' || course.track === 'Core' || course.track === 'Applied';
 }
 
 function handleCourseClick(courseId) {
@@ -398,111 +576,38 @@ function renderCoursesWidgetHTML() {
   const enrolledList = COURSES_DATABASE.filter(c => isCourseOpenForStudent(c));
 
   return `
-  <div class="courses-widget">
-    <div class="cw-hdr">
-      <div class="cw-title-wrap">
-        <h2 class="cw-title">Enrolled Subjects</h2>
-        <span class="cw-subtitle">S.Y. 2024–2025 · First Semester · Click any subject to view its individual PDF learning modules</span>
-      </div>
-    </div>
-
-    <div class="cw-filters-row">
-      <div class="cw-left-filters">
-        <div class="cw-tab-group">
-          <button class="cw-tab active" title="Subjects Enrolled">
-            Subjects Enrolled <span class="cw-count">${enrolledList.length}</span>
-          </button>
+    <div class="courses-widget-container">
+      <div class="cw-header">
+        <div>
+          <h3>My Enrolled Subjects</h3>
+          <p>DepEd Official Senior High School Curriculum (${studentStrand} Strand · S.Y. 2026–2027)</p>
+        </div>
+        <div class="cw-controls">
+          <button class="cw-nav-btn prev" onclick="scrollCoursesGrid('left')" title="Scroll left">&#8249;</button>
+          <button class="cw-nav-btn next" onclick="scrollCoursesGrid('right')" title="Scroll right">&#8250;</button>
         </div>
       </div>
-
-      <div class="cw-nav-btns">
-        <button class="cw-slide-btn" onclick="scrollCoursesGrid('left')" aria-label="Scroll left" title="Scroll left">
-          <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <button class="cw-slide-btn" onclick="scrollCoursesGrid('right')" aria-label="Scroll right" title="Scroll right">
-          <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
+      <div class="cw-cards-grid" id="cwCardsGrid">
+        ${enrolledList.map(c => `
+          <div class="cw-subject-card" onclick="handleCourseClick('${c.id}')" title="View ${escHtml(c.title)} Modules">
+            <div class="cw-card-thumb" style="background-image:url('${c.cover}');">
+              <span class="cw-badge-code">${c.code}</span>
+              <span class="cw-badge-track">${c.track}</span>
+            </div>
+            <div class="cw-card-body">
+              <h4 class="cw-card-title">${escHtml(c.title)}</h4>
+              <p class="cw-card-inst">${escHtml(c.instructor)}</p>
+              <div class="cw-progress-bar-wrap">
+                <div class="cw-progress-fill" style="width:${c.progress}%;"></div>
+              </div>
+              <div class="cw-card-meta">
+                <span>${c.modules} Modules</span>
+                <span>${c.progress}% Finished</span>
+              </div>
+            </div>
+          </div>
+        `).join('')}
       </div>
     </div>
-
-    <div class="cw-cards-grid" id="cwCardsGrid">
-      ${enrolledList.length ? enrolledList.map(c => renderCourseCard(c)).join('') : `
-        <div style="padding: 30px; color: var(--text-muted); text-align: center; width: 100%; font-size: 13px;">
-          No enrolled subjects found for ${studentStrand}.
-        </div>
-      `}
-    </div>
-  </div>`;
-}
-
-function renderCourseCard(course) {
-  const isOpen = isCourseOpenForStudent(course);
-  const isCompleted = course.progress === 100;
-  const uploadsForCourse = (typeof materialsData !== 'undefined' && Array.isArray(materialsData))
-    ? materialsData.filter(m => (typeof isMaterialMatchingCourse === 'function' ? isMaterialMatchingCourse(m, course) : false) && (m.status === 'approved' || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id)))
-    : [];
-  const docCount = uploadsForCourse.length;
-
-  return `
-  <div class="cw-card ${!isOpen ? 'locked' : ''}" onclick="handleCourseClick('${course.id}')" title="Click to view learning materials for ${escHtml(course.title)}">
-    <div class="cw-thumb" style="background-image: url('${course.cover}');">
-      <div class="cw-thumb-gradient"></div>
-      
-      <div class="cw-thumb-top">
-        <span class="cw-track-badge">${course.track || 'Core'}</span>
-        <span class="cw-strand-badge ${!isOpen ? 'locked-badge' : ''}">${isOpen ? course.strand : '🔒 ' + course.strand}</span>
-      </div>
-
-      <div class="cw-thumb-bottom">
-        <span class="cw-sem-tag">${course.semester || '1st Sem'} · ${course.gradeLevel || 'Grade 12'}</span>
-      </div>
-
-      ${!isOpen ? `
-        <div class="cw-lock-overlay">
-          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-          <span>Locked for ${CURRENT_PROFILE?.strand || 'STEM'}</span>
-        </div>` : ''}
-    </div>
-
-    <div class="cw-card-body">
-      <div class="cw-code-row">
-        <span class="cw-course-code">${course.code || 'SUBJ-101'}</span>
-        <span class="cw-mod-chip">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          ${docCount} ${docCount === 1 ? 'Handout' : 'Handouts'}
-        </span>
-      </div>
-
-      <h3 class="cw-card-title">${escHtml(course.title)}</h3>
-
-      <div class="cw-instructor-row">
-        <div class="cw-avatar" title="${escHtml(course.instructor)}">${course.instructor ? course.instructor.charAt(course.instructor.startsWith('Dr.') ? 4 : course.instructor.startsWith('Prof.') ? 6 : course.instructor.startsWith('Engr.') ? 6 : course.instructor.startsWith('Ms.') ? 4 : 0) : 'U'}</div>
-        <span class="cw-instructor-name">${escHtml(course.instructor || 'Faculty')}</span>
-      </div>
-
-      <div class="cw-progress-section">
-        <div class="cw-progress-info">
-          <span class="cw-progress-text">${isCompleted ? 'Completed' : 'Course Progress'}</span>
-          <span class="cw-progress-pct ${isCompleted ? 'done' : ''}">${course.progress}%</span>
-        </div>
-        <div class="cw-progress-bar-track">
-          <div class="cw-progress-bar-fill ${isCompleted ? 'done' : ''}" style="width: ${isOpen ? course.progress : 0}%;"></div>
-        </div>
-      </div>
-
-      <div class="cw-card-foot">
-        <span class="cw-view-link">
-          ${docCount > 0 ? 'View Learning Handouts' : 'Open Subject Portal'}
-          <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-        </span>
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderCoursesWidget() {
-  const container = document.getElementById('coursesWidgetContainer');
-  if (container) {
-    container.innerHTML = renderCoursesWidgetHTML();
-  }
+  `;
 }

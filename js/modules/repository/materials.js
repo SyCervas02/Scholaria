@@ -573,6 +573,69 @@ function getRawSubjectLessons(course) {
     ];
   }
 
+  if (cTitle.includes('disciplines and ideas') || cTitle.includes('diss') || cTitle.includes('social science')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Emergence of Social Sciences & Dominant Approaches', cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Structural-Functionalism, Marxism & Symbolic Interactionism', cover: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Psychoanalysis, Rational Choice & Institutionalism', cover: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Real-World Applications & Filipino Indigenous Social Thought', cover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('philippine politics') || cTitle.includes('governance') || cTitle.includes('politics')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Concepts, Theories & Evolution of Philippine Politics', cover: 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 The Executive, Legislative & Judicial Branches', cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Local Government Units, Decentralization & Elections', cover: 'https://images.unsplash.com/photo-1577495508048-b635879837f1?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Citizenship, Civil Society Movements & Good Governance', cover: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('creative writing') || cTitle.includes('pagsulat')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Sensory Imagery, Figures of Speech & Literary Diction', cover: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Poetry: Forms, Rhyme, Meter & Contemporary Verse', cover: 'https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Fiction: Characterization, Plot Structure & Point of View', cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Playwriting, Dramatic Scripts, Staging & Dialogue', cover: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('business math') || cTitle.includes('bus math')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Fractions, Decimals, Percentages & Business Ratios', cover: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Buying & Selling: Mark-on, Mark-down, Margin & Gross Profit', cover: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Salaries, Wages, Overtime, Deductions & Net Earnings', cover: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Business Data Presentation & Break-Even Analysis', cover: 'https://images.unsplash.com/photo-1543286386-713bdd548da4?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('accountancy') || cTitle.includes('fabm') || cTitle.includes('accounting')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Introduction to Accounting, Ethics & Forms of Organization', cover: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 The Accounting Equation, Double-Entry & Types of Accounts', cover: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Accounting Cycle: Books of Accounts, Journalizing & Posting', cover: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Trial Balance, Adjusting Entries & Financial Statement Prep', cover: 'https://images.unsplash.com/photo-1579532537598-459ecdaf39cc?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('organization') || cTitle.includes('management') || cTitle.includes('org-mgmt')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Nature & Theories of Management in Modern Enterprises', cover: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 Planning, Decision-Making & Strategic Environmental Scanning', cover: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Organizational Structures, Delegation & Staffing Functions', cover: 'https://images.unsplash.com/photo-1533750516457-a7f992034fec?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Leadership, Motivation Theories, Communication & Control', cover: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
+  if (cTitle.includes('computer systems') || cTitle.includes('servicing') || cTitle.includes('tvl') || cTitle.includes('web systems') || cTitle.includes('cybersecurity')) {
+    return [
+      { id: `${course.id}_l1`, num: '01', title: '01 Hardware Architecture, BIOS Configuration & Tool Safety', cover: 'https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l2`, num: '02', title: '02 OS Deployment, Device Drivers & Local Area Networking', cover: 'https://images.unsplash.com/photo-1547658719-da2b51169166?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l3`, num: '03', title: '03 Web Development Protocols, Semantic HTML5 & Responsive UI', cover: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=400&q=80', items: [] },
+      { id: `${course.id}_l4`, num: '04', title: '04 Cyber Defense Protocols, Threat Mitigation & Systems Maintenance', cover: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=400&q=80', items: [] }
+    ];
+  }
+
   const defaultLessons = [
     { id: `${course.id}_l1`, num: '01', title: `01 Introduction to ${course.title}`, cover: course.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=80', items: [] },
     { id: `${course.id}_l2`, num: '02', title: `02 Core Concepts & Theoretical Principles`, cover: course.cover || 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80', items: [] },
@@ -1438,12 +1501,24 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
     handledSections.forEach((sec) => {
       const secStrand = getSectionStrand(sec);
 
-      // Section code generator adapted to strand and section letter
-      let secCode = course.code || 'STEM-1101';
-      if (secStrand && secStrand !== 'All') {
-        secCode = secCode.replace(/^(STEM|HUMSS|ABM|TVL)-/, `${secStrand}-`);
+      // STRICT STRAND ISOLATION:
+      // If a subject is Specialized, only pair it with sections of THAT STRAND!
+      // (e.g., STEM specialized -> Section A, Section C, Section E)
+      // (e.g., HUMSS specialized -> Section B)
+      // (e.g., ABM specialized -> Section D)
+      // (e.g., TVL specialized -> TVL sections)
+      // Core and Applied subjects (General Math, Reading & Writing, Stat & Prob, etc.) belong to ALL strands!
+      if (course.track === 'Specialized') {
+        const cStrand = (course.strand || '').toUpperCase();
+        if (cStrand && cStrand !== 'ALL') {
+          if (secStrand && secStrand !== 'ALL' && cStrand !== secStrand) {
+            return; // STRICTLY SKIP non-matching specialized subjects!
+          }
+        }
       }
 
+      // Section code generator adapted to section letter
+      let secCode = course.code || 'SUBJ-1101';
       const letterMatch = sec.match(/Section\s*([A-Za-z0-9]+)/i);
       const secIdentifier = letterMatch ? letterMatch[1].toUpperCase() : sec.trim().charAt(0).toUpperCase();
 
@@ -1456,7 +1531,7 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
         if (!secCode.endsWith(`-${secIdentifier}`)) secCode += `-${secIdentifier}`;
       }
 
-      const displayStrand = (secStrand && secStrand !== 'All') ? secStrand : (course.strand || 'General');
+      const displayStrand = (secStrand && secStrand !== 'ALL') ? secStrand : (course.strand || 'General');
 
       classCards.push({
         ...course,
