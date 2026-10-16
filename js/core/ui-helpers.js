@@ -3,6 +3,16 @@
 const STRANDS = ['STEM', 'HUMSS', 'ABM', 'TVL'];
 const GRADE_LEVELS = ['Grade 11', 'Grade 12'];
 
+function sortSectionsNaturally(list) {
+  if (!Array.isArray(list)) return [];
+  return [...list].sort((a, b) => {
+    const nameA = typeof a === 'string' ? a : (a?.name || '');
+    const nameB = typeof b === 'string' ? b : (b?.name || '');
+    return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+window.sortSectionsNaturally = sortSectionsNaturally;
+
 const DEFAULT_MANAGED_SECTIONS = [
   { id: 'sec-a', name: 'Section A', gradeLevel: 'Grade 11', strand: 'STEM', adviser: '', room: '' },
   { id: 'sec-b', name: 'Section B', gradeLevel: 'Grade 11', strand: 'HUMSS', adviser: '', room: '' },
@@ -20,17 +30,18 @@ let managedSections = (() => {
           if (s.room && (s.room.startsWith('Room 30') || s.room.startsWith('Room 40'))) s.room = '';
           if (s.adviser && s.adviser.startsWith('Adviser ')) s.adviser = '';
         });
-        return parsed;
+        return sortSectionsNaturally(parsed);
       }
     }
   } catch (e) {
     console.warn('Could not read saved sections:', e);
   }
-  return [...DEFAULT_MANAGED_SECTIONS];
+  return sortSectionsNaturally([...DEFAULT_MANAGED_SECTIONS]);
 })();
 
 function saveManagedSections() {
   try {
+    managedSections = sortSectionsNaturally(managedSections);
     localStorage.setItem('scholaria_managed_sections', JSON.stringify(managedSections));
   } catch (e) {
     console.warn('Could not save sections to localStorage:', e);
@@ -38,11 +49,11 @@ function saveManagedSections() {
   syncSectionsArray();
 }
 
-let SECTIONS = managedSections.filter(s => !s.isArchived).map(s => s.name);
+let SECTIONS = sortSectionsNaturally(managedSections.filter(s => !s.isArchived)).map(s => s.name);
 
 function syncSectionsArray() {
   SECTIONS.length = 0;
-  managedSections.filter(s => !s.isArchived).forEach(s => SECTIONS.push(s.name));
+  sortSectionsNaturally(managedSections.filter(s => !s.isArchived)).forEach(s => SECTIONS.push(s.name));
 }
 
 

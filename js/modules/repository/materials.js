@@ -161,14 +161,42 @@ const SUBJECTS_BY_STRAND_AND_GRADE = {
 };
 
 function getFilteredSubjects(strand, gradeLevel) {
-  if (strand && gradeLevel) {
-    return SUBJECTS_BY_STRAND_AND_GRADE[strand]?.[gradeLevel] || [];
-  }
+  let targetStrands = [];
   if (strand) {
-    const g11 = SUBJECTS_BY_STRAND_AND_GRADE[strand]?.['Grade 11'] || [];
-    const g12 = SUBJECTS_BY_STRAND_AND_GRADE[strand]?.['Grade 12'] || [];
-    return [...g11, ...g12];
+    const sUpper = String(strand).toUpperCase();
+    if (sUpper === 'ALL' || sUpper.includes('ALL') || sUpper.includes('BOTH') || sUpper.includes(',') || sUpper.includes('&')) {
+      if (sUpper.includes('STEM') && sUpper.includes('HUMSS')) {
+        targetStrands = ['STEM', 'HUMSS'];
+      } else if (sUpper.includes('ALL')) {
+        targetStrands = ['STEM', 'HUMSS', 'ABM', 'TVL'];
+      } else {
+        targetStrands = String(strand).split(/[,&]+/).map(s => s.trim().toUpperCase()).filter(s => SUBJECTS_BY_STRAND_AND_GRADE[s]);
+      }
+    } else if (SUBJECTS_BY_STRAND_AND_GRADE[strand]) {
+      targetStrands = [strand];
+    }
   }
+
+  if (targetStrands.length > 0) {
+    const list = [];
+    targetStrands.forEach(st => {
+      const strandObj = SUBJECTS_BY_STRAND_AND_GRADE[st] || {};
+      if (gradeLevel) {
+        (strandObj[gradeLevel] || []).forEach(sub => {
+          if (!list.includes(sub)) list.push(sub);
+        });
+      } else {
+        (strandObj['Grade 11'] || []).forEach(sub => {
+          if (!list.includes(sub)) list.push(sub);
+        });
+        (strandObj['Grade 12'] || []).forEach(sub => {
+          if (!list.includes(sub)) list.push(sub);
+        });
+      }
+    });
+    return list;
+  }
+
   if (gradeLevel) {
     const list = [];
     Object.values(SUBJECTS_BY_STRAND_AND_GRADE).forEach(grades => {
@@ -831,7 +859,7 @@ async function loadMaterialsFromDB() {
       const isTeacher = (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
       if (m.status && m.status !== 'approved' && !isTeacher) return false;
       const mStrand = (m.strand || '').toUpperCase();
-      if (mStrand && mStrand !== studentStrand && mStrand !== 'CORE' && mStrand !== 'GENERAL' && mStrand !== 'ALL') return false;
+      if (mStrand && !mStrand.includes(studentStrand) && mStrand !== 'CORE' && mStrand !== 'GENERAL' && mStrand !== 'ALL' && !mStrand.includes('ALL') && !mStrand.includes('BOTH')) return false;
       return true;
     });
   } else {
@@ -3940,8 +3968,12 @@ const materialUploadState = {
 
 function openMaterialModal(courseId, targetSection, targetLessonId) {
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(',').map(s => s.trim()).filter(Boolean)
+    ? CURRENT_PROFILE.strand.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
     : [];
+  if (ROLE === 'teacher') {
+    if (!teacherStrands.includes('STEM')) teacherStrands.push('STEM');
+    if (!teacherStrands.includes('HUMSS')) teacherStrands.push('HUMSS');
+  }
 
   const teacherGrades = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.grade_level)
     ? CURRENT_PROFILE.grade_level.split(',').map(s => s.trim()).filter(Boolean)
@@ -3953,21 +3985,28 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
 
   const targetCourseId = courseId || activeSubjectFilter;
   const chosenSection = targetSection || activeSubjectSection;
-  const initialSectionsSet = chosenSection ? new Set([chosenSection]) : new Set(teacherSections);
   let targetCourse = null;
   if (targetCourseId && typeof COURSES_DATABASE !== 'undefined') {
     targetCourse = COURSES_DATABASE.find(c => c.id === targetCourseId) || null;
   }
 
   let initialSubject = '';
-  let initialStrand = teacherStrands.length === 1 ? teacherStrands[0] : '';
-  let initialGrade = teacherGrades.length === 1 ? teacherGrades[0] : '';
+  let initialStrand = '';
+  let initialGrade = teacherGrades.length === 1 ? teacherGrades[0] : (targetCourse?.gradeLevel || 'Grade 11');
 
   if (targetCourse) {
     initialSubject = targetCourse.title;
-    initialStrand = targetCourse.strand || initialStrand;
+    initialStrand = (ROLE === 'teacher' && (targetCourse.track === 'Core' || targetCourse.track === 'Applied'))
+      ? 'STEM, HUMSS'
+      : (targetCourse.strand || (ROLE === 'teacher' ? 'STEM, HUMSS' : 'All Strands'));
     initialGrade = targetCourse.gradeLevel || initialGrade;
+  } else {
+    initialStrand = (ROLE === 'teacher') ? 'STEM, HUMSS' : 'All Strands';
   }
+
+  const initialSectionsSet = chosenSection
+    ? new Set([chosenSection])
+    : (teacherSections.length ? new Set(teacherSections) : (ROLE === 'teacher' ? new Set(['Section A', 'Section B']) : new Set()));
 
   const courseLessons = targetCourse ? getSubjectLessons(targetCourse) : [];
   let initialLessonId = targetLessonId || null;
@@ -4033,6 +4072,16 @@ function getAllSubjects() {
 
 function muUpdateStrand(value) {
   materialUploadState.strand = value;
+  if (ROLE === 'teacher') {
+    const valUp = (value || '').toUpperCase();
+    if (valUp.includes('STEM') && valUp.includes('HUMSS')) {
+      materialUploadState.sections = new Set(['Section A', 'Section B']);
+    } else if (valUp === 'STEM') {
+      materialUploadState.sections = new Set(['Section A']);
+    } else if (valUp === 'HUMSS') {
+      materialUploadState.sections = new Set(['Section B']);
+    }
+  }
   const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level);
   if (materialUploadState.subject && available.length > 0 && !available.includes(materialUploadState.subject)) {
     materialUploadState.subject = '';
@@ -4127,8 +4176,13 @@ function renderMaterialModal() {
 
   const subjectOptions = getFilteredSubjects(s.strand, s.grade_level);
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(',').map(str => str.trim()).filter(Boolean)
+    ? CURRENT_PROFILE.strand.split(',').map(str => str.trim().toUpperCase()).filter(Boolean)
     : [];
+  if (ROLE === 'teacher') {
+    if (!teacherStrands.includes('STEM')) teacherStrands.push('STEM');
+    if (!teacherStrands.includes('HUMSS')) teacherStrands.push('HUMSS');
+  }
+
   const teacherGrades = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.grade_level)
     ? CURRENT_PROFILE.grade_level.split(',').map(g => g.trim()).filter(Boolean)
     : [];
@@ -4138,9 +4192,14 @@ function renderMaterialModal() {
 
   const availableStrands = (ROLE === 'teacher' && teacherStrands.length) ? teacherStrands : STRANDS;
   const availableGrades  = (ROLE === 'teacher' && teacherGrades.length) ? teacherGrades : GRADE_LEVELS;
-  const availableSections = (ROLE === 'teacher' && teacherSections.length) ? teacherSections : SECTIONS;
+  
+  const sortFn = (typeof sortSectionsNaturally === 'function')
+    ? sortSectionsNaturally
+    : (list) => [...list].sort((a,b) => (typeof a === 'string' ? a : (a?.name || '')).localeCompare(typeof b === 'string' ? b : (b?.name || ''), undefined, { numeric: true, sensitivity: 'base' }));
 
-  const isStrandLocked = ROLE === 'teacher' && teacherStrands.length === 1;
+  const rawSections = (ROLE === 'teacher' && teacherSections.length) ? teacherSections : SECTIONS;
+  const availableSections = sortFn(rawSections);
+
   const isGradeLocked  = ROLE === 'teacher' && teacherGrades.length === 1;
 
   body.innerHTML = `
@@ -4152,17 +4211,18 @@ function renderMaterialModal() {
     ` : ''}
 
     <div class="gen-row">
-      <div class="gen-field"><label>Strand ${isStrandLocked ? '<span style="font-size:11px;color:#0284c7;font-weight:600;">(Handled Strand)</span>' : ''}</label>
-        ${isStrandLocked ? `
-          <select disabled style="opacity:0.85;cursor:not-allowed;background:#f8fafc;font-weight:600;">
-            <option value="${teacherStrands[0]}" selected>${teacherStrands[0]} (Locked to handled strand)</option>
-          </select>
-        ` : `
-          <select onchange="muUpdateStrand(this.value)">
-            <option value="" disabled ${!s.strand ? 'selected' : ''}>Select strand</option>
+      <div class="gen-field"><label>Strand ${ROLE === 'teacher' ? '<span style="font-size:11px;color:#0284c7;font-weight:600;">(Handled Strands)</span>' : ''}</label>
+        <select onchange="muUpdateStrand(this.value)">
+          ${ROLE === 'teacher' ? `
+            <option value="STEM, HUMSS" ${(s.strand === 'STEM, HUMSS' || s.strand === 'Both STEM & HUMSS' || (s.strand && s.strand.includes('STEM') && s.strand.includes('HUMSS'))) ? 'selected' : ''}>Both STEM &amp; HUMSS (All Handled)</option>
+            <option value="STEM" ${s.strand === 'STEM' ? 'selected' : ''}>STEM</option>
+            <option value="HUMSS" ${s.strand === 'HUMSS' ? 'selected' : ''}>HUMSS</option>
+            ${availableStrands.filter(st => st !== 'STEM' && st !== 'HUMSS').map(st => `<option value="${st}" ${s.strand === st ? 'selected' : ''}>${st}</option>`).join('')}
+          ` : `
+            <option value="All Strands" ${(!s.strand || s.strand === 'All Strands' || s.strand === 'all') ? 'selected' : ''}>All Strands (General / Core)</option>
             ${availableStrands.map(str => `<option value="${str}" ${s.strand === str ? 'selected' : ''}>${str}</option>`).join('')}
-          </select>
-        `}
+          `}
+        </select>
       </div>
       <div class="gen-field"><label>Grade Level ${isGradeLocked ? '<span style="font-size:11px;color:#0284c7;font-weight:600;">(Handled Grade)</span>' : ''}</label>
         ${isGradeLocked ? `
