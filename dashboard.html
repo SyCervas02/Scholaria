@@ -228,6 +228,40 @@
     </div>
   </div>
 
+  <!-- TEACHER SECTION ASSIGNMENT MODAL -->
+  <div class="modal-overlay" id="teacherSectionModal">
+    <div class="modal-card" style="max-width:720px;">
+      <div class="modal-head">
+        <div>
+          <h3 id="teacherSectionModalTitle">Assign Sections to Teacher</h3>
+          <span id="teacherSectionModalSubtitle">Select sections matching teacher's specialized strand</span>
+        </div>
+        <button class="modal-x" onclick="closeTeacherSectionModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="teacherSectionModalBody"></div>
+      <div class="modal-foot" id="teacherSectionModalFoot"></div>
+    </div>
+  </div>
+
+  <!-- ASSIGN TEACHERS TO SECTION MODAL -->
+  <div class="modal-overlay" id="assignTeachersToSectionModal">
+    <div class="modal-card" style="max-width:720px;">
+      <div class="modal-head">
+        <div>
+          <h3 id="assignTeachersToSectionTitle">Assign Faculty to Section</h3>
+          <span id="assignTeachersToSectionSubtitle">Manage subject teachers for this section respecting strand specialization</span>
+        </div>
+        <button class="modal-x" onclick="closeAssignTeachersToSectionModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="assignTeachersToSectionBody"></div>
+      <div class="modal-foot" id="assignTeachersToSectionFoot"></div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="roomModal">
     <div class="modal-card">
       <div class="modal-head">
@@ -587,7 +621,9 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div class="anc-form-field">
             <label>Subject</label>
-            <input type="text" class="anc-form-input" id="crSubjInput" value="Web Systems"/>
+            <div id="crSubjPickerWrap">
+              <input type="text" class="anc-form-input" id="crSubjInput" value="General Class"/>
+            </div>
           </div>
           <div class="anc-form-field">
             <label>Grade / Score (%)</label>

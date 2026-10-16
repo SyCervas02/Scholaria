@@ -390,7 +390,7 @@ app.post('/api/admin/create-account', async (req, res) => {
   if (!profile) return;
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can create accounts' });
 
-  const { full_name, role, email, strand, grade_level, section, subjects, custom_password } = req.body;
+  const { full_name, first_name, middle_name, last_name, suffix, role, email, strand, grade_level, section, subjects, custom_password, contact_number, address } = req.body;
 
   if (!full_name || !full_name.trim()) return res.status(400).json({ error: 'Missing full name' });
   if (!['student', 'teacher', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
@@ -434,9 +434,15 @@ app.post('/api/admin/create-account', async (req, res) => {
     email_confirm: true,
     user_metadata: { 
       full_name: full_name.trim(),
+      first_name: (first_name && first_name.trim()) ? first_name.trim() : null,
+      middle_name: (middle_name && middle_name.trim()) ? middle_name.trim() : null,
+      last_name: (last_name && last_name.trim()) ? last_name.trim() : null,
+      suffix: (suffix && suffix.trim()) ? suffix.trim() : null,
       role,
       must_reset_password: true,
       recovery_email: (email && email.trim()) ? email.trim() : null,
+      contact_number: (contact_number && contact_number.trim()) ? contact_number.trim() : null,
+      address: (address && address.trim()) ? address.trim() : null,
       created_by: creatorMeta
     }
   });
@@ -447,21 +453,26 @@ app.post('/api/admin/create-account', async (req, res) => {
     return res.status(400).json({ error: msg });
   }
 
+  const userRowPayload = {
+    id: authData.user.id,
+    full_name: full_name.trim(),
+    school_id,
+    role,
+    email: accountEmail,
+    strand: strand || null,
+    grade_level: grade_level || null,
+    section: section || null,
+    subjects: subjects || null,
+    is_active: true,
+    is_demo: false,
+  };
+  if (contact_number && contact_number.trim()) {
+    userRowPayload.contact_number = contact_number.trim();
+  }
+
   const { data: userRow, error: insertErr } = await supabaseAdmin
     .from('users')
-    .insert({
-      id: authData.user.id,
-      full_name: full_name.trim(),
-      school_id,
-      role,
-      email: accountEmail,
-      strand: strand || null,
-      grade_level: grade_level || null,
-      section: section || null,
-      subjects: subjects || null,
-      is_active: true,
-      is_demo: false,
-    })
+    .insert(userRowPayload)
     .select().single();
 
   if (insertErr) {
@@ -479,6 +490,8 @@ app.post('/api/admin/create-account', async (req, res) => {
     strand: strand || null,
     grade_level: grade_level || null,
     section: section || null,
+    contact_number: (contact_number && contact_number.trim()) ? contact_number.trim() : null,
+    address: (address && address.trim()) ? address.trim() : null,
     created_at: createdAtIso,
     created_by: creatorMeta,
     is_active: true
@@ -490,10 +503,16 @@ app.post('/api/admin/create-account', async (req, res) => {
     recovery_email: (email && email.trim()) ? email.trim() : null,
     temp_password,
     name: full_name.trim(),
+    first_name: (first_name && first_name.trim()) ? first_name.trim() : null,
+    middle_name: (middle_name && middle_name.trim()) ? middle_name.trim() : null,
+    last_name: (last_name && last_name.trim()) ? last_name.trim() : null,
+    suffix: (suffix && suffix.trim()) ? suffix.trim() : null,
     role,
     strand: strand || null,
     grade_level: grade_level || null,
     section: section || null,
+    contact_number: (contact_number && contact_number.trim()) ? contact_number.trim() : null,
+    address: (address && address.trim()) ? address.trim() : null,
     created_at: createdAtIso,
     created_by: creatorMeta
   });

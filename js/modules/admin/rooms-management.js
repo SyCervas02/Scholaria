@@ -720,8 +720,16 @@ function renderAssignSectionModalForm() {
 
     <div class="gen-field">
       <label>Subject / Class Course (Optional)</label>
-      <input type="text" id="asfSubject" placeholder="e.g. General Biology 1, Pre-Calculus, Practical Research" maxlength="80">
-      <span style="font-size:11px;color:var(--text-muted);">Specific academic subject taking place in this room</span>
+      ${typeof renderSearchableSubjectPicker === 'function' ? renderSearchableSubjectPicker({
+        id: 'asfSubjectPicker',
+        inputId: 'asfSubject',
+        value: '',
+        options: (typeof getCurriculumSubjectsList === 'function') ? getCurriculumSubjectsList() : ['Pre-Calculus', 'Basic Calculus', 'General Biology 1', 'General Biology 2', 'General Physics 1', 'General Physics 2', 'Empowerment Technologies (ICT)'],
+        placeholder: 'Select from dropdown or search subject...'
+      }) : `
+        <input type="text" id="asfSubject" placeholder="e.g. General Biology 1, Pre-Calculus, Practical Research" maxlength="80">
+      `}
+      <span style="font-size:11px;color:var(--text-muted);">Select from curriculum dropdown or type to search with matching text highlight</span>
     </div>
 
     <div class="gen-field" style="margin-bottom:18px;">

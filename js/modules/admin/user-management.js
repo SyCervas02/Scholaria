@@ -287,6 +287,10 @@ async function adminToggleUserStatus(userId, shouldActivate, name) {
       return u;
     });
 
+    const wrap = document.getElementById('userManagementContentWrap');
+    if (wrap) {
+      wrap.innerHTML = renderUserManagementContent();
+    }
     filterUserTable();
   } catch (err) {
     if (typeof showToast === 'function') showToast(`Could not reach the server to ${actionWord} user`, 'error');
@@ -328,20 +332,90 @@ function renderTeacherRow(u) {
   const actionBtn = isMuted
     ? `<span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`
     : `<span class="action-link" style="color:#d97706;font-weight:600;white-space:nowrap;" onclick="adminMuteUser('${escHtml(targetId)}')">Mute</span>`;
+  const secHtml = u.section
+    ? `<span class="sec-badge grade" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;" onclick="openAssignTeacherSectionsModal('${escHtml(targetId)}')" title="Click to reassign handled section(s)">
+        ${escHtml(u.section)}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </span>`
+    : `<button type="button" class="action-link" style="color:#d97706;background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;padding:0;display:inline-flex;align-items:center;gap:3px;white-space:nowrap;" onclick="openAssignTeacherSectionsModal('${escHtml(targetId)}')">
+        <span>+ Assign Section</span>
+      </button>`;
+
   return `<tr>
     <td style="white-space:nowrap;"><strong style="white-space:nowrap;">${escHtml(u.name)}</strong></td>
     <td style="white-space:nowrap;"><code style="font-size:12px;background:#fffbeb;padding:3px 8px;border-radius:4px;color:#d97706;font-family:'JetBrains Mono',monospace;white-space:nowrap;display:inline-block;">${escHtml(u.id)}</code></td>
     <td style="white-space:nowrap;"><span class="role-tag teacher" style="white-space:nowrap;display:inline-block;">${escHtml(u.subjects || u.strand || 'General')}</span></td>
     <td style="white-space:nowrap;"><span style="font-size:12px;font-weight:600;color:var(--text-secondary);white-space:nowrap;">Grade 11 & 12</span></td>
-    <td style="white-space:nowrap;">${escHtml(u.section || 'All / None')}</td>
+    <td style="white-space:nowrap;">${secHtml}</td>
     <td class="date-val" style="white-space:nowrap;">${formatDateWithOriginHtml(u)}</td>
     <td style="white-space:nowrap;">${formatAccountStatusBadge(u)}</td>
     <td style="white-space:nowrap;">${chatStatusHtml(u)}</td>
     <td style="white-space:nowrap;">
       <div style="display:inline-flex;align-items:center;gap:10px;white-space:nowrap;">
         <span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
+        <span class="action-link" style="color:#0284c7;font-weight:600;white-space:nowrap;cursor:pointer;" onclick="openAssignTeacherSectionsModal('${escHtml(targetId)}')">Assign Section</span>
         ${isAdmin ? actionBtn : ''}
         ${isAdmin ? renderUserDeactivationAction(u) : ''}
+      </div>
+    </td>
+  </tr>`;
+}
+
+function renderDeactivatedRow(u) {
+  const isAdmin = (typeof ROLE !== 'undefined' && ROLE === 'admin') || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role === 'admin');
+  const targetId = u.dbId || u.id;
+
+  let roleBadge = '';
+  if (u.role === 'admin') {
+    roleBadge = `<span class="role-tag" style="background:#fef3c7;color:#b45309;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Admin
+    </span>`;
+  } else if (u.role === 'teacher') {
+    roleBadge = `<span class="role-tag teacher" style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> Teacher
+    </span>`;
+  } else {
+    roleBadge = `<span class="role-tag student" style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg> Student
+    </span>`;
+  }
+
+  let strandDeptHtml = '';
+  if (u.role === 'admin') {
+    strandDeptHtml = `<span style="color:#64748b;font-size:12px;font-style:italic;white-space:nowrap;">Department Administration</span>`;
+  } else if (u.role === 'teacher') {
+    strandDeptHtml = `<span class="role-tag teacher" style="white-space:nowrap;display:inline-block;">${escHtml(u.subjects || u.strand || 'General')}</span>`;
+  } else {
+    strandDeptHtml = `<span class="role-tag student" style="white-space:nowrap;display:inline-block;">${escHtml(u.strand || 'N/A')}</span> ${u.gradeLevel ? `<span style="font-size:11px;color:#64748b;margin-left:4px;white-space:nowrap;">${escHtml(u.gradeLevel)}</span>` : ''}`;
+  }
+
+  let secHtml = '';
+  if (u.role === 'admin') {
+    secHtml = `<span style="color:#94a3b8;font-style:italic;font-size:12px;">—</span>`;
+  } else if (u.role === 'teacher') {
+    secHtml = u.section ? `<span class="sec-badge grade" style="white-space:nowrap;">${escHtml(u.section)}</span>` : `<span style="color:#94a3b8;font-style:italic;font-size:12px;">All / None</span>`;
+  } else {
+    const isUnassigned = !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—';
+    secHtml = isUnassigned
+      ? `<span style="color:#94a3b8;font-style:italic;font-size:12px;">Unassigned</span>`
+      : `<span class="sec-badge grade" style="white-space:nowrap;">${escHtml(u.section)}</span>`;
+  }
+
+  return `<tr style="background:#fffafa;">
+    <td style="white-space:nowrap;">
+      <strong style="color:var(--text-primary);white-space:nowrap;">${escHtml(u.name)}</strong>
+      ${u.email ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px;white-space:nowrap;">${escHtml(u.email)}</div>` : ''}
+    </td>
+    <td style="white-space:nowrap;">${roleBadge}</td>
+    <td style="white-space:nowrap;"><code style="font-size:12px;background:#fef2f2;border:1px solid #fee2e2;padding:3px 8px;border-radius:4px;color:#b91c1c;font-family:'JetBrains Mono',monospace;white-space:nowrap;display:inline-block;">${escHtml(u.id)}</code></td>
+    <td style="white-space:nowrap;">${strandDeptHtml}</td>
+    <td style="white-space:nowrap;">${secHtml}</td>
+    <td class="date-val" style="white-space:nowrap;">${formatDateWithOriginHtml(u)}</td>
+    <td style="white-space:nowrap;">${formatAccountStatusBadge(u)}</td>
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:10px;white-space:nowrap;">
+        <span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
+        ${isAdmin ? `<span class="action-link" style="color:#059669;font-weight:700;white-space:nowrap;cursor:pointer;" onclick="adminToggleUserStatus('${escHtml(targetId)}', true, '${escHtml(u.name)}')">Reactivate</span>` : ''}
       </div>
     </td>
   </tr>`;
@@ -455,12 +529,24 @@ async function openAdminResetPasswordPrompt(userId, name) {
 }
 
 function renderUserManagementContent() {
-  const students = registeredUsers.filter(u => u.role === 'student');
-  const teachers = registeredUsers.filter(u => u.role === 'teacher');
-  const admins = registeredUsers.filter(u => u.role === 'admin');
+  const students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
+  const teachers = registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false);
+  const admins = registeredUsers.filter(u => u.role === 'admin' && u.isActive !== false);
+  const deactivated = registeredUsers.filter(u => u.isActive === false);
   const isStudentTab = adminUserTab === 'students';
   const isTeacherTab = adminUserTab === 'teachers';
   const isAdminTab = adminUserTab === 'admins';
+  const isDeactivatedTab = adminUserTab === 'deactivated';
+
+  const rolePriority = { admin: 1, teacher: 2, student: 3 };
+  const sortedDeactivated = [...deactivated].sort((a, b) => {
+    const pA = rolePriority[a.role] || 99;
+    const pB = rolePriority[b.role] || 99;
+    if (pA !== pB) return pA - pB;
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
 
   return `
     <div class="um-tabs">
@@ -473,13 +559,25 @@ function renderUserManagementContent() {
       <button class="um-tab admin-tab ${isAdminTab ? 'active' : ''}" onclick="setAdminUserTab('admins')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Administrators <span class="um-badge">${admins.length}</span>
       </button>
+      <button class="um-tab deactivated-tab ${isDeactivatedTab ? 'active' : ''}" style="${isDeactivatedTab ? 'background:#fef2f2;border-color:#fecaca;color:#991b1b;font-weight:700;' : 'color:#b91c1c;'}" onclick="setAdminUserTab('deactivated')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Deactivated Accounts <span class="um-badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">${deactivated.length}</span>
+      </button>
     </div>
 
     <div class="user-search-row">
       <div class="user-search-wrap">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input type="text" id="userSearchInput" placeholder="${isAdminTab ? 'Search admins by name, ID, or email…' : 'Search by name, ID, or strand…'}" oninput="filterUserTable()">
+        <input type="text" id="userSearchInput" placeholder="${isAdminTab ? 'Search admins by name, ID, or email…' : isDeactivatedTab ? 'Search deactivated accounts by name, ID, role, or strand…' : 'Search by name, ID, or strand…'}" oninput="filterUserTable()">
       </div>
+
+      ${isDeactivatedTab ? `
+        <select class="user-filter-select" id="deactivatedRoleFilter" onchange="filterUserTable()">
+          <option value="">All Roles (Admin → Teacher → Student)</option>
+          <option value="admin">Administrators</option>
+          <option value="teacher">Teachers</option>
+          <option value="student">Students</option>
+        </select>
+      ` : ''}
 
       ${isStudentTab ? `
         <select class="user-filter-select" id="userGradeFilter" onchange="filterUserTable()">
@@ -516,7 +614,18 @@ function renderUserManagementContent() {
     <div class="user-table" id="userTableWrap">
       <table>
         <thead>
-          ${isStudentTab ? `
+          ${isDeactivatedTab ? `
+            <tr>
+              <th>Account Name</th>
+              <th>Role</th>
+              <th>School / Employee ID</th>
+              <th>Department / Handled Strand</th>
+              <th>Assigned Section</th>
+              <th>Date & Origin</th>
+              <th>Account Status</th>
+              <th>Actions</th>
+            </tr>
+          ` : isStudentTab ? `
             <tr>
               <th>Student Name</th>
               <th>Student ID</th>
@@ -553,16 +662,18 @@ function renderUserManagementContent() {
           `}
         </thead>
         <tbody id="userTableBody">
-          ${isStudentTab
-            ? students.map(u => renderStudentRow(u)).join('')
-            : isTeacherTab
-              ? teachers.map(u => renderTeacherRow(u)).join('')
-              : admins.map(u => renderAdminRow(u)).join('')
+          ${isDeactivatedTab
+            ? sortedDeactivated.map(u => renderDeactivatedRow(u)).join('')
+            : isStudentTab
+              ? students.map(u => renderStudentRow(u)).join('')
+              : isTeacherTab
+                ? teachers.map(u => renderTeacherRow(u)).join('')
+                : admins.map(u => renderAdminRow(u)).join('')
           }
         </tbody>
       </table>
-      <div id="userNoResults" style="${(isStudentTab ? students.length : isTeacherTab ? teachers.length : admins.length) === 0 ? '' : 'display:none;'}padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
-        No ${isStudentTab ? 'students' : isTeacherTab ? 'teachers' : 'administrators'} found matching the filter criteria.
+      <div id="userNoResults" style="${(isDeactivatedTab ? deactivated.length : isStudentTab ? students.length : isTeacherTab ? teachers.length : admins.length) === 0 ? '' : 'display:none;'}padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
+        No ${isDeactivatedTab ? 'deactivated accounts' : isStudentTab ? 'students' : isTeacherTab ? 'teachers' : 'administrators'} found matching the filter criteria.
       </div>
     </div>
   `;
@@ -732,35 +843,64 @@ function filterUserTable() {
   const grade = document.getElementById('userGradeFilter')?.value || '';
   const strand = document.getElementById('userStrandFilter')?.value || '';
   const dateSort = document.getElementById('userDateSort')?.value || 'newest';
+  const deactivatedRole = document.getElementById('deactivatedRoleFilter')?.value || '';
 
   const isStudentTab = adminUserTab === 'students';
   const isTeacherTab = adminUserTab === 'teachers';
   const isAdminTab = adminUserTab === 'admins';
+  const isDeactivatedTab = adminUserTab === 'deactivated';
 
-  let list = registeredUsers.filter(u => {
-    if (isStudentTab) return u.role === 'student';
-    if (isTeacherTab) return u.role === 'teacher';
-    return u.role === 'admin';
-  });
+  let list = [];
 
-  list = list.filter(u => {
-    const matchSearch = !q || (u.name + ' ' + u.id + ' ' + (u.subjects || '') + ' ' + (u.strand || '') + ' ' + (u.email || '')).toLowerCase().includes(q);
-    if (isAdminTab) return matchSearch;
+  if (isDeactivatedTab) {
+    list = registeredUsers.filter(u => u.isActive === false);
+    if (deactivatedRole) {
+      list = list.filter(u => u.role === deactivatedRole);
+    }
+    if (strand) {
+      list = list.filter(u => (u.strand && u.strand.includes(strand)) || (u.subjects && u.subjects.includes(strand)));
+    }
+    if (q) {
+      list = list.filter(u => (u.name + ' ' + u.id + ' ' + (u.subjects || '') + ' ' + (u.strand || '') + ' ' + (u.email || '') + ' ' + (u.role || '')).toLowerCase().includes(q));
+    }
 
-    const matchGrade = !grade || u.gradeLevel === grade;
-    const matchStrand = !strand || (u.strand && u.strand.includes(strand)) || (u.subjects && u.subjects.includes(strand));
-    const secFilter = document.getElementById('userSectionFilter')?.value || '';
-    const matchSection = !secFilter ? true :
-      secFilter === 'Unassigned' ? (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—') :
-      (u.section || '').trim().toLowerCase() === secFilter.trim().toLowerCase();
-    return matchSearch && matchGrade && matchStrand && matchSection;
-  });
+    // Strict hierarchy: Admin first, Teacher second, Student last
+    const rolePriority = { admin: 1, teacher: 2, student: 3 };
+    list.sort((a, b) => {
+      const pA = rolePriority[a.role] || 99;
+      const pB = rolePriority[b.role] || 99;
+      if (pA !== pB) return pA - pB;
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateSort === 'oldest' ? timeA - timeB : timeB - timeA;
+    });
+  } else {
+    list = registeredUsers.filter(u => {
+      if (u.isActive === false) return false;
+      if (isStudentTab) return u.role === 'student';
+      if (isTeacherTab) return u.role === 'teacher';
+      return u.role === 'admin';
+    });
 
-  list.sort((a, b) => {
-    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return dateSort === 'oldest' ? timeA - timeB : timeB - timeA;
-  });
+    list = list.filter(u => {
+      const matchSearch = !q || (u.name + ' ' + u.id + ' ' + (u.subjects || '') + ' ' + (u.strand || '') + ' ' + (u.email || '')).toLowerCase().includes(q);
+      if (isAdminTab) return matchSearch;
+
+      const matchGrade = !grade || u.gradeLevel === grade;
+      const matchStrand = !strand || (u.strand && u.strand.includes(strand)) || (u.subjects && u.subjects.includes(strand));
+      const secFilter = document.getElementById('userSectionFilter')?.value || '';
+      const matchSection = !secFilter ? true :
+        secFilter === 'Unassigned' ? (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—') :
+        (u.section || '').trim().toLowerCase() === secFilter.trim().toLowerCase();
+      return matchSearch && matchGrade && matchStrand && matchSection;
+    });
+
+    list.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateSort === 'oldest' ? timeA - timeB : timeB - timeA;
+    });
+  }
 
   const tbody = document.getElementById('userTableBody');
   const noRes = document.getElementById('userNoResults');
@@ -768,6 +908,7 @@ function filterUserTable() {
 
   if (tbody) {
     tbody.innerHTML = list.map(u => {
+      if (isDeactivatedTab) return renderDeactivatedRow(u);
       if (isStudentTab) return renderStudentRow(u);
       if (isTeacherTab) return renderTeacherRow(u);
       return renderAdminRow(u);
@@ -899,6 +1040,12 @@ function renderSectionCards() {
       (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
     );
 
+    const assignedTeachers = registeredUsers.filter(u =>
+      u.role === 'teacher' &&
+      u.isActive !== false &&
+      isTeacherAssignedToSection(u, s.name)
+    );
+
     const isArchived = Boolean(s.isArchived);
 
     return `
@@ -922,6 +1069,7 @@ function renderSectionCards() {
           <div class="sec-card-details">
             <div><strong>Adviser:</strong> ${escHtml(s.adviser || 'Not Assigned')}</div>
             <div><strong>Room / Location:</strong> ${escHtml(s.room || 'TBD')}</div>
+            <div><strong>Assigned Teachers:</strong> ${assignedTeachers.length > 0 ? assignedTeachers.map(t => escHtml(t.name)).join(', ') : '<span style="color:#94a3b8;font-style:italic;">None assigned</span>'}</div>
             ${isArchived && s.archivedAt ? `<div style="color:#b45309;font-size:11.5px;margin-top:4px;">Archived on ${new Date(s.archivedAt).toLocaleDateString()}</div>` : ''}
           </div>
         </div>
@@ -1134,6 +1282,369 @@ function deleteSectionPrompt(secId) {
   archiveSectionPrompt(secId);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   TEACHER SECTION ASSIGNMENT & STRAND COMPATIBILITY ENGINE
+   ═══════════════════════════════════════════════════════════════ */
+
+let currentEditingTeacherKey = null;
+
+function getTeacherHandledStrands(teacher) {
+  if (!teacher) return ['General'];
+  const raw = `${teacher.subjects || ''} ${teacher.strand || ''}`.toUpperCase();
+  const known = ['STEM', 'HUMSS', 'ABM', 'TVL'];
+  const matched = known.filter(k => raw.includes(k));
+  return matched.length === 0 ? ['General'] : matched;
+}
+
+function isTeacherCompatibleWithSection(teacher, section) {
+  if (!teacher || !section) return false;
+  const teacherStrands = getTeacherHandledStrands(teacher);
+  if (teacherStrands.includes('General')) return true;
+
+  const secStrand = (section.strand || '').toUpperCase().trim();
+  if (!secStrand || secStrand === 'GENERAL') return true;
+
+  return teacherStrands.includes(secStrand);
+}
+
+function isTeacherAssignedToSection(teacher, secName) {
+  if (!teacher || !teacher.section || !secName) return false;
+  const parts = teacher.section.split(',').map(s => s.trim().toLowerCase());
+  return parts.includes(secName.trim().toLowerCase());
+}
+
+/* ── Modal: Assign Sections to a Specific Teacher ── */
+function openAssignTeacherSectionsModal(teacherKey) {
+  currentEditingTeacherKey = teacherKey;
+  const teacher = registeredUsers.find(u => u.dbId === teacherKey || u.id === teacherKey);
+  if (!teacher) {
+    if (typeof showToast === 'function') showToast('Teacher record not found', 'error');
+    return;
+  }
+
+  const modal = document.getElementById('teacherSectionModal');
+  if (!modal) return;
+
+  const teacherStrands = getTeacherHandledStrands(teacher);
+  const activeSections = managedSections.filter(s => !s.isArchived);
+
+  document.getElementById('teacherSectionModalTitle').textContent = `Reassign Sections — ${teacher.name}`;
+  document.getElementById('teacherSectionModalSubtitle').textContent = `Employee ID: ${teacher.id} · Curriculum Specialization: ${teacherStrands.join(', ')}`;
+
+  const body = document.getElementById('teacherSectionModalBody');
+  const foot = document.getElementById('teacherSectionModalFoot');
+
+  const curAssigned = (teacher.section || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  body.innerHTML = `
+    <!-- TEACHER SPECIALIZATION STRIP -->
+    <div style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:12px;padding:12px 16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-size:11px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.5px;">Curriculum Specialization</span>
+          <div style="font-size:14px;font-weight:700;color:#0c4a6e;display:flex;align-items:center;gap:8px;margin-top:2px;">
+            ${teacherStrands.map(st => `<span class="role-tag teacher" style="font-size:12px;padding:3px 10px;">${escHtml(st)}</span>`).join('')}
+          </div>
+        </div>
+        <div style="font-size:12px;color:#0369a1;text-align:right;">
+          <strong>Currently Assigned:</strong> ${curAssigned.length > 0 ? curAssigned.map(s => `<span class="sec-badge grade" style="font-size:11px;margin-left:4px;">${escHtml(s)}</span>`).join('') : '<span style="font-style:italic;color:#64748b;">None (All / Unassigned)</span>'}
+        </div>
+      </div>
+      <div style="font-size:12px;color:#075985;margin-top:8px;line-height:1.4;">
+        ℹ️ To uphold academic standards, faculty can only be assigned to class sections matching their handled strand(s) (<strong>${teacherStrands.join(', ')}</strong>). Sections of differing strands are restricted.
+      </div>
+    </div>
+
+    <!-- SECTIONS LIST -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <h5 style="margin:0;font-size:13px;font-weight:700;color:var(--text-primary);">Available Class Sections</h5>
+      <span style="font-size:11.5px;color:var(--text-muted);">${activeSections.length} Active Sections</span>
+    </div>
+
+    <div style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">
+      ${activeSections.length > 0 ? activeSections.map(s => {
+        const isCompatible = isTeacherCompatibleWithSection(teacher, s);
+        const isChecked = isTeacherAssignedToSection(teacher, s.name);
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #f1f5f9;${!isCompatible ? 'background:#f8fafc;opacity:0.65;' : 'cursor:pointer;'}"
+               ${isCompatible ? `onclick="document.getElementById('ts_sec_${escHtml(s.id)}').click()"` : ''}>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <input type="checkbox" id="ts_sec_${escHtml(s.id)}" value="${escHtml(s.name)}"
+                     ${isChecked ? 'checked' : ''}
+                     ${!isCompatible ? 'disabled' : ''}
+                     onclick="event.stopPropagation()">
+              <div>
+                <div style="font-size:13.5px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px;">
+                  ${escHtml(s.name)}
+                  <span class="sec-badge grade" style="font-size:10.5px;">${escHtml(s.gradeLevel || 'Grade 11')}</span>
+                  <span class="sec-badge strand" style="font-size:10.5px;">${escHtml(s.strand || 'General')}</span>
+                </div>
+                <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                  Adviser: ${escHtml(s.adviser || 'None')} · Room: ${escHtml(s.room || 'TBD')}
+                </div>
+              </div>
+            </div>
+            <div>
+              ${isCompatible ? (
+                isChecked
+                  ? `<span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11px;font-weight:600;">✓ Assigned</span>`
+                  : `<span style="font-size:11px;color:#0284c7;font-weight:600;">Eligible</span>`
+              ) : `
+                <span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:10.5px;font-weight:700;" title="Section strand (${s.strand}) differs from teacher specialization (${teacherStrands.join(', ')})">
+                  Strand Mismatch (${escHtml(s.strand || 'General')})
+                </span>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('') : `
+        <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
+          No active sections found. Create a section first.
+        </div>
+      `}
+    </div>
+  `;
+
+  foot.innerHTML = `
+    <button class="foot-btn-secondary" onclick="closeTeacherSectionModal()">Cancel</button>
+    <button type="button" class="foot-btn-secondary" style="color:#dc2626;border-color:#fecaca;" onclick="clearAllTeacherSections('${escHtml(teacherKey)}')">Clear All (Unassign)</button>
+    <button class="gen-btn" onclick="saveTeacherSectionAssignments('${escHtml(teacherKey)}')">
+      Save Section Assignments
+    </button>
+  `;
+
+  modal.classList.add('active');
+}
+
+function closeTeacherSectionModal() {
+  const modal = document.getElementById('teacherSectionModal');
+  if (modal) modal.classList.remove('active');
+  currentEditingTeacherKey = null;
+}
+
+async function clearAllTeacherSections(teacherKey) {
+  const teacher = registeredUsers.find(u => u.dbId === teacherKey || u.id === teacherKey);
+  if (!teacher) return;
+  teacher.section = null;
+  if (teacher.dbId && typeof db !== 'undefined' && db?.from) {
+    try {
+      await db.from('users').update({ section: null }).eq('id', teacher.dbId);
+    } catch (e) {
+      console.warn('DB update failed:', e);
+    }
+  }
+  if (typeof showToast === 'function') showToast(`Unassigned all sections for ${teacher.name}`, 'info');
+  closeTeacherSectionModal();
+  refreshSectionAndUserViews();
+}
+
+async function saveTeacherSectionAssignments(teacherKey) {
+  const teacher = registeredUsers.find(u => u.dbId === teacherKey || u.id === teacherKey);
+  if (!teacher) return;
+
+  const modal = document.getElementById('teacherSectionModal');
+  if (!modal) return;
+
+  const checkedBoxes = modal.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)');
+  const selectedSections = Array.from(checkedBoxes).map(cb => cb.value.trim()).filter(Boolean);
+
+  const newSectionStr = selectedSections.length > 0 ? selectedSections.join(', ') : null;
+  teacher.section = newSectionStr;
+
+  if (teacher.dbId && typeof db !== 'undefined' && db?.from) {
+    try {
+      const { error } = await db.from('users').update({ section: newSectionStr }).eq('id', teacher.dbId);
+      if (error) {
+        console.warn('Failed to update teacher sections in database:', error.message);
+      }
+    } catch (e) {
+      console.warn('DB update error:', e);
+    }
+  }
+
+  if (typeof showToast === 'function') {
+    showToast(`Updated sections for ${teacher.name}: ${newSectionStr || 'None (Unassigned)'}`, 'success');
+  }
+
+  closeTeacherSectionModal();
+  refreshSectionAndUserViews();
+}
+
+/* ── Modal: Assign Subject Teachers to a Section ── */
+function openAssignTeachersToSectionModal(secName) {
+  const sec = managedSections.find(s => s.name === secName) || { name: secName, gradeLevel: 'Grade 11', strand: 'General' };
+  const modal = document.getElementById('assignTeachersToSectionModal');
+  if (!modal) return;
+
+  document.getElementById('assignTeachersToSectionTitle').textContent = `Assign Faculty — ${sec.name}`;
+  document.getElementById('assignTeachersToSectionSubtitle').textContent = `${sec.gradeLevel || 'Grade 11'} · ${sec.strand || 'General'} Curriculum`;
+
+  const body = document.getElementById('assignTeachersToSectionBody');
+  const foot = document.getElementById('assignTeachersToSectionFoot');
+
+  const activeTeachers = registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false);
+
+  body.innerHTML = `
+    <!-- CURRICULUM GUARD BANNER -->
+    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.5px;">Curriculum Strand Filter</span>
+          <div style="font-size:14px;font-weight:700;color:#166534;display:flex;align-items:center;gap:8px;margin-top:2px;">
+            Required Specialization: <span class="sec-badge strand" style="font-size:12px;padding:3px 10px;">${escHtml(sec.strand || 'General')}</span>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#166534;margin-top:6px;line-height:1.4;">
+        🛡️ Faculty members must handle <strong>${escHtml(sec.strand || 'General')}</strong> subjects to be assigned to this section. Incompatible faculty are restricted to preserve senior high academic specialization.
+      </div>
+    </div>
+
+    <!-- TEACHERS LIST -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <h5 style="margin:0;font-size:13px;font-weight:700;color:var(--text-primary);">Faculty Roster</h5>
+      <span style="font-size:11.5px;color:var(--text-muted);">${activeTeachers.length} Total Faculty</span>
+    </div>
+
+    <div style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">
+      ${activeTeachers.length > 0 ? activeTeachers.map(t => {
+        const isCompatible = isTeacherCompatibleWithSection(t, sec);
+        const isAssigned = isTeacherAssignedToSection(t, sec.name);
+        const tStrands = getTeacherHandledStrands(t);
+        const curSections = (t.section || '').split(',').map(s => s.trim()).filter(Boolean);
+
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #f1f5f9;${!isCompatible ? 'background:#f8fafc;opacity:0.6;' : 'cursor:pointer;'}"
+               ${isCompatible ? `onclick="document.getElementById('att_cb_${escHtml(t.dbId || t.id)}').click()"` : ''}>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <input type="checkbox" id="att_cb_${escHtml(t.dbId || t.id)}"
+                     value="${escHtml(t.dbId || t.id)}"
+                     ${isAssigned ? 'checked' : ''}
+                     ${!isCompatible ? 'disabled' : ''}
+                     onclick="event.stopPropagation()">
+              <div>
+                <div style="font-size:13.5px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px;">
+                  ${escHtml(t.name)}
+                  <code style="font-size:11px;background:#fffbeb;padding:2px 5px;border-radius:3px;color:#d97706;">${escHtml(t.id)}</code>
+                  <span class="role-tag teacher" style="font-size:10.5px;">${escHtml(tStrands.join(', '))}</span>
+                </div>
+                <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                  Handled Sections: ${curSections.length > 0 ? curSections.join(', ') : 'None'}
+                </div>
+              </div>
+            </div>
+            <div>
+              ${isCompatible ? (
+                isAssigned
+                  ? `<span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11px;font-weight:600;">✓ Assigned</span>`
+                  : `<span style="font-size:11px;color:#16a34a;font-weight:600;">Compatible</span>`
+              ) : `
+                <span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:10.5px;font-weight:700;" title="Teacher handles ${tStrands.join(', ')}, but this section is ${sec.strand || 'General'}">
+                  Strand Mismatch
+                </span>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('') : `
+        <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
+          No active teachers found in the system.
+        </div>
+      `}
+    </div>
+  `;
+
+  foot.innerHTML = `
+    <button class="foot-btn-secondary" onclick="closeAssignTeachersToSectionModal()">Cancel</button>
+    <button class="gen-btn" onclick="saveSectionTeacherAssignments('${escHtml(sec.name)}')">
+      Save Assigned Teachers
+    </button>
+  `;
+
+  modal.classList.add('active');
+}
+
+function closeAssignTeachersToSectionModal() {
+  const modal = document.getElementById('assignTeachersToSectionModal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function saveSectionTeacherAssignments(secName) {
+  const modal = document.getElementById('assignTeachersToSectionModal');
+  if (!modal) return;
+
+  const sec = managedSections.find(s => s.name === secName);
+  if (!sec) return;
+
+  const activeTeachers = registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false);
+
+  for (const t of activeTeachers) {
+    if (!isTeacherCompatibleWithSection(t, sec)) continue;
+    const key = t.dbId || t.id;
+    const cb = modal.querySelector(`input[value="${key}"]`);
+    if (!cb) continue;
+
+    const curSections = (t.section || '').split(',').map(s => s.trim()).filter(Boolean);
+    const hasSec = curSections.some(s => s.toLowerCase() === secName.toLowerCase());
+
+    let updated = false;
+    if (cb.checked && !hasSec) {
+      curSections.push(secName);
+      updated = true;
+    } else if (!cb.checked && hasSec) {
+      const idx = curSections.findIndex(s => s.toLowerCase() === secName.toLowerCase());
+      if (idx !== -1) curSections.splice(idx, 1);
+      updated = true;
+    }
+
+    if (updated) {
+      t.section = curSections.length > 0 ? curSections.join(', ') : null;
+      if (t.dbId && typeof db !== 'undefined' && db?.from) {
+        try {
+          await db.from('users').update({ section: t.section }).eq('id', t.dbId);
+        } catch (e) {
+          console.warn('DB update failed for teacher section:', e);
+        }
+      }
+    }
+  }
+
+  if (typeof showToast === 'function') {
+    showToast(`Updated assigned faculty for ${secName}`, 'success');
+  }
+
+  closeAssignTeachersToSectionModal();
+  openManageSectionModal(secName);
+  refreshSectionAndUserViews();
+}
+
+async function removeTeacherFromSection(teacherKey, secName) {
+  const teacher = registeredUsers.find(u => u.dbId === teacherKey || u.id === teacherKey);
+  if (!teacher) return;
+
+  const curSections = (teacher.section || '').split(',').map(s => s.trim()).filter(Boolean);
+  const filtered = curSections.filter(s => s.toLowerCase() !== secName.toLowerCase());
+  teacher.section = filtered.length > 0 ? filtered.join(', ') : null;
+
+  if (teacher.dbId && typeof db !== 'undefined' && db?.from) {
+    try {
+      await db.from('users').update({ section: teacher.section }).eq('id', teacher.dbId);
+    } catch (e) {
+      console.warn('DB update failed:', e);
+    }
+  }
+
+  if (typeof showToast === 'function') {
+    showToast(`${teacher.name} unassigned from ${secName}`, 'info');
+  }
+
+  openManageSectionModal(secName);
+  refreshSectionAndUserViews();
+}
+
 /* ── Section Roster Modal ── */
 function openManageSectionModal(secName) {
   activeRosterSection = secName;
@@ -1141,6 +1652,12 @@ function openManageSectionModal(secName) {
   const enrolled = registeredUsers.filter(u =>
     u.role === 'student' &&
     (u.section || '').trim().toLowerCase() === secName.trim().toLowerCase()
+  );
+
+  const assignedTeachers = registeredUsers.filter(u =>
+    u.role === 'teacher' &&
+    u.isActive !== false &&
+    isTeacherAssignedToSection(u, secName)
   );
 
   document.getElementById('sectionRosterTitle').textContent = `Manage Section — ${sec.name}`;
@@ -1165,6 +1682,55 @@ function openManageSectionModal(secName) {
       <button type="button" class="sec-edit-shortcut-btn" onclick="closeSectionRosterModal(); openEditSectionModal('${escHtml(sec.id)}')">
         ${iconDoc()} Edit Details & Adviser
       </button>
+    </div>
+
+    <!-- ASSIGNED SUBJECT TEACHERS -->
+    <div class="roster-header-bar" style="margin-bottom:8px;">
+      <div class="roster-sec-info">
+        <h4>${assignedTeachers.length} Assigned Subject Teacher${assignedTeachers.length !== 1 ? 's' : ''}</h4>
+        <span>Faculty handling subjects for this section (${sec.strand || 'General'} specialization)</span>
+      </div>
+      <button class="add-btn" style="margin:0;padding:6px 14px;font-size:12px;height:32px;background:#0284c7;" onclick="openAssignTeachersToSectionModal('${escHtml(sec.name)}')">
+        ${iconUsers()} Assign / Reassign Teachers
+      </button>
+    </div>
+
+    <div class="roster-table-wrap" style="margin-bottom:20px;">
+      <table class="roster-table">
+        <thead>
+          <tr>
+            <th>Teacher Name</th>
+            <th>Teacher ID</th>
+            <th>Specialized Strands</th>
+            <th>All Handled Sections</th>
+            <th style="text-align:right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${assignedTeachers.length > 0 ? assignedTeachers.map(t => `
+            <tr>
+              <td><strong>${escHtml(t.name)}</strong></td>
+              <td><code style="font-size:12px;background:#fffbeb;padding:2px 6px;border-radius:4px;color:#d97706;">${escHtml(t.id)}</code></td>
+              <td><span class="role-tag teacher">${escHtml(t.subjects || t.strand || 'General')}</span></td>
+              <td><span class="sec-badge grade" style="font-size:11px;">${escHtml(t.section || secName)}</span></td>
+              <td style="text-align:right;">
+                <button class="action-link" style="color:#dc2626;background:none;border:none;cursor:pointer;font-family:inherit;font-weight:600;" onclick="removeTeacherFromSection('${t.dbId || t.id}', '${escHtml(secName)}')">
+                  Remove
+                </button>
+              </td>
+            </tr>
+          `).join('') : `
+            <tr>
+              <td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted);font-size:13px;">
+                No subject teachers assigned to this section yet.<br>
+                <button class="foot-btn-secondary" style="margin-top:8px;" onclick="openAssignTeachersToSectionModal('${escHtml(sec.name)}')">
+                  ${iconPlus()} Assign Teachers Now
+                </button>
+              </td>
+            </tr>
+          `}
+        </tbody>
+      </table>
     </div>
 
     <!-- ENROLLED STUDENTS LIST -->
@@ -1479,22 +2045,58 @@ async function executeMassAssignment() {
 const addUser = {
   step: 'type',
   userType: 'student',
-  name: '', email: '', password: '',
-  grade: 'Grade 11', section: null,
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  suffix: '',
+  contactNumber: '',
+  address: '',
+  name: '',
+  email: '',
+  password: '',
+  grade: 'Grade 11',
+  section: null,
   strands: new Set(['STEM']),
-  bulkFile: null, bulkMapped: [],
+  bulkFile: null,
+  bulkMapped: [],
   pendingUsers: [],
   generatedAdminPassword: ''
 };
 
+function auAssembleFullName() {
+  const fn = (addUser.firstName || '').trim();
+  const mn = (addUser.middleName || '').trim();
+  const ln = (addUser.lastName || '').trim();
+  const sf = (addUser.suffix || '').trim();
+  if (!fn && !ln) return '';
+  const parts = [];
+  if (fn) parts.push(fn);
+  if (mn) parts.push(mn.length === 1 ? `${mn}.` : mn);
+  if (ln) parts.push(ln);
+  if (sf) parts.push(sf);
+  return parts.join(' ');
+}
+
 function openAddUserModal(initialType) {
   const chosenType = initialType || (adminUserTab === 'admins' ? 'admin' : (adminUserTab === 'teachers' ? 'teacher' : 'student'));
   Object.assign(addUser, {
-    step: 'type', userType: chosenType,
-    name: '', email: '', password: '',
-    grade: 'Grade 11', section: null,
+    step: 'type',
+    userType: chosenType,
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    suffix: '',
+    contactNumber: '',
+    address: '',
+    name: '',
+    email: '',
+    password: '',
+    grade: 'Grade 11',
+    section: null,
     strands: new Set(['STEM']),
-    bulkFile: null, bulkMapped: [], pendingUsers: [],
+    bulkFile: null,
+    bulkMapped: [],
+    pendingUsers: [],
     generatedAdminPassword: generateComplexPasswordClient(14)
   });
   document.getElementById('addUserModal').classList.add('active');
@@ -1511,6 +2113,11 @@ function closeAddUserModal() {
 function auSelectType(t) {
   addUser.userType = t;
   addUser.section = null;
+  if (t === 'student') {
+    if (addUser.strands.size > 1) {
+      addUser.strands = new Set([Array.from(addUser.strands)[0] || 'STEM']);
+    }
+  }
   if (t === 'admin' && !addUser.generatedAdminPassword) {
     addUser.generatedAdminPassword = generateComplexPasswordClient(14);
   }
@@ -1526,25 +2133,53 @@ function auRegenerateAdminPassword() {
 function auSetGrade(g)   { addUser.grade = g; renderAddUserModal(); }
 function auSetSection(s) { addUser.section = s; renderAddUserModal(); }
 function auToggleStrand(s) {
-  if (addUser.strands.has(s)) { if (addUser.strands.size > 1) addUser.strands.delete(s); }
-  else addUser.strands.add(s);
+  if (addUser.userType === 'student') {
+    // A student is strictly enrolled in ONE strand only
+    addUser.strands = new Set([s]);
+  } else {
+    // Teachers can handle multiple strands
+    if (addUser.strands.has(s)) {
+      if (addUser.strands.size > 1) addUser.strands.delete(s);
+    } else {
+      addUser.strands.add(s);
+    }
+  }
   renderAddUserModal();
 }
 function auRefreshSaveButton() {
   const btn = document.getElementById('auSaveBtn');
   if (!btn) return;
-  const queuedCount = addUser.pendingUsers.length + (addUser.bulkFile ? resolveBulkRows().rows.length : 0);
-  const saveCount = queuedCount || (addUser.name.trim() ? 1 : 0);
-  btn.disabled = saveCount === 0;
-  btn.innerHTML = `${iconUsers()} Save ${saveCount > 0 ? `(${saveCount} user${saveCount !== 1 ? 's' : ''})` : 'Users'}`;
+  const isAdm = addUser.userType === 'admin';
+  if (isAdm) {
+    const hasName = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
+    btn.disabled = !hasName;
+  } else {
+    const queuedCount = addUser.pendingUsers.length + (addUser.bulkFile ? resolveBulkRows().rows.length : 0);
+    const hasSingle = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
+    const saveCount = queuedCount || (hasSingle ? 1 : 0);
+    btn.disabled = saveCount === 0;
+    btn.innerHTML = `${iconUsers()} Save ${saveCount > 0 ? `(${saveCount} user${saveCount !== 1 ? 's' : ''})` : 'Users'}`;
+  }
 }
 
-function auUpdateName(v)     { addUser.name = v; auRefreshSaveButton(); }
-function auUpdateEmail(v)    { addUser.email = v; }
-function auUpdatePassword(v) { addUser.password = v; }
+function auUpdateFirstName(v)     { addUser.firstName = v; addUser.name = auAssembleFullName(); auRefreshSaveButton(); }
+function auUpdateMiddleName(v)    { addUser.middleName = v; addUser.name = auAssembleFullName(); }
+function auUpdateLastName(v)     { addUser.lastName = v; addUser.name = auAssembleFullName(); auRefreshSaveButton(); }
+function auUpdateSuffix(v)       { addUser.suffix = v; addUser.name = auAssembleFullName(); }
+function auUpdateContactNumber(v){ addUser.contactNumber = v; }
+function auUpdateAddress(v)      { addUser.address = v; }
+function auUpdateName(v)         { addUser.name = v; auRefreshSaveButton(); }
+function auUpdateEmail(v)        { addUser.email = v; }
+function auUpdatePassword(v)     { addUser.password = v; }
 
 const BULK_HEADER_ALIASES = {
   name: ['name', 'full name', 'full_name', 'fullname'],
+  first_name: ['first name', 'first_name', 'firstname'],
+  middle_name: ['middle name', 'middle_name', 'middlename'],
+  last_name: ['last name', 'last_name', 'lastname', 'surname'],
+  suffix: ['suffix'],
+  contact_number: ['phone', 'contact', 'contact number', 'contact_number', 'phone number', 'phone_number', 'mobile'],
+  address: ['address', 'residence', 'home address', 'residential address'],
   email: ['email', 'e-mail', 'email address'],
   strand: ['strand'],
   grade_level: ['grade level', 'grade_level', 'grade'],
@@ -1573,28 +2208,50 @@ function mapBulkHeaders(rawRows) {
 
 function resolveBulkRows() {
   const isStudent = addUser.userType === 'student';
-  const fallbackStrand = Array.from(addUser.strands)[0] || null;
+  const fallbackStrand = Array.from(addUser.strands)[0] || 'STEM';
   const rows = [];
   const errors = [];
 
   addUser.bulkMapped.forEach((mapped, i) => {
     const rowNum = i + 2;
-    const name = mapped.name || '';
+    let name = mapped.name || '';
+    if (!name && (mapped.first_name || mapped.last_name)) {
+      const parts = [mapped.first_name, mapped.middle_name, mapped.last_name, mapped.suffix].filter(Boolean);
+      name = parts.join(' ');
+    }
     const email = mapped.email || '';
-    if (!name) { errors.push(`Row ${rowNum}: missing name`); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.push(`Row ${rowNum} (${name || 'unnamed'}): invalid or missing email`); return; }
+    if (!name) { errors.push(`Row ${rowNum}: Missing name (First Name & Last Name are required)`); return; }
+    if (/\d/.test(name)) { errors.push(`Row ${rowNum} (${name}): Name cannot contain numbers`); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.push(`Row ${rowNum} (${name || 'unnamed'}): Invalid or missing email`); return; }
 
-    const targetSection = mapped.section || addUser.section || null;
+    const strand = (mapped.strand || fallbackStrand || '').trim();
+    if (isStudent) {
+      if (!strand) { errors.push(`Row ${rowNum} (${name}): Strand is required`); return; }
+      if (strand.includes(',') || strand.includes('/') || strand.includes(';') || strand.includes('&')) {
+        errors.push(`Row ${rowNum} (${name}): A student can only be enrolled in exactly 1 strand (STEM, HUMSS, or ABM)`);
+        return;
+      }
+    }
+
+    const gradeLevel = isStudent ? (mapped.grade_level || addUser.grade || '').trim() : null;
+    if (isStudent && !gradeLevel) {
+      errors.push(`Row ${rowNum} (${name}): Grade Level is strictly required (not optional)`);
+      return;
+    }
+
+    const targetSection = (mapped.section || addUser.section || '').trim() || null;
 
     rows.push({
       name, email,
+      contact_number: mapped.contact_number || '',
+      address: mapped.address || '',
       role: addUser.userType,
-      strand: mapped.strand || fallbackStrand,
-      grade_level: isStudent ? (mapped.grade_level || addUser.grade) : null,
+      strand: strand || fallbackStrand,
+      grade_level: gradeLevel,
       section: targetSection,
       subjects: !isStudent ? (mapped.subjects || Array.from(addUser.strands).join(', ')) : null,
       detail: isStudent
-        ? `${mapped.strand || fallbackStrand} — ${mapped.grade_level || addUser.grade}${targetSection ? ` (${targetSection})` : ' (Unassigned)'}`
+        ? `${strand || fallbackStrand} — ${gradeLevel}${targetSection ? ` (${targetSection})` : ' (Unassigned)'}`
         : (targetSection 
             ? `${mapped.subjects || Array.from(addUser.strands).join(', ')} (${targetSection})`
             : (mapped.subjects || Array.from(addUser.strands).join(', ')))
@@ -1674,19 +2331,19 @@ function downloadBulkUserTemplate() {
   const fileName = `Scholaria_${roleName}_Bulk_Template.xlsx`;
 
   const headers = isStudent
-    ? ['Name', 'Email', 'Strand', 'Grade Level', 'Section']
-    : ['Name', 'Email', 'Subjects', 'Section'];
+    ? ['First Name', 'Middle Name', 'Last Name', 'Suffix', 'Email', 'Strand', 'Grade Level', 'Section', 'Contact Number', 'Address']
+    : ['First Name', 'Middle Name', 'Last Name', 'Suffix', 'Email', 'Subjects', 'Section', 'Contact Number', 'Address'];
 
   const sampleRows = isStudent
     ? [
-        ['Dela Cruz, Juan P.', 'juan.delacruz@sample.edu.ph', 'STEM', 'Grade 11', 'Section A'],
-        ['Reyes, Ana Marie T.', 'ana.reyes@sample.edu.ph', 'ABM', 'Grade 12', 'Section B'],
-        ['Santos, Pedro L.', 'pedro.santos@sample.edu.ph', 'HUMSS', 'Grade 11', '']
+        ['Juan', 'Mercado', 'Dela Cruz', 'Jr.', 'juan.delacruz@sample.edu.ph', 'STEM', 'Grade 11', 'Section A', '09171234567', '123 Rizal St., Pasig City'],
+        ['Ana Marie', 'Tan', 'Reyes', '', 'ana.reyes@sample.edu.ph', 'ABM', 'Grade 12', '', '09189876543', '456 Ortigas Ave., Pasig City'],
+        ['Pedro', 'Lim', 'Santos', '', 'pedro.santos@sample.edu.ph', 'HUMSS', 'Grade 11', '', '09205556677', '789 San Antonio, Pasig City']
       ]
     : [
-        ['Garcia, Ramon C.', 'ramon.garcia@sample.edu.ph', 'General Mathematics, Pre-Calculus', 'Section A'],
-        ['Torres, Liza M.', 'liza.torres@sample.edu.ph', 'Practical Research 1, Statistics', 'Section B'],
-        ['Fernandez, Paul B.', 'paul.fernandez@sample.edu.ph', 'Empowerment Technologies', '']
+        ['Ramon', 'Cruz', 'Garcia', '', 'ramon.garcia@sample.edu.ph', 'General Mathematics, Pre-Calculus', 'Section A', '09172223344', 'Quezon City'],
+        ['Liza', 'Morales', 'Torres', '', 'liza.torres@sample.edu.ph', 'Practical Research 1, Statistics', 'Section B', '09183334455', 'Mandaluyong City'],
+        ['Paul', 'Bautista', 'Fernandez', '', 'paul.fernandez@sample.edu.ph', 'Empowerment Technologies', '', '', '']
       ];
 
   if (typeof XLSX !== 'undefined') {
@@ -1736,29 +2393,39 @@ function renderFormatExampleTable() {
   const isStudent = addUser.userType === 'student';
   const columns = isStudent
     ? [
-        { header: 'Name',        required: true },
-        { header: 'Email',       required: true },
-        { header: 'Strand',      required: false },
-        { header: 'Grade Level', required: false },
-        { header: 'Section',     required: false }
+        { header: 'First Name',     required: true },
+        { header: 'Middle Name',    required: false },
+        { header: 'Last Name',      required: true },
+        { header: 'Suffix',         required: false },
+        { header: 'Email',          required: true },
+        { header: 'Strand',         required: true },
+        { header: 'Grade Level',    required: true },
+        { header: 'Section',        required: false },
+        { header: 'Contact Number', required: false },
+        { header: 'Address',        required: false }
       ]
     : [
-        { header: 'Name',     required: true },
-        { header: 'Email',    required: true },
-        { header: 'Subjects', required: false },
-        { header: 'Section',  required: false }
+        { header: 'First Name',     required: true },
+        { header: 'Middle Name',    required: false },
+        { header: 'Last Name',      required: true },
+        { header: 'Suffix',         required: false },
+        { header: 'Email',          required: true },
+        { header: 'Subjects',       required: false },
+        { header: 'Section',        required: false },
+        { header: 'Contact Number', required: false },
+        { header: 'Address',        required: false }
       ];
 
   const sampleRows = isStudent
     ? [
-        ['Dela Cruz, Juan P.',   'juan.delacruz@sample.edu.ph', STRANDS[0], GRADE_LEVELS[1], ''],
-        ['Reyes, Ana Marie T.',  'ana.reyes@sample.edu.ph', STRANDS[2], GRADE_LEVELS[0], ''],
-        ['Santos, Pedro L.',     'pedro.santos@sample.edu.ph', '', '', '']
+        ['Juan', 'Mercado', 'Dela Cruz', 'Jr.', 'juan.delacruz@sample.edu.ph', 'STEM', 'Grade 11', 'Section A', '09171234567', '123 Rizal St., Pasig City'],
+        ['Ana Marie', 'Tan', 'Reyes', '', 'ana.reyes@sample.edu.ph', 'ABM', 'Grade 12', '', '09189876543', '456 Ortigas Ave., Pasig City'],
+        ['Pedro', 'Lim', 'Santos', '', 'pedro.santos@sample.edu.ph', 'HUMSS', 'Grade 11', '', '09205556677', '789 San Antonio, Pasig City']
       ]
     : [
-        ['Garcia, Ramon C.',  'ramon.garcia@sample.edu.ph', 'Web Systems, Programming', 'Section A'],
-        ['Torres, Liza M.',   'liza.torres@sample.edu.ph', 'Research, Statistics', ''],
-        ['Fernandez, Paul B.', 'paul.fernandez@sample.edu.ph', '', '']
+        ['Ramon', 'Cruz', 'Garcia', '', 'ramon.garcia@sample.edu.ph', 'General Mathematics, Pre-Calculus', 'Section A', '09172223344', 'Quezon City'],
+        ['Liza', 'Morales', 'Torres', '', 'liza.torres@sample.edu.ph', 'Practical Research 1, Statistics', 'Section B', '09183334455', 'Mandaluyong City'],
+        ['Paul', 'Bautista', 'Fernandez', '', 'paul.fernandez@sample.edu.ph', 'Empowerment Technologies', '', '', '']
       ];
 
   return `
@@ -1773,8 +2440,14 @@ function renderFormatExampleTable() {
           Download Editable Excel (.xlsx)
         </button>
       </div>
-      <div class="au-format-note">
-        Upload a spreadsheet with these column headers in row 1. Only <b>Name</b> and <b>Email</b> are required; <b>Section is optional</b> and students can be mass-assigned to sections anytime in the <b>Sections &amp; Rosters</b> tab.
+      <div class="au-format-note" style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 14px;color:#1e40af;line-height:1.6;margin-bottom:12px;">
+        <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;color:#1d4ed8;">Institutional Roster Requirements:</div>
+        <ul style="margin:4px 0 0 18px;padding:0;font-size:12px;">
+          <li>${isStudent ? '<strong>GRADE LEVEL is STRICTLY REQUIRED</strong>. <strong>Section is OPTIONAL</strong> (can be left empty and assigned later in the Sections &amp; Rosters tab).' : 'Faculty assignments require Name and Email. Subjects and Section are optional.'}</li>
+          <li>${isStudent ? 'Students must be enrolled in <strong>EXACTLY ONE STRAND</strong> (e.g. STEM, HUMSS, or ABM) — multiple strands are not permitted.' : 'Teachers can handle multiple strands/subjects separated by comma.'}</li>
+          <li><strong>No digits or numbers are allowed</strong> in First Name, Middle Name, Last Name, or Suffix fields.</li>
+          <li>Section, Contact Number, and Residential Address are optional.</li>
+        </ul>
       </div>
       <div class="au-format-table-scroll">
         <table class="au-format-table">
@@ -1791,8 +2464,8 @@ function renderFormatExampleTable() {
       </div>
       <div class="au-format-legend" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
         <div style="display:flex;align-items:center;gap:14px;">
-          <span><i class="sw-req"></i> Required</span>
-          <span><i class="sw-opt"></i> Optional — falls back to Unassigned or chips above</span>
+          <span><i class="sw-req"></i> Required (Grade Level is Mandatory)</span>
+          <span><i class="sw-opt"></i> Optional (Section can be left empty)</span>
         </div>
         <a href="javascript:void(0)" onclick="downloadBulkUserTemplate()" style="color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;">Download .xlsx template &rarr;</a>
       </div>
@@ -1801,18 +2474,48 @@ function renderFormatExampleTable() {
 }
 
 function auBuildSingleFromForm() {
-  if (!addUser.name.trim()) return { error: 'Please enter a name' };
-  if (!/^[a-zA-Z\sñÑ\-.]+$/.test(addUser.name.trim())) {
-    return { error: 'Name must contain letters only (no numbers or special characters)' };
-  }
-  if (addUser.name.trim().length > 50) {
-    return { error: 'Name exceeds maximum of 50 characters' };
-  }
+  const fn = (addUser.firstName || '').trim();
+  const mn = (addUser.middleName || '').trim();
+  const ln = (addUser.lastName || '').trim();
+  const sf = (addUser.suffix || '').trim();
+  const phone = (addUser.contactNumber || '').trim();
+  const addr = (addUser.address || '').trim();
+
+  if (!fn) return { error: 'Please enter a First Name' };
+  if (!ln) return { error: 'Please enter a Last Name' };
+
+  // Explicit check for numbers in all name fields
+  if (/\d/.test(fn)) return { error: 'First Name cannot contain numbers' };
+  if (/\d/.test(mn)) return { error: 'Middle Name cannot contain numbers' };
+  if (/\d/.test(ln)) return { error: 'Last Name cannot contain numbers' };
+  if (/\d/.test(sf)) return { error: 'Suffix cannot contain numbers' };
+
+  const nameRegex = /^[a-zA-Z\s\u00C0-\u024FñÑ\-.]+$/;
+  if (!nameRegex.test(fn)) return { error: 'First Name must contain letters only (no numbers or special characters)' };
+  if (mn && !nameRegex.test(mn)) return { error: 'Middle Name must contain letters only (no numbers or special characters)' };
+  if (!nameRegex.test(ln)) return { error: 'Last Name must contain letters only (no numbers or special characters)' };
+  if (sf && !nameRegex.test(sf)) return { error: 'Suffix must contain letters only (no numbers or special characters)' };
+
+  if (fn.length > 50 || ln.length > 50) return { error: 'Name fields cannot exceed 50 characters' };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addUser.email.trim())) return { error: 'Please enter a valid email' };
+
+  const fullName = auAssembleFullName();
   const isStudent = addUser.userType === 'student';
   const targetSection = addUser.section || null;
+
+  if (isStudent) {
+    if (!addUser.grade) return { error: 'Please select a Grade Level (Required)' };
+    if (!addUser.strands || addUser.strands.size !== 1) return { error: 'Student must be enrolled in exactly one strand' };
+  }
+
   const user = {
-    name: addUser.name.trim(),
+    name: fullName,
+    firstName: fn,
+    middleName: mn,
+    lastName: ln,
+    suffix: sf,
+    contact_number: phone,
+    address: addr,
     email: addUser.email.trim(),
     role: addUser.userType,
     grade_level: isStudent ? addUser.grade : null,
@@ -1830,6 +2533,12 @@ function auAddSingle() {
   const { user, error } = auBuildSingleFromForm();
   if (error) { showToast(error, 'error'); return; }
   addUser.pendingUsers.push(user);
+  addUser.firstName = '';
+  addUser.middleName = '';
+  addUser.lastName = '';
+  addUser.suffix = '';
+  addUser.contactNumber = '';
+  addUser.address = '';
   addUser.name = '';
   addUser.email = '';
   renderAddUserModal();
@@ -1844,14 +2553,15 @@ async function auSaveUsers() {
 
   const toAdd = [...addUser.pendingUsers, ...bulkRows];
 
-  if (toAdd.length === 0 && addUser.name.trim()) {
+  const hasSingle = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
+  if (toAdd.length === 0 && hasSingle) {
     const { user, error } = auBuildSingleFromForm();
     if (error) { showToast(error, 'error'); return; }
     toAdd.push(user);
   }
 
   if (toAdd.length === 0) {
-    showToast(bulkErrors.length ? 'Every row in the file had a problem — see below' : 'Nothing to save — add at least one user', 'error');
+    showToast(bulkErrors.length ? 'Every row in the file had a problem — see below' : 'Nothing to save — enter user details or upload a file', 'error');
     return;
   }
 
@@ -1871,23 +2581,38 @@ async function auSaveUsers() {
         },
         body: JSON.stringify({
           full_name: u.name,
+          first_name: u.firstName || undefined,
+          middle_name: u.middleName || undefined,
+          last_name: u.lastName || undefined,
+          suffix: u.suffix || undefined,
           role: u.role,
           email: u.email,
           strand: u.strand,
           grade_level: u.grade_level,
           section: u.section,
-          subjects: u.subjects
+          subjects: u.subjects,
+          contact_number: u.contact_number || undefined,
+          address: u.address || undefined
         })
       });
       const body = await res.json();
       if (!res.ok) { failures.push(`${u.name}: ${body.error || 'failed'}`); continue; }
       const itemRecord = {
         name: u.name,
+        firstName: u.firstName || body.first_name || '',
+        middleName: u.middleName || body.middle_name || '',
+        lastName: u.lastName || body.last_name || '',
+        suffix: u.suffix || body.suffix || '',
+        first_name: u.firstName || body.first_name || '',
+        middle_name: u.middleName || body.middle_name || '',
+        last_name: u.lastName || body.last_name || '',
         role: u.role,
         strand: u.strand,
         grade_level: u.grade_level,
         section: u.section,
         subjects: u.subjects,
+        contact_number: u.contact_number || '',
+        address: u.address || '',
         ...body
       };
       saveCredentialSlipRecord(itemRecord);
@@ -1915,14 +2640,39 @@ async function auSaveUsers() {
 }
 
 async function auSaveAdminAccount() {
-  const name = addUser.name.trim();
+  const fn = (addUser.firstName || '').trim();
+  const mn = (addUser.middleName || '').trim();
+  const ln = (addUser.lastName || '').trim();
+  const sf = (addUser.suffix || '').trim();
+  const phone = (addUser.contactNumber || '').trim();
+  const addr = (addUser.address || '').trim();
+
+  if (!fn) {
+    if (typeof showToast === 'function') showToast('Administrator First Name is required', 'error');
+    return;
+  }
+  if (!ln) {
+    if (typeof showToast === 'function') showToast('Administrator Last Name is required', 'error');
+    return;
+  }
+
+  // Explicit check for numbers in all name fields
+  if (/\d/.test(fn)) { if (typeof showToast === 'function') showToast('First Name cannot contain numbers', 'error'); return; }
+  if (/\d/.test(mn)) { if (typeof showToast === 'function') showToast('Middle Name cannot contain numbers', 'error'); return; }
+  if (/\d/.test(ln)) { if (typeof showToast === 'function') showToast('Last Name cannot contain numbers', 'error'); return; }
+  if (/\d/.test(sf)) { if (typeof showToast === 'function') showToast('Suffix cannot contain numbers', 'error'); return; }
+
+  const nameRegex = /^[a-zA-Z\s\u00C0-\u024FñÑ\-.]+$/;
+  if (!nameRegex.test(fn)) { if (typeof showToast === 'function') showToast('First Name must contain letters only', 'error'); return; }
+  if (mn && !nameRegex.test(mn)) { if (typeof showToast === 'function') showToast('Middle Name must contain letters only', 'error'); return; }
+  if (!nameRegex.test(ln)) { if (typeof showToast === 'function') showToast('Last Name must contain letters only', 'error'); return; }
+  if (sf && !nameRegex.test(sf)) { if (typeof showToast === 'function') showToast('Suffix must contain letters only', 'error'); return; }
+
+  const name = auAssembleFullName();
+  addUser.name = name;
   const email = addUser.email.trim();
   const password = addUser.generatedAdminPassword || generateComplexPasswordClient(14);
 
-  if (!name) {
-    if (typeof showToast === 'function') showToast('Administrator full name is required', 'error');
-    return;
-  }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     if (typeof showToast === 'function') showToast('Please enter a valid recovery email format, or leave empty', 'error');
     return;
@@ -1947,9 +2697,15 @@ async function auSaveAdminAccount() {
       },
       body: JSON.stringify({
         full_name: name,
+        first_name: fn,
+        middle_name: mn || undefined,
+        last_name: ln,
+        suffix: sf || undefined,
         role: 'admin',
         email: email || undefined,
-        custom_password: password
+        custom_password: password,
+        contact_number: phone || undefined,
+        address: addr || undefined
       })
     });
 
@@ -1963,10 +2719,19 @@ async function auSaveAdminAccount() {
     const adminSlip = {
       school_id: data.school_id,
       name: data.name || name,
+      firstName: fn,
+      middleName: mn,
+      lastName: ln,
+      suffix: sf,
+      first_name: fn,
+      middle_name: mn,
+      last_name: ln,
       role: 'admin',
       temp_password: data.temp_password || password,
       recovery_email: data.recovery_email || email || null,
       email: data.email || email,
+      contact_number: data.contact_number || phone || null,
+      address: data.address || addr || null,
       created_at: data.created_at || new Date().toISOString(),
       created_by: data.created_by || {
         id: CURRENT_PROFILE?.id,
@@ -2087,6 +2852,16 @@ function buildCredentialSlipCardHtml(slip, index = 0) {
           <div class="slip-info-label">Academic Assignment / Division</div>
           <div class="slip-info-value" style="font-size:12.5px;">${escHtml(academicInfo)}</div>
         </div>
+        ${slip.contact_number ? `
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Contact / Phone</div>
+          <div class="slip-info-value" style="font-size:12.5px;">${escHtml(slip.contact_number)}</div>
+        </div>` : ''}
+        ${slip.address ? `
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Residential Address</div>
+          <div class="slip-info-value" style="font-size:12.5px;">${escHtml(slip.address)}</div>
+        </div>` : ''}
       </div>
 
       <div class="slip-creds-box">
@@ -2460,17 +3235,42 @@ function renderAddUserModal() {
 
     ${isAdmin ? `
       <div style="margin-top:16px;">
-        <div class="gen-field">
-          <label>Administrator Full Name *</label>
-          <input type="text" placeholder="e.g. Dr. Eleanor Vance or Juan Santos" maxlength="50" value="${escHtml(addUser.name)}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateName(this.value);">
+        <div class="au-name-grid" style="margin-bottom:12px;">
+          <div class="gen-field">
+            <label>First Name <span style="color:#ef4444;">*</span></label>
+            <input type="text" placeholder="e.g. Eleanor" maxlength="50" value="${escHtml(addUser.firstName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateFirstName(this.value);">
+          </div>
+          <div class="gen-field">
+            <label>Middle Name <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
+            <input type="text" placeholder="e.g. Vance" maxlength="50" value="${escHtml(addUser.middleName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateMiddleName(this.value);">
+          </div>
+          <div class="gen-field">
+            <label>Last Name <span style="color:#ef4444;">*</span></label>
+            <input type="text" placeholder="e.g. Sterling" maxlength="50" value="${escHtml(addUser.lastName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateLastName(this.value);">
+          </div>
+          <div class="gen-field">
+            <label>Suffix <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
+            <input type="text" placeholder="e.g. III" maxlength="15" value="${escHtml(addUser.suffix || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateSuffix(this.value);">
+          </div>
         </div>
 
-        <div class="gen-field" style="margin-top:12px;">
-          <label>Recovery Gmail / Official Email <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
-          <input type="email" placeholder="e.g. eleanor.vance@gmail.com (Optional)" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
-          <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">
-            Optional: Used for account recovery & notifications. If omitted, the administrator logs in using their assigned School Admin ID.
+        <div class="gen-row" style="margin-bottom:12px;">
+          <div class="gen-field">
+            <label>Recovery Gmail / Official Email <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+            <input type="email" placeholder="e.g. eleanor.vance@gmail.com" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
           </div>
+          <div class="gen-field">
+            <label>Phone / Emergency Contact <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+            <input type="tel" placeholder="e.g. 09171234567" maxlength="15" value="${escHtml(addUser.contactNumber || '')}" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); auUpdateContactNumber(this.value)">
+          </div>
+        </div>
+
+        <div class="gen-field" style="margin-bottom:12px;">
+          <label>Residential / Home Address <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+          <input type="text" placeholder="e.g. 456 Meralco Ave., Pasig City" maxlength="150" value="${escHtml(addUser.address || '')}" oninput="auUpdateAddress(this.value)">
+        </div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:14px;">
+          Note: If recovery email is omitted, the administrator logs in using their assigned School Admin ID.
         </div>
 
         <div class="gen-field" style="margin-top:14px;">
@@ -2502,7 +3302,7 @@ function renderAddUserModal() {
       </div>
     ` : `
       <div class="gen-field">
-        <label>${isStudent ? 'Strand' : 'Strands Handled'}</label>
+        <label>${isStudent ? 'Strand <span style="color:#ef4444;">*</span> <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;">(Single selection only — select 1 strand)</span>' : 'Strands Handled <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;">(Select all handled strands)</span>'}</label>
         <div class="au-strand-grid">
           ${STRANDS.map(s => `<div class="au-strand-chip ${addUser.strands.has(s) ? 'on' : ''}" onclick="auToggleStrand('${s}')">${s}</div>`).join('')}
         </div>
@@ -2512,7 +3312,7 @@ function renderAddUserModal() {
       <div class="gen-row">
         ${isStudent ? `
         <div class="gen-field">
-          <label>Grade Level</label>
+          <label>Grade Level <span style="color:#ef4444;">*</span> <span style="font-size:11px;font-weight:700;color:#dc2626;text-transform:none;">(Required)</span></label>
           <div class="au-grade-pills">
             ${GRADE_LEVELS.map(g => `<div class="au-grade-pill ${addUser.grade === g ? 'on' : ''}" onclick="auSetGrade('${g}')">${g}</div>`).join('')}
           </div>
@@ -2559,7 +3359,7 @@ function renderAddUserModal() {
       <label class="au-bulk-zone" for="auBulkInput">
         <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/></svg>
         <div class="dz-title">Import from Excel or CSV</div>
-        <div class="dz-sub">Columns: Name, Email (Required) · Strand, Grade Level, Section (Optional) — Max 50MB only</div>
+        <div class="dz-sub">Columns: First Name, Last Name, Email, Strand, Grade Level (Required) · Section, Phone, Address (Optional) — Max 50MB only</div>
       </label>
       <input type="file" id="auBulkInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="auHandleBulkFile(this)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:8px;flex-wrap:wrap;">
@@ -2577,9 +3377,39 @@ function renderAddUserModal() {
 
       <div class="au-divider">Or add individually</div>
 
-      <div class="gen-row">
-        <div class="gen-field"><label>Full Name</label><input type="text" placeholder="e.g. Santos, Maria L." maxlength="50" value="${escHtml(addUser.name)}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateName(this.value);"></div>
-        <div class="gen-field"><label>Email</label><input type="text" placeholder="e.g. student@hwa.edu.ph" maxlength="100" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)"></div>
+      <div class="au-name-grid" style="margin-bottom:12px;">
+        <div class="gen-field">
+          <label>First Name <span style="color:#ef4444;">*</span></label>
+          <input type="text" placeholder="e.g. Maria" maxlength="50" value="${escHtml(addUser.firstName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateFirstName(this.value);">
+        </div>
+        <div class="gen-field">
+          <label>Middle Name <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
+          <input type="text" placeholder="e.g. Lopez" maxlength="50" value="${escHtml(addUser.middleName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateMiddleName(this.value);">
+        </div>
+        <div class="gen-field">
+          <label>Last Name <span style="color:#ef4444;">*</span></label>
+          <input type="text" placeholder="e.g. Santos" maxlength="50" value="${escHtml(addUser.lastName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateLastName(this.value);">
+        </div>
+        <div class="gen-field">
+          <label>Suffix <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
+          <input type="text" placeholder="e.g. Jr." maxlength="15" value="${escHtml(addUser.suffix || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateSuffix(this.value);">
+        </div>
+      </div>
+
+      <div class="gen-row" style="margin-bottom:12px;">
+        <div class="gen-field">
+          <label>${isStudent ? 'Official School Email' : 'Email Address'} <span style="color:#ef4444;">*</span></label>
+          <input type="email" placeholder="${isStudent ? 'e.g. student@hwa.edu.ph' : 'e.g. teacher@hwa.edu.ph'}" maxlength="100" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
+        </div>
+        <div class="gen-field">
+          <label>Phone / Emergency Contact <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+          <input type="tel" placeholder="e.g. 09171234567" maxlength="15" value="${escHtml(addUser.contactNumber || '')}" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); auUpdateContactNumber(this.value)">
+        </div>
+      </div>
+
+      <div class="gen-field" style="margin-bottom:12px;">
+        <label>Residential / Home Address <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+        <input type="text" placeholder="e.g. 123 Rizal St., Brgy. San Antonio, Pasig City" maxlength="150" value="${escHtml(addUser.address || '')}" oninput="auUpdateAddress(this.value)">
       </div>
 
       ${addUser.pendingUsers.length > 0 ? `
@@ -2595,7 +3425,7 @@ function renderAddUserModal() {
   `;
 
   if (isAdmin) {
-    const hasName = !!addUser.name.trim();
+    const hasName = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
     foot.innerHTML = `
       <button class="foot-btn-secondary" onclick="closeAddUserModal()">Cancel</button>
       <button class="gen-btn" id="auSaveBtn" ${!hasName ? 'disabled' : ''} onclick="auSaveAdminAccount()" style="background:#0f172a;color:#f59e0b;border:1.5px solid #d97706;padding:8px 18px;font-size:13px;font-weight:700;">
@@ -2605,7 +3435,8 @@ function renderAddUserModal() {
   } else {
     const bulkRowCount = addUser.bulkFile ? resolveBulkRows().rows.length : 0;
     const queuedCount = addUser.pendingUsers.length + bulkRowCount;
-    const saveCount = queuedCount || (addUser.name.trim() ? 1 : 0);
+    const hasSingle = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
+    const saveCount = queuedCount || (hasSingle ? 1 : 0);
     foot.innerHTML = `
       <button class="foot-btn-secondary" onclick="closeAddUserModal()">Cancel</button>
       <div style="display:flex;gap:8px;align-items:center;">
@@ -2615,4 +3446,17 @@ function renderAddUserModal() {
         </button>
       </div>`;
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.openAssignTeacherSectionsModal = openAssignTeacherSectionsModal;
+  window.closeTeacherSectionModal = closeTeacherSectionModal;
+  window.clearAllTeacherSections = clearAllTeacherSections;
+  window.saveTeacherSectionAssignments = saveTeacherSectionAssignments;
+  window.openAssignTeachersToSectionModal = openAssignTeachersToSectionModal;
+  window.closeAssignTeachersToSectionModal = closeAssignTeachersToSectionModal;
+  window.saveSectionTeacherAssignments = saveSectionTeacherAssignments;
+  window.removeTeacherFromSection = removeTeacherFromSection;
+  window.isTeacherAssignedToSection = isTeacherAssignedToSection;
+  window.isTeacherCompatibleWithSection = isTeacherCompatibleWithSection;
 }

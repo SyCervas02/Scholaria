@@ -448,44 +448,24 @@ function isAttemptBelongingToStudent(a, u) {
 }
 
 function getClassRecordQuizzes() {
-  const attempts = getAllRecordedAttempts();
-  const custom = getCustomClassRecEntries();
-
-  const attemptedQuizIds = new Set();
-  attempts.forEach(a => {
-    if (a.quiz_id) attemptedQuizIds.add(String(a.quiz_id).toLowerCase());
-    if (a.quiz_title) attemptedQuizIds.add(String(a.quiz_title).toLowerCase());
-  });
-
-  Object.values(custom).forEach(studCustom => {
-    Object.keys(studCustom).forEach(k => {
-      if (k !== 'subject') attemptedQuizIds.add(String(k).toLowerCase());
-    });
-  });
-
   const pool = typeof customQuizzes !== 'undefined' ? [...customQuizzes] : [];
+  const teacherQuizzes = (ROLE === 'teacher' && CURRENT_PROFILE)
+    ? pool.filter(q =>
+        !q.createdBy ||
+        q.createdBy === CURRENT_PROFILE.id ||
+        q.createdBy === CURRENT_PROFILE.dbId ||
+        q.isDemo ||
+        ((CURRENT_PROFILE.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
+      )
+    : pool;
 
-  attempts.forEach(a => {
-    const title = a.quiz_title || a.quiz_id;
-    const id = a.quiz_id || a.quiz_title;
-    if (id && !pool.some(q => String(q.id).toLowerCase() === String(id).toLowerCase() || String(q.title || '').toLowerCase() === String(title).toLowerCase())) {
-      pool.push({ id, title: title || 'Quiz' });
-    }
-  });
-
-  if (pool.length) {
-    const takenQuizzes = pool.filter(q =>
-      attemptedQuizIds.has(String(q.id).toLowerCase()) ||
-      attemptedQuizIds.has(String(q.title || '').toLowerCase()) ||
-      attempts.some(a => String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() || String(a.quiz_title || '').toLowerCase() === String(q.title || '').toLowerCase())
-    );
-    if (takenQuizzes.length) return takenQuizzes;
-  }
-
-  return [
-    { id: 'quiz_1', title: 'Quiz 1' },
-    { id: 'quiz_2', title: 'Quiz 2' }
-  ];
+  const finalQuizzes = teacherQuizzes.length ? teacherQuizzes : pool;
+  return finalQuizzes.map(q => ({
+    id: q.id,
+    title: q.title || 'Assessment',
+    subject: q.subject || '',
+    strand: q.strand || ''
+  }));
 }
 
 function openAddClassRecordModal() {
@@ -499,7 +479,17 @@ function openAddClassRecordModal() {
   const quizSelect = document.getElementById('crQuizSelect');
   if (quizSelect) {
     const quizzes = getClassRecordQuizzes();
-    quizSelect.innerHTML = quizzes.map(q => `<option value="${q.id}">${escHtml(q.title)}</option>`).join('');
+    quizSelect.innerHTML = quizzes.length ? quizzes.map(q => `<option value="${q.id}">${escHtml(q.title)}</option>`).join('') : '<option value="manual_eval">Standard Evaluation</option>';
+  }
+  const subjWrap = document.getElementById('crSubjPickerWrap');
+  if (subjWrap && typeof renderSearchableSubjectPicker === 'function') {
+    subjWrap.innerHTML = renderSearchableSubjectPicker({
+      id: 'crSubjPicker',
+      inputId: 'crSubjInput',
+      value: (ROLE === 'teacher' && CURRENT_PROFILE?.subjects) ? CURRENT_PROFILE.subjects.split(',')[0].trim() : 'General Class',
+      options: (typeof getCurriculumSubjectsList === 'function') ? getCurriculumSubjectsList() : ['Pre-Calculus', 'Basic Calculus', 'General Biology 1', 'General Biology 2'],
+      placeholder: 'Select from dropdown or search subject...'
+    });
   }
   modal.classList.add('active');
 }
@@ -511,9 +501,10 @@ function closeAddClassRecordModal() {
 
 function submitAddClassRecord() {
   const studentKey = document.getElementById('crStudentSelect')?.value;
-  const quizId = document.getElementById('crQuizSelect')?.value || 'quiz_1';
-  const score = Number(document.getElementById('crScoreInput')?.value || 85);
-  const subj = document.getElementById('crSubjInput')?.value || 'Web Systems';
+  const quizId = document.getElementById('crQuizSelect')?.value || 'manual_eval';
+  const rawScore = Number(document.getElementById('crScoreInput')?.value || 85);
+  const score = Math.min(100, Math.max(0, isNaN(rawScore) ? 0 : rawScore));
+  const subj = document.getElementById('crSubjInput')?.value || 'General Class';
 
   if (!studentKey) { showToast('Please select a student', 'error'); return; }
 
@@ -560,72 +551,63 @@ function buildRealClassRecordEntries() {
       let scorePct = null;
       let isLive = false;
 
-      const attempt = studAttempts.find(a =>
+      // Find attempts matching this quiz
+      const matchedAttempts = studAttempts.filter(a =>
         String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() ||
         (a.quiz_title && String(a.quiz_title).toLowerCase() === String(q.title || '').toLowerCase())
       );
 
-      if (attempt) {
-        if (attempt.score_percentage !== undefined && attempt.score_percentage !== null) {
-          scorePct = Math.round(Number(attempt.score_percentage));
-        } else if (attempt.score !== undefined && attempt.total_items) {
-          scorePct = Math.round((Number(attempt.score) / Number(attempt.total_items)) * 100);
-        } else if (attempt.score !== undefined) {
-          scorePct = Math.round(Number(attempt.score));
+      if (matchedAttempts.length > 0) {
+        let bestPct = -1;
+        matchedAttempts.forEach(att => {
+          let p = null;
+          if (att.score_percentage !== undefined && att.score_percentage !== null) {
+            p = Number(att.score_percentage);
+          } else if (att.score !== undefined && att.total_items) {
+            p = (Number(att.score) / Number(att.total_items)) * 100;
+          } else if (att.score !== undefined) {
+            p = Number(att.score);
+          }
+          if (p !== null && !isNaN(p) && isFinite(p)) {
+            p = Math.min(100, Math.max(0, Math.round(p)));
+            if (p > bestPct) bestPct = p;
+          }
+        });
+        if (bestPct >= 0) {
+          scorePct = bestPct;
+          isLive = true;
+          hasRealData = true;
         }
-        isLive = true;
-        hasRealData = true;
       } else if (customData[q.id] !== undefined) {
         const parsed = Number(customData[q.id]);
-        if (!isNaN(parsed)) scorePct = parsed;
-        hasRealData = true;
+        if (!isNaN(parsed) && isFinite(parsed)) {
+          scorePct = Math.min(100, Math.max(0, Math.round(parsed)));
+          hasRealData = true;
+        }
       }
 
-      if (scorePct !== null && !isNaN(scorePct) && isFinite(scorePct)) {
-        scorePct = Math.min(100, Math.max(0, scorePct));
+      if (scorePct !== null) {
         validScoresSum += scorePct;
         validScoresCount++;
-      } else {
-        scorePct = null;
       }
 
       quizScores[q.id] = { scorePct, isLive };
     });
 
-    let avg = validScoresCount > 0 ? Math.min(100, Math.max(0, Number((validScoresSum / validScoresCount).toFixed(2)))) : null;
-
-    if (studAttempts.length > 0) {
-      hasRealData = true;
-      let attSum = 0;
-      let attCnt = 0;
-      studAttempts.forEach(sa => {
-        let p = null;
-        if (sa.score_percentage !== undefined && sa.score_percentage !== null) {
-          p = Number(sa.score_percentage);
-        } else if (sa.score !== undefined && sa.total_items) {
-          p = (Number(sa.score) / Number(sa.total_items)) * 100;
-        } else if (sa.score !== undefined) {
-          p = Number(sa.score);
-        }
-        if (p !== null && !isNaN(p) && isFinite(p)) {
-          p = Math.min(100, Math.max(0, p));
-          attSum += p;
-          attCnt++;
-        }
-      });
-      if (attCnt > 0) {
-        avg = Math.min(100, Math.max(0, Number((attSum / attCnt).toFixed(2))));
-      }
-    }
+    // Student average is the average of completed quizzes, strictly clamped between 0 and 100%
+    const avg = validScoresCount > 0
+      ? Math.min(100, Math.max(0, Number((validScoresSum / validScoresCount).toFixed(2))))
+      : null;
 
     return {
       key,
       name: u.name,
+      schoolId: u.school_id || u.id || '—',
       section: u.section || 'Unassigned',
       strand: u.strand || 'General',
       subject: customData.subject || (ROLE === 'teacher' ? (CURRENT_PROFILE?.subjects || 'STEM, HUMSS') : 'STEM, HUMSS'),
       quizScores,
-      quizzesTakenCount: studAttempts.length,
+      quizzesTakenCount: validScoresCount,
       avg,
       hasRealData
     };
@@ -760,11 +742,12 @@ function handleAvatarFileSelect(event) {
 
 function updateProfileNamePreview() {
   const f = document.getElementById('pfFirstName')?.value || '';
-  const mi = document.getElementById('pfMiddleInitial')?.value || '';
+  const m = document.getElementById('pfMiddleName')?.value || '';
   const l = document.getElementById('pfLastName')?.value || '';
+  const s = document.getElementById('pfSuffix')?.value || '';
   const preview = document.getElementById('pfFullNamePreview');
   const heroName = document.getElementById('pfHeroNameTitle');
-  const assembled = typeof assembleFullName === 'function' ? assembleFullName(f, l, mi) : [f, mi, l].filter(Boolean).join(' ');
+  const assembled = typeof assembleFullName === 'function' ? assembleFullName(f, m, l, s) : [f, m, l, s].filter(Boolean).join(' ');
   if (preview) preview.textContent = assembled || 'Your Full Name';
   if (heroName) heroName.textContent = assembled || 'Your Full Name';
 }
@@ -779,11 +762,13 @@ async function saveUserProfile() {
   try {
     // 1. Official Identity Details (Vital Information: Name is locked to official registered record)
     const firstName = CURRENT_PROFILE.first_name || (document.getElementById('pfFirstName')?.value || '').trim();
+    const middleName = CURRENT_PROFILE.middle_name || (document.getElementById('pfMiddleName')?.value || '').trim();
     const lastName = CURRENT_PROFILE.last_name || (document.getElementById('pfLastName')?.value || '').trim();
-    const middleInitial = CURRENT_PROFILE.middle_initial || (document.getElementById('pfMiddleInitial')?.value || '').trim().replace('.', '').toUpperCase();
+    const suffix = CURRENT_PROFILE.suffix || (document.getElementById('pfSuffix')?.value || '').trim();
+    const middleInitial = CURRENT_PROFILE.middle_initial || (middleName ? middleName.replace('.', '')[0]?.toUpperCase() : '') || (document.getElementById('pfMiddleInitial')?.value || '').trim();
     const fullName = CURRENT_PROFILE.full_name || (typeof assembleFullName === 'function' 
-      ? assembleFullName(firstName, lastName, middleInitial) 
-      : `${firstName} ${middleInitial ? middleInitial + '. ' : ''}${lastName}`.trim() || 'Scholaria User');
+      ? assembleFullName(firstName, middleName, lastName, suffix) 
+      : [firstName, middleName, lastName, suffix].filter(Boolean).join(' ') || 'Scholaria User');
 
     const contactNumber = (document.getElementById('pfContact')?.value || '').trim();
     const email = (document.getElementById('pfEmail')?.value || '').trim();
@@ -951,12 +936,24 @@ function buildProfilePage(role) {
   const schoolIdVal = p.school_id || (p.id ? p.id.slice(0, 8).toUpperCase() : 'HWA-2026');
   const joinDateFormatted = formatJoinDate(p.created_at);
 
-  // Parse separated name components
-  const nameParts = typeof parseFullNameParts === 'function' ? parseFullNameParts(p.full_name || '') : { firstName: '', lastName: '', middleInitial: '' };
-  const firstNameVal = p.first_name || nameParts.firstName || '';
-  const lastNameVal = p.last_name || nameParts.lastName || '';
-  const middleInitialVal = p.middle_initial || nameParts.middleInitial || '';
-  const currentFullName = p.full_name || (typeof assembleFullName === 'function' ? assembleFullName(firstNameVal, lastNameVal, middleInitialVal) : 'User');
+  // Parse separated name components matching User Management structure (First Name, Middle Name, Last Name, Suffix)
+  let slipRec = null;
+  if (typeof getCredentialSlipRecord === 'function' && schoolIdVal) {
+    slipRec = getCredentialSlipRecord(schoolIdVal);
+  }
+
+  const nameParts = typeof parseFullNameParts === 'function'
+    ? parseFullNameParts(p.full_name || '')
+    : { firstName: '', middleName: '', lastName: '', suffix: '', middleInitial: '' };
+
+  const firstNameVal = p.first_name || slipRec?.firstName || slipRec?.first_name || nameParts.firstName || '';
+  const middleNameVal = p.middle_name || slipRec?.middleName || slipRec?.middle_name || nameParts.middleName || '';
+  const lastNameVal = p.last_name || slipRec?.lastName || slipRec?.last_name || nameParts.lastName || '';
+  const suffixVal = p.suffix || slipRec?.suffix || nameParts.suffix || '';
+  const middleInitialVal = p.middle_initial || (middleNameVal ? middleNameVal.replace('.', '')[0]?.toUpperCase() : '') || nameParts.middleInitial || '';
+  const currentFullName = p.full_name || (typeof assembleFullName === 'function'
+    ? assembleFullName(firstNameVal, middleNameVal, lastNameVal, suffixVal)
+    : [firstNameVal, middleNameVal, lastNameVal, suffixVal].filter(Boolean).join(' ')) || 'User';
 
   return `
   <div style="display:flex;flex-direction:column;gap:20px;width:100%;">
@@ -1023,21 +1020,27 @@ function buildProfilePage(role) {
             </span>
           </div>
 
-          <!-- SEPARATED FULL NAME FIELDS (READONLY OFFICIAL RECORD) -->
-          <div style="display:grid;grid-template-columns:1fr 80px 1fr;gap:12px;">
+          <!-- SEPARATED FULL NAME FIELDS MATCHING USER MANAGEMENT STRUCTURE (READONLY OFFICIAL RECORD) -->
+          <div class="pf-name-grid" style="display:grid;grid-template-columns:1.2fr 1fr 1.2fr 85px;gap:12px;">
             <div class="pf-field">
               <label>First Name <span style="font-size:10.5px;color:var(--text-muted);font-weight:400;">(Official)</span></label>
               <input type="text" id="pfFirstName" value="${escHtml(firstNameVal)}" readonly title="Official School Record — Cannot be modified here" style="background:#f8fafc;color:#475569;cursor:not-allowed;border-color:#e2e8f0;" />
             </div>
 
             <div class="pf-field">
-              <label>M.I.</label>
-              <input type="text" id="pfMiddleInitial" value="${escHtml(middleInitialVal)}" readonly title="Official School Record — Cannot be modified here" style="text-align:center;text-transform:uppercase;background:#f8fafc;color:#475569;cursor:not-allowed;border-color:#e2e8f0;" />
+              <label>Middle Name <span style="font-size:10.5px;color:var(--text-muted);font-weight:400;">(Official)</span></label>
+              <input type="text" id="pfMiddleName" value="${escHtml(middleNameVal)}" readonly title="Official School Record — Cannot be modified here" style="background:#f8fafc;color:#475569;cursor:not-allowed;border-color:#e2e8f0;" />
             </div>
 
             <div class="pf-field">
               <label>Last Name <span style="font-size:10.5px;color:var(--text-muted);font-weight:400;">(Official)</span></label>
               <input type="text" id="pfLastName" value="${escHtml(lastNameVal)}" readonly title="Official School Record — Cannot be modified here" style="background:#f8fafc;color:#475569;cursor:not-allowed;border-color:#e2e8f0;" />
+            </div>
+
+            <div class="pf-field">
+              <label>Suffix <span style="font-size:10.5px;color:var(--text-muted);font-weight:400;">(Opt)</span></label>
+              <input type="text" id="pfSuffix" value="${escHtml(suffixVal)}" readonly title="Official School Record — Cannot be modified here" style="text-align:center;background:#f8fafc;color:#475569;cursor:not-allowed;border-color:#e2e8f0;" />
+              <input type="hidden" id="pfMiddleInitial" value="${escHtml(middleInitialVal)}" />
             </div>
           </div>
 
@@ -3055,13 +3058,17 @@ function teacherPage(page) {
         loadAttemptsForAnalysis(analysisSelectedQuizId);
       }
 
-      const attempts = (typeof getAttemptsForAnalysis === 'function')
-        ? getAttemptsForAnalysis(analysisSelectedQuizId, analysisSectionFilter)
+      const allQuizAttempts = (typeof getAttemptsForAnalysis === 'function')
+        ? getAttemptsForAnalysis(analysisSelectedQuizId, analysisSectionFilter, '', 'all')
         : (analysisAttemptsCache[analysisSelectedQuizId] || []);
 
-      const rows = buildAnalysisRows(selectedQuiz, attempts);
-      const attemptCount = attempts.length;
-      const validScores = attempts.map(a => a.total_items ? (a.score / a.total_items) * 100 : (a.score_percentage || 0));
+      const studentFilteredAttempts = (typeof getAttemptsForAnalysis === 'function')
+        ? getAttemptsForAnalysis(analysisSelectedQuizId, analysisSectionFilter, analysisStudentSearchQuery, analysisScoreFilter)
+        : allQuizAttempts;
+
+      const rows = buildAnalysisRows(selectedQuiz, allQuizAttempts);
+      const attemptCount = allQuizAttempts.length;
+      const validScores = allQuizAttempts.map(a => a.total_items ? (a.score / a.total_items) * 100 : (a.score_percentage || 0));
       const avgScore = validScores.length
         ? Math.round(validScores.reduce((sum, v) => sum + v, 0) / validScores.length)
         : null;
@@ -3070,21 +3077,39 @@ function teacherPage(page) {
       const passingCount = validScores.filter(s => s >= 75).length;
       const passRate = validScores.length ? Math.round((passingCount / validScores.length) * 100) : null;
 
+      let displayRows = rows;
+      if (analysisQuestionSearchQuery) {
+        displayRows = rows.filter(r => (r.label || '').toLowerCase().includes(analysisQuestionSearchQuery) || (r.correctAnswer || '').toLowerCase().includes(analysisQuestionSearchQuery));
+      }
+
       return `
-      <div class="section-hdr">
+      <div class="section-hdr" style="background:#ffffff;padding:16px 20px;border-radius:16px;border:1px solid #e2e8f0;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
         <div>
-          <h2>Item Analysis Report</h2>
-          <span style="font-size:12px;color:var(--text-muted);">Psychometric item discrimination, accuracy rates, and question difficulty breakdown</span>
+          <h2 style="margin:0;font-size:20px;color:#0f172a;">Item Analysis &amp; Student Evaluation</h2>
+          <span style="font-size:12px;color:var(--text-muted);">Psychometric item discrimination, accuracy rates, and individual student evaluation</span>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div class="analysis-tab-bar">
+            <button type="button" class="analysis-tab-btn ${analysisActiveTab === 'questions' ? 'active' : ''}" onclick="setAnalysisTab('questions')">
+              📑 Question Psychometrics (${rows.length})
+            </button>
+            <button type="button" class="analysis-tab-btn ${analysisActiveTab === 'students' ? 'active' : ''}" onclick="setAnalysisTab('students')">
+              👨‍🎓 Student Submissions (${allQuizAttempts.length})
+            </button>
+          </div>
+
           <select class="user-filter-select" onchange="setAnalysisSectionFilter(this.value)">
             <option value="">All Handled Sections</option>
             ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
           </select>
+
           <select class="user-filter-select" onchange="setAnalysisQuiz(this.value)">
             ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
           </select>
-          <button class="add-btn" style="background:var(--blue-light);color:var(--blue);" onclick="loadAttemptsForAnalysis('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
+
+          <button type="button" class="add-btn" style="background:var(--blue-light);color:var(--blue);cursor:pointer;" onclick="loadAttemptsForAnalysis('${selectedQuiz.id}')">
+            ${iconRefresh()} Refresh
+          </button>
         </div>
       </div>
 
@@ -3093,7 +3118,7 @@ function teacherPage(page) {
         <div class="info-card horizontal-card">
           <div class="ic-icon">${iconUsers()}</div>
           <div class="ic-content">
-            <div class="ic-sub">Submissions</div>
+            <div class="ic-sub">Submissions Recorded</div>
             <div class="ic-num">${attemptCount}</div>
             <p>${analysisSectionFilter ? `Filtered for ${escHtml(analysisSectionFilter)}` : 'Across all class sections'}</p>
           </div>
@@ -3117,7 +3142,7 @@ function teacherPage(page) {
         <div class="info-card horizontal-card">
           <div class="ic-icon">${iconQuiz()}</div>
           <div class="ic-content">
-            <div class="ic-sub">Total Items</div>
+            <div class="ic-sub">Total Questions</div>
             <div class="ic-num">${rows.length}</div>
             <p>${selectedQuiz.type === 'interactive' ? '🎮 Interactive Mode' : '📝 Standard Assessment'}</p>
           </div>
@@ -3138,47 +3163,155 @@ function teacherPage(page) {
         <div class="ann-meta" style="margin-top:8px;">Live psychometric breakdown recomputed from submitted student attempts.</div>
       </div>
 
-      <!-- QUESTION ACCURACY TABLE -->
-      <div class="score-table">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:40px;">#</th>
-              <th>Question & Type</th>
-              <th style="width:100px;text-align:center;">Correct</th>
-              <th style="width:100px;text-align:center;">Incorrect</th>
-              <th style="width:180px;">Accuracy Rate</th>
-              <th style="width:120px;text-align:center;">Difficulty</th>
-              <th>Key / Correct Answer</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.length ? rows.map((r, i) => `
-              <tr>
-                <td style="font-weight:700;color:var(--blue);">${i + 1}</td>
-                <td>
-                  <div style="font-weight:600;color:#0f172a;margin-bottom:2px;">${escHtml(r.label)}</div>
-                  <span style="font-size:11px;color:var(--text-muted);text-transform:capitalize;">Type: ${escHtml(r.type.replace('_', ' '))}</span>
-                </td>
-                <td style="text-align:center;font-weight:700;color:#059669;">${r.correct}</td>
-                <td style="text-align:center;font-weight:700;color:#dc2626;">${r.incorrect}</td>
-                <td>
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <span class="analysis-bar-wrap" style="flex:1;"><span class="analysis-bar ${r.pct >= 80 ? 'high' : r.pct < 50 ? 'low' : ''}" style="width:${r.pct}%"></span></span>
-                    <span style="font-weight:700;font-size:12px;min-width:36px;">${r.pct}%</span>
-                  </div>
-                </td>
-                <td style="text-align:center;">
-                  <span class="status-pill ${r.diffBadge}" style="color:${r.diffColor};">${r.difficulty}</span>
-                </td>
-                <td style="font-size:12px;color:var(--text-secondary);font-weight:600;">
-                  ${escHtml(r.correctAnswer || '—')}
-                </td>
-              </tr>`).join('')
-              : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">No question items found in this quiz.</td></tr>`}
-          </tbody>
-        </table>
-      </div>`;
+      ${analysisActiveTab === 'questions' ? `
+        <!-- QUESTION PSYCHOMETRICS VIEW -->
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div style="font-weight:700;font-size:14px;color:#0f172a;">
+            Question Psychometrics Table <span style="font-size:12px;color:var(--text-muted);font-weight:500;">(${displayRows.length} items shown)</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text"
+              id="analysisQuestionSearchInput"
+              class="user-filter-select"
+              style="width:240px;background:#fff;"
+              placeholder="🔍 Filter questions by keyword..."
+              value="${escHtml(analysisQuestionSearchQuery)}"
+              oninput="setAnalysisQuestionSearch(this.value)"
+            />
+          </div>
+        </div>
+
+        <div class="score-table scholaria-custom-scroll" style="max-height:520px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+          <table style="width:100%;border-collapse:collapse;min-width:760px;">
+            <thead>
+              <tr style="position:sticky;top:0;z-index:3;background:var(--blue);color:#ffffff;">
+                <th style="width:40px;">#</th>
+                <th>Question &amp; Type</th>
+                <th style="width:90px;text-align:center;">Correct</th>
+                <th style="width:90px;text-align:center;">Incorrect</th>
+                <th style="width:170px;">Accuracy Rate</th>
+                <th style="width:110px;text-align:center;">Difficulty</th>
+                <th>Key / Answer</th>
+                <th style="width:140px;text-align:center;">Student List</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${displayRows.length ? displayRows.map((r, i) => `
+                <tr>
+                  <td style="font-weight:700;color:var(--blue);">${i + 1}</td>
+                  <td>
+                    <div style="font-weight:600;color:#0f172a;margin-bottom:2px;line-height:1.4;">${escHtml(r.label)}</div>
+                    <span style="font-size:11px;color:var(--text-muted);text-transform:capitalize;">Type: ${escHtml(r.type.replace('_', ' '))}</span>
+                  </td>
+                  <td style="text-align:center;font-weight:700;color:#059669;">${r.correct}</td>
+                  <td style="text-align:center;font-weight:700;color:#dc2626;">${r.incorrect}</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span class="analysis-bar-wrap" style="flex:1;"><span class="analysis-bar ${r.pct >= 80 ? 'high' : r.pct < 50 ? 'low' : ''}" style="width:${r.pct}%"></span></span>
+                      <span style="font-weight:700;font-size:12px;min-width:36px;">${r.pct}%</span>
+                    </div>
+                  </td>
+                  <td style="text-align:center;">
+                    <span class="status-pill ${r.diffBadge}" style="color:${r.diffColor};">${r.difficulty}</span>
+                  </td>
+                  <td style="font-size:12px;color:var(--text-secondary);font-weight:600;">
+                    ${escHtml(r.correctAnswer || '—')}
+                  </td>
+                  <td style="text-align:center;">
+                    <button type="button" class="table-act-btn take" onclick="viewQuestionStudentsBreakdown('${r.itemId}')" title="Inspect students who got this item right vs wrong">
+                      Roster (${r.correct + r.incorrect})
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                  </td>
+                </tr>`).join('')
+                : `<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:30px;">No question items match the filter criteria.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      ` : `
+        <!-- STUDENT SUBMISSIONS & BREAKDOWN VIEW -->
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div style="font-weight:700;font-size:14px;color:#0f172a;">
+            Student Performance Roster <span style="font-size:12px;color:var(--text-muted);font-weight:500;">(${studentFilteredAttempts.length} of ${allQuizAttempts.length} submissions)</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <input type="text"
+              id="analysisStudentSearchInput"
+              class="user-filter-select"
+              style="width:260px;background:#fff;"
+              placeholder="🔍 Find student by name or ID..."
+              value="${escHtml(analysisStudentSearchQuery)}"
+              oninput="setAnalysisStudentSearch(this.value)"
+            />
+
+            <select class="user-filter-select" onchange="setAnalysisScoreFilter(this.value)">
+              <option value="all" ${analysisScoreFilter === 'all' ? 'selected' : ''}>All Scores</option>
+              <option value="passed" ${analysisScoreFilter === 'passed' ? 'selected' : ''}>Passing Only (≥ 75%)</option>
+              <option value="failed" ${analysisScoreFilter === 'failed' ? 'selected' : ''}>Needs Improvement (&lt; 75%)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="score-table scholaria-custom-scroll" style="max-height:520px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+          <table style="width:100%;border-collapse:collapse;min-width:760px;">
+            <thead>
+              <tr style="position:sticky;top:0;z-index:3;background:var(--blue);color:#ffffff;">
+                <th style="width:40px;">#</th>
+                <th>Student Name &amp; School ID</th>
+                <th style="width:110px;">Section</th>
+                <th style="width:90px;">Strand</th>
+                <th style="width:90px;text-align:center;">Score</th>
+                <th style="width:100px;text-align:center;">Percentage</th>
+                <th style="width:130px;text-align:center;">Status</th>
+                <th style="width:150px;">Submitted At</th>
+                <th style="width:140px;text-align:center;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${studentFilteredAttempts.length ? studentFilteredAttempts.map((a, i) => {
+                const pct = a.score_percentage != null ? Math.min(100, Math.max(0, a.score_percentage)) : 0;
+                const isPassed = pct >= 75;
+                const subDate = a.submitted_at
+                  ? new Date(a.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'Recent';
+                return `
+                  <tr>
+                    <td style="font-weight:700;color:var(--blue);">${i + 1}</td>
+                    <td>
+                      <div style="font-weight:700;color:#0f172a;">${escHtml(a.student_name)}</div>
+                      <span style="font-size:11px;color:var(--text-muted);font-weight:600;">ID: ${escHtml(a.student_school_id || a.student_id || '—')}</span>
+                    </td>
+                    <td>
+                      <span class="user-role-badge student" style="font-size:12px;padding:3px 8px;">${escHtml(a.section)}</span>
+                    </td>
+                    <td style="font-weight:600;font-size:12px;color:#475569;">${escHtml(a.strand)}</td>
+                    <td style="text-align:center;font-weight:800;color:#0f172a;">
+                      ${a.score != null ? a.score : '—'} / ${a.total_items || (a.answers?.length || '—')}
+                    </td>
+                    <td style="text-align:center;font-weight:800;color:${isPassed ? '#059669' : '#dc2626'};">
+                      ${pct}%
+                    </td>
+                    <td style="text-align:center;">
+                      <span class="status-pill ${isPassed ? 'done' : 'low'}" style="font-weight:700;">
+                        ${isPassed ? 'PASSED' : 'NEEDS IMP.'}
+                      </span>
+                    </td>
+                    <td style="font-size:12px;color:var(--text-secondary);font-weight:600;">${escHtml(subDate)}</td>
+                    <td style="text-align:center;">
+                      <button type="button" class="table-act-btn take" onclick="inspectStudentAttempt('${escHtml(a.id || a.student_id)}')" title="Inspect individual question answers and items">
+                        Inspect Answers
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('') : `
+                <tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:30px;">No student submissions match the search and filter criteria.</td></tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      `}`;
     }
 
 
@@ -3249,10 +3382,10 @@ function teacherPage(page) {
         </div>
 
         <!-- SECTION LEVEL MAIN TABLE -->
-        <div class="score-table">
-          <table>
+        <div class="score-table scholaria-custom-scroll" style="max-height:520px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+          <table style="width:100%;border-collapse:collapse;min-width:760px;">
             <thead>
-              <tr>
+              <tr style="position:sticky;top:0;z-index:3;background:var(--blue);color:#ffffff;">
                 <th>Section Name</th>
                 <th>Subject / Strand</th>
                 <th>Enrolled Students</th>
@@ -3271,12 +3404,12 @@ function teacherPage(page) {
                   <td class="score-val ${s.classAvg !== null && s.classAvg >= 85 ? 'good' : s.classAvg !== null && s.classAvg < 75 ? 'low' : ''}">${s.classAvg !== null ? s.classAvg.toFixed(2) + '%' : '—'}</td>
                   <td>
                     <div style="display:flex;gap:6px;align-items:center;">
-                      <button class="table-act-btn take" onclick="event.stopPropagation(); openExpandedSectionView('${escHtml(s.section)}')">
+                      <button type="button" class="table-act-btn take" onclick="event.stopPropagation(); openExpandedSectionView('${escHtml(s.section)}')">
                         Expand Record
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;margin-left:4px;pointer-events:none;"><polyline points="6 9 12 15 18 9"/></svg>
                       </button>
-                      <button class="table-act-btn review" title="Print Master Sheet" onclick="event.stopPropagation(); openSectionReportModal('${escHtml(s.section)}')">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                      <button type="button" class="table-act-btn review" title="Print Master Sheet" onclick="event.stopPropagation(); openSectionReportModal('${escHtml(s.section)}')">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="pointer-events:none;"><polyline points="6 18 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Print
                       </button>
                     </div>
@@ -3294,8 +3427,8 @@ function teacherPage(page) {
       return `
       <div class="section-hdr" style="background:#ffffff;padding:16px 20px;border-radius:16px;border:1px solid #e2e8f0;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
         <div style="display:flex;align-items:center;gap:14px;">
-          <button class="add-btn" style="background:#1e293b;color:#ffffff;padding:8px 16px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-radius:10px;cursor:pointer;" onclick="closeExpandedSectionView()">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          <button type="button" class="add-btn" style="background:#1e293b;color:#ffffff;padding:8px 16px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-radius:10px;cursor:pointer;" onclick="closeExpandedSectionView()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="pointer-events:none;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             Back to All Sections
           </button>
           <div>
@@ -3305,17 +3438,17 @@ function teacherPage(page) {
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <div style="display:inline-flex;background:#e2e8f0;padding:3px;border-radius:10px;">
-            <button type="button" class="anc-archive-tab ${classRecSubView === 'combined' ? 'active' : ''}" style="padding:6px 12px;font-size:12px;" onclick="setClassRecSubView('combined')">📋 Combined Grade</button>
-            <button type="button" class="anc-archive-tab ${classRecSubView === 'matrix' ? 'active' : ''}" style="padding:6px 12px;font-size:12px;" onclick="setClassRecSubView('matrix')">📑 Quiz Matrix Columns</button>
+            <button type="button" class="anc-archive-tab ${classRecSubView === 'combined' ? 'active' : ''}" style="padding:6px 12px;font-size:12px;cursor:pointer;" onclick="setClassRecSubView('combined')">📋 Combined Grade</button>
+            <button type="button" class="anc-archive-tab ${classRecSubView === 'matrix' ? 'active' : ''}" style="padding:6px 12px;font-size:12px;cursor:pointer;" onclick="setClassRecSubView('matrix')">📑 Quiz Matrix Columns</button>
           </div>
 
-          <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openSectionReportModal('${escHtml(classRecExpandedSection)}')">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          <button type="button" class="add-btn" style="background:#1e293b;color:#fff;cursor:pointer;" onclick="openSectionReportModal('${escHtml(classRecExpandedSection)}')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="pointer-events:none;"><polyline points="6 18 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             Print Master Sheet
           </button>
 
-          <button class="foot-btn-secondary" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:12.5px;" onclick="exportSectionGradeCSV('${escHtml(classRecExpandedSection)}')">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <button type="button" class="foot-btn-secondary" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:12.5px;cursor:pointer;" onclick="exportSectionGradeCSV('${escHtml(classRecExpandedSection)}')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="pointer-events:none;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Export CSV
           </button>
 
@@ -3327,7 +3460,7 @@ function teacherPage(page) {
             }).join('')}
           </select>
 
-          <button class="add-btn" onclick="openAddClassRecordModal()">${typeof iconPlus === 'function' ? iconPlus() : ''} Add / Edit Entry</button>
+          <button type="button" class="add-btn" style="cursor:pointer;" onclick="openAddClassRecordModal()">${typeof iconPlus === 'function' ? iconPlus() : ''} Add / Edit Entry</button>
         </div>
       </div>
 
@@ -3361,10 +3494,10 @@ function teacherPage(page) {
 
       ${classRecSubView === 'combined' ? `
         <!-- COMBINED SINGLE OVERALL PERCENTAGE GRADE VIEW -->
-        <div class="score-table">
-          <table>
+        <div class="score-table scholaria-custom-scroll" style="max-height:520px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+          <table style="width:100%;border-collapse:collapse;min-width:760px;">
             <thead>
-              <tr>
+              <tr style="position:sticky;top:0;z-index:3;background:var(--blue);color:#ffffff;">
                 <th>Student</th>
                 <th>Section</th>
                 <th>Subject</th>
@@ -3379,18 +3512,18 @@ function teacherPage(page) {
                   <td><strong>${escHtml(e.name)}</strong> ${e.hasRealData ? '<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;">Live</span>' : ''}</td>
                   <td><span class="user-role-badge student">${escHtml(e.section)}</span></td>
                   <td>${escHtml(e.subject)}</td>
-                  <td><strong>${e.quizzesTakenCount}</strong> quiz${e.quizzesTakenCount === 1 ? '' : 'zes'} taken</td>
+                  <td><strong>${e.quizzesTakenCount}</strong> quiz${e.quizzesTakenCount === 1 ? '' : 'zes'} evaluated</td>
                   <td class="score-val ${e.avg !== null && e.avg >= 85 ? 'good' : e.avg !== null && e.avg < 75 ? 'low' : ''}">
                     ${e.avg !== null ? `<strong>${e.avg.toFixed(2)}%</strong> <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:${e.avg >= 75 ? '#dcfce7' : '#fee2e2'};color:${e.avg >= 75 ? '#15803d' : '#991b1b'};font-weight:700;">${e.avg >= 75 ? 'PASSING' : 'NEEDS IMP.'}</span>` : '<span style="color:var(--text-muted);">—</span>'}
                   </td>
                   <td>
                     <div style="display:flex;gap:6px;align-items:center;">
-                      <button class="table-act-btn take" onclick="openStudentGradePanel('${e.key}')">
+                      <button type="button" class="table-act-btn take" onclick="openStudentGradePanel('${e.key}')">
                         Grade Details
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;margin-left:4px;pointer-events:none;"><polyline points="6 9 12 15 18 9"/></svg>
                       </button>
-                      <button class="table-act-btn review" title="Print Student Grade Slip" onclick="openStudentReportModal('${e.key}')">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                      <button type="button" class="table-act-btn review" title="Print Student Grade Slip" onclick="openStudentReportModal('${e.key}')">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="pointer-events:none;"><polyline points="6 18 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Slip
                       </button>
                     </div>
@@ -3402,10 +3535,10 @@ function teacherPage(page) {
         </div>
       ` : `
         <!-- FULL QUIZ MATRIX COLUMNS VIEW -->
-        <div class="score-table">
-          <table>
+        <div class="score-table scholaria-custom-scroll" style="max-height:520px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+          <table style="width:100%;border-collapse:collapse;min-width:760px;">
             <thead>
-              <tr>
+              <tr style="position:sticky;top:0;z-index:3;background:var(--blue);color:#ffffff;">
                 <th>Student</th>
                 <th>Section</th>
                 <th>Subject</th>

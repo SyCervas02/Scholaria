@@ -4248,12 +4248,20 @@ function renderMaterialModal() {
     </div>
     <div class="gen-row">
       <div class="gen-field"><label>Title / Description</label><input type="text" placeholder="e.g. Q1 Lesson 3 – Lecture Notes & Handouts" value="${escHtml(s.title)}" oninput="muUpdateField('title', this.value)"></div>
-      <div class="gen-field"><label>Subject</label>
-        <select onchange="muUpdateSubject(this.value)">
-          <option value="" disabled ${!s.subject ? 'selected' : ''}>${(s.strand && s.grade_level) ? `Select subject (${s.strand} · ${s.grade_level})` : s.strand ? `Select subject (${s.strand})` : s.grade_level ? `Select subject (${s.grade_level})` : 'Select subject'}</option>
-          ${subjectOptions.map(sub => `<option value="${escHtml(sub)}" ${s.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
-          ${(s.subject && !subjectOptions.includes(s.subject)) ? `<option value="${escHtml(s.subject)}" selected>${escHtml(s.subject)}</option>` : ''}
-        </select>
+      <div class="gen-field"><label>Subject <span style="color:#ef4444;">*</span></label>
+        ${typeof renderSearchableSubjectPicker === 'function' ? renderSearchableSubjectPicker({
+          id: 'materialsSubjectPicker',
+          inputId: 'materialsSubjectInput',
+          value: s.subject || '',
+          options: subjectOptions,
+          placeholder: (s.strand && s.grade_level) ? `Select or search subject (${s.strand} · ${s.grade_level})...` : 'Select from dropdown or search subject...',
+          onSelect: 'muUpdateSubject'
+        }) : `
+          <select onchange="muUpdateSubject(this.value)">
+            <option value="" disabled ${!s.subject ? 'selected' : ''}>${(s.strand && s.grade_level) ? `Select subject (${s.strand} · ${s.grade_level})` : s.strand ? `Select subject (${s.strand})` : s.grade_level ? `Select subject (${s.grade_level})` : 'Select subject'}</option>
+            ${subjectOptions.map(sub => `<option value="${escHtml(sub)}" ${s.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
+          </select>
+        `}
       </div>
     </div>
     ${(() => {

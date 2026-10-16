@@ -2576,11 +2576,19 @@ function renderQuizModal() {
           </div>
           <div class="gen-field">
             <label>Subject <span style="color:#ef4444;">*</span></label>
-            <select id="quizGenSubjectSelect" onchange="updateSubject(this.value)">
-              <option value="" disabled ${!quizGen.subject ? 'selected' : ''}>${quizGen.strands.size > 0 ? 'Select subject' : 'Select subject (All Strands)'}</option>
-              ${getAvailableSubjectsForQuizGen().map(sub => `<option value="${escHtml(sub)}" ${quizGen.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
-              ${(quizGen.subject && !getAvailableSubjectsForQuizGen().includes(quizGen.subject)) ? `<option value="${escHtml(quizGen.subject)}" selected>${escHtml(quizGen.subject)}</option>` : ''}
-            </select>
+            ${typeof renderSearchableSubjectPicker === 'function' ? renderSearchableSubjectPicker({
+              id: 'quizGenSubjectPicker',
+              inputId: 'quizGenSubjectSelect',
+              value: quizGen.subject || '',
+              options: getAvailableSubjectsForQuizGen(),
+              placeholder: quizGen.strands.size > 0 ? 'Select from dropdown or search subject...' : 'Select from dropdown or search subject (All Strands)...',
+              onSelect: 'updateSubject'
+            }) : `
+              <select id="quizGenSubjectSelect" onchange="updateSubject(this.value)">
+                <option value="" disabled ${!quizGen.subject ? 'selected' : ''}>${quizGen.strands.size > 0 ? 'Select subject' : 'Select subject (All Strands)'}</option>
+                ${getAvailableSubjectsForQuizGen().map(sub => `<option value="${escHtml(sub)}" ${quizGen.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
+              </select>
+            `}
           </div>
         </div>
 

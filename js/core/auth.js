@@ -43,6 +43,16 @@ async function guardSessionAndInit() {
     return;
   }
 
+  if (session.user && session.user.user_metadata) {
+    const meta = session.user.user_metadata;
+    profile.first_name = profile.first_name || meta.first_name || null;
+    profile.middle_name = profile.middle_name || meta.middle_name || null;
+    profile.last_name = profile.last_name || meta.last_name || null;
+    profile.suffix = profile.suffix || meta.suffix || null;
+    profile.contact_number = profile.contact_number || meta.contact_number || null;
+    profile.address = profile.address || meta.address || null;
+  }
+
   ROLE = profile.role;
   CURRENT_PROFILE = profile;
   try {
