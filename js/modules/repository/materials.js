@@ -1293,6 +1293,29 @@ function getSectionStrand(secName) {
 }
 window.getSectionStrand = getSectionStrand;
 
+function getSectionGradeLevel(secName) {
+  if (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) {
+    const found = managedSections.find(s => (s.name || '').toLowerCase().trim() === (secName || '').toLowerCase().trim());
+    if (found && found.gradeLevel) return found.gradeLevel.trim();
+  }
+  const sLow = (secName || '').toLowerCase().trim();
+  if (sLow.includes('grade 12') || sLow.includes('gr12') || sLow.includes('g12')) return 'Grade 12';
+  if (sLow.includes('grade 11') || sLow.includes('gr11') || sLow.includes('g11')) return 'Grade 11';
+  if (sLow === 'section c' || sLow === 'section d') return 'Grade 12';
+  return 'Grade 11';
+}
+window.getSectionGradeLevel = getSectionGradeLevel;
+
+let teacherGradeFilter = 'all';
+window.teacherGradeFilter = 'all';
+
+function setTeacherGradeFilter(gradeVal) {
+  teacherGradeFilter = gradeVal || 'all';
+  window.teacherGradeFilter = teacherGradeFilter;
+  applyTeacherClassFilter();
+}
+window.setTeacherGradeFilter = setTeacherGradeFilter;
+
 let teacherStrandFilter = 'all';
 window.teacherStrandFilter = 'all';
 let teacherSectionFilter = 'all';
@@ -1354,6 +1377,8 @@ function resetAllMaterialsFilters() {
   teacherClassSearchQuery = '';
   window.teacherClassSearchQuery = '';
 
+  const gradeSelect = document.getElementById('teacherGradeSelect');
+  if (gradeSelect) gradeSelect.value = 'all';
   const strandSelect = document.getElementById('teacherStrandSelect');
   if (strandSelect) strandSelect.value = 'all';
   const secSelect = document.getElementById('teacherSectionSelect');
@@ -1420,6 +1445,7 @@ function applyTeacherClassFilter() {
   const cards = grid.querySelectorAll('.subject-folder-card');
   const emptyState = document.getElementById('teacherClassesEmptyState');
 
+  const activeGrade = (window.teacherGradeFilter || 'all').toLowerCase().replace(/\s+/g, '');
   const activeStrand = (window.teacherStrandFilter || 'all').toLowerCase();
   const activeSection = (window.teacherSectionFilter || 'all').toLowerCase();
   const activeTrack = (window.teacherTrackFilter || 'all').toLowerCase();
@@ -1433,6 +1459,13 @@ function applyTeacherClassFilter() {
     const cardSearch = (card.dataset.search || '').toLowerCase();
     const cardStrand = (card.dataset.strand || '').toLowerCase();
     const cardSecStrand = (card.dataset.sectionStrand || '').toLowerCase();
+    const cardGrade = (card.dataset.grade || '').toLowerCase().replace(/\s+/g, '');
+
+    // 0. GRADE LEVEL MATCH:
+    let matchesGrade = true;
+    if (activeGrade !== 'all') {
+      matchesGrade = (cardGrade === activeGrade);
+    }
 
     // 1. STRAND MATCH: When a strand like STEM/HUMSS/ABM/TVL is picked, strictly isolate matching sections/classes
     let matchesStrand = true;
@@ -1458,7 +1491,7 @@ function applyTeacherClassFilter() {
       matchesSearch = cardSearch.includes(searchQuery);
     }
 
-    if (matchesStrand && matchesSection && matchesTrack && matchesSearch) {
+    if (matchesGrade && matchesStrand && matchesSection && matchesTrack && matchesSearch) {
       card.style.display = 'flex';
       visibleCount++;
     } else {
@@ -1500,20 +1533,31 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
   courses.forEach(course => {
     handledSections.forEach((sec) => {
       const secStrand = getSectionStrand(sec);
+      const secGrade = getSectionGradeLevel(sec);
 
-      // STRICT STRAND ISOLATION:
+      // 1. STRICT STRAND ISOLATION:
       // If a subject is Specialized, only pair it with sections of THAT STRAND!
       // (e.g., STEM specialized -> Section A, Section C, Section E)
-      // (e.g., HUMSS specialized -> Section B)
+      // (e.g., HUMSS specialized -> Section B, Section F)
       // (e.g., ABM specialized -> Section D)
       // (e.g., TVL specialized -> TVL sections)
-      // Core and Applied subjects (General Math, Reading & Writing, Stat & Prob, etc.) belong to ALL strands!
+      // Core and Applied subjects belong to ALL strands!
       if (course.track === 'Specialized') {
         const cStrand = (course.strand || '').toUpperCase();
         if (cStrand && cStrand !== 'ALL') {
           if (secStrand && secStrand !== 'ALL' && cStrand !== secStrand) {
             return; // STRICTLY SKIP non-matching specialized subjects!
           }
+        }
+      }
+
+      // 2. GRADE LEVEL ALIGNMENT:
+      // Grade 11 sections take Grade 11 curriculum; Grade 12 sections take Grade 12 curriculum.
+      if (secGrade && course.gradeLevel && course.gradeLevel !== 'All') {
+        const normSecGrade = secGrade.toLowerCase().replace(/\s+/g, '');
+        const normCourseGrade = course.gradeLevel.toLowerCase().replace(/\s+/g, '');
+        if (normSecGrade !== normCourseGrade) {
+          return; // Skip subjects of the other grade level!
         }
       }
 
@@ -1532,6 +1576,7 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
       }
 
       const displayStrand = (secStrand && secStrand !== 'ALL') ? secStrand : (course.strand || 'General');
+      const displayGrade = secGrade || course.gradeLevel || 'Grade 11';
 
       classCards.push({
         ...course,
@@ -1540,7 +1585,9 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
         assignedSection: sec,
         sectionCode: secCode,
         sectionStrand: secStrand,
-        displayStrand: displayStrand
+        sectionGradeLevel: displayGrade,
+        displayStrand: displayStrand,
+        gradeLevel: displayGrade
       });
     });
   });
@@ -1819,13 +1866,20 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
     <!-- 2. INSTITUTIONAL APPROVED HANDOUTS REPOSITORY (USER MANAGEMENT STYLE) -->
     ${isAdmin ? renderAdminApprovedHandoutsTableHTML() : ''}
 
-    <!-- 3. STRAND, SECTION & TRACK DROPDOWN FILTERS TOOLBAR (MATCHING REPOSITORY FILTER DESIGN) -->
+    <!-- 3. GRADE, STRAND, SECTION & TRACK DROPDOWN FILTERS TOOLBAR -->
     <div class="user-search-row" style="margin-bottom:20px;gap:10px;flex-wrap:wrap;align-items:center;">
-      <div class="user-search-wrap" style="flex:1;min-width:240px;">
+      <div class="user-search-wrap" style="flex:1;min-width:220px;">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         <input type="text" id="teacherClassSearchInput" placeholder="Search classes, subjects, sections, or codes..." value="${escHtml(teacherClassSearchQuery || '')}" oninput="setTeacherClassSearch(this.value)">
         <button type="button" id="teacherClassSearchClearBtn" onclick="clearTeacherClassSearch()" style="${teacherClassSearchQuery ? 'display:block;' : 'display:none;'}position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px;line-height:1;padding:4px;">&times;</button>
       </div>
+
+      <!-- GRADE LEVEL DROPDOWN -->
+      <select class="user-filter-select" id="teacherGradeSelect" onchange="setTeacherGradeFilter(this.value)" aria-label="Filter by Grade Level">
+        <option value="all" ${(!teacherGradeFilter || teacherGradeFilter === 'all') ? 'selected' : ''}>All Grades</option>
+        <option value="Grade 11" ${teacherGradeFilter === 'Grade 11' ? 'selected' : ''}>Grade 11</option>
+        <option value="Grade 12" ${teacherGradeFilter === 'Grade 12' ? 'selected' : ''}>Grade 12</option>
+      </select>
 
       <!-- STRAND DROPDOWN -->
       <select class="user-filter-select" id="teacherStrandSelect" onchange="setTeacherStrandFilter(this.value)" aria-label="Filter by Strand">
@@ -1841,7 +1895,8 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
         <option value="all">All Sections</option>
         ${distinctSections.map(sec => {
           const secStrand = getSectionStrand(sec);
-          return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand})</option>`;
+          const secGrade = getSectionGradeLevel(sec);
+          return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" data-section-grade="${escHtml(secGrade)}" ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand} · ${secGrade})</option>`;
         }).join('')}
       </select>
 
@@ -1898,6 +1953,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
                data-track="${escHtml((card.track || 'specialized').toLowerCase())}"
                data-strand="${escHtml((card.strand || '').toLowerCase())}"
                data-section-strand="${escHtml((card.sectionStrand || '').toLowerCase())}"
+               data-grade="${escHtml((card.gradeLevel || card.sectionGradeLevel || 'Grade 11').toLowerCase())}"
                data-search="${escHtml(searchKeywords)}"
                data-has-admin-materials="${hasAdminMaterials ? 'true' : 'false'}"
                onclick="setActiveSubjectMaterials('${card.baseCourseId}', '${card.assignedSection}')"

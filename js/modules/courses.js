@@ -213,6 +213,55 @@ const COURSES_DATABASE = [
     documents: []
   },
 
+  {
+    id: 'course-research2',
+    title: 'Practical Research 2',
+    code: 'RES-1201',
+    strand: 'All',
+    track: 'Applied',
+    gradeLevel: 'Grade 12',
+    semester: '1st Sem',
+    progress: 30,
+    modules: 0,
+    instructor: 'Dr. Patricia Mendoza',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
+    description: 'Quantitative research methodologies, statistical analysis, hypothesis testing, and empirical study execution.',
+    documents: []
+  },
+  {
+    id: 'course-philosophy',
+    title: 'Introduction to the Philosophy of the Human Person',
+    code: 'PHIL-1201',
+    strand: 'All',
+    track: 'Core',
+    gradeLevel: 'Grade 12',
+    semester: '1st Sem',
+    progress: 45,
+    modules: 0,
+    instructor: 'Dr. Arthur Cruz',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=600&q=80',
+    description: 'Philosophical reflection on human nature, embodiment, freedom, intersubjectivity, and mortality.',
+    documents: []
+  },
+  {
+    id: 'course-cpar',
+    title: 'Contemporary Philippine Arts from the Regions',
+    code: 'CPAR-1201',
+    strand: 'All',
+    track: 'Core',
+    gradeLevel: 'Grade 12',
+    semester: '2nd Sem',
+    progress: 25,
+    modules: 0,
+    instructor: 'Ms. Clara Asis',
+    status: 'enrolled',
+    cover: 'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&w=600&q=80',
+    description: 'Appreciation of contemporary art forms, techniques, and cultural heritage from the various regions of the Philippines.',
+    documents: []
+  },
+  
   // ── HUMSS STRAND ALLOCATED SPECIALIZED SUBJECTS (Strictly for HUMSS Sections like Section B) ──
   {
     id: 'course-humss-diss',
