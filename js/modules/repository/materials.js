@@ -1305,6 +1305,19 @@ function getSectionGradeLevel(secName) {
   return 'Grade 11';
 }
 window.getSectionGradeLevel = getSectionGradeLevel;
+function getTrackForSubjectTitle(title, strand) {
+  const t = (title || '').toLowerCase();
+  if (t.includes('homeroom')) return 'Other';
+  if (t.includes('complex numbers') || t.includes('vectors') || t.includes('human biology') || t.includes('differential equations') || t.includes('biochemistry')) return 'Elective';
+  if (t.includes('pre-calculus') || t.includes('basic calculus') || t.includes('general biology') || t.includes('general physics') || t.includes('general chemistry') || t.includes('work immersion / research / culminating activity')) return 'Specialized';
+  if (t.includes('disciplines and ideas') || t.includes('philippine politics') || t.includes('creative writing') || t.includes('world religions') || t.includes('creative nonfiction') || t.includes('community engagement') || t.includes('trends, networks') || t.includes('culminating activity')) return 'Specialized';
+  if (t.includes('business math') || t.includes('fundamentals of accountancy') || t.includes('principles of marketing') || t.includes('applied economics') || t.includes('business finance') || t.includes('business ethics') || t.includes('business enterprise simulation') || t.includes('organization and management')) return 'Specialized';
+  if (t.includes('computer systems') || t.includes('web systems') || t.includes('database management') || t.includes('cybersecurity') || t.includes('work immersion (tvl)')) return 'Specialized';
+  if (t.includes('research') || t.includes('empowerment') || t.includes('eapp') || t.includes('english for academic') || t.includes('filipino sa piling') || t.includes('entrepreneurship') || t.includes('inquiries, investigation') || t.includes('inquiries, investigations')) return 'Applied';
+  return 'Core';
+}
+window.getTrackForSubjectTitle = getTrackForSubjectTitle;
+
 
 let teacherGradeFilter = 'all';
 window.teacherGradeFilter = 'all';
@@ -1530,66 +1543,76 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
     if (raw.length > 0) handledSections = raw;
   }
 
-  courses.forEach(course => {
-    handledSections.forEach((sec) => {
-      const secStrand = getSectionStrand(sec);
-      const secGrade = getSectionGradeLevel(sec);
+  handledSections.forEach(sec => {
+    const secStrand = getSectionStrand(sec);
+    const secGrade = getSectionGradeLevel(sec);
 
-      // 1. STRICT STRAND ISOLATION:
-      // If a subject is Specialized, only pair it with sections of THAT STRAND!
-      // (e.g., STEM specialized -> Section A, Section C, Section E)
-      // (e.g., HUMSS specialized -> Section B, Section F)
-      // (e.g., ABM specialized -> Section D)
-      // (e.g., TVL specialized -> TVL sections)
-      // Core and Applied subjects belong to ALL strands!
-      if (course.track === 'Specialized') {
-        const cStrand = (course.strand || '').toUpperCase();
-        if (cStrand && cStrand !== 'ALL') {
-          if (secStrand && secStrand !== 'ALL' && cStrand !== secStrand) {
-            return; // STRICTLY SKIP non-matching specialized subjects!
-          }
+    // Official curriculum list matching the Senior High School Curriculum Guide
+    const officialTitles = (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined' && SUBJECTS_BY_STRAND_AND_GRADE[secStrand]?.[secGrade])
+      ? SUBJECTS_BY_STRAND_AND_GRADE[secStrand][secGrade]
+      : [];
+
+    if (officialTitles.length > 0) {
+      officialTitles.forEach(title => {
+        const foundCourse = (courses || []).find(c => {
+          const cT = (c.title || '').toLowerCase().trim();
+          const tT = title.toLowerCase().trim();
+          return cT === tT || cT.includes(tT) || tT.includes(cT);
+        }) || {};
+
+        const track = foundCourse.track || getTrackForSubjectTitle(title, secStrand);
+        const baseId = foundCourse.id || ('course-' + title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+        const cover = foundCourse.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80';
+        const desc = foundCourse.description || (`Official DepEd Senior High School ${secStrand} curriculum subject: ${title}.`);
+
+        let secCode = foundCourse.code || (`${secStrand}-${secGrade === 'Grade 12' ? '1201' : '1101'}`);
+        const letterMatch = sec.match(/Section\s*([A-Za-z0-9]+)/i);
+        const secIdentifier = letterMatch ? letterMatch[1].toUpperCase() : sec.trim().charAt(0).toUpperCase();
+
+        if (secIdentifier === 'B') {
+          secCode = secCode.replace(/1$/, '2');
+          if (!secCode.endsWith('-B')) secCode += '-B';
+        } else if (secIdentifier === 'A') {
+          if (!secCode.endsWith('-A')) secCode += '-A';
+        } else {
+          if (!secCode.endsWith(`-${secIdentifier}`)) secCode += `-${secIdentifier}`;
         }
-      }
 
-      // 2. GRADE LEVEL ALIGNMENT:
-      // Grade 11 sections take Grade 11 curriculum; Grade 12 sections take Grade 12 curriculum.
-      if (secGrade && course.gradeLevel && course.gradeLevel !== 'All') {
-        const normSecGrade = secGrade.toLowerCase().replace(/\s+/g, '');
-        const normCourseGrade = course.gradeLevel.toLowerCase().replace(/\s+/g, '');
-        if (normSecGrade !== normCourseGrade) {
-          return; // Skip subjects of the other grade level!
-        }
-      }
-
-      // Section code generator adapted to section letter
-      let secCode = course.code || 'SUBJ-1101';
-      const letterMatch = sec.match(/Section\s*([A-Za-z0-9]+)/i);
-      const secIdentifier = letterMatch ? letterMatch[1].toUpperCase() : sec.trim().charAt(0).toUpperCase();
-
-      if (secIdentifier === 'B') {
-        secCode = secCode.replace(/1$/, '2');
-        if (!secCode.endsWith('-B')) secCode += '-B';
-      } else if (secIdentifier === 'A') {
-        if (!secCode.endsWith('-A')) secCode += '-A';
-      } else {
-        if (!secCode.endsWith(`-${secIdentifier}`)) secCode += `-${secIdentifier}`;
-      }
-
-      const displayStrand = (secStrand && secStrand !== 'ALL') ? secStrand : (course.strand || 'General');
-      const displayGrade = secGrade || course.gradeLevel || 'Grade 11';
-
-      classCards.push({
-        ...course,
-        cardKey: `${course.id}__${sec.replace(/\s+/g, '_')}`,
-        baseCourseId: course.id,
-        assignedSection: sec,
-        sectionCode: secCode,
-        sectionStrand: secStrand,
-        sectionGradeLevel: displayGrade,
-        displayStrand: displayStrand,
-        gradeLevel: displayGrade
+        classCards.push({
+          ...foundCourse,
+          id: `${baseId}__${sec.replace(/\s+/g, '_')}`,
+          cardKey: `${baseId}__${sec.replace(/\s+/g, '_')}`,
+          baseCourseId: baseId,
+          title: title,
+          track: track,
+          strand: secStrand,
+          gradeLevel: secGrade,
+          assignedSection: sec,
+          sectionCode: secCode,
+          sectionStrand: secStrand,
+          sectionGradeLevel: secGrade,
+          displayStrand: secStrand,
+          cover: cover,
+          description: desc
+        });
       });
-    });
+    } else {
+      // Fallback in case of custom strand
+      (courses || []).forEach(course => {
+        let secCode = course.code || 'SUBJ-1101';
+        classCards.push({
+          ...course,
+          cardKey: `${course.id}__${sec.replace(/\s+/g, '_')}`,
+          baseCourseId: course.id,
+          assignedSection: sec,
+          sectionCode: secCode,
+          sectionStrand: secStrand,
+          sectionGradeLevel: secGrade,
+          displayStrand: secStrand,
+          gradeLevel: secGrade
+        });
+      });
+    }
   });
 
   return classCards;
@@ -1906,6 +1929,8 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
         <option value="Specialized" ${teacherTrackFilter === 'Specialized' ? 'selected' : ''}>Specialized</option>
         <option value="Core" ${teacherTrackFilter === 'Core' ? 'selected' : ''}>Core Subjects</option>
         <option value="Applied" ${teacherTrackFilter === 'Applied' ? 'selected' : ''}>Applied</option>
+        <option value="Elective" ${teacherTrackFilter === 'Elective' ? 'selected' : ''}>Electives</option>
+        <option value="Other" ${teacherTrackFilter === 'Other' ? 'selected' : ''}>Homeroom / Other</option>
       </select>
 
       <!-- ACTIVE CLASSES BADGE -->
