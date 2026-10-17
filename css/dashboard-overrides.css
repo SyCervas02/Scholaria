@@ -2498,6 +2498,7 @@ button,
   line-height: 1.2;
 }
 .type-pill.quiz { background: #ede9fe; color: #7c3aed; }
+.type-pill.interactive { background: #e0e7ff; color: #4338ca; }
 .type-pill.assignment { background: #e0f2fe; color: #0284c7; }
 .type-pill.performance { background: #dcfce7; color: #16a34a; }
 .type-pill.project { background: #fae8ff; color: #a21caf; }

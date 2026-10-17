@@ -962,7 +962,7 @@ function showNewsAlertIfNeeded() {
   };
 
   // Update header if there's an emergency
-  const hasEmergency = emergencyUnread.length > 0;
+  const hasEmergency = emergencyUnseen.length > 0;
   const headerGrad = hasEmergency
     ? 'background:linear-gradient(135deg,#991b1b 0%,#dc2626 100%)'
     : 'background:linear-gradient(135deg,#1e40af 0%,#2563eb 100%)';

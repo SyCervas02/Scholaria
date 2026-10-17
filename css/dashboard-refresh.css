@@ -93,7 +93,6 @@ body { background: #f1f7ff; }
 .sidebar .menu-item.active svg { color: #fff; }
 .top-nav #wm-schol { fill: #0086ff; }
 .top-nav #wm-aria { fill: #ffb400; }
-.top-nav .logo-svg image { clip-path: circle(21px at 22px 26px); }
 .top-nav .logo-svg > text:last-child { fill: #a6c6e8; }
 .top-nav .search-kbd-badge { display: none; }
 .top-nav .icon-btn .badge { background: #ff4966; }
@@ -363,4 +362,7 @@ body { background: #f1f7ff; }
 .subject-shelf-tabs button[aria-pressed="true"] { background:#1875f9; border-color:#1875f9; color:#fff; }
 .subject-shelf-tabs button span { padding:2px 6px; border-radius:6px; background:#edf4ff; color:#2465bf; font-size:11px; }
 .subject-shelf-tabs button:focus-visible { outline:2px solid #1875f9; outline-offset:3px; }
-.main:is([data-page="quizzes"], [data-page="progress"]) .ic-num { font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; }
+.main:is([data-page="quizzes"], [data-page="progress"], [data-page="quiz"], [data-page="classrec"]) .ic-num,
+.main[data-page="classrec"] .score-val {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}

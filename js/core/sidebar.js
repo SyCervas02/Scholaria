@@ -1368,18 +1368,42 @@ function resetStudentProgressFilters() {
 }
 
 /* ── STUDENT TASK & QUIZ DEADLINES STREAM ENGINE (NEWS DEADLINES) ── */
-let studentDeadlineTab = 'pending'; // 'pending' | 'archive' | 'all' | 'overdue' | 'done'
+let studentDeadlineTab = 'all'; // 'pending' | 'archive' | 'all' | 'overdue' | 'done' | 'completed'
 let studentDeadlineSubjectFilter = 'all';
+let studentDeadlineTypeFilter = 'all'; // 'all' | 'interactive' | 'normal'
+let studentDeadlineStatusFilter = 'all'; // 'all' | 'pending' | 'completed'
 let studentDeadlineMonthFilter = 'all';
 let studentDeadlineSort = 'deadline_desc'; // 'deadline_desc' | 'type_interactive' | 'type_standard'
 
 function setStudentDeadlineTab(tab) {
   studentDeadlineTab = tab;
+  if (tab === 'pending') {
+    studentDeadlineStatusFilter = 'pending';
+  } else if (tab === 'all') {
+    studentDeadlineStatusFilter = 'all';
+  }
   updateStudentDeadlinesWidget();
 }
 
 function setStudentDeadlineSubject(sub) {
   studentDeadlineSubjectFilter = sub;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineType(type) {
+  studentDeadlineTypeFilter = type;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineStatus(status) {
+  studentDeadlineStatusFilter = status;
+  if (status === 'pending') {
+    studentDeadlineTab = 'pending';
+  } else if (status === 'all') {
+    studentDeadlineTab = 'all';
+  } else {
+    studentDeadlineTab = status;
+  }
   updateStudentDeadlinesWidget();
 }
 
@@ -1399,6 +1423,14 @@ function updateStudentDeadlinesWidget() {
     container.innerHTML = renderStudentDeadlinesWidgetHTML();
   }
 }
+
+window.setStudentDeadlineTab = setStudentDeadlineTab;
+window.setStudentDeadlineSubject = setStudentDeadlineSubject;
+window.setStudentDeadlineType = setStudentDeadlineType;
+window.setStudentDeadlineStatus = setStudentDeadlineStatus;
+window.setStudentDeadlineMonth = setStudentDeadlineMonth;
+window.setStudentDeadlineSort = setStudentDeadlineSort;
+window.updateStudentDeadlinesWidget = updateStudentDeadlinesWidget;
 
 // Presentation helpers: all dashboard links use the existing role navigation.
 function dashboardIcon(name) {
@@ -1465,7 +1497,7 @@ function renderStudentSubjectShelf() {
   const courses = getStudentDashboardSubjects(studentSubjectShelfTab);
   const completed = studentSubjectShelfTab === 'completed';
   return `<section class="dashboard-subject-shelf" aria-labelledby="studentSubjectsTitle">
-    <header><div><h3 id="studentSubjectsTitle">My Subjects</h3><p>${completed ? 'Previous-grade subjects and completed courses.' : 'Browse subjects for your current grade level.'}</p></div>
+    <header><div><h3 id="studentSubjectsTitle">${completed ? 'Completed Subjects' : 'My Enrolled Subjects'}</h3><p>${completed ? 'Previous-grade subjects and completed courses.' : 'Browse subjects for your current grade level.'}</p></div>
       <div class="subject-shelf-controls"><button type="button" aria-label="Previous subjects" onclick="scrollStudentSubjectShelf(-1)">&#8592;</button><button type="button" aria-label="Next subjects" onclick="scrollStudentSubjectShelf(1)">&#8594;</button></div>
     </header>
     <div class="subject-shelf-tabs" role="group" aria-label="Subject status">
@@ -1625,141 +1657,8 @@ function renderStudentDeadlinesWidgetHTML() {
     };
   });
 
-  const totalCount = items.length;
-  const dueCount = items.filter(i => i.status === 'due').length;
-  const overdueCount = items.filter(i => i.status === 'overdue').length;
-  const doneCount = items.filter(i => i.status === 'done').length;
-  const archiveCount = overdueCount + doneCount;
-
-  const uniqueSubjects = [...new Set(items.map(i => i.subject).filter(Boolean))].sort();
-  const uniqueMonths = [...new Map(items.map(i => [i.monthNum, { num: i.monthNum, name: i.monthLong }])).values()]
-    .sort((a, b) => a.num - b.num);
-
-  let filtered = items;
-  if (studentDeadlineTab === 'pending') {
-    filtered = filtered.filter(i => i.status === 'due');
-  } else if (studentDeadlineTab === 'archive') {
-    filtered = filtered.filter(i => i.status === 'overdue' || i.status === 'done');
-  } else if (studentDeadlineTab === 'overdue') {
-    filtered = filtered.filter(i => i.status === 'overdue');
-  } else if (studentDeadlineTab === 'done') {
-    filtered = filtered.filter(i => i.status === 'done');
-  }
-
-  if (studentDeadlineSubjectFilter !== 'all') {
-    filtered = filtered.filter(i => i.subject === studentDeadlineSubjectFilter);
-  }
-
-  if (studentDeadlineMonthFilter !== 'all') {
-    filtered = filtered.filter(i => String(i.monthNum) === String(studentDeadlineMonthFilter) || i.monthShort.toLowerCase() === String(studentDeadlineMonthFilter).toLowerCase());
-  }
-
-  filtered.sort((a, b) => {
-    if (studentDeadlineSort === 'deadline_desc' || studentDeadlineSort === 'deadline_asc') {
-      const diff = a.dueMs - b.dueMs;
-      return diff !== 0 ? diff : a.title.localeCompare(b.title);
-    }
-    if (studentDeadlineSort === 'type_interactive') {
-      const typeDiff = (b.isInter ? 1 : 0) - (a.isInter ? 1 : 0);
-      return typeDiff !== 0 ? typeDiff : (a.dueMs - b.dueMs);
-    }
-    if (studentDeadlineSort === 'type_standard') {
-      const typeDiff = (a.isInter ? 1 : 0) - (b.isInter ? 1 : 0);
-      return typeDiff !== 0 ? typeDiff : (a.dueMs - b.dueMs);
-    }
-    return 0;
-  });
-
-  // Academic fallback items matching ELMS dashboard design in Image 1
-  const defaultTasks = [
-    {
-      id: 'task-cyber',
-      subject: 'Cyber security',
-      icon: '🛡️',
-      iconBg: '#2563eb',
-      title: 'Quiz 1 - Module 3',
-      type: 'Quiz',
-      typeClass: 'quiz',
-      deadline: 'Sep 5, 2025 10:00 AM',
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('cyber'))?.id || (allQuizzes[0]?.id || null)
-    },
-    {
-      id: 'task-math',
-      subject: 'General Mathematics',
-      icon: '∑',
-      iconBg: '#7c3aed',
-      title: 'Activity 2 - Problem Set',
-      type: 'Assignment',
-      typeClass: 'assignment',
-      deadline: 'Sep 6, 2025 11:59 PM',
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('math'))?.id || null
-    },
-    {
-      id: 'task-bio',
-      subject: 'General Biology 1',
-      icon: '🌿',
-      iconBg: '#16a34a',
-      title: 'Quiz 1 - Cell Structure',
-      type: 'Quiz',
-      typeClass: 'quiz',
-      deadline: 'Sep 8, 2025 09:00 AM',
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('bio'))?.id || null
-    },
-    {
-      id: 'task-precalc',
-      subject: 'Pre-Calculus',
-      icon: '📈',
-      iconBg: '#0284c7',
-      title: 'Performance Task',
-      type: 'Performance Task',
-      typeClass: 'performance',
-      deadline: 'Sep 10, 2025 11:59 PM',
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('calc'))?.id || null
-    },
-    {
-      id: 'task-oral',
-      subject: 'Oral Communication',
-      icon: '💬',
-      iconBg: '#0284c7',
-      title: 'Quiz 2 - Speech Analysis',
-      type: 'Quiz',
-      typeClass: 'quiz',
-      deadline: 'Sep 12, 2025 10:00 AM',
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('oral') || (q.subject || '').toLowerCase().includes('comm'))?.id || null
-    },
-    {
-      id: 'task-reading',
-      subject: 'Reading and Writing Skills',
-      icon: '📖',
-      iconBg: '#9333ea',
-      title: 'Activity 1 - Essay',
-      type: 'Assignment',
-      typeClass: 'assignment',
-      deadline: 'Sep 15, 2025 11:59 PM',
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('reading') || (q.subject || '').toLowerCase().includes('writing'))?.id || null
-    },
-    {
-      id: 'task-stem',
-      subject: 'STEM',
-      icon: '⚛️',
-      iconBg: '#06b6d4',
-      title: 'Project Submission',
-      type: 'Project',
-      typeClass: 'project',
-      deadline: 'Sep 18, 2025 11:59 PM',
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.strand || '').toLowerCase().includes('stem'))?.id || null
-    }
-  ];
-
-  // Merge live teacher quizzes so user quizzes are never missed
-  const liveQuizTasks = filtered.map(i => {
+  // Live quiz tasks from visible teacher quizzes
+  const liveQuizTasks = items.map(i => {
     let icon = '📝';
     let iconBg = '#2563eb';
     const sLower = (i.subject || '').toLowerCase();
@@ -1777,30 +1676,205 @@ function renderStudentDeadlinesWidgetHTML() {
       iconBg,
       title: i.title,
       type: i.isInter ? 'Interactive Quiz' : 'Quiz',
-      typeClass: 'quiz',
+      typeClass: i.isInter ? 'interactive' : 'quiz',
+      isInter: i.isInter,
       deadline: `${i.monthShort} ${i.dayNum}, 2025 ${i.time12}`,
       status: i.isAttempted ? 'Completed' : 'Pending',
       quizId: i.id,
       isCompleted: i.isAttempted,
-      pct: i.pct
+      pct: i.pct,
+      monthNum: i.monthNum,
+      monthShort: i.monthShort,
+      monthLong: i.monthLong,
+      dueMs: i.dueMs
     };
   });
 
-  // Combined tasks list
-  let displayTasks = [...liveQuizTasks, ...defaultTasks];
+  // Academic fallback items matching ELMS dashboard design
+  const defaultTasks = [
+    {
+      id: 'task-cyber',
+      subject: 'Cyber security',
+      icon: '🛡️',
+      iconBg: '#2563eb',
+      title: 'Quiz 1 - Module 3',
+      type: 'Quiz',
+      typeClass: 'quiz',
+      isInter: false,
+      deadline: 'Sep 5, 2025 10:00 AM',
+      monthNum: 9,
+      monthShort: 'Sep',
+      monthLong: 'September',
+      dueMs: new Date('2025-09-05T10:00:00').getTime(),
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('cyber'))?.id || (allQuizzes[0]?.id || null)
+    },
+    {
+      id: 'task-math',
+      subject: 'General Mathematics',
+      icon: '∑',
+      iconBg: '#7c3aed',
+      title: 'Activity 2 - Problem Set',
+      type: 'Assignment',
+      typeClass: 'assignment',
+      isInter: false,
+      deadline: 'Sep 6, 2025 11:59 PM',
+      monthNum: 9,
+      monthShort: 'Sep',
+      monthLong: 'September',
+      dueMs: new Date('2025-09-06T23:59:00').getTime(),
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('math'))?.id || null
+    },
+    {
+      id: 'task-bio',
+      subject: 'General Biology 1',
+      icon: '🌿',
+      iconBg: '#16a34a',
+      title: 'Quiz 1 - Cell Structure',
+      type: 'Quiz',
+      typeClass: 'quiz',
+      isInter: false,
+      deadline: 'Sep 8, 2025 09:00 AM',
+      monthNum: 9,
+      monthShort: 'Sep',
+      monthLong: 'September',
+      dueMs: new Date('2025-09-08T09:00:00').getTime(),
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('bio'))?.id || null
+    },
+    {
+      id: 'task-precalc',
+      subject: 'Pre-Calculus',
+      icon: '📈',
+      iconBg: '#0284c7',
+      title: 'Performance Task',
+      type: 'Performance Task',
+      typeClass: 'performance',
+      isInter: false,
+      deadline: 'Sep 10, 2025 11:59 PM',
+      monthNum: 9,
+      monthShort: 'Sep',
+      monthLong: 'September',
+      dueMs: new Date('2025-09-10T23:59:00').getTime(),
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('calc'))?.id || null
+    },
+    {
+      id: 'task-oral',
+      subject: 'Oral Communication',
+      icon: '💬',
+      iconBg: '#0284c7',
+      title: 'Quiz 2 - Speech Analysis',
+      type: 'Interactive Quiz',
+      typeClass: 'interactive',
+      isInter: true,
+      deadline: 'Sep 12, 2025 10:00 AM',
+      monthNum: 9,
+      monthShort: 'Sep',
+      monthLong: 'September',
+      dueMs: new Date('2025-09-12T10:00:00').getTime(),
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('oral') || (q.subject || '').toLowerCase().includes('comm'))?.id || null
+    },
+    {
+      id: 'task-reading',
+      subject: 'Reading and Writing Skills',
+      icon: '📖',
+      iconBg: '#9333ea',
+      title: 'Activity 1 - Essay',
+      type: 'Assignment',
+      typeClass: 'assignment',
+      isInter: false,
+      deadline: 'Sep 15, 2025 11:59 PM',
+      monthNum: 9,
+      monthShort: 'Sep',
+      monthLong: 'September',
+      dueMs: new Date('2025-09-15T23:59:00').getTime(),
+      status: 'Pending',
+      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('reading') || (q.subject || '').toLowerCase().includes('writing'))?.id || null
+    },
+    {
+      id: 'task-stem',
+      subject: 'STEM',
+      icon: '⚛️',
+      iconBg: '#06b6d4',
+      title: 'Project Submission',
+      type: 'Project',
+      typeClass: 'project',
+      isInter: false,
+      deadline: 'Sep 18, 2025 11:59 PM',
+      monthNum: 9,
+      monthShort: 'Sep',
+      monthLong: 'September',
+      dueMs: new Date('2025-09-18T23:59:00').getTime(),
+      status: 'Completed',
+      isCompleted: true,
+      quizId: allQuizzes.find(q => (q.strand || '').toLowerCase().includes('stem'))?.id || null
+    }
+  ];
 
-  // Subject filtering
-  if (studentDeadlineSubjectFilter !== 'all') {
-    displayTasks = displayTasks.filter(t => t.subject === studentDeadlineSubjectFilter);
+  // Update default tasks if user has taken any linked quiz
+  defaultTasks.forEach(dt => {
+    if (dt.quizId && attemptsByQuiz.has(String(dt.quizId))) {
+      dt.status = 'Completed';
+      dt.isCompleted = true;
+    }
+  });
+
+  // All combined tasks
+  const allCombinedTasks = [...liveQuizTasks, ...defaultTasks];
+  const pendingTasksCount = allCombinedTasks.filter(t => (t.status || '').toLowerCase() === 'pending').length;
+  const totalTasksCount = allCombinedTasks.length;
+
+  let displayTasks = allCombinedTasks;
+
+  // 1. Subject filter
+  if (studentDeadlineSubjectFilter && studentDeadlineSubjectFilter !== 'all') {
+    displayTasks = displayTasks.filter(t => (t.subject || '').trim().toLowerCase() === studentDeadlineSubjectFilter.trim().toLowerCase());
   }
 
-  // Pending filter
-  if (studentDeadlineTab === 'pending') {
-    displayTasks = displayTasks.filter(t => t.status === 'Pending');
+  // 2. Types of Quiz filter (Interactive or Normal Quiz)
+  if (studentDeadlineTypeFilter && studentDeadlineTypeFilter !== 'all') {
+    if (studentDeadlineTypeFilter === 'interactive') {
+      displayTasks = displayTasks.filter(t => t.isInter === true || (t.type && t.type.toLowerCase().includes('interactive')));
+    } else if (studentDeadlineTypeFilter === 'normal') {
+      displayTasks = displayTasks.filter(t => !t.isInter && (t.type && (t.type.toLowerCase() === 'quiz' || t.type.toLowerCase().includes('normal') || t.type.toLowerCase().includes('standard'))));
+    }
   }
 
+  // 3. Status filter (Pending or Completed)
+  if (studentDeadlineStatusFilter && studentDeadlineStatusFilter !== 'all') {
+    if (studentDeadlineStatusFilter.toLowerCase() === 'pending') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'pending');
+    } else if (studentDeadlineStatusFilter.toLowerCase() === 'completed') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'completed' || t.isCompleted === true);
+    }
+  } else if (studentDeadlineTab === 'pending') {
+    displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'pending');
+  }
+
+  // 4. Date / Month filter
+  if (studentDeadlineMonthFilter && studentDeadlineMonthFilter !== 'all') {
+    const filterMonth = String(studentDeadlineMonthFilter).toLowerCase();
+    displayTasks = displayTasks.filter(t => {
+      const mNum = t.monthNum != null ? String(t.monthNum) : (t.dateObj ? String(t.dateObj.getMonth() + 1) : null);
+      if (mNum && mNum === filterMonth) return true;
+      if (t.monthShort && t.monthShort.toLowerCase() === filterMonth) return true;
+      if (t.monthLong && t.monthLong.toLowerCase() === filterMonth) return true;
+      return false;
+    });
+  }
+
+  // Sort display tasks chronologically
+  displayTasks.sort((a, b) => {
+    const aMs = a.dueMs || (a.dateObj ? a.dateObj.getTime() : 0);
+    const bMs = b.dueMs || (b.dateObj ? b.dateObj.getTime() : 0);
+    return aMs - bMs;
+  });
+
+  // Unique Subject options
   const subjectOptions = [
-    'All Subjects (14)',
     'Cyber security',
     'General Mathematics',
     'General Biology 1',
@@ -1813,6 +1887,27 @@ function renderStudentDeadlinesWidgetHTML() {
     'Reading and Writing Skills',
     'STEM'
   ];
+  allCombinedTasks.forEach(t => {
+    if (t.subject && !subjectOptions.some(s => s.toLowerCase() === t.subject.toLowerCase())) {
+      subjectOptions.push(t.subject);
+    }
+  });
+
+  // Month options
+  const monthOptions = [
+    { val: '9', label: 'September 2025' },
+    { val: '10', label: 'October 2025' },
+    { val: '11', label: 'November 2025' },
+    { val: '12', label: 'December 2025' }
+  ];
+  allCombinedTasks.forEach(t => {
+    if (t.monthNum && !monthOptions.some(m => m.val === String(t.monthNum))) {
+      monthOptions.push({
+        val: String(t.monthNum),
+        label: `${t.monthLong || t.monthShort} ${t.dateObj ? t.dateObj.getFullYear() : '2025'}`
+      });
+    }
+  });
 
   return `
   <div class="student-deadlines-container">
@@ -1821,9 +1916,9 @@ function renderStudentDeadlinesWidgetHTML() {
       <div class="deadlines-title-wrap">
         <h3>
           <span class="dashboard-heading-icon">${dashboardIcon('calendar')}</span> Your Tasks &amp; Quizzes
-          ${dueCount > 0 ? `
+          ${pendingTasksCount > 0 ? `
           <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;margin-left:6px;">
-            ${dueCount} Active Due
+            ${pendingTasksCount} Active Due
           </span>` : ''}
         </h3>
         <p>Track upcoming quiz schedules, day/time deadlines, and types for every subject you take.</p>
@@ -1831,49 +1926,45 @@ function renderStudentDeadlinesWidgetHTML() {
 
       <!-- Top Pills -->
       <div class="deadlines-top-pills">
-        <button class="top-pill-btn ${studentDeadlineTab === 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
-          Pending Quizzes <span style="font-weight:800;margin-left:2px;">${dueCount || 0}</span>
+        <button class="top-pill-btn ${studentDeadlineStatusFilter === 'pending' || (studentDeadlineStatusFilter === 'all' && studentDeadlineTab === 'pending') ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
+          Pending Quizzes <span style="font-weight:800;margin-left:2px;">${pendingTasksCount}</span>
         </button>
-        <button class="top-pill-btn ${studentDeadlineTab === 'all' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
-          All Tasks <span style="font-weight:800;margin-left:2px;">${displayTasks.length}</span>
+        <button class="top-pill-btn ${studentDeadlineStatusFilter === 'all' && studentDeadlineTab !== 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
+          All Tasks <span style="font-weight:800;margin-left:2px;">${totalTasksCount}</span>
         </button>
       </div>
     </div>
 
     <!-- Filter Dropdowns Row -->
     <div class="deadlines-filters-row">
-      <!-- 1. All Subjects (14) -->
-      <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)">
-        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (14)</option>
-        ${subjectOptions.slice(1).map(s => `
+      <!-- 1. Subject Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)" title="Filter by Subject">
+        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (${subjectOptions.length})</option>
+        ${subjectOptions.map(s => `
           <option value="${escHtml(s)}" ${studentDeadlineSubjectFilter === s ? 'selected' : ''}>${escHtml(s)}</option>
         `).join('')}
       </select>
 
-      <!-- 2. Handouts / Lessons Filter -->
-      <select class="deadline-filter-select">
-        <option value="all">📄 01_Handout_1(45)</option>
-        <option value="h1">Module 1 Handouts</option>
-        <option value="h2">Module 2 Problem Sets</option>
-        <option value="h3">Module 3 Review Guide</option>
+      <!-- 2. Types of Quiz Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineType(this.value)" title="Filter by Quiz Type">
+        <option value="all" ${studentDeadlineTypeFilter === 'all' ? 'selected' : ''}>📝 All Quiz Types</option>
+        <option value="interactive" ${studentDeadlineTypeFilter === 'interactive' ? 'selected' : ''}>🎮 Interactive Quiz</option>
+        <option value="normal" ${studentDeadlineTypeFilter === 'normal' ? 'selected' : ''}>📋 Normal Quiz</option>
       </select>
 
-      <!-- 3. Category / Specific Subject Filter -->
-      <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)">
-        <option value="all">🛡️ Cyber security</option>
-        <option value="General Mathematics">∑ General Mathematics</option>
-        <option value="General Biology 1">🌿 General Biology 1</option>
-        <option value="Pre-Calculus">📈 Pre-Calculus</option>
-        <option value="Oral Communication">💬 Oral Communication</option>
+      <!-- 3. Status Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineStatus(this.value)" title="Filter by Status">
+        <option value="all" ${studentDeadlineStatusFilter === 'all' ? 'selected' : ''}>⚡ All Status</option>
+        <option value="pending" ${studentDeadlineStatusFilter === 'pending' ? 'selected' : ''}>⏳ Pending</option>
+        <option value="completed" ${studentDeadlineStatusFilter === 'completed' ? 'selected' : ''}>✅ Completed</option>
       </select>
 
       <!-- 4. Month Filter -->
-      <select class="deadline-filter-select" onchange="setStudentDeadlineMonth(this.value)">
+      <select class="deadline-filter-select" onchange="setStudentDeadlineMonth(this.value)" title="Filter by Month/Date">
         <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
-        <option value="9">September 2025</option>
-        <option value="10">October 2025</option>
-        <option value="11">November 2025</option>
-        <option value="12">December 2025</option>
+        ${monthOptions.map(m => `
+          <option value="${escHtml(m.val)}" ${String(studentDeadlineMonthFilter) === String(m.val) ? 'selected' : ''}>${escHtml(m.label)}</option>
+        `).join('')}
       </select>
     </div>
 
@@ -1890,7 +1981,13 @@ function renderStudentDeadlinesWidgetHTML() {
           </tr>
         </thead>
         <tbody>
-          ${(displayTasks.slice(0, 7)).map(t => {
+          ${displayTasks.length === 0 ? `
+            <tr>
+              <td colspan="5" style="text-align:center;padding:32px 16px;color:#64748b;font-size:13px;font-weight:600;">
+                No tasks or quizzes found matching your filters.
+              </td>
+            </tr>
+          ` : displayTasks.slice(0, 10).map(t => {
             const clickHandler = t.quizId
               ? (t.isCompleted ? `openReviewAttempt('${t.quizId}')` : `openTakeQuizModal('${t.quizId}')`)
               : `showToast('Assessment details for ${escHtml(t.title)}', 'info')`;
@@ -1914,7 +2011,7 @@ function renderStudentDeadlinesWidgetHTML() {
 
               <!-- Type -->
               <td>
-                <span class="type-pill ${t.typeClass}">
+                <span class="type-pill ${t.typeClass || 'quiz'}">
                   ${escHtml(t.type)}
                 </span>
               </td>
