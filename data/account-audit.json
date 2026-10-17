@@ -191,5 +191,49 @@
     },
     "is_active": true,
     "updated_at": "2026-10-16T17:03:58.481Z"
+  },
+  "HWA-2026-004": {
+    "user_id": "d8e3765c-1820-4498-a399-b372133da8c0",
+    "school_id": "HWA-2026-004",
+    "name": "David Daniel Davis IV",
+    "role": "student",
+    "email": "daviddavis@gmail.com",
+    "strand": "TVL",
+    "grade_level": "Grade 12",
+    "section": null,
+    "contact_number": null,
+    "address": null,
+    "created_at": "2026-10-17T12:58:49.238Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-17T12:58:49.238Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-17T12:58:50.075Z"
+  },
+  "HWA-T-2026-005": {
+    "user_id": "480d9e39-aa7c-41f8-833a-0abc743bb5ec",
+    "school_id": "HWA-T-2026-005",
+    "name": "Diana Delilah Dizon Jr.",
+    "role": "teacher",
+    "email": "dianadizon@gmail.com",
+    "strand": "TVL",
+    "grade_level": null,
+    "section": null,
+    "contact_number": "09924242562",
+    "address": "South PTC, N.I.A. Road",
+    "created_at": "2026-10-17T13:00:17.151Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-17T13:00:17.151Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-17T13:00:18.284Z"
   }
 }
