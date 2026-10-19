@@ -1,4 +1,11 @@
 /* Reference layout: shared navigation, with content styling scoped to dashboards. */
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/Inter-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root { --sidebar-w: 224px; --nav-h: 70px; }
 body { background: #f1f7ff; }
 .top-nav { gap: 14px; padding: 0 20px 0 calc(var(--sidebar-w) + 20px); background: #ffffffed; box-shadow: 0 4px 18px #4489dd12; transition: padding .28s ease; }
@@ -61,29 +68,29 @@ body { background: #f1f7ff; }
 .main[data-page="dashboard"] :is(.student-deadlines-container, .news-bulletin-container, .student-progress-card, .anc-widget-card) { border: 1px solid #d2e3ff; border-radius: 15px; background: linear-gradient(120deg, #fff, #fbfdff); box-shadow: 0 3px 12px #345c9809; padding: 18px 16px; }
 .main[data-page="dashboard"] .student-deadlines-header { gap: 10px; margin-bottom: 22px; }
 .main[data-page="dashboard"] .deadlines-title-wrap h3 { color: #12346e; font-size: 18px; }
-.main[data-page="dashboard"] .deadlines-title-wrap p { color: #7391bb; font-size: 11px; line-height: 1.6; }
-.main[data-page="dashboard"] .deadlines-top-pills { gap: 3px; margin-left: auto; }
-.main[data-page="dashboard"] .top-pill-btn { padding: 4px 8px; font-size: 9px; border-color: #cee0ff; color: #1672ff; background: #f5f9ff; }
+.main[data-page="dashboard"] .deadlines-title-wrap p { color: #7391bb; font-size: 12.5px; line-height: 1.5; }
+.main[data-page="dashboard"] .deadlines-top-pills { gap: 6px; margin-left: auto; }
+.main[data-page="dashboard"] .top-pill-btn { padding: 5px 11px; font-size: 11.5px; font-weight: 600; border-color: #cee0ff; color: #1672ff; background: #f5f9ff; }
 .main[data-page="dashboard"] .deadlines-filters-row { grid-template-columns: 1.6fr 1.2fr 1.2fr .85fr; gap: 8px; }
-.main[data-page="dashboard"] .deadline-filter-select { min-width: 0; height: 38px; padding: 8px; font-size: 10px; font-weight: 500; color: #12346e; border: 1px solid #d5e4ff; }
+.main[data-page="dashboard"] .deadline-filter-select { min-width: 0; height: 38px; padding: 7px 10px; font-size: 12px; font-weight: 500; color: #12346e; border: 1px solid #d5e4ff; }
 .main[data-page="dashboard"] .student-deadlines-table-wrap { border: 1px solid #e3edff; border-radius: 12px; margin: 0; }
 .main[data-page="dashboard"] .student-deadlines-table { min-width: 0; width: 100%; table-layout: fixed; }
-.main[data-page="dashboard"] .student-deadlines-table th { background: #f1f6fd; color: #31558c; padding: 12px 10px; text-transform: none; font-weight: 500; font-size: 10px; letter-spacing: 0; }
+.main[data-page="dashboard"] .student-deadlines-table th { background: #f1f6fd; color: #31558c; padding: 12px 10px; text-transform: none; font-weight: 600; font-size: 11.5px; letter-spacing: 0; }
 .main[data-page="dashboard"] .student-deadlines-table td { height: 50px; padding: 9px 10px; border-bottom: 1px solid #edf3fc; white-space: normal !important; }
-.main[data-page="dashboard"] .student-deadlines-table td span { font-size: 10px !important; font-weight: 500 !important; }
+.main[data-page="dashboard"] .student-deadlines-table td span { font-size: 12px !important; font-weight: 500 !important; }
 .main[data-page="dashboard"] .subject-badge-cell { gap: 9px; }
 .main[data-page="dashboard"] .subj-icon-box { width: 30px; height: 30px; border-radius: 9px; box-shadow: inset 0 0 0 3px #ffffff18; }
 .main[data-page="dashboard"] :is(.type-pill, .status-pill-amber) { padding: 4px 9px; max-width: 100%; white-space: normal !important; text-align: center; }
-.main[data-page="dashboard"] .news-bulletin-header h3 { color: #12346e; font-size: 14px; }
-.main[data-page="dashboard"] .view-all-link { font-size: 10px; font-weight: 500; color: #006bff; }
+.main[data-page="dashboard"] .news-bulletin-header h3 { color: #12346e; font-size: 15px; }
+.main[data-page="dashboard"] .view-all-link { font-size: 11.5px; font-weight: 600; color: #006bff; }
 .main[data-page="dashboard"] .news-bulletin-item { position: relative; padding: 12px 12px 12px 42px; border-radius: 11px; border: 1px solid #e0ebfc; border-left: 2px solid #41b5ff; background: linear-gradient(115deg, #fff, #f9fcff); }
 .main[data-page="dashboard"] .news-bulletin-item:has(.emergency) { border-left-color: #ff5b7e; }
 .main[data-page="dashboard"] .news-bulletin-item:has(.event) { border-left-color: #40c583; }
-.main[data-page="dashboard"] .news-item-title { color: #12346e; font-size: 11px; line-height: 1.5; }
-.main[data-page="dashboard"] .news-item-snippet { color: #6c8bb7; font-size: 10px; line-height: 1.6; }
-.main[data-page="dashboard"] .news-tag { font-size: 9px; letter-spacing: 0; font-weight: 600; border-radius: 20px; }
+.main[data-page="dashboard"] .news-item-title { color: #12346e; font-size: 12.5px; font-weight: 600; line-height: 1.45; }
+.main[data-page="dashboard"] .news-item-snippet { color: #6c8bb7; font-size: 11.5px; line-height: 1.5; }
+.main[data-page="dashboard"] .news-tag { font-size: 10.5px; letter-spacing: 0; font-weight: 600; border-radius: 20px; }
 .main[data-page="dashboard"] .news-tag-new { border-radius: 20px; background: #087bff; }
-.main[data-page="dashboard"] .student-progress-card-header h3 { font-size: 14px; color: #12346e; }
+.main[data-page="dashboard"] .student-progress-card-header h3 { font-size: 15px; color: #12346e; }
 .main[data-page="dashboard"] .section-hdr h2 { color: #12346e; font-size: 18px; }
 .main[data-page="dashboard"] .quiz-list { border: 1px solid #d2e3ff; border-radius: 15px; background: #fff; overflow: hidden; }
 .main[data-page="dashboard"] .quiz-row { padding: 16px 18px; border-color: #edf3fc; }
@@ -101,11 +108,11 @@ body { background: #f1f7ff; }
 .main[data-page="dashboard"] .subj-icon-box svg { width: 21px; height: 21px; }
 .main[data-page="dashboard"] .dashboard-date { display: flex; align-items: center; gap: 7px; color: #173c78; }
 .main[data-page="dashboard"] .dashboard-date > svg { width: 13px; height: 13px; flex-shrink: 0; color: #1675ff; }
-.main[data-page="dashboard"] .dashboard-date small { display: block; color: #6886b0; font-size: 10px; margin-top: 3px; }
+.main[data-page="dashboard"] .dashboard-date small { display: block; color: #6886b0; font-size: 11px; margin-top: 3px; }
 .main[data-page="dashboard"] .student-deadlines-table :is(th, td):last-child { text-align: center !important; }
-.main[data-page="dashboard"] .student-deadlines-table .type-pill { min-width: 64px; padding-inline: 6px; font-size: 9px !important; }
-.main[data-page="dashboard"] .status-pill-amber { background: #fff2db; color: #ec8a00; min-width: 62px; }
-.main[data-page="dashboard"] .student-deadlines-table .type-pill.performance { white-space: nowrap !important; font-size: 8.5px !important; }
+.main[data-page="dashboard"] .student-deadlines-table .type-pill { min-width: 64px; padding: 4px 8px; font-size: 11px !important; }
+.main[data-page="dashboard"] .status-pill-amber { background: #fff2db; color: #ec8a00; min-width: 62px; font-size: 11px; }
+.main[data-page="dashboard"] .student-deadlines-table .type-pill.performance { white-space: nowrap !important; font-size: 10.5px !important; }
 .main[data-page="dashboard"] .student-deadlines-table td { height: 49px; }
 .main[data-page="dashboard"] .dashboard-news-icon { position: absolute; top: 11px; left: 9px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 9px; background: #d8f1ff; color: #1686de; }
 .main[data-page="dashboard"] .dashboard-news-icon.emergency { background: #ffe1e9; color: #f55079; }
@@ -114,15 +121,15 @@ body { background: #f1f7ff; }
 .main[data-page="dashboard"] .news-bulletin-list { display: flex; flex-direction: column; gap: 12px; }
 .main[data-page="dashboard"] .news-bulletin-container { min-width: 0; width: 100%; }
 .main[data-page="dashboard"] .news-bulletin-header { gap: 10px; }
-.main[data-page="dashboard"] .news-bulletin-header h3 { min-width: 0; font-size: 14px !important; }
-.main[data-page="dashboard"] .news-bulletin-header .view-all-link { flex-shrink: 0; }
+.main[data-page="dashboard"] .news-bulletin-header h3 { min-width: 0; font-size: 15px !important; }
+.main[data-page="dashboard"] .news-bulletin-header .view-all-link { flex-shrink: 0; font-size: 11.5px; font-weight: 600; }
 .main[data-page="dashboard"] .news-bulletin-item { margin: 0; min-height: 94px; }
 .main[data-page="dashboard"] .dashboard-quick-links { padding: 16px; border: 1px solid #d2e3ff; border-radius: 15px; background: linear-gradient(120deg, #fff, #fbfdff); box-shadow: 0 3px 12px #345c9809; }
-.main[data-page="dashboard"] .dashboard-quick-links h3 { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 13px; color: #12346e; }
+.main[data-page="dashboard"] .dashboard-quick-links h3 { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 14px; font-weight: 700; color: #12346e; }
 .main[data-page="dashboard"] .dashboard-quick-links h3 > span { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 8px; background: #3557d6; color: #fff; }
 .main[data-page="dashboard"] .dashboard-quick-links h3 svg { width: 19px; height: 19px; }
 .main[data-page="dashboard"] .dashboard-shortcut-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.main[data-page="dashboard"] .dashboard-shortcut { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 17px; min-height: 104px; padding: 12px 6px; border: 0; border-radius: 13px; background: #edf4ff; color: #0064ec; font: 500 11px 'Inter', sans-serif; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+.main[data-page="dashboard"] .dashboard-shortcut { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 17px; min-height: 104px; padding: 12px 6px; border: 0; border-radius: 13px; background: #edf4ff; color: #0064ec; font: 600 12px 'Inter', 'Plus Jakarta Sans', sans-serif; cursor: pointer; transition: transform .15s, box-shadow .15s; }
 .main[data-page="dashboard"] .dashboard-shortcut:nth-child(2) { background: #f4f1ff; color: #6341ed; }
 .main[data-page="dashboard"] .dashboard-shortcut:nth-child(3) { background: #edf8fa; color: #008c79; }
 .main[data-page="dashboard"] .dashboard-shortcut:nth-child(4) { background: #eff7ff; color: #0078eb; }
@@ -139,7 +146,7 @@ body { background: #f1f7ff; }
 .main[data-page="dashboard"] .dashboard-progress-detail .progress-breakdown-item.total { padding: 0; border: 0; }
 .main[data-page="dashboard"] .dashboard-progress-detail .progress-breakdown-item strong { font-size: 22px; }
 .main[data-page="dashboard"] .teacher-dashboard-split { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-.main[data-page="dashboard"] .teacher-dashboard-main { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.main[data-page="dashboard"] .teacher-dashboard-main { min-width: 0; overflow: hidden; display: flex; flex-direction: column; gap: 14px; }
 .main[data-page="dashboard"] .teacher-dashboard-side { min-width: 0; }
 .main[data-page="dashboard"] .dashboard-assessments-panel { padding: 18px 16px; border: 1px solid #d2e3ff; border-radius: 15px; background: #fff; }
 .main[data-page="dashboard"] .dashboard-assessments-panel .section-hdr { gap: 10px; flex-wrap: wrap; }
@@ -149,24 +156,24 @@ body { background: #f1f7ff; }
 .main[data-page="dashboard"] .stat-filter-card:nth-child(4) .ic-icon { background: linear-gradient(135deg, #ff759b, #ff446b) !important; }
 .main[data-page="dashboard"] .stat-filter-card:nth-child(4) .ic-num { color: #fb466b !important; }
 .main[data-page="dashboard"] .dashboard-admin-shortcuts > div:last-child { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 8px !important; }
-.main[data-page="dashboard"] .dashboard-admin-shortcuts button { flex-direction: column; justify-content: center !important; text-align: center !important; padding: 12px 6px !important; background: #edf4ff; border: 0; min-height: 104px; font-size: 10px !important; }
+.main[data-page="dashboard"] .dashboard-admin-shortcuts button { flex-direction: column; justify-content: center !important; text-align: center !important; padding: 14px 8px !important; background: #edf4ff; border: 0; min-height: 104px; font-size: 12px !important; font-weight: 600 !important; font-family: 'Inter', 'Plus Jakarta Sans', sans-serif !important; }
 .main[data-page="dashboard"] .dashboard-admin-shortcuts button:nth-child(2) { background: #f4f1ff; }
 .main[data-page="dashboard"] .dashboard-admin-shortcuts button:nth-child(3) { background: #edf8fa; }
 .main[data-page="dashboard"] .dashboard-admin-shortcuts button:nth-child(4) { background: #eff7ff; }
 .main[data-page="dashboard"] .dashboard-admin-shortcuts button > span:first-child { font-size: 24px; }
 
 /* Override the older global typography and metric rules only on dashboards. */
-.main[data-page="dashboard"] :is(h1, h2, h3, h4, .ic-num) { font-family: 'Inter', sans-serif !important; }
+.main[data-page="dashboard"] :is(h1, h2, h3, h4, .ic-num) { font-family: 'Inter', 'Plus Jakarta Sans', sans-serif !important; }
 .main[data-page="dashboard"] .ic-num { font-size: 30px !important; line-height: 1.2 !important; font-weight: 700 !important; }
 .main[data-page="dashboard"] .ic-num.gold { color: #ee8a22 !important; }
 .main[data-page="dashboard"] .ic-num.green { color: #00a17e !important; }
-.main[data-page="dashboard"] .ic-sub { font-size: 12px !important; font-weight: 500 !important; text-transform: none !important; letter-spacing: 0 !important; color: #386899 !important; }
+.main[data-page="dashboard"] .ic-sub { font-size: 13px !important; font-weight: 600 !important; text-transform: none !important; letter-spacing: 0 !important; color: #386899 !important; }
 .main[data-page="dashboard"] .ic-icon { width: 56px !important; height: 56px !important; border-radius: 17px !important; }
 .main[data-page="dashboard"] .stat-filter-card p { white-space: normal !important; overflow: visible !important; }
 .main[data-page="dashboard"] .admin-dashboard-split { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr) !important; gap: 14px !important; }
 .main[data-page="dashboard"] .admin-dashboard-split > div { min-width: 0; gap: 14px !important; }
 .main[data-page="dashboard"] .admin-dashboard-split > div > div { border: 1px solid #d2e3ff !important; border-radius: 15px !important; padding: 18px 16px !important; box-shadow: 0 3px 12px #345c9809 !important; }
-.main[data-page="dashboard"] .admin-dashboard-split h3 { color: #12346e !important; font-size: 14px !important; }
+.main[data-page="dashboard"] .admin-dashboard-split h3 { color: #12346e !important; font-size: 16px !important; font-weight: 700 !important; }
 @media (min-width: 901px) {
   .top-nav .hamburger { position: static; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 10px; background: #e7f0ff; color: #2463cf; box-shadow: none; }
 
@@ -255,7 +262,7 @@ body { background: #f1f7ff; }
 }
 
 /* Compact student workspace and a shared dashboard type scale. */
-.main[data-page="dashboard"] { --dash-title:16px; --dash-body:13px; --dash-meta:12px; --dash-small:11px; }
+.main[data-page="dashboard"] { --dash-title:17px; --dash-body:13.5px; --dash-meta:12.5px; --dash-small:11.5px; }
 .sidebar .logout-btn { font-size:12.5px !important; min-height:42px; padding:10px 12px !important; }
 .main[data-page="dashboard"] :is(.deadlines-title-wrap h3,.news-bulletin-header h3,.student-progress-card-header h3,.section-hdr h2,.dashboard-quick-links h3,.cw-title) { font-size:var(--dash-title) !important; line-height:1.4; }
 .main[data-page="dashboard"] :is(.stat-card-label,.ic-sub,.news-item-title) { font-size:var(--dash-body) !important; line-height:1.5; }
@@ -263,7 +270,7 @@ body { background: #f1f7ff; }
 .main[data-page="dashboard"] :is(.news-tag,.news-tag-new,.news-time,.top-pill-btn) { font-size:var(--dash-small) !important; }
 .main[data-page="dashboard"] :is(.student-hero-text h1,.welcome-text-box h1) { font-size:24px !important; }
 .main[data-page="dashboard"] :is(.student-hero-text h2,.welcome-text-box h2) { font-size:16px !important; }
-.main[data-page="dashboard"] .student-hero-text p { font-size:13px; }
+.main[data-page="dashboard"] .student-hero-text p { font-size:13.5px; }
 .main[data-page="dashboard"] .student-deadlines-table { min-width:640px; }
 .main[data-page="dashboard"] .student-deadlines-table :is(th,td,td span) { font-size:var(--dash-meta) !important; }
 .main[data-page="dashboard"] .student-deadlines-table :is(.type-pill,.status-pill-amber,.type-pill.performance) { font-size:var(--dash-small) !important; }
