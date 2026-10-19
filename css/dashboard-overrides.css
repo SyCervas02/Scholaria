@@ -4054,3 +4054,26 @@ button,
 .take-btn:active {
   transform: translateY(0) !important;
 }
+
+/* Seating capacity & modal number input styling */
+.gen-field input[type="number"],
+#rfCapacity {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  border: 1.5px solid var(--blue-light) !important;
+  border-radius: 10px !important;
+  padding: 10px 13px !important;
+  font-size: 13.5px !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  outline: none !important;
+  background: #f8fbff !important;
+  color: var(--text-primary) !important;
+  transition: border-color 0.2s, background-color 0.2s !important;
+}
+
+.gen-field input[type="number"]:focus,
+#rfCapacity:focus {
+  border-color: var(--blue) !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+}

@@ -977,24 +977,26 @@ function closeSectionModal() {
   document.getElementById('sectionModal').classList.remove('active');
 }
 
+function getAvailableCampusRooms() {
+  if (typeof managedRooms !== 'undefined' && Array.isArray(managedRooms) && managedRooms.length > 0) {
+    return managedRooms;
+  }
+  try {
+    const raw = localStorage.getItem('scholaria_managed_rooms');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
 function renderSectionModalForm(sec) {
   const body = document.getElementById('sectionModalBody');
   const foot = document.getElementById('sectionModalFoot');
-
-  let availableRooms = [];
-  try {
-    if (typeof managedRooms !== 'undefined' && Array.isArray(managedRooms) && managedRooms.length > 0) {
-      availableRooms = managedRooms;
-    } else {
-      const rawR = localStorage.getItem('scholaria_managed_rooms');
-      if (rawR) {
-        const parsedR = JSON.parse(rawR);
-        if (Array.isArray(parsedR)) availableRooms = parsedR;
-      }
-    }
-  } catch (e) {
-    availableRooms = [];
-  }
+  const campusRooms = getAvailableCampusRooms();
+  const currentRoomName = (sec.room || '').trim();
+  const isRoomInList = campusRooms.some(r => r.name.toLowerCase() === currentRoomName.toLowerCase());
 
   body.innerHTML = `
     <div class="gen-field">
@@ -1021,7 +1023,7 @@ function renderSectionModalForm(sec) {
     <div class="gen-row">
       <div class="gen-field">
         <label>Class Adviser</label>
-        <select id="secFormAdviser" class="user-filter-select" style="width:100%;">
+        <select id="secFormAdviser" class="user-filter-select" style="width:100%;" onchange="if(this.value) { const c = document.getElementById('secFormAdviserCustom'); if(c) c.value = ''; }">
           <option value="">Select a Teacher as Adviser (Optional)</option>
           ${registeredUsers.filter(u => u.role === 'teacher').map(t => `<option value="${escHtml(t.name)}" ${sec.adviser === t.name ? 'selected' : ''}>${escHtml(t.name)} (${escHtml(t.strand || t.subjects || 'General')})</option>`).join('')}
         </select>
@@ -1031,12 +1033,17 @@ function renderSectionModalForm(sec) {
       </div>
       <div class="gen-field">
         <label>Room / Location (Optional)</label>
-        <select id="secFormRoomSelect" class="user-filter-select" style="width:100%;" onchange="handleSectionRoomChange(this.value)">
-          <option value="">Select a Campus Room (Optional)</option>
-          ${availableRooms.map(r => `<option value="${escHtml(r.name)}" ${sec.room === r.name ? 'selected' : ''}>${escHtml(r.name)} (${escHtml(r.building || 'Campus')} · ${r.capacity || 40} seats)</option>`).join('')}
+        <select id="secFormRoom" class="user-filter-select" style="width:100%;" onchange="if(this.value) { const c = document.getElementById('secFormRoomCustom'); if(c) c.value = ''; }">
+          <option value="">Select a Room (Optional)</option>
+          ${campusRooms.map(r => {
+            const loc = r.building ? ` (${r.building}${r.floor ? ' · ' + r.floor : ''})` : '';
+            const isSelected = isRoomInList && currentRoomName.toLowerCase() === r.name.toLowerCase();
+            return `<option value="${escHtml(r.name)}" ${isSelected ? 'selected' : ''}>${escHtml(r.name + loc)}</option>`;
+          }).join('')}
+          ${(currentRoomName && !isRoomInList) ? `<option value="${escHtml(currentRoomName)}" selected>${escHtml(currentRoomName)} (Current Location)</option>` : ''}
         </select>
         <div style="margin-top:5px;">
-          <input type="text" id="secFormRoomCustom" placeholder="Or enter specific room / location details…" value="${availableRooms.some(r => r.name === sec.room) ? '' : escHtml(sec.room || '')}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
+          <input type="text" id="secFormRoomCustom" placeholder="Or type unlisted room / location…" value="${(currentRoomName && !isRoomInList) ? escHtml(currentRoomName) : ''}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
         </div>
       </div>
     </div>
@@ -1048,13 +1055,6 @@ function renderSectionModalForm(sec) {
   `;
 }
 
-window.handleSectionRoomChange = function(val) {
-  const custom = document.getElementById('secFormRoomCustom');
-  if (custom && val) {
-    custom.value = '';
-  }
-};
-
 function saveSectionForm() {
   const name = (document.getElementById('secFormName')?.value || '').trim();
   const gradeLevel = document.getElementById('secFormGrade')?.value || 'Grade 11';
@@ -1062,7 +1062,7 @@ function saveSectionForm() {
   const adviserSelect = document.getElementById('secFormAdviser')?.value || '';
   const adviserCustom = (document.getElementById('secFormAdviserCustom')?.value || '').trim();
   const adviser = adviserCustom || adviserSelect;
-  const roomSelect = document.getElementById('secFormRoomSelect')?.value || '';
+  const roomSelect = document.getElementById('secFormRoom')?.value || '';
   const roomCustom = (document.getElementById('secFormRoomCustom')?.value || '').trim();
   const room = roomCustom || roomSelect;
 
