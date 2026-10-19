@@ -401,7 +401,7 @@ function renderRoomCards() {
               <span>${escHtml(room.building || 'Main Campus')} · ${escHtml(room.floor || 'Floor 1')}</span>
             </div>
           </div>
-          <div class="rc-capacity-badge" title="Maximum student capacity">
+          <div class="rc-capacity-badge" style="cursor:pointer;" title="Click to view Seating Arrangement Blueprint" onclick="openRoomSeatingPlanModal('${escHtml(room.id)}')">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
             ${room.capacity || 40} seats
           </div>
@@ -450,7 +450,11 @@ function renderRoomCards() {
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Assign Section
           </button>
-          <div style="display:flex;gap:6px;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button type="button" class="rc-btn-seating" title="View Seating Arrangement Blueprint" onclick="openRoomSeatingPlanModal('${escHtml(room.id)}')">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 18v3M20 18v3M4 11h16M6 18h12M5 11V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5"/></svg>
+              Seating Plan
+            </button>
             <button type="button" class="sec-btn-icon" title="Edit Room" onclick="openEditRoomModal('${escHtml(room.id)}')">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             </button>
@@ -519,7 +523,8 @@ function openCreateRoomModal() {
     building: 'Main Academic Building',
     floor: '1st Floor',
     type: 'Lecture Classroom',
-    capacity: 45
+    capacity: 45,
+    seatingLayout: 'rows'
   });
   modal.classList.add('active');
 }
@@ -542,10 +547,92 @@ function closeRoomModal() {
   currentEditingRoomId = null;
 }
 
+function renderDeskGridHTML(capacity, layout = 'rows') {
+  const cap = Math.min(250, Math.max(1, parseInt(capacity, 10) || 45));
+  let cols = 5;
+  if (layout === 'pairs') cols = 4;
+  else if (layout === 'pods') cols = 4;
+  else if (layout === 'ushape') cols = 6;
+
+  const totalRows = Math.ceil(cap / cols);
+  let html = '';
+  let count = 0;
+
+  for (let r = 0; r < totalRows; r++) {
+    const rowLetter = String.fromCharCode(65 + (r % 26)) + (r >= 26 ? Math.floor(r / 26) : '');
+    html += `<div class="rf-desk-row">`;
+    html += `<span class="rf-row-label">${rowLetter}</span>`;
+
+    for (let c = 1; c <= cols; c++) {
+      if ((layout === 'rows' || layout === 'pairs') && c === 3) {
+        html += `<span class="rf-aisle-gap" title="Walking Aisle"></span>`;
+      }
+
+      count++;
+      if (count <= cap) {
+        const deskId = `${rowLetter}${c}`;
+        html += `<span class="rf-desk-pill" title="Desk ${deskId}">🪑 ${deskId}</span>`;
+      } else {
+        html += `<span class="rf-desk-pill" style="opacity:0;pointer-events:none;"></span>`;
+      }
+    }
+    html += `</div>`;
+  }
+  return html;
+}
+
+function getLayoutDimensionsText(capacity, layout = 'rows') {
+  const cap = Math.min(250, Math.max(1, parseInt(capacity, 10) || 45));
+  let cols = 5;
+  if (layout === 'pairs') cols = 4;
+  else if (layout === 'pods') cols = 4;
+  else if (layout === 'ushape') cols = 6;
+  const rows = Math.ceil(cap / cols);
+  return `${cols} cols × ${rows} rows (${cap} seats)`;
+}
+
+window.handleRoomCapacityLiveChange = function(val) {
+  const cap = Math.min(250, Math.max(1, parseInt(val, 10) || 45));
+  const layout = document.getElementById('rfSeatingLayout')?.value || 'rows';
+  const grid = document.getElementById('rfDeskGrid');
+  if (grid) grid.innerHTML = renderDeskGridHTML(cap, layout);
+
+  const dim = document.getElementById('rfDeskDimensions');
+  if (dim) dim.textContent = getLayoutDimensionsText(cap, layout);
+
+  const summary = document.getElementById('rfSeatingSummary');
+  if (summary) summary.textContent = `${cap} Total Desks`;
+
+  document.querySelectorAll('.rf-preset-chip').forEach(btn => {
+    const match = parseInt(btn.textContent, 10) === cap;
+    btn.classList.toggle('active', match);
+  });
+};
+
+window.handleRoomLayoutLiveChange = function(layout) {
+  const cap = parseInt(document.getElementById('rfCapacity')?.value, 10) || 45;
+  const grid = document.getElementById('rfDeskGrid');
+  if (grid) grid.innerHTML = renderDeskGridHTML(cap, layout);
+
+  const dim = document.getElementById('rfDeskDimensions');
+  if (dim) dim.textContent = getLayoutDimensionsText(cap, layout);
+};
+
+window.applyRoomCapacityPreset = function(num) {
+  const input = document.getElementById('rfCapacity');
+  if (input) {
+    input.value = num;
+    window.handleRoomCapacityLiveChange(num);
+  }
+};
+
 function renderRoomModalForm(r) {
   const body = document.getElementById('roomModalBody');
   const foot = document.getElementById('roomModalFoot');
   if (!body || !foot) return;
+
+  const currentCapacity = parseInt(r.capacity, 10) || 45;
+  const currentLayout = r.seatingLayout || 'rows';
 
   body.innerHTML = `
     <div class="gen-field">
@@ -573,9 +660,57 @@ function renderRoomModalForm(r) {
         </select>
       </div>
       <div class="gen-field">
-        <label>Seating Capacity *</label>
-        <input type="number" id="rfCapacity" placeholder="e.g. 45" value="${r.capacity || 45}" min="1" max="500" data-type="number" maxlength="4" required>
-        <span style="font-size:11px;color:var(--text-muted);">Maximum students (Digits only, max 4 digits)</span>
+        <label>Seating Arrangement Layout</label>
+        <select id="rfSeatingLayout" class="user-filter-select" style="width:100%;" onchange="handleRoomLayoutLiveChange(this.value)">
+          <option value="rows" ${currentLayout === 'rows' ? 'selected' : ''}>Standard Rows (5 Desks per Row)</option>
+          <option value="pairs" ${currentLayout === 'pairs' ? 'selected' : ''}>Paired Desks (2 × 2 with Center Aisle)</option>
+          <option value="pods" ${currentLayout === 'pods' ? 'selected' : ''}>Group Pods (4 Desks per Cluster)</option>
+          <option value="ushape" ${currentLayout === 'ushape' ? 'selected' : ''}>U-Shape / Seminar Style</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- SEATING ARRANGEMENT & CAPACITY CONTAINER -->
+    <div class="rf-seating-container">
+      <div class="rf-seating-head">
+        <div class="rf-seating-title">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 18v3M20 18v3M4 11h16M6 18h12M5 11V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5"/></svg>
+          Seating Capacity & Blueprint
+        </div>
+        <span class="rf-seating-badge" id="rfSeatingSummary">${currentCapacity} Total Desks</span>
+      </div>
+
+      <div class="gen-field" style="margin-bottom:8px;">
+        <label style="font-size:11.5px;color:var(--text-secondary);font-weight:600;margin-bottom:4px;">Maximum Student Capacity *</label>
+        <div class="rf-capacity-input-wrap">
+          <input type="number" id="rfCapacity" placeholder="e.g. 45" value="${currentCapacity}" min="1" max="250" data-type="number" maxlength="4" required oninput="handleRoomCapacityLiveChange(this.value)" style="width:100%;border:1.5px solid var(--blue-light);border-radius:10px;padding:10px 55px 10px 14px;font-size:14px;outline:none;background:#fff;font-weight:600;color:var(--text-primary);">
+          <span class="rf-capacity-unit">seats</span>
+        </div>
+      </div>
+
+      <div class="rf-preset-chips-wrap">
+        <span style="font-size:11px;font-weight:700;color:var(--text-muted);margin-right:2px;">Presets:</span>
+        ${[30, 35, 40, 45, 50, 60].map(cnt => `
+          <button type="button" class="rf-preset-chip ${currentCapacity === cnt ? 'active' : ''}" onclick="applyRoomCapacityPreset(${cnt})">${cnt} seats</button>
+        `).join('')}
+      </div>
+
+      <!-- LIVE BLUEPRINT VISUALIZER -->
+      <div class="rf-blueprint-card">
+        <div class="rf-podium-bar">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span>FRONT / TEACHER'S PODIUM & WHITEBOARD</span>
+        </div>
+        <div id="rfDeskGrid" class="rf-desk-grid">
+          ${renderDeskGridHTML(currentCapacity, currentLayout)}
+        </div>
+        <div class="rf-seating-footer">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="rf-legend-item"><span class="rf-legend-indicator desk"></span> Student Desk</span>
+            <span class="rf-legend-item"><span class="rf-legend-indicator aisle"></span> Center Aisle</span>
+          </div>
+          <span id="rfDeskDimensions" style="font-weight:700;color:var(--blue);">${getLayoutDimensionsText(currentCapacity, currentLayout)}</span>
+        </div>
       </div>
     </div>
   `;
@@ -592,7 +727,8 @@ function saveRoomForm() {
   const floor = (document.getElementById('rfFloor')?.value || '').trim() || '1st Floor';
   const type = document.getElementById('rfType')?.value || 'Lecture Classroom';
   const capacityRaw = document.getElementById('rfCapacity')?.value || '45';
-  const capacity = parseInt(capacityRaw, 10) || 45;
+  const capacity = Math.min(250, Math.max(1, parseInt(capacityRaw, 10) || 45));
+  const seatingLayout = document.getElementById('rfSeatingLayout')?.value || 'rows';
 
   if (!name) {
     showToast('Please enter a Room Name', 'error');
@@ -612,14 +748,14 @@ function saveRoomForm() {
     if (idx !== -1) {
       managedRooms[idx] = {
         ...managedRooms[idx],
-        name, building, floor, type, capacity
+        name, building, floor, type, capacity, seatingLayout
       };
       showToast(`Room "${name}" updated successfully!`, 'success');
     }
   } else {
     managedRooms.push({
       id: 'room-' + Date.now(),
-      name, building, floor, type, capacity,
+      name, building, floor, type, capacity, seatingLayout,
       schedule: []
     });
     showToast(`Room "${name}" created successfully!`, 'success');
@@ -629,6 +765,130 @@ function saveRoomForm() {
   closeRoomModal();
   const wrap = document.getElementById('roomsCardsGridWrap');
   if (wrap) wrap.innerHTML = renderRoomCards();
+}
+
+/* ── FULL SCREEN INTERACTIVE SEATING CHART MODAL ── */
+window.openRoomSeatingPlanModal = function(roomId) {
+  const room = managedRooms.find(r => r.id === roomId);
+  if (!room) return;
+
+  let modal = document.getElementById('seatingPlanModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'seatingPlanModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  const cap = room.capacity || 45;
+  const layout = room.seatingLayout || 'rows';
+  const schedules = room.schedule || [];
+
+  let schedInfo = 'No section currently scheduled';
+  if (schedules.length > 0) {
+    schedInfo = schedules.map(s => `<strong>${escHtml(s.sectionName)}</strong> (${escHtml(s.day || 'MWF')} · ${escHtml(s.startTime)} – ${escHtml(s.endTime)})`).join(', ');
+  }
+
+  modal.innerHTML = `
+    <div class="modal-card" style="max-width:760px;width:95%;">
+      <div class="modal-head" style="display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid #e2e8f0;padding:20px 24px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <h3 style="margin:0;font-size:18px;font-weight:800;color:var(--text-primary);">${escHtml(room.name)} — Seating Arrangement</h3>
+            <span class="rc-badge-type">${escHtml(room.type || 'Lecture')}</span>
+          </div>
+          <span style="font-size:12px;color:var(--text-secondary);margin-top:3px;display:block;">
+            ${escHtml(room.building || 'Main Campus')} · ${escHtml(room.floor || '1st Floor')} · ${cap} Total Student Desks
+          </span>
+        </div>
+        <button class="modal-x" onclick="closeRoomSeatingPlanModal()">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding:22px;overflow-y:auto;max-height:78vh;">
+        <!-- Schedule banner -->
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="font-size:12px;color:#1e40af;">
+            <span style="font-weight:700;">📅 Active Schedule:</span> ${schedInfo}
+          </div>
+          <span style="font-size:11.5px;font-weight:700;color:#1e40af;background:#fff;padding:2px 8px;border-radius:6px;border:1px solid #93c5fd;">
+            ${getLayoutDimensionsText(cap, layout)}
+          </span>
+        </div>
+
+        <!-- Seating Blueprint container -->
+        <div class="seating-chart-container">
+          <div class="rf-podium-bar" style="padding:10px;font-size:11px;margin-bottom:16px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span>FRONT / TEACHER'S DESK & INTERACTIVE WHITEBOARD</span>
+          </div>
+
+          <div class="seating-chart-grid">
+            ${renderFullSeatingChartGridHTML(cap, layout, schedules)}
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:12px;border-top:1px dashed #cbd5e1;font-size:11.5px;color:#64748b;font-weight:600;">
+            <div style="display:flex;align-items:center;gap:14px;">
+              <span class="rf-legend-item"><span class="rf-legend-indicator desk"></span> Student Desk</span>
+              <span class="rf-legend-item"><span class="rf-legend-indicator aisle"></span> Center Walking Aisle</span>
+            </div>
+            <span>Standard Exam & Daily Seating Blueprint</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot" style="display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-top:1px solid #e2e8f0;background:#f8fafc;">
+        <button type="button" class="foot-btn-secondary" onclick="closeRoomSeatingPlanModal()">Close</button>
+        <button type="button" class="gen-btn" onclick="window.print()">${iconDoc()} Print Seating Chart</button>
+      </div>
+    </div>
+  `;
+
+  modal.classList.add('active');
+};
+
+window.closeRoomSeatingPlanModal = function() {
+  const modal = document.getElementById('seatingPlanModal');
+  if (modal) modal.classList.remove('active');
+};
+
+function renderFullSeatingChartGridHTML(cap, layout, schedules) {
+  let cols = 5;
+  if (layout === 'pairs') cols = 4;
+  else if (layout === 'pods') cols = 4;
+  else if (layout === 'ushape') cols = 6;
+
+  const totalRows = Math.ceil(cap / cols);
+  let html = '';
+  let count = 0;
+
+  for (let r = 0; r < totalRows; r++) {
+    const rowLetter = String.fromCharCode(65 + (r % 26)) + (r >= 26 ? Math.floor(r / 26) : '');
+    html += `<div style="display:flex;align-items:center;justify-content:center;gap:8px;">`;
+    html += `<span style="font-size:11px;font-weight:800;color:#94a3b8;width:18px;text-align:right;">${rowLetter}</span>`;
+
+    for (let c = 1; c <= cols; c++) {
+      if ((layout === 'rows' || layout === 'pairs') && c === 3) {
+        html += `<span style="width:20px;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:10px;font-weight:700;">│</span>`;
+      }
+
+      count++;
+      if (count <= cap) {
+        const deskCode = `${rowLetter}${c}`;
+        html += `
+          <div class="seating-chart-desk" title="Desk ${deskCode}">
+            <span style="font-size:8.5px;color:#64748b;font-weight:600;">Desk</span>
+            <span style="font-size:11px;font-weight:800;color:#1e40af;">${deskCode}</span>
+          </div>
+        `;
+      } else {
+        html += `<div class="seating-chart-desk" style="opacity:0;pointer-events:none;"></div>`;
+      }
+    }
+    html += `</div>`;
+  }
+  return html;
 }
 
 function deleteRoomPrompt(roomId) {
