@@ -1125,9 +1125,26 @@ function closeSectionModal() {
   document.getElementById('sectionModal').classList.remove('active');
 }
 
+function getAvailableCampusRooms() {
+  if (typeof managedRooms !== 'undefined' && Array.isArray(managedRooms) && managedRooms.length > 0) {
+    return managedRooms;
+  }
+  try {
+    const raw = localStorage.getItem('scholaria_managed_rooms');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
 function renderSectionModalForm(sec) {
   const body = document.getElementById('sectionModalBody');
   const foot = document.getElementById('sectionModalFoot');
+  const campusRooms = getAvailableCampusRooms();
+  const currentRoomName = (sec.room || '').trim();
+  const isRoomInList = campusRooms.some(r => r.name.toLowerCase() === currentRoomName.toLowerCase());
 
   body.innerHTML = `
     <div class="gen-field">
@@ -1154,7 +1171,7 @@ function renderSectionModalForm(sec) {
     <div class="gen-row">
       <div class="gen-field">
         <label>Class Adviser</label>
-        <select id="secFormAdviser" class="user-filter-select" style="width:100%;">
+        <select id="secFormAdviser" class="user-filter-select" style="width:100%;" onchange="if(this.value) { const c = document.getElementById('secFormAdviserCustom'); if(c) c.value = ''; }">
           <option value="">Select a Teacher as Adviser (Optional)</option>
           ${registeredUsers.filter(u => u.role === 'teacher').map(t => `<option value="${escHtml(t.name)}" ${sec.adviser === t.name ? 'selected' : ''}>${escHtml(t.name)} (${escHtml(t.strand || t.subjects || 'General')})</option>`).join('')}
         </select>
@@ -1164,7 +1181,18 @@ function renderSectionModalForm(sec) {
       </div>
       <div class="gen-field">
         <label>Room / Location (Optional)</label>
-        <input type="text" id="secFormRoom" placeholder="e.g. Room 304, Science Wing" value="${escHtml(sec.room || '')}">
+        <select id="secFormRoom" class="user-filter-select" style="width:100%;" onchange="if(this.value) { const c = document.getElementById('secFormRoomCustom'); if(c) c.value = ''; }">
+          <option value="">Select a Room (Optional)</option>
+          ${campusRooms.map(r => {
+            const loc = r.building ? ` (${r.building}${r.floor ? ' · ' + r.floor : ''})` : '';
+            const isSelected = isRoomInList && currentRoomName.toLowerCase() === r.name.toLowerCase();
+            return `<option value="${escHtml(r.name)}" ${isSelected ? 'selected' : ''}>${escHtml(r.name + loc)}</option>`;
+          }).join('')}
+          ${(currentRoomName && !isRoomInList) ? `<option value="${escHtml(currentRoomName)}" selected>${escHtml(currentRoomName)} (Current Location)</option>` : ''}
+        </select>
+        <div style="margin-top:5px;">
+          <input type="text" id="secFormRoomCustom" placeholder="Or type unlisted room / location…" value="${(currentRoomName && !isRoomInList) ? escHtml(currentRoomName) : ''}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
+        </div>
       </div>
     </div>
   `;
@@ -1182,7 +1210,9 @@ function saveSectionForm() {
   const adviserSelect = document.getElementById('secFormAdviser')?.value || '';
   const adviserCustom = (document.getElementById('secFormAdviserCustom')?.value || '').trim();
   const adviser = adviserCustom || adviserSelect;
-  const room = (document.getElementById('secFormRoom')?.value || '').trim();
+  const roomSelect = document.getElementById('secFormRoom')?.value || '';
+  const roomCustom = (document.getElementById('secFormRoomCustom')?.value || '').trim();
+  const room = roomCustom || roomSelect;
 
   if (!name) {
     showToast('Please enter a Section Name', 'error');

@@ -574,7 +574,7 @@ function renderRoomModalForm(r) {
       </div>
       <div class="gen-field">
         <label>Seating Capacity *</label>
-        <input type="number" id="rfCapacity" placeholder="e.g. 45" value="${r.capacity || 45}" min="1" max="500" data-type="number" maxlength="4" required>
+        <input type="number" id="rfCapacity" placeholder="e.g. 45" value="${r.capacity || 45}" min="1" max="500" data-type="number" maxlength="4" style="width:100%;box-sizing:border-box;" required>
         <span style="font-size:11px;color:var(--text-muted);">Maximum students (Digits only, max 4 digits)</span>
       </div>
     </div>

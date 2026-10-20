@@ -1012,10 +1012,10 @@ body {
 .gen-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .gen-field { display: flex; flex-direction: column; gap: 6px; }
 .gen-field label { font-size: 11px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: 0.7px; }
-.gen-field input[type=text], .gen-field textarea {
+.gen-field input[type=text], .gen-field input[type=number], .gen-field textarea {
   border: 1.5px solid rgba(37,99,235,0.12); border-radius: 10px; padding: 10px 13px;
   font-size: 13.5px; font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-primary);
-  outline: none; background: #f8fbff; transition: 0.2s;
+  outline: none; background: #f8fbff; transition: 0.2s; box-sizing: border-box; width: 100%;
 }
 .gen-field input:focus, .gen-field textarea:focus { border-color: var(--blue); background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
 
