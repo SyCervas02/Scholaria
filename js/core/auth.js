@@ -5,14 +5,16 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { storage: window.sessionStorage } });
 
 const API_BASE = (function() {
-  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    const proto = window.location.protocol;
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    if (window.location.protocol === 'file:') {
+      return 'http://localhost:3001';
+    }
     const host = window.location.hostname;
     const port = window.location.port;
-    if (port === '3001') {
-      return window.location.origin;
+    if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '3001') {
+      return `${window.location.protocol}//${host}:3001`;
     }
-    return `${proto}//${host}:3001`;
+    return window.location.origin;
   }
   return 'http://localhost:3001';
 })();

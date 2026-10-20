@@ -52,11 +52,14 @@ app.use(helmet({
 }));
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || origin === 'null' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    if (!origin || origin === 'null' || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
-    if (process.env.ALLOWED_ORIGIN && origin === process.env.ALLOWED_ORIGIN) {
-      return callback(null, true);
+    if (process.env.ALLOWED_ORIGIN) {
+      const allowed = process.env.ALLOWED_ORIGIN.split(',').map(s => s.trim());
+      if (allowed.includes(origin) || allowed.includes('*')) {
+        return callback(null, true);
+      }
     }
     return callback(null, true);
   },
@@ -65,9 +68,29 @@ app.use(cors({
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
+// Health check endpoint for deployment (Railway / PaaS)
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Redirect root to login page
 app.get('/', (req, res) => {
   res.redirect('/login.html');
+});
+
+// Protect sensitive files from static exposure
+app.use((req, res, next) => {
+  const blockedPatterns = [
+    /^\/\.env/i,
+    /^\/server\.js$/i,
+    /^\/package(-lock)?\.json$/i,
+    /\.sql$/i,
+    /^\/data(\/|$)/i
+  ];
+  if (blockedPatterns.some(p => p.test(req.path))) {
+    return res.status(403).send('Forbidden');
+  }
+  next();
 });
 
 app.use(express.static(__dirname));
