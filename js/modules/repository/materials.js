@@ -237,10 +237,14 @@ function cleanupLegacyDummyStorage() {
           const t = String(m.title || m.fileName || '').trim().toLowerCase();
           if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
           return true;
-        }).map(m => ({
-          ...m,
-          status: 'approved' // Auto-approve teacher uploads so they reflect immediately for students
-        }));
+        }).map(m => {
+          const isUploadedByAdmin = (m.uploader_role === 'Admin' || m.uploaded_by_name === 'Administrator' || m.approved_by);
+          const finalStatus = isUploadedByAdmin ? (m.status || 'approved') : (m.approved_by ? 'approved' : (m.status === 'approved' && !m.approved_by ? 'pending' : (m.status || 'pending')));
+          return {
+            ...m,
+            status: finalStatus
+          };
+        });
         localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(cleaned));
       }
     }
@@ -275,10 +279,13 @@ function getCustomMaterialsFromStorage() {
       const t = String(m.title || m.fileName || '').trim().toLowerCase();
       if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
       return true;
-    }).map(m => ({
-      ...m,
-      status: m.status || 'approved'
-    }));
+    }).map(m => {
+      const isUploadedByAdmin = (m.uploader_role === 'Admin' || m.uploaded_by_name === 'Administrator' || m.approved_by);
+      return {
+        ...m,
+        status: m.status || (isUploadedByAdmin ? 'approved' : 'pending')
+      };
+    });
   } catch (e) {
     return [];
   }
@@ -856,8 +863,8 @@ async function loadMaterialsFromDB() {
   if (ROLE === 'student') {
     const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
     materialsData = filteredMerged.filter(m => {
-      const isTeacher = (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
-      if (m.status && m.status !== 'approved' && !isTeacher) return false;
+      // Students MUST NOT see pending materials; only approved items are accessible!
+      if (m.status && m.status !== 'approved') return false;
       const mStrand = (m.strand || '').toUpperCase();
       if (mStrand && !mStrand.includes(studentStrand) && mStrand !== 'CORE' && mStrand !== 'GENERAL' && mStrand !== 'ALL' && !mStrand.includes('ALL') && !mStrand.includes('BOTH')) return false;
       return true;
@@ -900,9 +907,22 @@ function updateApprovalBadge() {
 
 function renderMaterialsList(role) {
   const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
+  const teacherStrands = (role === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
+    ? CURRENT_PROFILE.strand.split(/[,&]+/).map(str => str.trim().toUpperCase()).filter(Boolean)
+    : [];
+
   let enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
     ? (role === 'teacher'
-        ? (materialsStrandFilter ? COURSES_DATABASE.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase()) : COURSES_DATABASE.slice())
+        ? COURSES_DATABASE.filter(c => {
+            const courseStrand = (c.strand || 'STEM').toUpperCase();
+            if (materialsStrandFilter) {
+              return courseStrand === materialsStrandFilter.toUpperCase();
+            }
+            if (teacherStrands.length > 0) {
+              return teacherStrands.includes(courseStrand);
+            }
+            return true;
+          })
         : COURSES_DATABASE.filter(c => {
             // STRICT: When student is enrolled in STEM, only STEM subjects are shown!
             const courseStrand = (c.strand || 'STEM').toUpperCase();
@@ -1057,21 +1077,21 @@ function renderMaterialsList(role) {
                           <div class="sw-lesson-card ${isExpanded ? 'expanded' : ''}" style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,0.04);transition:all 0.2s ease;">
                             <div class="sw-lesson-header" onclick="toggleLessonAccordion('${lesson.id}')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;user-select:none;gap:14px;background:#ffffff;">
                               <div style="display:flex;align-items:center;gap:14px;min-width:0;flex:1;">
-                                <img src="${lesson.cover}" alt="${escHtml(lesson.title)}" style="width:96px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,0.06);flex-shrink:0;">
-                                <div style="min-width:0;">
+                                <img src="${lesson.cover}" alt="${escHtml(lesson.title)}" class="sw-lesson-cover-img" style="width:96px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,0.06);flex-shrink:0;">
+                                <div style="min-width:0;flex:1;">
                                   <h4 style="margin:0 0 6px 0;font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(lesson.title)}</h4>
-                                  <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;">
+                                  <div class="sw-lesson-subtitle" style="display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;flex-wrap:wrap;">
                                     ${(() => {
                                       const compCount = items.filter(it => (it.status || '').toLowerCase() === 'completed').length;
                                       const compPct = items.length ? Math.round((compCount / items.length) * 100) : 0;
                                       return items.length ? `
-                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${compPct === 100 ? '#dcfce7;color:#15803d' : '#e0f2fe;color:#0369a1'};border:1px solid #e2e8f0;">${compPct}% Completed</span>
+                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${compPct === 100 ? '#dcfce7;color:#15803d' : '#e0f2fe;color:#0369a1'};border:1px solid #e2e8f0;white-space:nowrap;flex-shrink:0;">${compPct}% Completed</span>
                                         <span>·</span>
-                                        <span>${items.length} handout${items.length === 1 ? '' : 's'} available</span>
+                                        <span style="white-space:nowrap;">${items.length} handout${items.length === 1 ? '' : 's'} available</span>
                                       ` : `
-                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;">0% Empty</span>
+                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;white-space:nowrap;flex-shrink:0;">0% Empty</span>
                                         <span>·</span>
-                                        <span>No files posted yet</span>
+                                        <span style="white-space:nowrap;">No files posted yet</span>
                                       `;
                                     })()}
                                   </div>
@@ -1640,6 +1660,10 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
   const classCards = [];
   let handledSections = ['Section A', 'Section B'];
 
+  const teacherStrands = (currentRole === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
+    ? CURRENT_PROFILE.strand.split(/[,&]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+    : [];
+
   if (currentRole === 'admin') {
     if (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) {
       const nonArch = managedSections.filter(s => !s.isArchived).map(s => s.name);
@@ -1650,6 +1674,18 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
   } else if (CURRENT_PROFILE && CURRENT_PROFILE.section) {
     const raw = CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean);
     if (raw.length > 0) handledSections = raw;
+  }
+
+  // Teacher should strictly handle sections matching their assigned strand(s)
+  if (currentRole === 'teacher' && teacherStrands.length > 0) {
+    handledSections = handledSections.filter(sec => {
+      const sStrand = getSectionStrand(sec);
+      return teacherStrands.includes(sStrand);
+    });
+    if (handledSections.length === 0) {
+      if (teacherStrands.includes('STEM')) handledSections.push('Section A');
+      else if (teacherStrands.includes('HUMSS')) handledSections.push('Section B');
+    }
   }
 
   handledSections.forEach(sec => {
@@ -3968,12 +4004,8 @@ const materialUploadState = {
 
 function openMaterialModal(courseId, targetSection, targetLessonId) {
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+    ? CURRENT_PROFILE.strand.split(/[,&]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
     : [];
-  if (ROLE === 'teacher') {
-    if (!teacherStrands.includes('STEM')) teacherStrands.push('STEM');
-    if (!teacherStrands.includes('HUMSS')) teacherStrands.push('HUMSS');
-  }
 
   const teacherGrades = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.grade_level)
     ? CURRENT_PROFILE.grade_level.split(',').map(s => s.trim()).filter(Boolean)
@@ -3996,12 +4028,14 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
 
   if (targetCourse) {
     initialSubject = targetCourse.title;
-    initialStrand = (ROLE === 'teacher' && (targetCourse.track === 'Core' || targetCourse.track === 'Applied'))
-      ? 'STEM, HUMSS'
-      : (targetCourse.strand || (ROLE === 'teacher' ? 'STEM, HUMSS' : 'All Strands'));
+    initialStrand = (ROLE === 'teacher' && teacherStrands.length > 0)
+      ? (teacherStrands.includes((targetCourse.strand || '').toUpperCase()) ? (targetCourse.strand || teacherStrands[0]) : teacherStrands[0])
+      : (targetCourse.strand || 'All Strands');
     initialGrade = targetCourse.gradeLevel || initialGrade;
   } else {
-    initialStrand = (ROLE === 'teacher') ? 'STEM, HUMSS' : 'All Strands';
+    initialStrand = (ROLE === 'teacher' && teacherStrands.length > 0)
+      ? (teacherStrands.length === 1 ? teacherStrands[0] : teacherStrands.join(', '))
+      : 'All Strands';
   }
 
   const initialSectionsSet = chosenSection
@@ -4176,12 +4210,8 @@ function renderMaterialModal() {
 
   const subjectOptions = getFilteredSubjects(s.strand, s.grade_level);
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(',').map(str => str.trim().toUpperCase()).filter(Boolean)
+    ? CURRENT_PROFILE.strand.split(/[,&]+/).map(str => str.trim().toUpperCase()).filter(Boolean)
     : [];
-  if (ROLE === 'teacher') {
-    if (!teacherStrands.includes('STEM')) teacherStrands.push('STEM');
-    if (!teacherStrands.includes('HUMSS')) teacherStrands.push('HUMSS');
-  }
 
   const teacherGrades = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.grade_level)
     ? CURRENT_PROFILE.grade_level.split(',').map(g => g.trim()).filter(Boolean)
@@ -4214,10 +4244,8 @@ function renderMaterialModal() {
       <div class="gen-field"><label>Strand ${ROLE === 'teacher' ? '<span style="font-size:11px;color:#0284c7;font-weight:600;">(Handled Strands)</span>' : ''}</label>
         <select onchange="muUpdateStrand(this.value)">
           ${ROLE === 'teacher' ? `
-            <option value="STEM, HUMSS" ${(s.strand === 'STEM, HUMSS' || s.strand === 'Both STEM & HUMSS' || (s.strand && s.strand.includes('STEM') && s.strand.includes('HUMSS'))) ? 'selected' : ''}>Both STEM &amp; HUMSS (All Handled)</option>
-            <option value="STEM" ${s.strand === 'STEM' ? 'selected' : ''}>STEM</option>
-            <option value="HUMSS" ${s.strand === 'HUMSS' ? 'selected' : ''}>HUMSS</option>
-            ${availableStrands.filter(st => st !== 'STEM' && st !== 'HUMSS').map(st => `<option value="${st}" ${s.strand === st ? 'selected' : ''}>${st}</option>`).join('')}
+            ${availableStrands.length > 1 ? `<option value="${availableStrands.join(', ')}" ${(s.strand && s.strand.includes(',')) ? 'selected' : ''}>All My Handled Strands (${availableStrands.join(', ')})</option>` : ''}
+            ${availableStrands.map(st => `<option value="${st}" ${s.strand === st ? 'selected' : ''}>${st}</option>`).join('')}
           ` : `
             <option value="All Strands" ${(!s.strand || s.strand === 'All Strands' || s.strand === 'all') ? 'selected' : ''}>All Strands (General / Core)</option>
             ${availableStrands.map(str => `<option value="${str}" ${s.strand === str ? 'selected' : ''}>${str}</option>`).join('')}
@@ -4275,15 +4303,25 @@ function renderMaterialModal() {
         gradeLevel: s.grade_level || 'Grade 11'
       } : null);
       const availableLessons = courseObj ? getSubjectLessons(courseObj) : [];
+
+      if (ROLE !== 'admin') {
+        // Teacher uploads MUST strictly go to Teacher Uploads (requires admin approval)
+        return `
+          <div class="gen-field" style="margin-top:4px;">
+            <label>Target Placement <span style="font-size:11px;color:#0284c7;font-weight:600;">(Teacher Handout &middot; Requires Admin Approval)</span></label>
+            <select disabled style="opacity:0.9;cursor:not-allowed;background:#f8fafc;font-weight:600;">
+              <option value="" selected>📁 Teacher Uploads (Supplementary Handouts)</option>
+            </select>
+            <span style="font-size:11.5px;color:var(--text-muted);margin-top:4px;display:block;">All teacher handouts are submitted to the Teacher Uploads tab and require Admin approval before students can access them.</span>
+          </div>
+        `;
+      }
+
       return `
         <div class="gen-field" style="margin-top:4px;">
-          <label>Target Lesson / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${ROLE === 'admin' ? '(Admin curriculum handouts appear inside the module box under Modules & Handouts)' : '(Select a specific lesson or general supplementary)'}</span></label>
+          <label>Target Lesson / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(Admin curriculum handouts appear inside the module box under Modules & Handouts)</span></label>
           <select onchange="muUpdateField('lesson_id', this.value)">
-            ${ROLE === 'admin' ? `
-              <option value="" ${!s.lesson_id ? 'selected' : ''}>📖 Auto-detect from file (e.g. 01_Handout → Lesson 01)</option>
-            ` : `
-              <option value="" ${!s.lesson_id ? 'selected' : ''}>📁 General Supplementary (Appears in Teacher Uploads Tab)</option>
-            `}
+            <option value="" ${!s.lesson_id ? 'selected' : ''}>📖 Auto-detect from file (e.g. 01_Handout → Lesson 01)</option>
             ${availableLessons.map(l => `
               <option value="${escHtml(l.id || l.num)}" ${s.lesson_id === (l.id || l.num) ? 'selected' : ''}>
                 📖 ${escHtml(l.title)}
@@ -4389,7 +4427,8 @@ async function submitMaterialUpload() {
   // Persist each file in scholaria_custom_materials_v1 in localStorage so materials are NEVER lost
   const uploaderName = CURRENT_PROFILE?.full_name || (ROLE === 'admin' ? 'Administrator' : 'Teacher');
   const uploaderRole = ROLE === 'admin' ? 'Admin' : 'Teacher';
-  const targetStatus = 'approved'; // Instantly approved so uploads reflect immediately for students
+  // Teacher uploads require admin approval; only admin uploads are automatically approved
+  const targetStatus = (ROLE === 'admin') ? 'approved' : 'pending';
 
   // Determine course lessons for auto-assignment if needed
   let courseForLessons = null;
@@ -4455,8 +4494,8 @@ async function submitMaterialUpload() {
       uploaded_by_name: uploaderName,
       uploader_role: uploaderRole,
       uploaded_by: CURRENT_PROFILE?.id || 'local_user',
-      approved_by: CURRENT_PROFILE?.id || 'admin',
-      approved_by_name: ROLE === 'admin' ? uploaderName : 'System Administrator',
+      approved_by: ROLE === 'admin' ? (CURRENT_PROFILE?.id || 'admin') : null,
+      approved_by_name: ROLE === 'admin' ? uploaderName : null,
       is_curriculum: ROLE === 'admin',
       file_type: f.type || 'application/pdf',
       type: typeLabel,
@@ -4482,12 +4521,16 @@ async function submitMaterialUpload() {
   });
 
   const uploadCount = s.files.length;
-  showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
+  if (ROLE === 'admin') {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
+  } else {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts submitted for admin approval!` : 'Handout submitted for admin approval!', 'success');
+  }
   if (ROLE !== 'admin' && typeof addNotification === 'function') {
     addNotification({
       targetRole: 'admin',
-      title: 'New Material Published',
-      message: `Teacher ${uploaderName} uploaded ${uploadCount > 1 ? `${uploadCount} handouts for "${s.subject}"` : `"${s.title.trim()}"`}.`,
+      title: 'Material Pending Approval',
+      message: `Teacher ${uploaderName} submitted ${uploadCount > 1 ? `${uploadCount} handouts for "${s.subject}"` : `"${s.title.trim()}"`} for content approval.`,
       type: 'info'
     });
   }

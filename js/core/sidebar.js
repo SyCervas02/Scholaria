@@ -69,7 +69,13 @@ function initDashboardShell() {
     sidebarMenu.appendChild(a);
   });
 
-  renderPage('dashboard');
+  const urlParams = (typeof window !== 'undefined' && window.location && window.location.search) ? new URLSearchParams(window.location.search) : null;
+  const requestedPage = urlParams ? urlParams.get('page') : null;
+  const initialPage = (requestedPage && typeof getPageContent === 'function' && getPageContent(ROLE, requestedPage))
+    ? requestedPage
+    : 'dashboard';
+
+  renderPage(initialPage);
   refreshNotificationsUI();
   if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
   if (typeof showNewsAlertIfNeeded === 'function') showNewsAlertIfNeeded();

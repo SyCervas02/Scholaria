@@ -428,7 +428,11 @@ function closeQuizModal(redirect = true) {
     modal.style.display = 'none';
   }
   if (redirect && (document.getElementById('quizMakerContainer') || window.location.pathname.endsWith('quiz-maker.html') || window.location.href.includes('quiz-maker.html'))) {
-    window.location.href = 'dashboard.html';
+    window.location.href = 'dashboard.html?page=quiz';
+    return;
+  }
+  if (typeof renderPage === 'function' && typeof currentPage !== 'undefined' && currentPage !== 'quiz') {
+    renderPage('quiz');
   }
 }
 
@@ -600,7 +604,18 @@ function distributeCountToFormats(total) {
 }
 
 function getAvailableSubjectsForQuizGen() {
-  const selectedStrands = Array.from(quizGen.strands);
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedStrands = isTeacher ? getTeacherAllowedStrands() : [];
+
+  let selectedStrands = Array.from(quizGen.strands);
+  if (isTeacher && allowedStrands.length > 0) {
+    if (selectedStrands.length === 0) {
+      selectedStrands = allowedStrands;
+    } else {
+      selectedStrands = selectedStrands.filter(st => allowedStrands.includes(st));
+    }
+  }
+
   const subjectsSet = new Set();
 
   // If teacher has assigned subjects in their profile, include them
@@ -608,10 +623,15 @@ function getAvailableSubjectsForQuizGen() {
     CURRENT_PROFILE.subjects.split(',').map(s => s.trim()).filter(Boolean).forEach(sub => subjectsSet.add(sub));
   }
 
-  // If COURSES_DATABASE exists, pull from courses database
+  // If COURSES_DATABASE exists, pull from courses database matching the selected/allowed strands
   if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
     COURSES_DATABASE.forEach(c => {
-      if (selectedStrands.length === 0 || selectedStrands.includes(c.strand) || c.track === 'Core' || c.track === 'Applied') {
+      const cStrand = (c.strand || '').toUpperCase();
+      if (selectedStrands.length > 0) {
+        if (selectedStrands.map(s => s.toUpperCase()).includes(cStrand)) {
+          if (c.title) subjectsSet.add(c.title);
+        }
+      } else if (!isTeacher) {
         if (c.title) subjectsSet.add(c.title);
       }
     });
@@ -619,7 +639,13 @@ function getAvailableSubjectsForQuizGen() {
 
   // Include mapped subjects by strand
   if (selectedStrands.length === 0) {
-    Object.values(SUBJECTS_BY_STRAND).forEach(list => list.forEach(s => subjectsSet.add(s)));
+    if (!isTeacher) {
+      Object.values(SUBJECTS_BY_STRAND).forEach(list => list.forEach(s => subjectsSet.add(s)));
+    } else if (allowedStrands.length > 0) {
+      allowedStrands.forEach(st => {
+        (SUBJECTS_BY_STRAND[st] || []).forEach(s => subjectsSet.add(s));
+      });
+    }
   } else {
     selectedStrands.forEach(st => {
       (SUBJECTS_BY_STRAND[st] || []).forEach(s => subjectsSet.add(s));
@@ -713,8 +739,9 @@ function handleFileInput(input) {
 }
 
 async function extractAllFilesText() {
+  quizGen.fileText = '';
+  quizGen.questions = [];
   if (!quizGen.files || quizGen.files.length === 0) {
-    quizGen.fileText = '';
     quizGen.isExtracting = false;
     renderQuizModal();
     return;
@@ -778,7 +805,23 @@ function extractSingleFileText(file, ext, maxChars = 20000) {
             for (let i = 1; i <= maxPages; i++) {
               const page = await pdf.getPage(i);
               const content = await page.getTextContent();
-              const pageStr = content.items.map(it => it.str).join(' ');
+              let pageStr = '';
+              let lastY = null;
+              for (const item of (content.items || [])) {
+                if (!item || typeof item.str !== 'string') continue;
+                const curY = Array.isArray(item.transform) ? item.transform[5] : null;
+                if (lastY !== null && curY !== null && Math.abs(curY - lastY) > 5) {
+                  pageStr += '\n';
+                } else if (pageStr.length > 0 && !pageStr.endsWith(' ') && !pageStr.endsWith('\n')) {
+                  pageStr += ' ';
+                }
+                pageStr += item.str;
+                if (item.hasEOL) {
+                  pageStr += '\n';
+                }
+                lastY = curY;
+              }
+              pageStr = pageStr.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
               text += `[Document: ${file.name} | Page: ${i}]\n${pageStr}\n\n`;
               if (text.length > maxChars) break;
             }
@@ -850,9 +893,13 @@ function extractSingleFileText(file, ext, maxChars = 20000) {
           const dataUrl = reader.result;
           let extractedText = '';
 
-          // 1. Try Gemini Vision OCR via server
+          // 1. Try Gemini Vision OCR via Scholaria server
+          const serverBase = (typeof API_BASE !== 'undefined' && API_BASE) 
+            ? API_BASE 
+            : (window.location.origin.includes(':5500') ? 'http://localhost:3001' : window.location.origin);
+
           try {
-            const res = await fetch('/api/quiz/extract-image', {
+            const res = await fetch(`${serverBase}/api/quiz/extract-image`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -871,12 +918,24 @@ function extractSingleFileText(file, ext, maxChars = 20000) {
             console.warn('[ImageExtract] Server vision failed/skipped:', netErr);
           }
 
-          // 2. Client-side Tesseract.js OCR fallback
+          // 2. Client-side Tesseract.js OCR fallback with strict garbage-line filter
           if (!extractedText && typeof Tesseract !== 'undefined') {
             try {
               const ocrRes = await Tesseract.recognize(dataUrl, 'eng');
               if (ocrRes && ocrRes.data && ocrRes.data.text) {
-                extractedText = ocrRes.data.text.trim();
+                const rawLines = ocrRes.data.text.split('\n');
+                const cleanLines = rawLines.map(l => l.trim()).filter(l => {
+                  if (l.length < 4) return false;
+                  // Reject lines composed mostly of symbol noise, broken brackets, or high non-alpha ratio
+                  const symbolCount = (l.match(/[»«\\|/\[\]{}~@#$%^&*_=<>©®\(\),;]/g) || []).length;
+                  if (symbolCount > 1 || (symbolCount / l.length) > 0.08) return false;
+                  const alphaCount = (l.match(/[a-zA-Z]/g) || []).length;
+                  if ((alphaCount / l.length) < 0.7) return false;
+                  if (/\b\d+\b/.test(l)) return false;
+                  if (/encyclop[æe]dia britannica|all rights reserved|getty images|shutterstock/i.test(l)) return false;
+                  return true;
+                });
+                extractedText = cleanLines.join('\n').trim();
               }
             } catch (tessErr) {
               console.warn('[ImageExtract] Tesseract fallback failed:', tessErr);
@@ -905,6 +964,8 @@ function removeFile(fileName) {
   quizGen.files = (quizGen.files || []).filter(f => f.name !== fileName);
   quizGen.file = quizGen.files[0] || null;
   quizGen.totalSizeBytes = (quizGen.files || []).reduce((sum, f) => sum + (f.size || 0), 0);
+  quizGen.fileText = '';
+  quizGen.questions = [];
   extractAllFilesText();
 }
 
@@ -1314,6 +1375,18 @@ function applyGeneratedQuestions(list, isDemo) {
     obj.source_page = cleanPage;
     obj.sourceMaterial = sourceFile;
     obj.source_material = sourceFile;
+
+    // Strip accidental "According to <file>" leaks from question text while preserving citation metadata
+    if (typeof obj.question === 'string') {
+      let qText = obj.question.trim();
+      qText = qText.replace(/^(?:according\s+to|in|based\s+on|as\s+stated\s+in|from)\s+["']?[^"'\n,:–-]+\.(?:pdf|docx?|txt|xlsx?)["']?[\s,:–-]+/i, '');
+      qText = qText.replace(/^(?:according\s+to|in|based\s+on|as\s+stated\s+in|from)\s+(?:the\s+)?(?:handout|material|document|module|file|reading)[\s,:–-]+/i, '');
+      qText = qText.trim();
+      if (qText.length > 0) {
+        qText = qText.charAt(0).toUpperCase() + qText.slice(1);
+      }
+      obj.question = qText;
+    }
 
     if (obj.answer && typeof obj.answer === 'string') {
       obj.answer = cleanQuizTerm(obj.answer);
@@ -2045,7 +2118,7 @@ async function saveQuiz() {
 
     if (isStandalone) {
       setTimeout(() => {
-        window.location.href = 'dashboard.html';
+        window.location.href = 'dashboard.html?page=quiz';
       }, 1200);
     }
   } catch (err) {

@@ -15,6 +15,7 @@ const API_BASE = (function() {
       }
       return 'http://localhost:3001';
     })();
+window.API_BASE = API_BASE;
 let ROLE = null;
 let CURRENT_PROFILE = null;
 

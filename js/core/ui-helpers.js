@@ -168,6 +168,7 @@ function getSafeMaxInputLimit(el) {
 function handleUniversalKeydown(e) {
   const el = e.target;
   if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return;
+  if (el.id === 'cwInput' || (typeof el.closest === 'function' && el.closest('.cw-input-area'))) return;
   if (el.readOnly || el.disabled || el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button' || el.type === 'submit') return;
 
   const isNav = e.ctrlKey || e.altKey || e.metaKey || ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End', 'Escape'].includes(e.key);
@@ -204,6 +205,7 @@ function handleUniversalKeydown(e) {
 function handleUniversalSanitize(e) {
   const el = e.target;
   if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return;
+  if (el.id === 'cwInput' || (typeof el.closest === 'function' && el.closest('.cw-input-area'))) return;
   if (el.readOnly || el.disabled || el.type === 'checkbox' || el.type === 'radio' || el.type === 'file') return;
 
   const max = getSafeMaxInputLimit(el);
