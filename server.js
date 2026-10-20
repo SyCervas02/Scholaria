@@ -12,6 +12,9 @@ const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
+
+// Trust reverse proxy (Railway, Render, Fly.io, etc.)
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // --- Account audit trail store ---
@@ -52,14 +55,11 @@ app.use(helmet({
 }));
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || origin === 'null' || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    if (!origin || origin === 'null' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
-    if (process.env.ALLOWED_ORIGIN) {
-      const allowed = process.env.ALLOWED_ORIGIN.split(',').map(s => s.trim());
-      if (allowed.includes(origin) || allowed.includes('*')) {
-        return callback(null, true);
-      }
+    if (process.env.ALLOWED_ORIGIN && origin === process.env.ALLOWED_ORIGIN) {
+      return callback(null, true);
     }
     return callback(null, true);
   },
@@ -68,31 +68,17 @@ app.use(cors({
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-// Health check endpoint for deployment (Railway / PaaS)
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
 // Redirect root to login page
 app.get('/', (req, res) => {
   res.redirect('/login.html');
 });
 
-// Protect sensitive files from static exposure
-app.use((req, res, next) => {
-  const blockedPatterns = [
-    /^\/\.env/i,
-    /^\/server\.js$/i,
-    /^\/package(-lock)?\.json$/i,
-    /\.sql$/i,
-    /^\/data(\/|$)/i
-  ];
-  if (blockedPatterns.some(p => p.test(req.path))) {
-    return res.status(403).send('Forbidden');
-  }
-  next();
-});
-
+// Ensure uploads directory exists
+const chatUploadsDir = path.join(__dirname, 'uploads', 'chat');
+if (!fs.existsSync(chatUploadsDir)) {
+  fs.mkdirSync(chatUploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(__dirname));
 
 // Basic rate limiting on the API routes (auth routes skipped so rate limits never block logins)
@@ -104,6 +90,11 @@ const apiLimiter = rateLimit({
   skip: (req) => req.path.startsWith('/auth/'),
 });
 app.use('/api/', apiLimiter);
+// Health check endpoint for uptime monitoring and hosting platforms
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 
 // Every /api/ route returns live data, never a static asset
 app.use('/api/', (req, res, next) => {
@@ -111,14 +102,26 @@ app.use('/api/', (req, res, next) => {
   next();
 });
 
-// --- Supabase admin client (service role — server-side only) ---
+// --- Supabase client for token validation & admin operations ---
+const activeAdminKey = (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('eyJ')) 
+  ? process.env.SUPABASE_SERVICE_ROLE_KEY 
+  : process.env.SUPABASE_ANON_KEY;
+
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  activeAdminKey,
   {
     global: {
-      headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` }
+      headers: { Authorization: `Bearer ${activeAdminKey}` }
     },
+    auth: { autoRefreshToken: false, persistSession: false }
+  }
+);
+
+const supabaseAnon = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY,
+  {
     auth: { autoRefreshToken: false, persistSession: false }
   }
 );
@@ -195,12 +198,47 @@ async function requireUser(req, res) {
   const token = authHeader.replace('Bearer ', '');
   if (!token) { res.status(401).json({ error: 'Missing auth token' }); return null; }
 
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) { res.status(401).json({ error: 'Invalid session' }); return null; }
+  // Verify session with anon client (with valid registered API key) or fallback to admin
+  let user = null;
+  const anonAuth = await supabaseAnon.auth.getUser(token);
+  if (!anonAuth.error && anonAuth.data?.user) {
+    user = anonAuth.data.user;
+  } else {
+    try {
+      const adminAuth = await supabaseAdmin.auth.getUser(token);
+      if (!adminAuth.error && adminAuth.data?.user) user = adminAuth.data.user;
+    } catch (e) {}
+  }
+  if (!user) { res.status(401).json({ error: 'Invalid session' }); return null; }
 
-  const { data: profile } = await supabaseAdmin
-    .from('users').select('*').eq('id', user.id).single();
-  if (!profile) { res.status(401).json({ error: 'No profile found' }); return null; }
+  // Scoped user client for database operations
+  const userClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false }
+  });
+  req.userClient = userClient;
+
+  let { data: profile } = await userClient
+    .from('users').select('*').eq('id', user.id).maybeSingle();
+  if (!profile) {
+    try {
+      const adminRes = await supabaseAdmin.from('users').select('*').eq('id', user.id).maybeSingle();
+      if (adminRes.data) profile = adminRes.data;
+    } catch (e) {}
+  }
+  if (!profile) {
+    const meta = user.user_metadata || {};
+    profile = {
+      id: user.id,
+      email: user.email,
+      full_name: meta.full_name || (user.email ? user.email.split('@')[0] : 'User'),
+      role: meta.role || 'student',
+      strand: meta.strand || null,
+      grade_level: meta.grade_level || null,
+      section: meta.section || null,
+      is_active: true
+    };
+  }
 
   if (profile.is_active === false) {
     res.status(403).json({ error: 'Account has been deactivated. Permissions revoked by administration.' });
@@ -413,7 +451,7 @@ app.post('/api/admin/create-account', async (req, res) => {
   if (!profile) return;
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can create accounts' });
 
-  const { full_name, first_name, middle_name, last_name, suffix, role, email, strand, grade_level, section, subjects, custom_password, contact_number, address } = req.body;
+  const { full_name, role, email, strand, grade_level, section, subjects, custom_password } = req.body;
 
   if (!full_name || !full_name.trim()) return res.status(400).json({ error: 'Missing full name' });
   if (!['student', 'teacher', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
@@ -457,15 +495,9 @@ app.post('/api/admin/create-account', async (req, res) => {
     email_confirm: true,
     user_metadata: { 
       full_name: full_name.trim(),
-      first_name: (first_name && first_name.trim()) ? first_name.trim() : null,
-      middle_name: (middle_name && middle_name.trim()) ? middle_name.trim() : null,
-      last_name: (last_name && last_name.trim()) ? last_name.trim() : null,
-      suffix: (suffix && suffix.trim()) ? suffix.trim() : null,
       role,
       must_reset_password: true,
       recovery_email: (email && email.trim()) ? email.trim() : null,
-      contact_number: (contact_number && contact_number.trim()) ? contact_number.trim() : null,
-      address: (address && address.trim()) ? address.trim() : null,
       created_by: creatorMeta
     }
   });
@@ -476,26 +508,21 @@ app.post('/api/admin/create-account', async (req, res) => {
     return res.status(400).json({ error: msg });
   }
 
-  const userRowPayload = {
-    id: authData.user.id,
-    full_name: full_name.trim(),
-    school_id,
-    role,
-    email: accountEmail,
-    strand: strand || null,
-    grade_level: grade_level || null,
-    section: section || null,
-    subjects: subjects || null,
-    is_active: true,
-    is_demo: false,
-  };
-  if (contact_number && contact_number.trim()) {
-    userRowPayload.contact_number = contact_number.trim();
-  }
-
   const { data: userRow, error: insertErr } = await supabaseAdmin
     .from('users')
-    .insert(userRowPayload)
+    .insert({
+      id: authData.user.id,
+      full_name: full_name.trim(),
+      school_id,
+      role,
+      email: accountEmail,
+      strand: strand || null,
+      grade_level: grade_level || null,
+      section: section || null,
+      subjects: subjects || null,
+      is_active: true,
+      is_demo: false,
+    })
     .select().single();
 
   if (insertErr) {
@@ -513,8 +540,6 @@ app.post('/api/admin/create-account', async (req, res) => {
     strand: strand || null,
     grade_level: grade_level || null,
     section: section || null,
-    contact_number: (contact_number && contact_number.trim()) ? contact_number.trim() : null,
-    address: (address && address.trim()) ? address.trim() : null,
     created_at: createdAtIso,
     created_by: creatorMeta,
     is_active: true
@@ -526,16 +551,10 @@ app.post('/api/admin/create-account', async (req, res) => {
     recovery_email: (email && email.trim()) ? email.trim() : null,
     temp_password,
     name: full_name.trim(),
-    first_name: (first_name && first_name.trim()) ? first_name.trim() : null,
-    middle_name: (middle_name && middle_name.trim()) ? middle_name.trim() : null,
-    last_name: (last_name && last_name.trim()) ? last_name.trim() : null,
-    suffix: (suffix && suffix.trim()) ? suffix.trim() : null,
     role,
     strand: strand || null,
     grade_level: grade_level || null,
     section: section || null,
-    contact_number: (contact_number && contact_number.trim()) ? contact_number.trim() : null,
-    address: (address && address.trim()) ? address.trim() : null,
     created_at: createdAtIso,
     created_by: creatorMeta
   });
@@ -686,6 +705,48 @@ function getMuteForStrikes(strikes) {
   return { action: 'muted_permanent', permanently_muted: true, muted_until: null };
 }
 
+// --- Chat File Uploads ---
+const chatStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, chatUploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname) || '';
+    const safeBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+    cb(null, `${uniqueSuffix}_${safeBase}${ext}`);
+  }
+});
+
+const chatUpload = multer({
+  storage: chatStorage,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  if (profile.permanently_muted) {
+    return res.status(403).json({ error: 'CHAT_MUTED_PERMANENT' });
+  }
+  if (profile.muted_until && new Date(profile.muted_until) > new Date()) {
+    return res.status(403).json({ error: 'CHAT_MUTED_UNTIL', mutedUntil: profile.muted_until });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  const relativeUrl = `/uploads/chat/${req.file.filename}`;
+  res.json({
+    url: relativeUrl,
+    name: req.file.originalname,
+    size: req.file.size,
+    mime: req.file.mimetype
+  });
+});
+
 app.post('/api/chat/send', async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
@@ -702,29 +763,39 @@ app.post('/api/chat/send', async (req, res) => {
     return res.status(403).json({ error: 'CHAT_MUTED_UNTIL', mutedUntil: profile.muted_until });
   }
 
-  const localCheck = checkLocalContent(text);
-
-  let modResult;
-  try {
-    const modRes = await fetch('https://api.openai.com/v1/moderations', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({ input: text })
-    });
-    const modData = await modRes.json();
-
-    if (!modRes.ok || !modData.results) {
-      console.error('Moderation API error:', modRes.status, modData.error?.message || modData);
-      modResult = { flagged: false, categories: {} };
-    } else {
-      modResult = modData.results[0];
+  const isAttachment = typeof text === 'string' && text.trim().startsWith('{"type":"attachment"');
+  let textToCheck = text;
+  let parsedAttachment = null;
+  if (isAttachment) {
+    try {
+      parsedAttachment = JSON.parse(text);
+      textToCheck = parsedAttachment.name || '';
+    } catch (e) {
+      textToCheck = '';
     }
-  } catch (err) {
-    console.error('Moderation API request failed:', err.message);
-    modResult = { flagged: false, categories: {} };
+  }
+
+  const localCheck = checkLocalContent(textToCheck);
+
+  let modResult = { flagged: false, categories: {} };
+  if (!isAttachment && textToCheck && textToCheck.trim().length > 0) {
+    try {
+      const modRes = await fetch('https://api.openai.com/v1/moderations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({ input: textToCheck })
+      });
+      const modData = await modRes.json();
+
+      if (modRes.ok && modData.results) {
+        modResult = modData.results[0];
+      }
+    } catch (err) {
+      console.error('Moderation API request failed:', err.message);
+    }
   }
 
   const flaggedCategories = Object.entries(modResult.categories || {})
@@ -732,8 +803,8 @@ app.post('/api/chat/send', async (req, res) => {
     .map(([k]) => k);
 
   const severeCategories = ['hate', 'hate/threatening', 'harassment/threatening', 'violence/graphic', 'self-harm', 'self-harm/intent', 'self-harm/instructions'];
-  const isSevere = localCheck.severeFlagged || flaggedCategories.some(c => severeCategories.includes(c));
-  const isProfanity = !isSevere && (localCheck.profanityFlagged || modResult.flagged);
+  const isSevere = !isAttachment && (localCheck.severeFlagged || flaggedCategories.some(c => severeCategories.includes(c)));
+  const isProfanity = !isAttachment && !isSevere && (localCheck.profanityFlagged || modResult.flagged);
 
   let finalBody = text;
   let warning = null;
@@ -765,23 +836,58 @@ app.post('/api/chat/send', async (req, res) => {
       : 'Your message contained inappropriate content and was censored.';
   }
 
-  const { data: message, error: insertErr } = await supabaseAdmin
-    .from('messages')
-    .insert({
-      conversation_id: conversationId,
-      sender_id: profile.id,
-      sender_name: profile.full_name,
-      body: finalBody
-    })
-    .select().single();
+  const dbClient = req.userClient || supabaseAdmin;
+  let message = null;
+  let insertErr = null;
 
-  if (insertErr) return res.status(500).json({ error: insertErr.message });
+  try {
+    const resInsert = await dbClient
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        sender_id: profile.id,
+        sender_name: profile.full_name,
+        body: finalBody
+      })
+      .select().single();
+    message = resInsert.data;
+    insertErr = resInsert.error;
+  } catch (e) {
+    insertErr = e;
+  }
+
+  if (insertErr || !message) {
+    try {
+      const fallbackInsert = await supabaseAdmin
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: profile.id,
+          sender_name: profile.full_name,
+          body: finalBody
+        })
+        .select().single();
+      if (fallbackInsert.data) {
+        message = fallbackInsert.data;
+        insertErr = null;
+      }
+    } catch (e2) {}
+  }
+
+  if (insertErr || !message) {
+    console.error('Chat insert error:', insertErr?.message || insertErr);
+    return res.status(500).json({ error: insertErr?.message || 'Failed to send message' });
+  }
 
   if (muteUpdate) {
-    await supabaseAdmin.from('users').update(muteUpdate).eq('id', profile.id);
+    try {
+      await (req.userClient || supabaseAdmin).from('users').update(muteUpdate).eq('id', profile.id);
+    } catch (e) {}
   }
   if (violationToLog) {
-    await supabaseAdmin.from('chat_violations').insert(violationToLog);
+    try {
+      await (req.userClient || supabaseAdmin).from('chat_violations').insert(violationToLog);
+    } catch (e) {}
   }
 
   res.json({ ...message, warning });
@@ -1198,6 +1304,13 @@ CRITICAL QUALITY AND ACCURACY RULES:
    - For every True/False question, you MUST provide an "explanation" property explaining the factual reason why the statement is True or False, and specifying why the opposite choice is wrong.
    - If the statement is False, clearly state what makes it incorrect and what the true fact or rule is (e.g. "Booleans in Java cannot be converted to numeric types because they are incompatible primitive types").
    - If the statement is True, succinctly cite the supporting rule or definition from the lesson.
+5. NEVER CITE OR MENTION FILENAMES, EXTENSIONS, OR HANDOUTS IN THE QUESTION TEXT:
+   - NEVER start questions with "According to [filename]...", "In [filename]...", "Based on [filename]...", "As stated in Document...", or mention any file name, PDF extension (.pdf), or document title inside the "question" string itself or within the "options".
+   - Phrase questions as natural, direct academic questions testing the concept itself (e.g. "What is the primary purpose of On-the-Job Training (OJT)?" instead of "According to 01_Handout_1A(35).pdf, which statement accurately reflects...?").
+   - The citation MUST reside ONLY in the metadata attributes "source_file" and "source_page", where students can view it after answering as a reference!
+6. GROUND DISTRACTORS STRICTLY IN THE HANDOUT CONTENT:
+   - All answer options and distractors must be directly grounded in the concepts present in the provided learning material.
+   - NEVER inject unrelated subjects (e.g., if the material is about Work Ethics or Computing, NEVER insert options like "General Biology", "Biology", or arbitrary scientific topics into the choices, even if the quiz title mentions a different subject). The source material is the sole authority for question and option content.
 
 Only include "type" values matching the requested formats. For True/False, options must be ["True", "False"]. For multiple choice, ensure ${numChoices} options. Base every question directly on the source material provided. Always include the specific individual "source_file" and "source_page" attributes.`;
 }
@@ -1213,6 +1326,10 @@ function isForbiddenFigureLabel(text) {
 function cleanAnswerTerm(answer) {
   if (!answer || typeof answer !== 'string') return '';
   let str = answer.trim();
+  if (str.includes('\n')) {
+    const lines = str.split('\n').map(l => l.trim()).filter(Boolean);
+    str = lines[lines.length - 1] || str;
+  }
   str = str.replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
   // Strip trailing pronoun connectors like " - It", " - it", " - These", " - This", " : It", " — It", " - They"
   str = str.replace(/\s*[-–—:]\s*(it|its|this|these|they|them|that|which)\s*$/i, '').trim();
@@ -1244,6 +1361,19 @@ function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
     if (type === 'tf') type = 'true_false';
     if (type === 'id') type = 'identification';
     if (type === 'match') type = 'matching';
+
+    // Strip accidental file/handout citations from question text
+    if (typeof q.question === 'string') {
+      let qText = q.question.trim();
+      qText = qText.replace(/^(?:according\s+to|in|based\s+on|as\s+stated\s+in|from)\s+["']?[^"'\n,:–-]+\.(?:pdf|docx?|txt|xlsx?)["']?[\s,:–-]+/i, '');
+      qText = qText.replace(/^(?:according\s+to|in|based\s+on|as\s+stated\s+in|from)\s+(?:the\s+)?(?:handout|material|document|module|file|reading)[\s,:–-]+/i, '');
+      qText = qText.trim();
+      if (qText.length > 0) {
+        qText = qText.charAt(0).toUpperCase() + qText.slice(1);
+      }
+      q.question = qText;
+    }
+
     return { ...q, type };
   }).filter(q => {
     if (!q || (typeof q.question !== 'string' && q.type !== 'matching')) return false;
@@ -1256,7 +1386,12 @@ function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
 
     if (q.type === 'multiple_choice') {
       if (!Array.isArray(q.options) || q.options.length < 2) return false;
-      q.options = q.options.map(o => cleanAnswerTerm(String(o))).filter(o => !isForbiddenFigureLabel(o));
+      q.options = q.options.map(o => cleanAnswerTerm(String(o))).filter(o => {
+        if (isForbiddenFigureLabel(o)) return false;
+        // Filter out artificial placeholder distractors like "Key principle regarding General Biology (Part 5)"
+        if (/^key principle regarding/i.test(o) && /\(part\s*\d+\)$/i.test(o)) return false;
+        return true;
+      });
       if (q.options.length < 2) return false;
 
       if (q.multipleAnswers === true || (Array.isArray(q.answers) && q.answers.length > 1)) {
@@ -1346,10 +1481,21 @@ function isValidAcademicTerm(term) {
   if (!term || typeof term !== 'string') return false;
   let clean = term.trim().replace(/^["'`“‘(]+|[)"'`”’:,;.]+$/g, '').trim();
   clean = clean.replace(/^(the|a|an)\s+/i, '').trim();
-  if (clean.length < 2 || clean.length > 45) return false;
+  if (clean.length < 3 || clean.length > 45) return false;
+
+  // Reject terms with OCR / symbol noise or brackets or punctuation
+  if (/[»«\\|/\[\]{}~@#$%^&*_=<>©®\(\),;]/.test(clean)) return false;
+  // Reject copyright / attribution strings
+  if (/encyclop[æe]dia britannica|all rights reserved|getty images|shutterstock|wikipedia/i.test(clean)) return false;
 
   // Reject figure, table, diagram, page labels
   if (isForbiddenFigureLabel(clean)) return false;
+
+  // Reject terms with numbers (e.g. "Tire in 1", "of EA 2", "Page 4")
+  if (/\b\d+\b/.test(clean)) return false;
+
+  // Reject 2 or 3 character uppercase acronym noise (e.g. "RI", "EA")
+  if (/^[A-Z]{2,3}$/.test(clean)) return false;
 
   // Reject sentence fragments containing copula/linking verbs
   if (/\b(is|are|was|were|has|have|can|will|should|represents|defined)\b/i.test(clean)) return false;
@@ -1362,6 +1508,11 @@ function isValidAcademicTerm(term) {
   if (INVALID_TERM_STARTERS.test(clean)) return false;
   if (STOP_WORDS && STOP_WORDS.has(clean.toLowerCase())) return false;
   if (/^[0-9\W]+$/.test(clean)) return false;
+
+  // Ensure high ratio of alphabetic characters
+  const alpha = (clean.match(/[a-zA-Z]/g) || []).length;
+  if ((alpha / clean.length) < 0.75) return false;
+
   return true;
 }
 
@@ -1468,13 +1619,36 @@ function extractQuestionsFromText(params) {
           allItems.push(itemObj);
           itemsByDoc[sec.doc].push(itemObj);
         }
+      } else {
+        const cleanLine = cleanAnswerTerm(line);
+        if (isValidAcademicTerm(cleanLine) && !isForbiddenFigureLabel(cleanLine) && cleanLine.length >= 3 && cleanLine.length <= 40) {
+          const itemObj = {
+            doc: sec.doc,
+            page: sec.page,
+            term: cleanLine,
+            def: '',
+            sentence: line,
+            isDef: false
+          };
+          allItems.push(itemObj);
+          itemsByDoc[sec.doc].push(itemObj);
+        }
       }
     });
+
+    const isGarbageOcr = (str) => {
+      if (!str || typeof str !== 'string') return true;
+      const symbols = (str.match(/[»«\\|/\[\]{}~@#$%^&*_=<>©®\(\)]/g) || []).length;
+      if (symbols > 1 || (symbols / str.length) > 0.05) return true;
+      if (/encyclop[æe]dia britannica|all rights reserved|getty images|shutterstock/i.test(str)) return true;
+      if (/\b[a-zA-Z]+\s+\d+\b|\b\d+\s+[a-zA-Z]+\b/.test(str)) return true;
+      return false;
+    };
 
     // Check sentence-by-sentence
     const sList = sec.text.split(/(?<=[.!?\n])\s+/)
       .map(s => s.trim())
-      .filter(s => s.length > 20 && s.length < 240 && !s.startsWith('%') && !s.startsWith('#'));
+      .filter(s => s.length > 20 && s.length < 240 && !s.startsWith('%') && !s.startsWith('#') && !isGarbageOcr(s));
 
     sList.forEach(s => {
       // Find definition verb non-greedily
@@ -1512,21 +1686,28 @@ function extractQuestionsFromText(params) {
   // Ensure every document in validFiles has items
   validFiles.forEach(f => {
     if (!itemsByDoc[f] || itemsByDoc[f].length === 0) {
-      const cleanName = f.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-      const fallbackItem = {
-        doc: f,
-        page: 1,
-        term: `Core Concept of ${cleanName}`,
-        def: `fundamental principle presented in ${cleanName}`,
-        sentence: `Key subject matter detailed within ${cleanName}`,
-        isDef: true
-      };
-      itemsByDoc[f] = [fallbackItem];
-      allItems.push(fallbackItem);
+      // Extract any available sentences from raw text before falling back
+      const rawSentences = rawClean.split(/[.\n]+/).map(s => s.trim()).filter(s => s.length > 25 && s.length < 200);
+      if (rawSentences.length > 0) {
+        rawSentences.slice(0, 10).forEach((rs, rIdx) => {
+          const words = rs.split(/\s+/);
+          const candidateTerm = words.slice(0, 3).join(' ').replace(/[^a-zA-Z0-9\s]/g, '').trim();
+          const itemObj = {
+            doc: f,
+            page: 1,
+            term: isValidAcademicTerm(candidateTerm) ? candidateTerm : '',
+            def: rs,
+            sentence: rs,
+            isDef: false
+          };
+          allItems.push(itemObj);
+          itemsByDoc[f].push(itemObj);
+        });
+      }
     }
   });
 
-  // Collect all valid unique extracted terms
+  // Collect all valid unique extracted terms from actual text
   const validTermsList = [];
   allItems.forEach(it => {
     if (it.term && isValidAcademicTerm(it.term) && !validTermsList.includes(it.term)) {
@@ -1534,23 +1715,29 @@ function extractQuestionsFromText(params) {
     }
   });
 
-  // Combine distractors
-  const isTechSubject = /game|programming|ict|software|code|data|computer|network|web|it|tech/i.test(title);
-  const subjectDistractors = isTechSubject
-    ? [...DOMAIN_DISTRACTORS.gamedev, ...DOMAIN_DISTRACTORS.tech, ...DOMAIN_DISTRACTORS.general]
-    : [...DOMAIN_DISTRACTORS.general, ...DOMAIN_DISTRACTORS.tech];
+  // Also collect capitalized technical phrases from source text as clean domain distractors
+  const extractedPhrases = [];
+  const phraseMatches = rawClean.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b/g) || [];
+  phraseMatches.forEach(p => {
+    const cleanP = cleanAnswerTerm(p);
+    if (isValidAcademicTerm(cleanP) && !validTermsList.includes(cleanP) && !extractedPhrases.includes(cleanP)) {
+      extractedPhrases.push(cleanP);
+    }
+  });
 
   const getFreshDistractors = (answer, neededCount) => {
-    const pool = [...validTermsList, ...subjectDistractors].filter(t => 
-      t && t.toLowerCase() !== answer.toLowerCase() && isValidAcademicTerm(t)
+    const pool = [...validTermsList, ...extractedPhrases].filter(t => 
+      t && t.toLowerCase() !== (answer || '').toLowerCase() && isValidAcademicTerm(t)
     );
     const shuffled = [...new Set(pool)].sort(() => Math.random() - 0.5);
     const chosen = shuffled.slice(0, neededCount);
-    let fallbackIdx = 1;
-    while (chosen.length < neededCount) {
-      const fallback = `Alternative ${fallbackIdx++}`;
-      if (!chosen.includes(fallback) && fallback.toLowerCase() !== answer.toLowerCase()) {
-        chosen.push(fallback);
+    const fallbackTerms = [...DOMAIN_DISTRACTORS.general, ...DOMAIN_DISTRACTORS.tech].filter(t => 
+      t.toLowerCase() !== (answer || '').toLowerCase() && !chosen.includes(t)
+    );
+    while (chosen.length < neededCount && fallbackTerms.length > 0) {
+      const cand = fallbackTerms.shift();
+      if (cand && !chosen.includes(cand)) {
+        chosen.push(cand);
       }
     }
     return chosen;
@@ -1566,7 +1753,7 @@ function extractQuestionsFromText(params) {
     
     // Balance evenly across all uploaded documents
     const targetDoc = validFiles[i % validFiles.length];
-    const docPool = (itemsByDoc[targetDoc] && itemsByDoc[targetDoc].length > 0) ? itemsByDoc[targetDoc] : allItems;
+    const docPool = (itemsByDoc[targetDoc] && itemsByDoc[targetDoc].length > 0) ? itemsByDoc[targetDoc] : (allItems.length > 0 ? allItems : [{ doc: targetDoc, page: 1, term: 'Core Concept', def: 'Fundamental subject concept', sentence: 'Essential learning principle', isDef: true }]);
     
     // Pick an item from this document's pool that hasn't had its answer used yet
     let item = null;
@@ -1579,11 +1766,12 @@ function extractQuestionsFromText(params) {
       }
     }
     if (!item) {
-      item = docPool[i % docPool.length] || allItems[i % allItems.length];
+      item = docPool[i % docPool.length] || allItems[i % Math.max(1, allItems.length)];
     }
 
     const itemDoc = item.doc || targetDoc;
     const itemPage = item.page || 1;
+    const sentenceSnippet = item.sentence ? (item.sentence.length > 90 ? item.sentence.slice(0, 90) + '...' : item.sentence) : 'the core principle';
 
     if (isMc) {
       let qText = '';
@@ -1592,20 +1780,16 @@ function extractQuestionsFromText(params) {
         qText = `Which concept is described as: "${item.def}"?`;
         correct = item.term;
       } else {
-        const sentenceSnippet = item.sentence.length > 90 ? item.sentence.slice(0, 90) + '...' : item.sentence;
-        qText = `According to ${itemDoc}, which statement accurately reflects the discussion on: "${sentenceSnippet}"?`;
-        correct = `It forms a foundational concept in ${title}`;
-        if (usedAnswers.has(correct.toLowerCase())) {
-          correct = `Key principle regarding ${title} (Part ${i + 1})`;
-        }
+        qText = `Which statement best describes the following concept: "${sentenceSnippet}"?`;
+        correct = item.sentence || 'It represents an essential foundational principle';
       }
 
-      // If correct answer was already used, make it unique
+      // If correct answer was already used, try an unused academic term
       if (usedAnswers.has(correct.toLowerCase().trim())) {
         const unusedTerm = validTermsList.find(t => !usedAnswers.has(t.toLowerCase()));
         if (unusedTerm) {
           correct = unusedTerm;
-          qText = `Which term corresponds to key topics discussed in ${itemDoc}?`;
+          qText = `Which term best corresponds to the concept described by: "${sentenceSnippet}"?`;
         }
       }
 
@@ -1628,26 +1812,20 @@ function extractQuestionsFromText(params) {
       if (item.isDef && item.term && item.def && isValidAcademicTerm(item.term)) {
         if (isTrue) {
           qText = `${item.term} is defined as ${item.def.toLowerCase().startsWith('a') || item.def.toLowerCase().startsWith('the') ? item.def : 'the ' + item.def}.`;
-          explanation = `This statement is True. By definition in ${itemDoc}, ${item.term} refers to ${item.def}.`;
+          explanation = `This statement is True. By definition, ${item.term} refers to ${item.def}.`;
         } else {
-          qText = `${item.term} refers exclusively to external non-academic factors and does not relate to ${item.def.slice(0, 40)}.`;
-          explanation = `This statement is False. In ${itemDoc}, ${item.term} directly relates to ${item.def}.`;
+          qText = `${item.term} is unrelated to and does not involve ${item.def.slice(0, 45)}.`;
+          explanation = `This statement is False. ${item.term} directly relates to ${item.def}.`;
         }
       } else {
         if (isTrue) {
           qText = `${item.sentence.replace(/[.]+$/, '')}.`;
-          explanation = `This statement is True as confirmed in ${itemDoc}.`;
+          explanation = `This statement is True as supported by the learning material.`;
         } else {
-          qText = `In the context of ${itemDoc}, ${item.sentence.replace(/[.]+$/, '')} is considered invalid and disregarded.`;
-          explanation = `This statement is False. According to ${itemDoc}, this statement is valid and recognized in the curriculum.`;
+          qText = `It is incorrect to conclude that ${item.sentence.replace(/[.]+$/, '')}.`;
+          explanation = `This statement is False. The course material explicitly validates this principle.`;
         }
       }
-
-      const tfKey = (qText + ':' + (isTrue ? 'True' : 'False')).toLowerCase();
-      if (usedQuestions.has(tfKey)) {
-        qText += ` (Ref. Section ${i + 1})`;
-      }
-      usedQuestions.add(tfKey);
 
       questions.push({
         type: 'true_false',
@@ -1665,17 +1843,15 @@ function extractQuestionsFromText(params) {
         qText = `Identify the term: "${item.def}"`;
         correct = item.term;
       } else {
-        qText = `In ${itemDoc}, name the primary concept associated with: "${item.sentence.slice(0, 90)}..."`;
-        correct = (item.term && isValidAcademicTerm(item.term)) ? item.term : `${title.split(' ')[0] || 'Core'} Module`;
+        qText = `Identify the concept associated with: "${sentenceSnippet}"`;
+        correct = (item.term && isValidAcademicTerm(item.term)) ? item.term : (validTermsList[i % Math.max(1, validTermsList.length)] || 'Core Principle');
       }
 
       if (usedAnswers.has(correct.toLowerCase().trim())) {
         const unusedTerm = validTermsList.find(t => !usedAnswers.has(t.toLowerCase()));
         if (unusedTerm) {
           correct = unusedTerm;
-          qText = `State the term for the concept reviewed in ${itemDoc} (Page ${itemPage})`;
-        } else {
-          correct = `${correct} (Section ${i + 1})`;
+          qText = `Identify the term described by: "${sentenceSnippet}"`;
         }
       }
       usedAnswers.add(correct.toLowerCase().trim());
@@ -1694,19 +1870,19 @@ function extractQuestionsFromText(params) {
         selected.forEach(p => usedAnswers.add(p.term.toLowerCase().trim()));
         questions.push({
           type: 'matching',
-          instructions: `Match each description on the left with the correct term on the right from ${itemDoc}.`,
+          instructions: `Match each description on the left with the correct concept on the right.`,
           pairs: selected.map(p => ({ left: p.def, right: p.term })),
           source_file: itemDoc,
           source_page: itemPage
         });
       } else {
-        const correct = (item.term && isValidAcademicTerm(item.term)) ? item.term : `${title} Standard`;
+        const correct = (item.term && isValidAcademicTerm(item.term)) ? item.term : (validTermsList[i % Math.max(1, validTermsList.length)] || 'Core Principle');
         usedAnswers.add(correct.toLowerCase().trim());
         const distractors = getFreshDistractors(correct, numChoices - 1);
         const options = [correct, ...distractors].sort(() => Math.random() - 0.5);
         questions.push({
           type: 'multiple_choice',
-          question: `Which key concept in ${itemDoc} is emphasized in: "${item.sentence.slice(0, 90)}..."?`,
+          question: `Which key concept is emphasized in: "${sentenceSnippet}"?`,
           options: options,
           answer: correct,
           source_file: itemDoc,
@@ -1732,25 +1908,24 @@ app.post('/api/quiz/extract-image', quizLimiter, async (req, res) => {
     const actualMime = mimeType || 'image/jpeg';
 
     const candidateModels = [
-      'gemini-2.5-flash',
-      'gemini-1.5-flash',
-      'gemini-flash-latest',
-      'gemini-3.5-flash'
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.6-flash'
     ];
 
     for (const model of candidateModels) {
       try {
-        const response = await fetch(
+        let response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(35000),
+            signal: AbortSignal.timeout(25000),
             body: JSON.stringify({
               contents: [{
                 parts: [
                   {
-                    text: "You are an accurate academic OCR tool. Transcribe all readable text, notes, equations, bullet points, headers, definitions, and questions found in this image. Do not add conversational commentary or meta-text. Just output the clean extracted text."
+                    text: "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part' (for example: 'Mitochondrion: Organelle that generates chemical energy (ATP) to power the cell; the powerhouse of the cell', 'Ribosomes: Molecular machines responsible for protein synthesis', 'Nucleus: The membrane-enclosed organelle that contains genetic material and coordinates cellular activities', 'Golgi apparatus: Cellular organelle that packages and sorts proteins for secretion').\n\nDo not add conversational commentary or meta-text. Just output clean, line-separated academic terms and definitions."
                   },
                   {
                     inlineData: {
@@ -1764,11 +1939,43 @@ app.post('/api/quiz/extract-image', quizLimiter, async (req, res) => {
           }
         );
 
+        if (response.status === 503) {
+          console.warn(`[ImageExtract] Gemini ${model} 503 spike, retrying after 1s...`);
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout(25000),
+                body: JSON.stringify({
+                  contents: [{
+                    parts: [
+                      {
+                        text: "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part'."
+                      },
+                      {
+                        inlineData: {
+                          mimeType: actualMime,
+                          data: cleanBase64
+                        }
+                      }
+                    ]
+                  }]
+                })
+              }
+            );
+          } catch (rErr) {}
+        }
+
         if (response.ok) {
           const data = await response.json();
-          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
           if (text && text.trim()) {
-            return res.json({ text: text.trim(), source: 'gemini-vision', model });
+            text = text.trim();
+            console.log(`[ImageExtract] Successfully extracted via vision model ${model} (${text.length} chars)`);
+            return res.json({ text, source: 'gemini-vision', model });
           }
         }
       } catch (mErr) {
@@ -1804,30 +2011,19 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
     const pageMatches = (req.body.sourceText || '').match(/\[Document:[^\]|]+\|\s*Page:\s*(\d+)\]/gi);
     const estimatedPages = pageMatches ? pageMatches.length : Math.max(1, Math.ceil((req.body.sourceText || '').length / 2200));
 
-    // Realistic dynamic timeout: 60s base per handout + 30s per extra handout + 30s-60s if >5 or >10 pages (max 3 mins)
-    let dynamicTimeoutMs = 60000;
-    if (fileCount > 1) {
-      dynamicTimeoutMs += (fileCount - 1) * 30000;
-    }
-    if (estimatedPages > 10) {
-      dynamicTimeoutMs += 60000; // Extra full minute for 10+ pages
-    } else if (estimatedPages > 5) {
-      dynamicTimeoutMs += 30000; // Extra 30 seconds for 5-10 pages
-    }
-    dynamicTimeoutMs = Math.min(180000, Math.max(60000, dynamicTimeoutMs));
-    console.log(`[QuizGen] Dynamic AI leeway timeout set to ${(dynamicTimeoutMs / 1000).toFixed(0)}s (Files: ${fileCount}, Pages: ~${estimatedPages})`);
+    // Fast & responsive AI timeout (12s per model) to ensure user never hangs
+    const dynamicTimeoutMs = 12000;
+    console.log(`[QuizGen] Responsive AI timeout set to ${(dynamicTimeoutMs / 1000).toFixed(0)}s`);
 
     const candidateModels = [
-      'gemini-3.6-flash',
       'gemini-3.5-flash',
-      'gemini-flash-latest',
       'gemini-3.5-flash-lite',
-      'gemini-2.5-flash'
+      'gemini-3.6-flash'
     ];
     for (const model of candidateModels) {
       try {
         console.log(`[QuizGen] Calling Gemini model ${model} (timeout ${(dynamicTimeoutMs / 1000).toFixed(0)}s)...`);
-        const aiResponse = await fetch(
+        let aiResponse = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
           {
             method: 'POST',
@@ -1839,6 +2035,25 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
             })
           }
         );
+
+        if (aiResponse.status === 503) {
+          console.warn(`[QuizGen] Gemini ${model} 503 spike, retrying after 1s...`);
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            aiResponse = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout(dynamicTimeoutMs),
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: prompt }] }],
+                  generationConfig: { responseMimeType: 'application/json' }
+                })
+              }
+            );
+          } catch (rErr) {}
+        }
 
         if (aiResponse.ok) {
           const data = await aiResponse.json();

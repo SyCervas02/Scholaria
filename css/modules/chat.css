@@ -103,7 +103,7 @@
 .scholaria-chat .chat-welcome p { margin: 0 0 28px; font-size: 13px; line-height: 1.6; }
 .scholaria-chat .chat-welcome .chat-primary-btn { min-width: 224px; }
 .scholaria-chat .cw-input-area { padding: 18px; gap: 10px; background: #fff; border-top: 1px solid #e7edfa; flex-shrink: 0; }
-.scholaria-chat .cw-input-area input { min-width: 0; width: 0; padding: 15px 14px; border: 1px solid #e5ebf8; border-radius: 12px; background: #f8f9fc; font-size: 13px; color: var(--chat-ink); }
+.scholaria-chat .cw-input-area input { flex: 1 1 auto; width: 100%; min-width: 0; padding: 15px 14px; border: 1px solid #e5ebf8; border-radius: 12px; background: #f8f9fc; font-size: 13px; color: var(--chat-ink); outline: none; box-sizing: border-box; }
 .scholaria-chat .cw-input-area input::placeholder { color: #a9b5d2; }
 .scholaria-chat .cw-input-area input:focus { border-color: #8caeff; }
 .scholaria-chat .cw-emoji-btn, .scholaria-chat .cw-attachment-btn, .scholaria-chat .cw-send { display: flex; align-items: center; justify-content: center; width: 48px; height: 50px; flex-shrink: 0; border: 1px solid #e5ebf8; border-radius: 12px; background: #f8f9fc; color: #64749e; cursor: pointer; }
@@ -116,6 +116,9 @@
 .scholaria-chat .msg-bubble { overflow-wrap: anywhere; }
 .scholaria-chat .msg-bubble.me { background: var(--chat-blue); }
 .scholaria-chat .msg-bubble.them { background: #e9effb; }
+.chat-overview-btn:hover { background: rgba(255,255,255,0.32) !important; }
+.msg-bubble.them .chat-overview-btn:hover { background: #cbd5e1 !important; }
+
 
 .cw-back-btn { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid #e4eafb; border-radius: 10px; background: #f5f7fb; color: var(--chat-blue, #195cff); cursor: pointer; flex-shrink: 0; transition: all 0.2s ease; margin-right: 2px; }
 .cw-back-btn:hover { background: #e3ecff; }

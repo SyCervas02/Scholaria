@@ -13,3 +13,6 @@ yarn-error.log*
 # System files
 .DS_Store
 Thumbs.db
+
+# User uploads & runtime storage
+uploads/

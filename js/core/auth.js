@@ -5,19 +5,17 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { storage: window.sessionStorage } });
 
 const API_BASE = (function() {
-  if (typeof window !== 'undefined' && window.location && window.location.origin) {
-    if (window.location.protocol === 'file:') {
+      if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+        const host = window.location.hostname;
+        const port = window.location.port;
+        if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '3001') {
+          return 'http://localhost:3001';
+        }
+        return window.location.origin;
+      }
       return 'http://localhost:3001';
-    }
-    const host = window.location.hostname;
-    const port = window.location.port;
-    if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '3001') {
-      return `${window.location.protocol}//${host}:3001`;
-    }
-    return window.location.origin;
-  }
-  return 'http://localhost:3001';
-})();
+    })();
+window.API_BASE = API_BASE;
 let ROLE = null;
 let CURRENT_PROFILE = null;
 
@@ -43,16 +41,6 @@ async function guardSessionAndInit() {
   if (session.user.user_metadata && session.user.user_metadata.must_reset_password) {
     window.location.href = 'reset-password.html';
     return;
-  }
-
-  if (session.user && session.user.user_metadata) {
-    const meta = session.user.user_metadata;
-    profile.first_name = profile.first_name || meta.first_name || null;
-    profile.middle_name = profile.middle_name || meta.middle_name || null;
-    profile.last_name = profile.last_name || meta.last_name || null;
-    profile.suffix = profile.suffix || meta.suffix || null;
-    profile.contact_number = profile.contact_number || meta.contact_number || null;
-    profile.address = profile.address || meta.address || null;
   }
 
   ROLE = profile.role;
