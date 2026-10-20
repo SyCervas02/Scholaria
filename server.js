@@ -12,6 +12,9 @@ const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
+
+// Trust reverse proxy (Railway, Render, Fly.io, etc.)
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // --- Account audit trail store ---
@@ -81,6 +84,11 @@ const apiLimiter = rateLimit({
   skip: (req) => req.path.startsWith('/auth/'),
 });
 app.use('/api/', apiLimiter);
+// Health check endpoint for uptime monitoring and hosting platforms
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 
 // Every /api/ route returns live data, never a static asset
 app.use('/api/', (req, res, next) => {
