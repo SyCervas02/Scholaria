@@ -235,5 +235,85 @@
     },
     "is_active": true,
     "updated_at": "2026-10-17T13:00:18.284Z"
+  },
+  "HWA-2026-005": {
+    "user_id": "a37aa5d4-80a8-45d2-98d9-912bf1517868",
+    "school_id": "HWA-2026-005",
+    "name": "Aaron Anthony Adams",
+    "role": "student",
+    "email": "aaronadams@gmail.com",
+    "strand": "STEM",
+    "grade_level": "Grade 11",
+    "section": null,
+    "created_at": "2026-10-20T13:48:41.248Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-20T13:48:41.248Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-20T13:48:42.464Z"
+  },
+  "HWA-2026-006": {
+    "user_id": "f629ad99-bf9d-4b0b-8c34-9729a7fb71ef",
+    "school_id": "HWA-2026-006",
+    "name": "Abigail Ashley Anderson",
+    "role": "student",
+    "email": "abigailanderson@gmail.com",
+    "strand": "STEM",
+    "grade_level": "Grade 11",
+    "section": null,
+    "created_at": "2026-10-20T13:48:43.984Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-20T13:48:43.984Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-20T13:48:44.742Z"
+  },
+  "HWA-2026-007": {
+    "user_id": "97f46269-6d61-4b72-a91c-e08a7c6e55eb",
+    "school_id": "HWA-2026-007",
+    "name": "Alexander Alan Abbott",
+    "role": "student",
+    "email": "alexanderabbott@gmail.com",
+    "strand": "STEM",
+    "grade_level": "Grade 11",
+    "section": null,
+    "created_at": "2026-10-20T13:48:45.940Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-20T13:48:45.940Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-20T13:48:46.582Z"
+  },
+  "HWA-2026-008": {
+    "user_id": "a94dd44e-9361-4e2d-a29f-577b4aec426d",
+    "school_id": "HWA-2026-008",
+    "name": "Aria Amara Armstrong",
+    "role": "student",
+    "email": "ariaarmstrong@gmail.com",
+    "strand": "STEM",
+    "grade_level": "Grade 11",
+    "section": null,
+    "created_at": "2026-10-20T13:48:47.503Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-20T13:48:47.503Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-20T13:48:48.151Z"
   }
 }

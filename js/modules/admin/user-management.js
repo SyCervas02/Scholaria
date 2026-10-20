@@ -4,6 +4,70 @@ const DEFAULT_SEED_ADMINS = [];
 const CREDENTIAL_SLIP_STORAGE_KEY = 'scholaria_credential_slip_records';
 const ADMIN_HANDOUTS_STORAGE_KEY = 'scholaria_admin_handout_records';
 const ORIGINS_STORAGE_KEY = 'scholaria_account_origins_v1';
+const USER_SECTIONS_STORAGE_KEY = 'scholaria_user_sections_map_v2';
+
+function getUserSectionsMap() {
+  try {
+    const raw = localStorage.getItem(USER_SECTIONS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveUserSectionToStorage(userKey, sectionVal) {
+  try {
+    if (!userKey) return;
+    const map = getUserSectionsMap();
+    if (sectionVal) {
+      map[userKey] = sectionVal;
+    } else {
+      map[userKey] = '';
+    }
+    localStorage.setItem(USER_SECTIONS_STORAGE_KEY, JSON.stringify(map));
+  } catch (_) {}
+}
+
+async function persistUserSectionChange(userOrId, sectionStr) {
+  let userId = null;
+  let schoolId = null;
+  if (typeof userOrId === 'object' && userOrId !== null) {
+    userId = userOrId.dbId || userOrId.id;
+    schoolId = userOrId.id || userOrId.school_id;
+  } else {
+    userId = userOrId;
+  }
+
+  // 1. Immediately cache in localStorage for instant reload resilience (both ID and School ID)
+  if (userId) saveUserSectionToStorage(userId, sectionStr);
+  if (schoolId) saveUserSectionToStorage(schoolId, sectionStr);
+
+  // 2. Call backend administrative update endpoint (bypasses Supabase RLS using service role)
+  try {
+    let token = null;
+    if (typeof db !== 'undefined' && db?.auth?.getSession) {
+      const { data } = await db.auth.getSession();
+      token = data?.session?.access_token;
+    }
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    await fetch(`${API_BASE}/api/admin/update-user-sections`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ user_id: userId, school_id: schoolId, section: sectionStr })
+    });
+  } catch (err) {
+    console.warn('Backend section sync notice:', err);
+  }
+
+  // 3. Fallback direct client update
+  if (userId && typeof db !== 'undefined' && db?.from) {
+    try {
+      await db.from('users').update({ section: sectionStr }).eq('id', userId);
+    } catch (_) {}
+  }
+}
 
 function getLocalOriginRecords() {
   try {
@@ -698,22 +762,73 @@ async function loadUsersFromDB() {
     } catch (_) {}
     const localAudits = getLocalOriginRecords();
 
-    const { data, error } = await db.from('users').select('*').order('created_at', { ascending: false });
-    if (error) { console.error('Failed to load users:', error.message); return; }
+    let data = [];
+    try {
+      if (typeof API_BASE !== 'undefined' && typeof db !== 'undefined' && db.auth) {
+        const { data: sessionData } = await db.auth.getSession().catch(() => ({ data: {} }));
+        if (sessionData?.session?.access_token) {
+          const uRes = await fetch(`${API_BASE}/api/users`, {
+            headers: { 'Authorization': `Bearer ${sessionData.session.access_token}` }
+          });
+          if (uRes.ok) {
+            const uJson = await uRes.json();
+            if (uJson && Array.isArray(uJson.users)) {
+              data = uJson.users;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (!data.length && typeof db !== 'undefined' && db) {
+      const { data: dbData, error } = await db.from('users').select('*').order('created_at', { ascending: false });
+      if (!error && Array.isArray(dbData)) data = dbData;
+    }
+
+    // Also harvest any students from class_records to guarantee they are never missing for teachers
+    try {
+      if (typeof db !== 'undefined' && db) {
+        const { data: crStudents } = await db.from('class_records').select('student_id, student_name, section, strand').order('submitted_at', { ascending: false });
+        if (crStudents && crStudents.length) {
+          crStudents.forEach(cs => {
+            const exists = data.some(existing =>
+              (existing.id && existing.id === cs.student_id) ||
+              (existing.school_id && existing.school_id === cs.student_id) ||
+              (existing.full_name && existing.full_name.toLowerCase().trim() === (cs.student_name || '').toLowerCase().trim())
+            );
+            if (!exists) {
+              data.push({
+                id: cs.student_id,
+                school_id: cs.student_id,
+                full_name: cs.student_name,
+                role: 'student',
+                section: cs.section || 'Unassigned',
+                strand: cs.strand || 'STEM',
+                is_active: true
+              });
+            }
+          });
+        }
+      }
+    } catch (_) {}
+    const savedSectionMap = getUserSectionsMap();
     const fetchedUsers = (data || []).map(u => {
       const auditInfo = auditMap[u.school_id] || auditMap[u.id] || localAudits[u.school_id] || localAudits[u.id] || null;
       const origin = auditInfo?.created_by || null;
+      const cachedSec = savedSectionMap[u.school_id] ?? savedSectionMap[u.id];
+      const effectiveSection = (cachedSec !== undefined && cachedSec !== null) ? cachedSec : (u.section || '');
 
       return {
         name: u.full_name,
         id: u.school_id,
+        school_id: u.school_id,
         role: u.role,
         detail: u.role === 'student'
           ? `${u.strand || ''} — ${u.grade_level || ''}`
-          : (u.role === 'teacher' ? (u.section ? `${u.subjects || u.strand || ''} (${u.section})` : (u.subjects || u.strand || '')) : 'School Administrator'),
+          : (u.role === 'teacher' ? (effectiveSection ? `${u.subjects || u.strand || ''} (${effectiveSection})` : (u.subjects || u.strand || '')) : 'School Administrator'),
         strand: u.strand || '',
         gradeLevel: u.grade_level || '',
-        section: u.section || '',
+        section: effectiveSection,
         subjects: u.subjects || '',
         email: u.email || '',
         recoveryEmail: u.email || '',
@@ -938,7 +1053,7 @@ function setSectionViewTab(tab) {
 }
 
 function renderSectionsTabContent() {
-  const unassignedStudents = registeredUsers.filter(u => u.role === 'student' && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—'));
+  const unassignedStudents = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—'));
   const targetDefaultSection = managedSections.find(s => !s.isArchived)?.name || managedSections[0]?.name || 'Section A';
   const activeCount = managedSections.filter(s => !s.isArchived).length;
   const archivedCount = managedSections.filter(s => s.isArchived).length;
@@ -1037,6 +1152,7 @@ function renderSectionCards() {
   return list.map(s => {
     const enrolledStudents = registeredUsers.filter(u =>
       u.role === 'student' &&
+      u.isActive !== false &&
       (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
     );
 
@@ -1173,10 +1289,10 @@ function renderSectionModalForm(sec) {
         <label>Class Adviser</label>
         <select id="secFormAdviser" class="user-filter-select" style="width:100%;" onchange="if(this.value) { const c = document.getElementById('secFormAdviserCustom'); if(c) c.value = ''; }">
           <option value="">Select a Teacher as Adviser (Optional)</option>
-          ${registeredUsers.filter(u => u.role === 'teacher').map(t => `<option value="${escHtml(t.name)}" ${sec.adviser === t.name ? 'selected' : ''}>${escHtml(t.name)} (${escHtml(t.strand || t.subjects || 'General')})</option>`).join('')}
+          ${registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false).map(t => `<option value="${escHtml(t.name)}" ${sec.adviser === t.name ? 'selected' : ''}>${escHtml(t.name)} (${escHtml(t.strand || t.subjects || 'General')})</option>`).join('')}
         </select>
         <div style="margin-top:5px;">
-          <input type="text" id="secFormAdviserCustom" placeholder="Or type unlisted adviser name…" value="${registeredUsers.some(u => u.role === 'teacher' && u.name === sec.adviser) ? '' : escHtml(sec.adviser || '')}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
+          <input type="text" id="secFormAdviserCustom" placeholder="Or type unlisted adviser name…" value="${registeredUsers.some(u => u.role === 'teacher' && u.isActive !== false && u.name === sec.adviser) ? '' : escHtml(sec.adviser || '')}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
         </div>
       </div>
       <div class="gen-field">
@@ -1257,6 +1373,23 @@ function saveSectionForm() {
     });
   }
 
+  // Link teacher to this section if adviser appointed
+  if (adviser) {
+    const teacherObj = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers))
+      ? registeredUsers.find(u => u.role === 'teacher' && u.name && u.name.trim().toLowerCase() === adviser.trim().toLowerCase())
+      : null;
+    if (teacherObj) {
+      const curSecs = (teacherObj.section || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!curSecs.some(s => s.toLowerCase() === name.toLowerCase())) {
+        curSecs.push(name);
+        teacherObj.section = curSecs.join(', ');
+        if (typeof persistUserSectionChange === 'function') {
+          persistUserSectionChange(teacherObj, teacherObj.section);
+        }
+      }
+    }
+  }
+
   saveManagedSections();
   closeSectionModal();
   showToast(`Section "${name}" saved successfully!`, 'success');
@@ -1278,6 +1411,7 @@ function archiveSectionPrompt(secId) {
 
   const enrolled = registeredUsers.filter(u =>
     u.role === 'student' &&
+    u.isActive !== false &&
     (u.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()
   );
 
@@ -1328,6 +1462,10 @@ function getTeacherHandledStrands(teacher) {
 
 function isTeacherCompatibleWithSection(teacher, section) {
   if (!teacher || !section) return false;
+  // If this teacher is the appointed class adviser, they are unconditionally compatible!
+  if (section.adviser && teacher.name && section.adviser.trim().toLowerCase() === teacher.name.trim().toLowerCase()) {
+    return true;
+  }
   const teacherStrands = getTeacherHandledStrands(teacher);
   if (teacherStrands.includes('General')) return true;
 
@@ -1338,9 +1476,17 @@ function isTeacherCompatibleWithSection(teacher, section) {
 }
 
 function isTeacherAssignedToSection(teacher, secName) {
-  if (!teacher || !teacher.section || !secName) return false;
+  if (!teacher || !secName) return false;
+  const sName = secName.trim().toLowerCase();
+  // 1. If appointed as adviser of this section, unconditionally recognized as assigned faculty
+  const sec = managedSections.find(s => (s.name || '').trim().toLowerCase() === sName);
+  if (sec && sec.adviser && teacher.name && sec.adviser.trim().toLowerCase() === teacher.name.trim().toLowerCase()) {
+    return true;
+  }
+  // 2. Or if teacher.section explicitly contains this section
+  if (!teacher.section) return false;
   const parts = teacher.section.split(',').map(s => s.trim().toLowerCase());
-  return parts.includes(secName.trim().toLowerCase());
+  return parts.includes(sName);
 }
 
 /* ── Modal: Assign Sections to a Specific Teacher ── */
@@ -1484,16 +1630,7 @@ async function saveTeacherSectionAssignments(teacherKey) {
   const newSectionStr = selectedSections.length > 0 ? selectedSections.join(', ') : null;
   teacher.section = newSectionStr;
 
-  if (teacher.dbId && typeof db !== 'undefined' && db?.from) {
-    try {
-      const { error } = await db.from('users').update({ section: newSectionStr }).eq('id', teacher.dbId);
-      if (error) {
-        console.warn('Failed to update teacher sections in database:', error.message);
-      }
-    } catch (e) {
-      console.warn('DB update error:', e);
-    }
-  }
+  await persistUserSectionChange(teacher, newSectionStr);
 
   if (typeof showToast === 'function') {
     showToast(`Updated sections for ${teacher.name}: ${newSectionStr || 'None (Unassigned)'}`, 'success');
@@ -1606,7 +1743,7 @@ async function saveSectionTeacherAssignments(secName) {
   const modal = document.getElementById('assignTeachersToSectionModal');
   if (!modal) return;
 
-  const sec = managedSections.find(s => s.name === secName);
+  const sec = managedSections.find(s => (s.name || '').trim().toLowerCase() === secName.trim().toLowerCase());
   if (!sec) return;
 
   const activeTeachers = registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false);
@@ -1618,36 +1755,30 @@ async function saveSectionTeacherAssignments(secName) {
     if (!cb) continue;
 
     const curSections = (t.section || '').split(',').map(s => s.trim()).filter(Boolean);
-    const hasSec = curSections.some(s => s.toLowerCase() === secName.toLowerCase());
+    const hasSec = curSections.some(s => s.toLowerCase() === sec.name.trim().toLowerCase());
 
     let updated = false;
     if (cb.checked && !hasSec) {
-      curSections.push(secName);
+      curSections.push(sec.name);
       updated = true;
     } else if (!cb.checked && hasSec) {
-      const idx = curSections.findIndex(s => s.toLowerCase() === secName.toLowerCase());
+      const idx = curSections.findIndex(s => s.toLowerCase() === sec.name.trim().toLowerCase());
       if (idx !== -1) curSections.splice(idx, 1);
       updated = true;
     }
 
     if (updated) {
       t.section = curSections.length > 0 ? curSections.join(', ') : null;
-      if (t.dbId && typeof db !== 'undefined' && db?.from) {
-        try {
-          await db.from('users').update({ section: t.section }).eq('id', t.dbId);
-        } catch (e) {
-          console.warn('DB update failed for teacher section:', e);
-        }
-      }
+      await persistUserSectionChange(t, t.section);
     }
   }
 
   if (typeof showToast === 'function') {
-    showToast(`Updated assigned faculty for ${secName}`, 'success');
+    showToast(`Updated assigned faculty for ${sec.name}`, 'success');
   }
 
   closeAssignTeachersToSectionModal();
-  openManageSectionModal(secName);
+  openManageSectionModal(sec.name);
   refreshSectionAndUserViews();
 }
 
@@ -1656,16 +1787,17 @@ async function removeTeacherFromSection(teacherKey, secName) {
   if (!teacher) return;
 
   const curSections = (teacher.section || '').split(',').map(s => s.trim()).filter(Boolean);
-  const filtered = curSections.filter(s => s.toLowerCase() !== secName.toLowerCase());
+  const filtered = curSections.filter(s => s.toLowerCase() !== secName.trim().toLowerCase());
   teacher.section = filtered.length > 0 ? filtered.join(', ') : null;
 
-  if (teacher.dbId && typeof db !== 'undefined' && db?.from) {
-    try {
-      await db.from('users').update({ section: teacher.section }).eq('id', teacher.dbId);
-    } catch (e) {
-      console.warn('DB update failed:', e);
-    }
+  // If this teacher was the appointed class adviser, clear adviser on section
+  const sec = managedSections.find(s => (s.name || '').trim().toLowerCase() === secName.trim().toLowerCase());
+  if (sec && sec.adviser && sec.adviser.trim().toLowerCase() === teacher.name.trim().toLowerCase()) {
+    sec.adviser = '';
+    saveManagedSections();
   }
+
+  await persistUserSectionChange(teacher, teacher.section);
 
   if (typeof showToast === 'function') {
     showToast(`${teacher.name} unassigned from ${secName}`, 'info');
@@ -1681,6 +1813,7 @@ function openManageSectionModal(secName) {
   const sec = managedSections.find(s => s.name === secName) || { name: secName, gradeLevel: 'Grade 11', strand: 'General', adviser: '', room: '' };
   const enrolled = registeredUsers.filter(u =>
     u.role === 'student' &&
+    u.isActive !== false &&
     (u.section || '').trim().toLowerCase() === secName.trim().toLowerCase()
   );
 
@@ -1834,10 +1967,10 @@ async function removeStudentFromSection(studentKey, secName) {
   if (!student) return;
 
   student.section = null;
+  saveUserSectionToStorage(student.id || student.school_id, null);
+  if (student.dbId) saveUserSectionToStorage(student.dbId, null);
 
-  if (student.dbId && typeof db !== 'undefined' && db?.from) {
-    await db.from('users').update({ section: null }).eq('id', student.dbId);
-  }
+  await persistUserSectionChange(student, null);
 
   showToast(`${student.name} removed from ${secName} (now Unassigned)`, 'info');
 
@@ -1885,7 +2018,7 @@ function filterMassAssignList() {
 }
 
 function getFilteredMassStudents() {
-  let list = registeredUsers.filter(u => u.role === 'student');
+  let list = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
 
   if (massAssignFilterMode === 'unassigned') {
     list = list.filter(u => !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—');
@@ -1937,8 +2070,8 @@ function renderMassAssignContent(isPartial = false) {
   if (!body) return;
 
   const currentList = getFilteredMassStudents();
-  const unassignedCount = registeredUsers.filter(u => u.role === 'student' && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—')).length;
-  const allEligibleCount = registeredUsers.filter(u => u.role === 'student' && (u.section || '').trim().toLowerCase() !== massAssignTargetSection.trim().toLowerCase()).length;
+  const unassignedCount = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—')).length;
+  const allEligibleCount = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (u.section || '').trim().toLowerCase() !== massAssignTargetSection.trim().toLowerCase()).length;
 
   const allSelectedInView = currentList.length > 0 && currentList.every(u => massAssignSelectedIds.has(u.dbId || u.id));
 
@@ -2045,15 +2178,39 @@ async function executeMassAssignment() {
     if (selectedKeys.includes(u.dbId) || selectedKeys.includes(u.id)) {
       u.section = targetSection;
       updatedCount++;
-      if (u.dbId) dbIdsToUpdate.push(u.dbId);
+      if (u.id) saveUserSectionToStorage(u.id, targetSection);
+      if (u.dbId) {
+        saveUserSectionToStorage(u.dbId, targetSection);
+        dbIdsToUpdate.push(u.dbId);
+      }
     }
   });
 
-  if (dbIdsToUpdate.length > 0 && typeof db !== 'undefined' && db?.from) {
+  if (dbIdsToUpdate.length > 0) {
     try {
-      await db.from('users').update({ section: targetSection }).in('id', dbIdsToUpdate);
-    } catch (e) {
-      console.warn('Could not sync mass section update to DB:', e);
+      let token = null;
+      if (typeof db !== 'undefined' && db?.auth?.getSession) {
+        const { data } = await db.auth.getSession();
+        token = data?.session?.access_token;
+      }
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+
+      await fetch(`${API_BASE}/api/admin/update-user-sections`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ user_ids: dbIdsToUpdate, section: targetSection })
+      });
+    } catch (err) {
+      console.warn('Backend mass section sync notice:', err);
+    }
+
+    if (typeof db !== 'undefined' && db?.from) {
+      try {
+        await db.from('users').update({ section: targetSection }).in('id', dbIdsToUpdate);
+      } catch (e) {
+        console.warn('Could not sync mass section update to DB:', e);
+      }
     }
   }
 
@@ -2108,6 +2265,8 @@ function auAssembleFullName() {
 }
 
 function openAddUserModal(initialType) {
+  const errContainer = document.getElementById('auErrorContainer');
+  if (errContainer) { errContainer.innerHTML = ''; errContainer.style.display = 'none'; }
   const chosenType = initialType || (adminUserTab === 'admins' ? 'admin' : (adminUserTab === 'teachers' ? 'teacher' : 'student'));
   Object.assign(addUser, {
     step: 'type',
@@ -2133,6 +2292,8 @@ function openAddUserModal(initialType) {
   renderAddUserModal();
 }
 function closeAddUserModal() {
+  const errContainer = document.getElementById('auErrorContainer');
+  if (errContainer) { errContainer.innerHTML = ''; errContainer.style.display = 'none'; }
   const modal = document.getElementById('addUserModal');
   if (modal) {
     modal.classList.remove('active');
@@ -2660,7 +2821,24 @@ async function auSaveUsers() {
     }
   }
 
-  if (failures.length) showToast(failures.join(' · '), 'error');
+  if (failures.length) {
+    const errContainer = document.getElementById('auErrorContainer');
+    if (errContainer) {
+      errContainer.style.display = 'block';
+      errContainer.innerHTML = `
+        <div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:12px;padding:14px 16px;margin-bottom:16px;color:#991b1b;box-shadow:0 2px 8px rgba(220,38,38,0.1);">
+          <div style="font-weight:800;font-size:13.5px;display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#dc2626" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Cannot Register ${failures.length} Account${failures.length === 1 ? '' : 's'}:
+          </div>
+          <ul style="margin:0 0 0 20px;padding:0;font-size:12px;line-height:1.6;">
+            ${failures.map(f => `<li>${escHtml(f)}</li>`).join('')}
+          </ul>
+        </div>`;
+      errContainer.scrollIntoView({ behavior: 'smooth' });
+    }
+    showToast(`${failures.length} account registration${failures.length === 1 ? '' : 's'} failed. Check the error list above.`, 'error');
+  }
 
   if (results.length) {
     closeAddUserModal();

@@ -264,7 +264,7 @@ async function loadClassRecAttempts(force = true) {
       if (data && data.length) qaData = data.filter(item => !isArtificialSeedAttempt(item));
     } catch(err) {}
 
-    // 3. Query per quiz ID for customQuizzes (same method as Item Analysis)
+    // 3. Query per quiz ID for customQuizzes
     if (typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes)) {
       for (const q of customQuizzes) {
         try {
@@ -280,7 +280,29 @@ async function loadClassRecAttempts(force = true) {
       }
     }
 
-    // 4. Purge artificial seeds from local storage & merge authentic submissions
+    // 4. Query backend API endpoint if authenticated session is available
+    try {
+      if (typeof API_BASE !== 'undefined' && typeof db !== 'undefined' && db.auth) {
+        const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+        if (session && session.access_token) {
+          const apiRes = await fetch(`${API_BASE}/api/class-records`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+          });
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json();
+            if (apiJson && Array.isArray(apiJson.records)) {
+              apiJson.records.forEach(rec => {
+                if (!isArtificialSeedAttempt(rec) && !crData.some(existing => existing.id === rec.id)) {
+                  crData.push(rec);
+                }
+              });
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 5. Purge artificial seeds from local storage & merge authentic submissions
     let localCR = [];
     try {
       const rawCR = localStorage.getItem('scholaria_class_records_v2');
@@ -317,9 +339,9 @@ async function loadClassRecAttempts(force = true) {
         const existing = combined[existingIdx];
         if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
           combined[existingIdx] = Object.assign({}, existing, item);
-        } else if (!existing.section && item.section) {
-          existing.section = item.section;
         }
+        if (!existing.section && item.section) existing.section = item.section;
+        if (!existing.student_name && item.student_name) existing.student_name = item.student_name;
       }
     });
 
@@ -328,6 +350,12 @@ async function loadClassRecAttempts(force = true) {
     console.error('Error loading class record attempts:', e);
   } finally {
     isFetchingClassRecAttempts = false;
+    if (typeof currentPage !== 'undefined' && (currentPage === 'classrec' || currentPage === 'analysis')) {
+      const mainContent = document.getElementById('mainContent');
+      if (mainContent && typeof getPageContent === 'function') {
+        mainContent.innerHTML = getPageContent(ROLE, currentPage);
+      }
+    }
   }
 }
 
@@ -348,10 +376,91 @@ function saveCustomClassRecEntry(studentKey, data) {
   if (typeof renderPage === 'function') renderPage('classrec');
 }
 
-function isStudentHandledByTeacher(student, teacherProfile) {
-  // Teachers and Admins are permitted to view and inspect all students' progress specification and academic records
-  return true;
+function getTeacherHandledSections(teacherProfile) {
+  const prof = teacherProfile || (typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE : null);
+  if (!prof) return [];
+
+  if (typeof ROLE !== 'undefined' && ROLE === 'admin') {
+    if (typeof managedSections !== 'undefined' && Array.isArray(managedSections) && managedSections.length) {
+      return managedSections.filter(s => !s.isArchived).map(s => s.name);
+    }
+    return (typeof SECTIONS !== 'undefined' && Array.isArray(SECTIONS) && SECTIONS.length)
+      ? [...SECTIONS]
+      : ['Section A', 'Section B', 'Section C', 'Section D'];
+  }
+
+  const teacherName = (prof.full_name || prof.name || '').trim().toLowerCase();
+  const teacherId = String(prof.id || prof.school_id || prof.dbId || '').trim();
+
+  // Find in registeredUsers
+  const regUser = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers))
+    ? registeredUsers.find(u =>
+        u.role === 'teacher' && (
+          (teacherId && (u.id === teacherId || u.dbId === teacherId || u.school_id === teacherId)) ||
+          (teacherName && (u.name || '').trim().toLowerCase() === teacherName)
+        )
+      )
+    : null;
+
+  const rawSection = (regUser && regUser.section) || prof.section ||
+    (typeof getUserSectionsMap === 'function' ? (getUserSectionsMap()[teacherId] || getUserSectionsMap()[prof.school_id]) : null) || '';
+
+  const handled = new Set();
+
+  if (rawSection && typeof rawSection === 'string') {
+    rawSection.split(',').map(s => s.trim()).filter(Boolean).forEach(s => {
+      if (s.toLowerCase() !== 'unassigned' && s.toLowerCase() !== 'all') {
+        handled.add(s);
+      }
+    });
+  }
+
+  // Check managedSections for appointed adviser
+  if (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) {
+    managedSections.forEach(sec => {
+      if (sec.isArchived) return;
+      if (sec.adviser && teacherName && sec.adviser.trim().toLowerCase() === teacherName) {
+        handled.add(sec.name);
+      }
+    });
+  }
+
+  // Also check localStorage directly as fallback
+  try {
+    const rawLocal = localStorage.getItem('scholaria_managed_sections');
+    if (rawLocal) {
+      const parsed = JSON.parse(rawLocal);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(sec => {
+          if (sec.isArchived) return;
+          if (sec.adviser && teacherName && sec.adviser.trim().toLowerCase() === teacherName) {
+            handled.add(sec.name);
+          }
+        });
+      }
+    }
+  } catch (_) {}
+
+  return Array.from(handled);
 }
+window.getTeacherHandledSections = getTeacherHandledSections;
+
+function isStudentHandledByTeacher(student, teacherProfile) {
+  if (typeof ROLE !== 'undefined' && ROLE === 'admin') return true;
+  const prof = teacherProfile || (typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE : null);
+  if (!prof) return false;
+
+  const handled = getTeacherHandledSections(prof);
+  if (!handled.length) return false;
+
+  const sec = (student.section && student.section !== 'Unassigned')
+    ? student.section
+    : (typeof getUserSectionsMap === 'function' ? (getUserSectionsMap()[student.school_id || student.id || student.dbId]) : null) || '';
+
+  if (!sec || sec.toLowerCase() === 'unassigned') return false;
+  return handled.some(h => h.trim().toLowerCase() === sec.trim().toLowerCase());
+}
+window.isStudentHandledByTeacher = isStudentHandledByTeacher;
 
 function deduplicateQuizAttempts(attemptsList) {
   const result = [];
@@ -412,26 +521,40 @@ function getAllRecordedAttempts() {
     }
   } catch(e) {}
 
+  try {
+    const rawCR = localStorage.getItem('scholaria_class_records_v2');
+    if (rawCR) {
+      const localCR = JSON.parse(rawCR);
+      localCR.forEach(a => pool.push(a));
+    }
+  } catch(e) {}
+
   return deduplicateQuizAttempts(pool);
 }
 
 function isAttemptBelongingToStudent(a, u) {
   if (!a || !u) return false;
   const sid = String(a.student_id || a.studentId || a.user_id || '').toLowerCase().trim();
+  const sSchoolId = String(a.student_school_id || a.school_id || '').toLowerCase().trim();
   const sname = String(a.student_name || a.studentName || '').toLowerCase().trim();
 
   const uDbId = String(u.dbId || '').toLowerCase().trim();
   const uId = String(u.id || '').toLowerCase().trim();
-  const uName = String(u.name || '').toLowerCase().trim();
+  const uSchoolId = String(u.school_id || '').toLowerCase().trim();
+  const uName = String(u.name || u.full_name || '').toLowerCase().trim();
 
-  if (uDbId && sid === uDbId) return true;
-  if (uId && sid === uId) return true;
-  if (uName && (sid === uName || sname === uName || sid.includes(uName) || uName.includes(sid))) return true;
+  if (uDbId && (sid === uDbId || sSchoolId === uDbId)) return true;
+  if (uId && (sid === uId || sSchoolId === uId)) return true;
+  if (uSchoolId && (sid === uSchoolId || sSchoolId === uSchoolId)) return true;
+
+  if (uName && (sid === uName || sname === uName)) return true;
+  if (uName && sname && (uName.includes(sname) || sname.includes(uName))) return true;
 
   const matchInRegistered = registeredUsers.find(ru =>
-    (ru.dbId && String(ru.dbId).toLowerCase().trim() === sid) ||
-    (ru.id && String(ru.id).toLowerCase().trim() === sid) ||
-    (ru.name && String(ru.name).toLowerCase().trim() === sid)
+    (ru.dbId && (String(ru.dbId).toLowerCase().trim() === sid || String(ru.dbId).toLowerCase().trim() === sSchoolId)) ||
+    (ru.id && (String(ru.id).toLowerCase().trim() === sid || String(ru.id).toLowerCase().trim() === sSchoolId)) ||
+    (ru.school_id && (String(ru.school_id).toLowerCase().trim() === sid || String(ru.school_id).toLowerCase().trim() === sSchoolId)) ||
+    (ru.name && String(ru.name).toLowerCase().trim() === sname)
   );
   if (matchInRegistered && matchInRegistered.name.toLowerCase().trim() === uName) {
     return true;
@@ -446,23 +569,33 @@ function isAttemptBelongingToStudent(a, u) {
     }
   }
 
-  if (uName.includes('john doe') && (sid.includes('john') || sid.includes('hwa-2026-002'))) {
-    return true;
-  }
-
   return false;
 }
 
 function getClassRecordQuizzes() {
   const pool = typeof customQuizzes !== 'undefined' ? [...customQuizzes] : [];
   const teacherQuizzes = (ROLE === 'teacher' && CURRENT_PROFILE)
-    ? pool.filter(q =>
-        !q.createdBy ||
-        q.createdBy === CURRENT_PROFILE.id ||
-        q.createdBy === CURRENT_PROFILE.dbId ||
-        q.isDemo ||
-        ((CURRENT_PROFILE.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
-      )
+    ? pool.filter(q => {
+        if (!q) return false;
+        if (q.isDemo) return true;
+        const qCreator = String(q.createdBy || q.created_by || '').toLowerCase().trim();
+        const pId = String(CURRENT_PROFILE.id || '').toLowerCase().trim();
+        const pDbId = String(CURRENT_PROFILE.dbId || '').toLowerCase().trim();
+        const pSchoolId = String(CURRENT_PROFILE.school_id || '').toLowerCase().trim();
+        const pName = String(CURRENT_PROFILE.full_name || CURRENT_PROFILE.name || '').toLowerCase().trim();
+
+        if (qCreator && (qCreator === pId || qCreator === pDbId || qCreator === pSchoolId || qCreator === pName || pName.includes(qCreator))) return true;
+
+        if (CURRENT_PROFILE.subjects && q.subject) {
+          const subs = CURRENT_PROFILE.subjects.split(',').map(sub => sub.trim().toLowerCase());
+          if (subs.some(sub => sub && (q.subject || '').toLowerCase().includes(sub))) return true;
+        }
+        if (CURRENT_PROFILE.strand && q.strand) {
+          const sts = CURRENT_PROFILE.strand.split(',').map(st => st.trim().toLowerCase());
+          if (sts.some(st => st && (q.strand || '').toLowerCase().includes(st))) return true;
+        }
+        return !qCreator;
+      })
     : pool;
 
   const finalQuizzes = teacherQuizzes.length ? teacherQuizzes : pool;
@@ -479,7 +612,7 @@ function openAddClassRecordModal() {
   if (!modal) return;
   const select = document.getElementById('crStudentSelect');
   if (select) {
-    const students = registeredUsers.filter(u => u.role === 'student');
+    const students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
     select.innerHTML = students.map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('');
   }
   const quizSelect = document.getElementById('crQuizSelect');
@@ -530,23 +663,35 @@ function buildRealClassRecordEntries() {
     loadUsersFromDB();
   }
 
-  const students = registeredUsers.filter(u => u.role === 'student');
+  let students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
+
+  // For teachers, strictly scope to students belonging to handled sections
+  if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+    const teacherHandled = getTeacherHandledSections(CURRENT_PROFILE);
+    students = students.filter(u => {
+      const sec = (u.section && u.section !== 'Unassigned')
+        ? u.section
+        : (typeof getUserSectionsMap === 'function' ? (getUserSectionsMap()[u.school_id || u.id || u.dbId]) : null) || '';
+      if (!sec || sec.toLowerCase() === 'unassigned') return false;
+      return teacherHandled.some(h => h.trim().toLowerCase() === sec.trim().toLowerCase());
+    });
+  }
+
   const custom = getCustomClassRecEntries();
   const quizzes = getClassRecordQuizzes();
   const allAttempts = getAllRecordedAttempts();
 
-  return students.filter(u => {
-    if (classRecSectionFilter && u.section !== classRecSectionFilter) return false;
-    if (classRecStudentFilter) {
-      const uKey = u.dbId || u.id || u.name;
-      if (uKey !== classRecStudentFilter) return false;
-    }
-    return true;
-  }).map(u => {
+  return students.map(u => {
     const key = u.dbId || u.id || u.name;
     const customData = custom[key] || {};
 
     const studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, u)));
+
+    // Resolve accurate student section from user record, saved map, or recorded attempts (Never force to Section A!)
+    const resolvedSection = (u.section && u.section !== 'Unassigned' ? u.section : null) ||
+      (typeof getUserSectionsMap === 'function' ? (getUserSectionsMap()[u.school_id] || getUserSectionsMap()[u.id] || getUserSectionsMap()[u.dbId]) : null) ||
+      (studAttempts[0]?.section && studAttempts[0]?.section !== 'Unassigned' ? studAttempts[0]?.section : '') ||
+      'Unassigned';
 
     const quizScores = {};
     let validScoresSum = 0;
@@ -558,10 +703,22 @@ function buildRealClassRecordEntries() {
       let isLive = false;
 
       // Find attempts matching this quiz
-      const matchedAttempts = studAttempts.filter(a =>
-        String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() ||
-        (a.quiz_title && String(a.quiz_title).toLowerCase() === String(q.title || '').toLowerCase())
-      );
+      const matchedAttempts = studAttempts.filter(a => {
+        const aQId = String(a.quiz_id || a.quizId || '').toLowerCase().trim();
+        const qId = String(q.id || '').toLowerCase().trim();
+        if (aQId && qId && aQId === qId) return true;
+
+        const aTitle = String(a.quiz_title || a.quizTitle || '').toLowerCase().trim();
+        const qTitle = String(q.title || '').toLowerCase().trim();
+        if (aTitle && qTitle) {
+          if (aTitle === qTitle) return true;
+          const aClean = aTitle.replace(/\s*\(demo\)$/i, '').trim();
+          const qClean = qTitle.replace(/\s*\(demo\)$/i, '').trim();
+          if (aClean === qClean) return true;
+          if (aClean.includes(qClean) || qClean.includes(aClean)) return true;
+        }
+        return false;
+      });
 
       if (matchedAttempts.length > 0) {
         let bestPct = -1;
@@ -600,7 +757,6 @@ function buildRealClassRecordEntries() {
       quizScores[q.id] = { scorePct, isLive };
     });
 
-    // Student average is the average of completed quizzes, strictly clamped between 0 and 100%
     const avg = validScoresCount > 0
       ? Math.min(100, Math.max(0, Number((validScoresSum / validScoresCount).toFixed(2))))
       : null;
@@ -609,7 +765,7 @@ function buildRealClassRecordEntries() {
       key,
       name: u.name,
       schoolId: u.school_id || u.id || '—',
-      section: u.section || 'Unassigned',
+      section: resolvedSection,
       strand: u.strand || 'General',
       subject: customData.subject || (ROLE === 'teacher' ? (CURRENT_PROFILE?.subjects || 'STEM, HUMSS') : 'STEM, HUMSS'),
       quizScores,
@@ -617,6 +773,10 @@ function buildRealClassRecordEntries() {
       avg,
       hasRealData
     };
+  }).filter(st => {
+    if (classRecSectionFilter && st.section.toLowerCase().trim() !== classRecSectionFilter.toLowerCase().trim()) return false;
+    if (classRecStudentFilter && st.key !== classRecStudentFilter) return false;
+    return true;
   });
 }
 
@@ -624,12 +784,37 @@ function buildSectionSummaryEntries() {
   const allStudentEntries = buildRealClassRecordEntries();
   const sectionMap = new Map();
 
+  // If teacher, pre-populate all handled sections so their assigned sections appear even if student count is 0
+  if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+    const teacherHandled = getTeacherHandledSections(CURRENT_PROFILE);
+    teacherHandled.forEach(secName => {
+      if (!secName || secName === 'Unassigned') return;
+      sectionMap.set(secName, {
+        section: secName,
+        subject: (CURRENT_PROFILE?.subjects || 'General Curriculum'),
+        studentsCount: 0,
+        scoresSum: 0,
+        scoresCount: 0,
+        passingCount: 0
+      });
+    });
+  }
+
   allStudentEntries.forEach(st => {
-    const sec = st.section || 'Unassigned';
+    const sec = st.section;
+    if (!sec || sec === 'Unassigned') return;
+
+    if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+      const teacherHandled = getTeacherHandledSections(CURRENT_PROFILE);
+      if (!teacherHandled.some(h => h.trim().toLowerCase() === sec.trim().toLowerCase())) {
+        return;
+      }
+    }
+
     if (!sectionMap.has(sec)) {
       sectionMap.set(sec, {
         section: sec,
-        subject: st.subject,
+        subject: st.subject || 'Earth and Life Science',
         studentsCount: 0,
         scoresSum: 0,
         scoresCount: 0,
@@ -646,7 +831,40 @@ function buildSectionSummaryEntries() {
     }
   });
 
-  return Array.from(sectionMap.values()).map(sec => {
+  // Fallback: If sectionMap is empty because user records are still loading, extract from recorded attempts
+  if (!sectionMap.size) {
+    const attempts = getAllRecordedAttempts();
+    if (attempts && attempts.length) {
+      const teacherHandled = (typeof ROLE !== 'undefined' && ROLE === 'teacher')
+        ? getTeacherHandledSections(CURRENT_PROFILE)
+        : null;
+
+      attempts.forEach(a => {
+        const sec = a.section;
+        if (!sec || sec === 'Unassigned') return;
+        if (teacherHandled && !teacherHandled.some(h => h.trim().toLowerCase() === sec.trim().toLowerCase())) return;
+
+        if (!sectionMap.has(sec)) {
+          sectionMap.set(sec, {
+            section: sec,
+            subject: a.subject || 'Earth and Life Science',
+            studentsCount: 0,
+            scoresSum: 0,
+            scoresCount: 0,
+            passingCount: 0
+          });
+        }
+        const secData = sectionMap.get(sec);
+        secData.studentsCount++;
+        const p = a.score_percentage != null ? Number(a.score_percentage) : (a.total_items ? (a.score / a.total_items) * 100 : 0);
+        secData.scoresSum += p;
+        secData.scoresCount++;
+        if (p >= 75) secData.passingCount++;
+      });
+    }
+  }
+
+  const summaries = Array.from(sectionMap.values()).map(sec => {
     const classAvg = sec.scoresCount > 0 ? Math.min(100, Math.max(0, Number((sec.scoresSum / sec.scoresCount).toFixed(2)))) : null;
     const passRate = sec.scoresCount > 0 ? Math.min(100, Math.max(0, Math.round((sec.passingCount / sec.scoresCount) * 100))) : null;
     return {
@@ -655,6 +873,12 @@ function buildSectionSummaryEntries() {
       passRate
     };
   });
+
+  if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+    const teacherHandled = getTeacherHandledSections(CURRENT_PROFILE);
+    return summaries.filter(s => teacherHandled.some(h => h.trim().toLowerCase() === s.section.trim().toLowerCase()));
+  }
+  return summaries;
 }
 
 function isQuizTargetedForStudent(q, studentProfile) {
@@ -3266,23 +3490,37 @@ function teacherPage(page) {
     case 'analysis': {
       let myQuizzesForAnalysis = customQuizzes.slice();
       if (ROLE === 'teacher') {
-        const myQuizzes = customQuizzes.filter(q => 
-          !q.createdBy || 
-          q.createdBy === CURRENT_PROFILE?.id || 
-          q.createdBy === CURRENT_PROFILE?.dbId || 
-          q.isDemo ||
-          ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
-        );
+        const myQuizzes = customQuizzes.filter(q => {
+          if (!q) return false;
+          if (q.isDemo) return true;
+          const qCreator = String(q.createdBy || q.created_by || '').toLowerCase().trim();
+          const pId = String(CURRENT_PROFILE?.id || '').toLowerCase().trim();
+          const pDbId = String(CURRENT_PROFILE?.dbId || '').toLowerCase().trim();
+          const pSchoolId = String(CURRENT_PROFILE?.school_id || '').toLowerCase().trim();
+          const pName = String(CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || '').toLowerCase().trim();
+
+          if (qCreator && (qCreator === pId || qCreator === pDbId || qCreator === pSchoolId || qCreator === pName || pName.includes(qCreator))) return true;
+
+          if (CURRENT_PROFILE?.subjects && q.subject) {
+            const subs = CURRENT_PROFILE.subjects.split(',').map(sub => sub.trim().toLowerCase());
+            if (subs.some(sub => sub && (q.subject || '').toLowerCase().includes(sub))) return true;
+          }
+          if (CURRENT_PROFILE?.strand && q.strand) {
+            const sts = CURRENT_PROFILE.strand.split(',').map(st => st.trim().toLowerCase());
+            if (sts.some(st => st && (q.strand || '').toLowerCase().includes(st))) return true;
+          }
+          return !qCreator;
+        });
         myQuizzesForAnalysis = myQuizzes.length ? myQuizzes : customQuizzes;
       }
       const displayQuizzes = myQuizzesForAnalysis.length ? myQuizzesForAnalysis : customQuizzes;
 
       if (!displayQuizzes.length) {
         return `
-        <div class="section-hdr">
+        <div class="analysis-header-card">
           <div>
             <h2>Item Analysis Report</h2>
-            <span style="font-size:12px;color:var(--text-muted);">Question-level psychometrics and difficulty metrics</span>
+            <div class="analysis-subtitle">Question-level psychometrics and difficulty metrics</div>
           </div>
           <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
         </div>
@@ -3293,11 +3531,17 @@ function teacherPage(page) {
       }
 
       if (!analysisSelectedQuizId || !displayQuizzes.some(q => String(q.id) === String(analysisSelectedQuizId))) {
-        analysisSelectedQuizId = displayQuizzes[0].id;
+        // Automatically default to teacher's newly created / active quiz first
+        const teacherActiveQuiz = displayQuizzes.find(q => !q.isDemo && q.createdBy && (
+          q.createdBy === CURRENT_PROFILE?.id ||
+          q.createdBy === CURRENT_PROFILE?.dbId ||
+          q.createdBy === CURRENT_PROFILE?.school_id
+        ));
+        analysisSelectedQuizId = (teacherActiveQuiz || displayQuizzes[0]).id;
       }
       const selectedQuiz = displayQuizzes.find(q => String(q.id) === String(analysisSelectedQuizId)) || displayQuizzes[0];
       if (!selectedQuiz) {
-        return `<div class="section-hdr"><h2>Item Analysis Report</h2></div><p style="padding:20px;">No quiz selected.</p>`;
+        return `<div class="analysis-header-card"><h2>Item Analysis Report</h2></div><p style="padding:20px;">No quiz selected.</p>`;
       }
 
       // Fetch attempts if not cached yet
@@ -3330,10 +3574,11 @@ function teacherPage(page) {
       }
 
       return `
-      <div class="section-hdr" style="background:#ffffff;padding:16px 20px;border-radius:16px;border:1px solid #e2e8f0;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+      <!-- HEADER CARD -->
+      <div class="analysis-header-card">
         <div>
-          <h2 style="margin:0;font-size:20px;color:#0f172a;">Item Analysis &amp; Student Evaluation</h2>
-          <span style="font-size:12px;color:var(--text-muted);">Psychometric item discrimination, accuracy rates, and individual student evaluation</span>
+          <h2>Item Analysis Report</h2>
+          <div class="analysis-subtitle">Question-by-question psychometric discrimination, student accuracy, and distractor evaluation</div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <div class="analysis-tab-bar">
@@ -3345,16 +3590,16 @@ function teacherPage(page) {
             </button>
           </div>
 
-          <select class="user-filter-select" onchange="setAnalysisSectionFilter(this.value)">
+          <select class="analysis-select" onchange="setAnalysisSectionFilter(this.value)" title="Filter by Section">
             <option value="">All Handled Sections</option>
             ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
           </select>
 
-          <select class="user-filter-select" onchange="setAnalysisQuiz(this.value)">
+          <select class="analysis-select" onchange="setAnalysisQuiz(this.value)" title="Select Quiz Assessment">
             ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
           </select>
 
-          <button type="button" class="add-btn" style="background:var(--blue-light);color:var(--blue);cursor:pointer;" onclick="loadAttemptsForAnalysis('${selectedQuiz.id}')">
+          <button type="button" class="analysis-refresh-btn" onclick="loadAttemptsForAnalysis('${selectedQuiz.id}')">
             ${iconRefresh()} Refresh
           </button>
         </div>
@@ -3391,23 +3636,22 @@ function teacherPage(page) {
           <div class="ic-content">
             <div class="ic-sub">Total Questions</div>
             <div class="ic-num">${rows.length}</div>
-            <p>${selectedQuiz.type === 'interactive' ? '🎮 Interactive Mode' : '📝 Standard Assessment'}</p>
+            <p>${escHtml(selectedQuiz.subject || 'General')} · ${escHtml(selectedQuiz.strand || 'STEM')}</p>
           </div>
         </div>
       </div>
 
-      <!-- QUIZ OVERVIEW CARD -->
-      <div class="announcement-card" style="margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-          <div>
-            <h3 style="margin-bottom:4px;">${escHtml(selectedQuiz.title)}</h3>
-            <p style="margin:0;font-size:13px;color:var(--text-muted);">
-              Subject: <strong>${escHtml(selectedQuiz.subject || 'General')}</strong> · Strand: <strong>${escHtml(selectedQuiz.strand || 'All')}</strong> · Target Grade: <strong>${escHtml(selectedQuiz.gradeLevel || 'Grade 11')}</strong>
-            </p>
-          </div>
-          <span class="status-pill ongoing">${escHtml(selectedQuiz.status || 'Active')}</span>
+      <!-- QUIZ OVERVIEW STRIP -->
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 18px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#64748b;background:#f1f5f9;padding:3px 8px;border-radius:6px;">Current Quiz</span>
+          <strong style="color:#0f172a;font-size:15px;">${escHtml(selectedQuiz.title)}</strong>
+          <span style="color:#94a3b8;">·</span>
+          <span style="font-size:13px;color:#475569;">Subject: <strong>${escHtml(selectedQuiz.subject || 'General')}</strong></span>
+          <span style="color:#94a3b8;">·</span>
+          <span style="font-size:13px;color:#475569;">Strand: <strong>${escHtml(selectedQuiz.strand || 'STEM')}</strong></span>
         </div>
-        <div class="ann-meta" style="margin-top:8px;">Live psychometric breakdown recomputed from submitted student attempts.</div>
+        <span class="status-pill done" style="font-weight:700;text-transform:uppercase;font-size:11px;">Active</span>
       </div>
 
       ${analysisActiveTab === 'questions' ? `
@@ -3419,8 +3663,8 @@ function teacherPage(page) {
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="text"
               id="analysisQuestionSearchInput"
-              class="user-filter-select"
-              style="width:240px;background:#fff;"
+              class="analysis-search-input"
+              style="width:260px;"
               placeholder="🔍 Filter questions by keyword..."
               value="${escHtml(analysisQuestionSearchQuery)}"
               oninput="setAnalysisQuestionSearch(this.value)"
@@ -3484,14 +3728,14 @@ function teacherPage(page) {
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <input type="text"
               id="analysisStudentSearchInput"
-              class="user-filter-select"
-              style="width:260px;background:#fff;"
+              class="analysis-search-input"
+              style="width:260px;"
               placeholder="🔍 Find student by name or ID..."
               value="${escHtml(analysisStudentSearchQuery)}"
               oninput="setAnalysisStudentSearch(this.value)"
             />
 
-            <select class="user-filter-select" onchange="setAnalysisScoreFilter(this.value)">
+            <select class="analysis-select" onchange="setAnalysisScoreFilter(this.value)" style="width:180px;">
               <option value="all" ${analysisScoreFilter === 'all' ? 'selected' : ''}>All Scores</option>
               <option value="passed" ${analysisScoreFilter === 'passed' ? 'selected' : ''}>Passing Only (≥ 75%)</option>
               <option value="failed" ${analysisScoreFilter === 'failed' ? 'selected' : ''}>Needs Improvement (&lt; 75%)</option>
@@ -3558,29 +3802,59 @@ function teacherPage(page) {
             </tbody>
           </table>
         </div>
-      `}`;
+      `}
+      `;
     }
-
-
-
 
     case 'classrec': {
       if (!classRecAttemptsCache.length) loadClassRecAttempts(true);
+      if (!registeredUsers.length && typeof loadUsersFromDB === 'function') loadUsersFromDB();
+      const teacherHandledSecs = (typeof ROLE !== 'undefined' && ROLE === 'teacher')
+        ? getTeacherHandledSections(CURRENT_PROFILE)
+        : (typeof SECTIONS !== 'undefined' ? SECTIONS : []);
+      const handledSecs = (ROLE === 'teacher') ? teacherHandledSecs : SECTIONS;
+
       const quizzes = getClassRecordQuizzes();
       const filteredEntries = buildRealClassRecordEntries();
       const sectionSummaries = buildSectionSummaryEntries();
-      const allHandledStudents = registeredUsers.filter(u => u.role === 'student' && (ROLE !== 'teacher' || isStudentHandledByTeacher(u, CURRENT_PROFILE)));
+      let allHandledStudents = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && isStudentHandledByTeacher(u, CURRENT_PROFILE));
 
-      const totalStudentsCount = allHandledStudents.length;
+      if (!allHandledStudents.length && filteredEntries.length) {
+        allHandledStudents = filteredEntries.map(fe => ({ name: fe.name, section: fe.section, strand: fe.strand, dbId: fe.key, id: fe.schoolId }));
+      }
+
+      const totalStudentsCount = allHandledStudents.length || filteredEntries.length || sectionSummaries.reduce((sum, s) => sum + (s.studentsCount || 0), 0);
       const quizzesCount = quizzes.length;
       const validStudentAvgs = filteredEntries.map(e => (e.avg !== null && !isNaN(e.avg)) ? Math.min(100, Math.max(0, Number(e.avg))) : null).filter(a => a !== null);
       const overallAvg = validStudentAvgs.length ? Math.min(100, Math.max(0, Number((validStudentAvgs.reduce((a, b) => Number(a) + Number(b), 0) / validStudentAvgs.length).toFixed(2)))) : null;
       const passingStudentsCount = validStudentAvgs.filter(a => a >= 75).length;
       const overallPassingRate = validStudentAvgs.length ? Math.min(100, Math.max(0, Math.round((passingStudentsCount / validStudentAvgs.length) * 100))) : null;
 
+      // If teacher has no assigned sections at all, show clear guidance
+      if (ROLE === 'teacher' && handledSecs.length === 0) {
+        return `
+          <div class="section-hdr">
+            <div>
+              <h2>Class Record Portal</h2>
+              <span style="font-size:12px;color:var(--text-muted);">Overview of handled class sections and student grade performance</span>
+            </div>
+          </div>
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:40px 24px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.03);margin-top:20px;">
+            <div style="width:52px;height:52px;border-radius:50%;background:#f1f5f9;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;color:#64748b;">
+              ${typeof iconFolder === 'function' ? iconFolder() : '📁'}
+            </div>
+            <h3 style="font-size:17px;color:#0f172a;margin-bottom:6px;font-weight:700;">No Handled Sections Assigned</h3>
+            <p style="font-size:13.5px;color:#64748b;max-width:500px;margin:0 auto 16px;line-height:1.5;">
+              You do not have any assigned class sections or advisory appointments yet. In Scholaria, teachers can only view records and grades for the sections they are assigned to.
+            </p>
+            <span style="font-size:12px;color:#94a3b8;">Please contact a School Administrator to assign your class sections in User Management.</span>
+          </div>
+        `;
+      }
+
       // MODE 1: MAIN CLASS RECORD PAGE (SECTIONS ONLY)
       if (!classRecExpandedSection) {
-        const targetPrintSec = classRecSectionFilter || (managedSections[0]?.name || 'Section A');
+        const targetPrintSec = classRecSectionFilter || (handledSecs[0] || 'Section B');
         return `
         <div class="section-hdr">
           <div>
@@ -3590,7 +3864,7 @@ function teacherPage(page) {
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <select class="user-filter-select" onchange="setClassRecSectionFilter(this.value)">
               <option value="">All Handled Sections</option>
-              ${SECTIONS.map(sec => `<option value="${sec}" ${classRecSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+              ${handledSecs.map(sec => `<option value="${sec}" ${classRecSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
             </select>
             <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openSectionReportModal('${escHtml(targetPrintSec)}')">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -3699,13 +3973,16 @@ function teacherPage(page) {
             Export CSV
           </button>
 
-          <select class="user-filter-select" onchange="setClassRecStudentFilter(this.value)">
+          ${(() => {
+            const secStudents = allHandledStudents.filter(u => (u.section || '').trim().toLowerCase() === classRecExpandedSection.trim().toLowerCase());
+            return `<select class="user-filter-select" onchange="setClassRecStudentFilter(this.value)">
             <option value="">Specify Student: (All)</option>
-            ${allHandledStudents.map(u => {
+            ${secStudents.map(u => {
               const uKey = u.dbId || u.id || u.name;
               return `<option value="${uKey}" ${classRecStudentFilter === uKey ? 'selected' : ''}>${escHtml(u.name)} (${escHtml(u.section || 'Unassigned')})</option>`;
             }).join('')}
-          </select>
+          </select>`;
+          })()}
 
           <button type="button" class="add-btn" style="cursor:pointer;" onclick="openAddClassRecordModal()">${typeof iconPlus === 'function' ? iconPlus() : ''} Add / Edit Entry</button>
         </div>
@@ -4387,7 +4664,7 @@ function adminPage(page) {
 
 function renderAdminAcademicReportsContent() {
   const allEntries = typeof buildRealClassRecordEntries === 'function' ? buildRealClassRecordEntries() : [];
-  const students = registeredUsers.filter(u => u.role === 'student');
+  const students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
   const validAvgs = allEntries.map(e => e.avg).filter(a => a !== null && !isNaN(a));
   const overallAvg = validAvgs.length ? (validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length).toFixed(2) : '82.50';
   const passingCount = validAvgs.filter(a => a >= 75).length;

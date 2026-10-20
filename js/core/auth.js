@@ -1,3 +1,17 @@
+/* ── INSTITUTIONAL DEVTOOLS SECURITY BANNER ── */
+(() => {
+  try {
+    console.log(
+      "%c🛡️ HAVEN OF WISDOM ACADEMY • SCHOLARIA SECURITY ENFORCEMENT 🛡️",
+      "color: #2563eb; font-size: 16px; font-weight: 800; padding: 6px 0;"
+    );
+    console.log(
+      "%cWARNING: This browser console is an administrative developer interface. Unauthorized script execution, token extraction, or automated endpoint probing is strictly monitored and violates institutional computer usage policies.",
+      "color: #dc2626; font-size: 12px; font-weight: 600;"
+    );
+  } catch (_) {}
+})();
+
 /* ── SUPABASE INIT & SESSION GUARD ── */
 
 const SUPABASE_URL  = 'https://qxpsbewbgdwkermxeeso.supabase.co';

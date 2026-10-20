@@ -710,7 +710,7 @@ async function openNewChatModal() {
   if (!newChatState.loaded || !newChatState.directory.length) {
     const { data, error } = await db.rpc('list_contacts');
     if (error) { showToast('Could not load contact list', 'error'); console.error(error.message); return; }
-    newChatState.directory = (data || []).filter(u => String(u.id) !== String(CURRENT_PROFILE?.id));
+    newChatState.directory = (data || []).filter(u => String(u.id) !== String(CURRENT_PROFILE?.id) && u.is_active !== false && u.isActive !== false);
     newChatState.loaded = true;
   }
   renderNewChatModal();

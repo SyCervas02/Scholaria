@@ -1099,6 +1099,153 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+    /* ── INSTITUTIONAL DEVTOOLS SECURITY BANNER ── */
+    (() => {
+        try {
+            console.log(
+                "%c🛡️ HAVEN OF WISDOM ACADEMY • SCHOLARIA SECURITY ENFORCEMENT 🛡️",
+                "color: #2563eb; font-size: 16px; font-weight: 800; padding: 6px 0;"
+            );
+            console.log(
+                "%cWARNING: This browser console is an administrative developer interface. Unauthorized script execution, token extraction, or automated endpoint probing is strictly monitored and violates institutional computer usage policies.",
+                "color: #dc2626; font-size: 12px; font-weight: 600;"
+            );
+        } catch (_) {}
+    })();
+
+    /* ═════════════════════════════════════════════════════════════════════════
+       SCHOLARIA DEFENSE: RATE LIMITER & BRUTE-FORCE LOCKOUT PROTECTION
+       Enforces a strict 3-attempt limit with 60-second cooldown timer.
+       Persisted in localStorage so refreshing or reopening tab cannot bypass it.
+    ═════════════════════════════════════════════════════════════════════════ */
+    const AUTH_SECURITY = {
+        maxAttempts: 3,
+        lockoutDurationSec: 60,
+        portalKey: 'portal',
+        timerInterval: null,
+
+        getStorageKeys() {
+            return {
+                fails: `scholaria_sec_${this.portalKey}_fails`,
+                lockout: `scholaria_sec_${this.portalKey}_lockout`
+            };
+        },
+
+        getState() {
+            try {
+                const keys = this.getStorageKeys();
+                const fails = parseInt(localStorage.getItem(keys.fails) || '0', 10);
+                const lockout = parseInt(localStorage.getItem(keys.lockout) || '0', 10);
+                return {
+                    fails: isNaN(fails) ? 0 : fails,
+                    lockoutUntil: isNaN(lockout) ? 0 : lockout
+                };
+            } catch (_) {
+                return { fails: 0, lockoutUntil: 0 };
+            }
+        },
+
+        isLocked() {
+            const state = this.getState();
+            return state.lockoutUntil > Date.now();
+        },
+
+        recordFailure() {
+            const state = this.getState();
+            const now = Date.now();
+            if (state.lockoutUntil > now) {
+                return { locked: true, remainingSec: Math.ceil((state.lockoutUntil - now) / 1000) };
+            }
+
+            const newFails = state.fails + 1;
+            const keys = this.getStorageKeys();
+
+            if (newFails >= this.maxAttempts) {
+                const lockoutUntil = now + (this.lockoutDurationSec * 1000);
+                localStorage.setItem(keys.fails, '0');
+                localStorage.setItem(keys.lockout, lockoutUntil.toString());
+                return { locked: true, justLocked: true, remainingSec: this.lockoutDurationSec };
+            } else {
+                localStorage.setItem(keys.fails, newFails.toString());
+                return { locked: false, fails: newFails, remainingAttempts: this.maxAttempts - newFails };
+            }
+        },
+
+        recordSuccess() {
+            try {
+                const keys = this.getStorageKeys();
+                localStorage.removeItem(keys.fails);
+                localStorage.removeItem(keys.lockout);
+            } catch (_) {}
+            if (this.timerInterval) {
+                clearInterval(this.timerInterval);
+                this.timerInterval = null;
+            }
+        },
+
+        applyLockoutUI(durationSec) {
+            const btn = document.getElementById('loginSubmitBtn');
+            const idInput = document.getElementById('l-id');
+            const pwInput = document.getElementById('l-pw');
+            const errBox = document.getElementById('l-pw-err');
+
+            if (this.timerInterval) clearInterval(this.timerInterval);
+
+            let remaining = durationSec;
+
+            const tick = () => {
+                if (remaining <= 0) {
+                    clearInterval(this.timerInterval);
+                    this.timerInterval = null;
+                    this.recordSuccess();
+
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.style.background = '';
+                        btn.style.cursor = 'pointer';
+                        btn.textContent = (this.portalKey === 'admin') ? 'Login to Admin Portal' : 'Login to Portal';
+                    }
+                    if (idInput) idInput.disabled = false;
+                    if (pwInput) pwInput.disabled = false;
+                    if (errBox) {
+                        errBox.textContent = '';
+                        errBox.style.display = 'none';
+                    }
+                    showToast('Security cooldown expired. You may now attempt to log in.', 'info');
+                    return;
+                }
+
+                if (btn) {
+                    btn.disabled = true;
+                    btn.style.background = '#dc2626';
+                    btn.style.cursor = 'not-allowed';
+                    btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline-block;vertical-align:middle;margin-right:6px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Security Cooldown (${remaining}s)`;
+                }
+                if (idInput) idInput.disabled = true;
+                if (pwInput) pwInput.disabled = true;
+                if (errBox) {
+                    errBox.innerHTML = `<strong>Security Alert:</strong> 3 failed attempts exceeded. Access temporarily locked for <strong>${remaining}s</strong> to prevent brute-force attacks.`;
+                    errBox.style.display = 'block';
+                }
+                remaining--;
+            };
+
+            tick();
+            this.timerInterval = setInterval(tick, 1000);
+        },
+
+        checkLockoutOnLoad() {
+            const state = this.getState();
+            const now = Date.now();
+            if (state.lockoutUntil > now) {
+                const secLeft = Math.ceil((state.lockoutUntil - now) / 1000);
+                this.applyLockoutUI(secLeft);
+                return true;
+            }
+            return false;
+        }
+    };
+
     /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
        SUPABASE + BACKEND INIT
     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
@@ -1283,22 +1430,40 @@
         if (!inputVal) { document.getElementById('l-id-err').textContent = cfg.idLabel + ' is required'; return; }
         if (!pw) { document.getElementById('l-pw-err').textContent = 'Password is required'; return; }
 
+        if (AUTH_SECURITY.isLocked()) {
+            showToast('Security cooldown active. Please wait before retrying.', 'error');
+            return;
+        }
+
         setLoginBusy(true);
         try {
             const { data, error } = await db.rpc('email_for_school_id', { p_school_id: inputVal.toUpperCase() });
             if (error || !data) {
-                showError('l-id-err', 'Invalid ID or account not found');
-                showToast('Invalid ID or password', 'error');
+                const failStatus = AUTH_SECURITY.recordFailure();
+                if (failStatus.locked) {
+                    AUTH_SECURITY.applyLockoutUI(failStatus.remainingSec);
+                    showToast('3 failed attempts. 60-second cooldown activated.', 'error');
+                    return;
+                }
+                showError('l-id-err', `Invalid ID or credentials. (${failStatus.remainingAttempts} attempt${failStatus.remainingAttempts === 1 ? '' : 's'} remaining before 60s security cooldown)`);
+                showToast(`Invalid credentials (${failStatus.remainingAttempts} attempt${failStatus.remainingAttempts === 1 ? '' : 's'} remaining)`, 'error');
                 return;
             }
             const email = data;
 
             const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email, password: pw });
             if (authErr || !authData.session) {
-                showError('l-pw-err', 'Invalid password. Please try again.');
-                showToast('Invalid password', 'error');
+                const failStatus = AUTH_SECURITY.recordFailure();
+                if (failStatus.locked) {
+                    AUTH_SECURITY.applyLockoutUI(failStatus.remainingSec);
+                    showToast('3 failed attempts. 60-second cooldown activated.', 'error');
+                    return;
+                }
+                showError('l-pw-err', `Invalid password. (${failStatus.remainingAttempts} attempt${failStatus.remainingAttempts === 1 ? '' : 's'} remaining before 60s security cooldown)`);
+                showToast(`Invalid password (${failStatus.remainingAttempts} attempt${failStatus.remainingAttempts === 1 ? '' : 's'} remaining)`, 'error');
                 return;
             }
+            AUTH_SECURITY.recordSuccess();
 
             const { data: profile, error: profileErr } = await db
                 .from('users').select('role, is_active, is_demo').eq('id', authData.user.id).single();
@@ -1418,6 +1583,7 @@
     }
 
     (async () => {
+        AUTH_SECURITY.checkLockoutOnLoad();
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('deactivated') === '1') {
             showToast('This account has been deactivated. Permissions revoked by administration.', 'error');

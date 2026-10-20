@@ -1,5 +1,6 @@
 // server.js
-require('dotenv').config(); // MUST be first — everything below reads from process.env
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') }); // Explicit absolute path for reliable env loading
 
 const express = require('express');
 const cors = require('cors');
@@ -8,7 +9,6 @@ const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
-const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -48,11 +48,70 @@ function saveAuditRecord(record) {
   }
 }
 
-// --- Core middleware ---
+// --- Core Security Middleware ---
+// 1. Helmet Security Headers (CSP, Anti-Clickjacking, Anti-MIME Sniffing, Hide Express Signature)
 app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginResourcePolicy: false
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'", "https://*.supabase.co"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com",
+        "https://*.supabase.co"
+      ],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://fonts.googleapis.com",
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com"
+      ],
+      fontSrc: [
+        "'self'",
+        "https://fonts.gstatic.com",
+        "https://cdn.jsdelivr.net",
+        "data:"
+      ],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "blob:",
+        "https://*.supabase.co",
+        "https://images.unsplash.com",
+        "https://i.pravatar.cc"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://*.supabase.co",
+        "wss://*.supabase.co",
+        "https://generativelanguage.googleapis.com",
+        "https://api.openai.com",
+        "https://cdn.jsdelivr.net"
+      ],
+      frameAncestors: ["'self'"],
+      objectSrc: ["'none'"]
+    }
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  frameguard: { action: 'sameorigin' },
+  noSniff: true,
+  xssFilter: true,
+  hidePoweredBy: true
 }));
+
+// Additional defense-in-depth headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.removeHeader('X-Powered-By');
+  next();
+});
+
+// 2. Strict Access Control / CORS
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || origin === 'null' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
@@ -65,8 +124,75 @@ app.use(cors({
   },
   credentials: true
 }));
+
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// 3. Input Sanitization Middleware (Anti-XSS & Code Injection Filter)
+function sanitizeInput(obj) {
+  if (typeof obj === 'string') {
+    return obj
+      .replace(/\0/g, '')
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/javascript:/gi, '')
+      .replace(/on\w+\s*=/gi, '');
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeInput(item));
+  }
+  if (obj && typeof obj === 'object') {
+    const sanitized = {};
+    for (const key of Object.keys(obj)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+      sanitized[key] = sanitizeInput(obj[key]);
+    }
+    return sanitized;
+  }
+  return obj;
+}
+
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') req.body = sanitizeInput(req.body);
+  if (req.query && typeof req.query === 'object') req.query = sanitizeInput(req.query);
+  if (req.params && typeof req.params === 'object') req.params = sanitizeInput(req.params);
+  next();
+});
+
+// 4. Critical Gatekeeper: Block Direct Access to Database Schemas, .env, Source Code, and Data
+const SENSITIVE_PATTERNS = [
+  /^\/\.env/i,
+  /\.sql$/i,
+  /\.json$/i,
+  /\.cjs$/i,
+  /\.bak$/i,
+  /\.log$/i,
+  /\.map$/i,
+  /\.md$/i,
+  /\.yml$/i,
+  /\.yaml$/i,
+  /^\/server\.js$/i,
+  /^\/flush-presentation-data\.js$/i,
+  /^\/seed-demo-account\.js$/i,
+  /^\/data(\/|$)/i,
+  /^\/tests(\/|$)/i,
+  /^\/node_modules(\/|$)/i,
+  /^\/\.git/i,
+  /^\/\.gemini/i
+];
+
+app.use((req, res, next) => {
+  const reqPath = decodeURIComponent(req.path);
+  // Prevent path traversal
+  if (reqPath.includes('..')) {
+    return res.status(404).send('Not Found');
+  }
+  for (const pattern of SENSITIVE_PATTERNS) {
+    if (pattern.test(reqPath)) {
+      return res.status(404).send('Not Found');
+    }
+  }
+  next();
+});
 
 // Redirect root to login page
 app.get('/', (req, res) => {
@@ -78,16 +204,32 @@ const chatUploadsDir = path.join(__dirname, 'uploads', 'chat');
 if (!fs.existsSync(chatUploadsDir)) {
   fs.mkdirSync(chatUploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use(express.static(__dirname));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { dotfiles: 'ignore' }));
 
-// Basic rate limiting on the API routes (auth routes skipped so rate limits never block logins)
+// Allowed public assets and folders
+app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'ignore' }));
+app.use('/js', express.static(path.join(__dirname, 'js'), { dotfiles: 'ignore' }));
+app.use('/assets', express.static(path.join(__dirname, 'assets'), { dotfiles: 'ignore' }));
+app.use(express.static(__dirname, { dotfiles: 'ignore', index: false }));
+
+// 5. Rate Limiting: Global API Limiter & Dedicated Auth Limiter (Anti-Brute Force / DDoS)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes window
+  max: 25,                  // max 25 auth calls per IP per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many authentication attempts from this IP address. Please wait 15 minutes before trying again.'
+  }
+});
+app.use('/api/auth/', authLimiter);
+app.use('/api/admin/create-account', authLimiter);
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500,                 // limit each IP per window
   standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => req.path.startsWith('/auth/'),
+  legacyHeaders: false
 });
 app.use('/api/', apiLimiter);
 // Health check endpoint for uptime monitoring and hosting platforms
@@ -502,9 +644,12 @@ app.post('/api/admin/create-account', async (req, res) => {
     }
   });
   if (authErr) {
-    const msg = /already.*regist/i.test(authErr.message)
-      ? 'An account with this email already exists'
-      : authErr.message;
+    let msg = authErr.message;
+    if (/already.*regist/i.test(msg)) {
+      msg = 'An account with this email already exists';
+    } else if (msg === 'User not allowed' || msg.includes('not allowed')) {
+      msg = 'Database Configuration Error: Supabase service_role secret key is missing or invalid in server .env (auth.admin.createUser permission denied). Your Excel format is valid, but the server needs the valid service_role key to register accounts.';
+    }
     return res.status(400).json({ error: msg });
   }
 
@@ -662,6 +807,64 @@ app.post('/api/admin/reset-user-password', async (req, res) => {
   });
 });
 
+app.post('/api/admin/update-user-sections', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can modify user sections' });
+
+  const { user_id, school_id, section, user_ids, updates } = req.body;
+
+  try {
+    // 1. Bulk updates with individual sections
+    if (Array.isArray(updates) && updates.length > 0) {
+      for (const item of updates) {
+        const targetId = item.user_id || item.id || item.school_id;
+        const targetSec = item.section !== undefined ? item.section : null;
+        if (targetId) {
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(targetId));
+          if (isUUID) {
+            await supabaseAdmin.from('users').update({ section: targetSec }).eq('id', targetId);
+          } else {
+            await supabaseAdmin.from('users').update({ section: targetSec }).eq('school_id', targetId);
+          }
+        }
+      }
+      return res.json({ success: true, count: updates.length });
+    }
+
+    // 2. Mass assignment of an array of user_ids to a single section
+    if (Array.isArray(user_ids) && user_ids.length > 0) {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .update({ section: section !== undefined ? section : null })
+        .in('id', user_ids)
+        .select();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ success: true, updated: data });
+    }
+
+    // 3. Single user section update (by user_id or school_id)
+    if (user_id || school_id) {
+      let query = supabaseAdmin.from('users').update({ section: section !== undefined ? section : null });
+      const target = user_id || school_id;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(target));
+      if (isUUID) {
+        query = query.eq('id', target);
+      } else {
+        query = query.eq('school_id', target);
+      }
+      const { data, error } = await query.select();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ success: true, updated: data });
+    }
+
+    return res.status(400).json({ error: 'Missing target user ID(s) or updates payload' });
+  } catch (err) {
+    console.error('Failed to update user section:', err);
+    return res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
 app.post('/api/auth/demo-login', async (req, res) => {
   if (process.env.DEMO_MODE !== 'true') {
     return res.status(404).json({ error: 'Not found' });
@@ -718,9 +921,21 @@ const chatStorage = multer.diskStorage({
   }
 });
 
+const ALLOWED_UPLOAD_EXTS = new Set([
+  '.png', '.jpg', '.jpeg', '.webp', '.gif',
+  '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'
+]);
+
 const chatUpload = multer({
   storage: chatStorage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_UPLOAD_EXTS.has(ext)) {
+      return cb(new Error('File type not allowed. Supported formats: images, PDF, documents, presentations, spreadsheets, and text files.'));
+    }
+    cb(null, true);
+  }
 });
 
 app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
@@ -1115,6 +1330,51 @@ app.delete('/api/quizzes/:id', async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   res.json({ success: true, id: req.params.id });
+});
+
+// --- Quiz attempts & class records retrieval for Teachers & Admins ---
+app.get('/api/quiz-attempts/:quizId', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (!['teacher', 'admin'].includes(profile.role)) return res.status(403).json({ error: 'Teacher or Admin only' });
+
+  const { quizId } = req.params;
+  const { data, error } = await supabaseAdmin
+    .from('quiz_attempts')
+    .select('*')
+    .eq('quiz_id', quizId)
+    .order('submitted_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ attempts: data || [] });
+});
+
+app.get('/api/class-records', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (!['teacher', 'admin'].includes(profile.role)) return res.status(403).json({ error: 'Teacher or Admin only' });
+
+  const { data, error } = await supabaseAdmin
+    .from('class_records')
+    .select('*')
+    .order('submitted_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ records: data || [] });
+});
+
+app.get('/api/users', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (!['teacher', 'admin'].includes(profile.role)) return res.status(403).json({ error: 'Teacher or Admin only' });
+
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, full_name, school_id, role, strand, grade_level, section, subjects, email, is_active, created_at, last_active_at, avatar_url, bio, profanity_strikes, permanently_muted, muted_until')
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ users: data || [] });
 });
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;

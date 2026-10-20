@@ -1035,7 +1035,7 @@ async function submitQuizAttempt(isAutoSubmit = false) {
   const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
   const studentId = prof.id || prof.school_id || 'stud_1';
   const studentName = prof.full_name || 'Student';
-  const section = prof.section || 'Section A';
+  const section = prof.section || 'Unassigned';
   const strand = prof.strand || 'STEM';
   const subject = quiz?.subject || strand;
 

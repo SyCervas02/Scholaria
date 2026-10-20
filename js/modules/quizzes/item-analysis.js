@@ -88,7 +88,7 @@ function getAttemptsForAnalysis(quizId, secFilter = '', studentSearch = '', scor
     if (matchU) {
       if (!a.student_name || a.student_name === 'Student') a.student_name = matchU.name || matchU.full_name;
       if (!a.student_school_id) a.student_school_id = matchU.school_id || matchU.id;
-      if (!a.section || a.section === 'Unassigned') a.section = matchU.section || 'Section A';
+      if (!a.section || a.section === 'Unassigned') a.section = matchU.section || 'Unassigned';
       if (!a.strand) a.strand = matchU.strand || 'STEM';
     } else {
       if (!a.student_name) a.student_name = 'Student';
@@ -137,6 +137,16 @@ function getAttemptsForAnalysis(quizId, secFilter = '', studentSearch = '', scor
       const sec = (a.section || '').trim().toLowerCase();
       return sec === secFilter.trim().toLowerCase();
     });
+  } else if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+    const teacherHandled = typeof getTeacherHandledSections === 'function'
+      ? getTeacherHandledSections(typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE : null)
+      : [];
+    if (teacherHandled.length > 0) {
+      uniqueAttempts = uniqueAttempts.filter(a => {
+        const sec = (a.section || '').trim().toLowerCase();
+        return teacherHandled.some(h => h.trim().toLowerCase() === sec);
+      });
+    }
   }
 
   // Filter by student search query if specified
@@ -270,7 +280,7 @@ function buildAnalysisRows(quiz, attempts) {
       }
 
       if (targetTally) {
-        const studAns = ans.studentAnswer != null ? String(ans.studentAnswer) : '—';
+        const studAns = ans.studentAnswer != null ? String(ans.studentAnswer) : (ans.given != null ? String(ans.given) : (ans.userAnswer != null ? String(ans.userAnswer) : '—'));
         if (ans.isCorrect) {
           targetTally.correct++;
           targetTally.correctStudents.push({ ...studentInfo, answer: studAns });
@@ -326,15 +336,99 @@ async function loadAttemptsForAnalysis(quizId) {
   if (!quizId || analysisFetchInFlightFor === quizId) return;
   analysisFetchInFlightFor = quizId;
   try {
+    const customQList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+    const targetQuiz = customQList.find(q => String(q.id) === String(quizId));
+    const targetTitle = targetQuiz ? String(targetQuiz.title || '').trim().toLowerCase() : '';
+
+    let qaData = [];
+    let crData = [];
+
+    // 1. Supabase direct queries
     if (typeof db !== 'undefined' && db) {
-      const { data, error } = await db.from('quiz_attempts').select('*').eq('quiz_id', quizId).order('submitted_at', { ascending: false });
-      if (error) {
-        console.warn('Failed to load attempts for analysis:', error.message);
-        if (!analysisAttemptsCache[quizId]) analysisAttemptsCache[quizId] = [];
-      } else {
-        analysisAttemptsCache[quizId] = data || [];
+      try {
+        const { data, error } = await db.from('quiz_attempts').select('*').eq('quiz_id', quizId).order('submitted_at', { ascending: false });
+        if (!error && Array.isArray(data)) qaData = data;
+      } catch (err) {
+        console.warn('quiz_attempts select notice:', err);
+      }
+
+      try {
+        const { data: cData, error: cErr } = await db.from('class_records').select('*').order('submitted_at', { ascending: false });
+        if (!cErr && Array.isArray(cData)) {
+          crData = cData.filter(item =>
+            String(item.quiz_id || '').toLowerCase() === String(quizId).toLowerCase() ||
+            (targetTitle && String(item.quiz_title || '').trim().toLowerCase() === targetTitle)
+          );
+        }
+      } catch (err) {
+        console.warn('class_records select notice:', err);
       }
     }
+
+    // 2. Backend service API query if available
+    try {
+      if (typeof API_BASE !== 'undefined' && typeof db !== 'undefined' && db.auth) {
+        const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+        if (session && session.access_token) {
+          const apiRes = await fetch(`${API_BASE}/api/quiz-attempts/${quizId}`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+          });
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json();
+            if (apiJson && Array.isArray(apiJson.attempts)) {
+              apiJson.attempts.forEach(att => {
+                if (!qaData.some(existing => existing.id === att.id)) qaData.push(att);
+              });
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 3. Merge qaData (which has answers) with crData (which has student metadata)
+    const attemptMap = new Map();
+
+    qaData.forEach(item => {
+      const sKey = String(item.student_id || item.user_id || item.id || '').toLowerCase().trim();
+      attemptMap.set(sKey, Object.assign({}, item));
+    });
+
+    crData.forEach(item => {
+      const sKey = String(item.student_id || item.user_id || '').toLowerCase().trim();
+      if (attemptMap.has(sKey)) {
+        const existing = attemptMap.get(sKey);
+        attemptMap.set(sKey, Object.assign({}, item, existing, {
+          student_name: item.student_name || existing.student_name,
+          section: item.section || existing.section,
+          strand: item.strand || existing.strand
+        }));
+      } else {
+        attemptMap.set(sKey, Object.assign({}, item));
+      }
+    });
+
+    // 4. Merge with local attempts
+    if (typeof getAllRecordedAttempts === 'function') {
+      const localAll = getAllRecordedAttempts();
+      localAll.forEach(la => {
+        const matchId = String(la.quiz_id || la.quizId || '').toLowerCase() === String(quizId).toLowerCase();
+        const matchTitle = targetTitle && String(la.quiz_title || la.quizTitle || '').trim().toLowerCase() === targetTitle;
+        if (matchId || matchTitle) {
+          const sKey = String(la.student_id || la.studentId || la.student_name || '').toLowerCase().trim();
+          if (attemptMap.has(sKey)) {
+            const existing = attemptMap.get(sKey);
+            if ((!existing.answers || !existing.answers.length) && (la.answers && la.answers.length)) {
+              existing.answers = la.answers;
+            }
+            if (!existing.section && la.section) existing.section = la.section;
+          } else {
+            attemptMap.set(sKey, la);
+          }
+        }
+      });
+    }
+
+    analysisAttemptsCache[quizId] = Array.from(attemptMap.values());
   } catch (e) {
     console.warn('Failed to load attempts for analysis:', e.message);
     if (!analysisAttemptsCache[quizId]) analysisAttemptsCache[quizId] = [];
@@ -417,9 +511,12 @@ function inspectStudentAttempt(attemptId) {
       <div class="scholaria-custom-scroll" style="padding:20px 24px;overflow-y:auto;max-height:55vh;display:flex;flex-direction:column;gap:14px;">
         ${answersList.length ? answersList.map((ans, idx) => {
           const isCorrect = !!ans.isCorrect;
-          const label = ans.label || `Question ${idx + 1}`;
-          const studAns = ans.studentAnswer != null ? String(ans.studentAnswer) : 'No answer provided';
-          const correctKey = ans.correctAnswer != null ? String(ans.correctAnswer) : '—';
+          const quizQuestion = (targetQuiz.questions && targetQuiz.questions[idx]) || {};
+          const label = ans.label || ans.question || quizQuestion.question || `Question ${idx + 1}`;
+          const rawStud = ans.studentAnswer ?? ans.given ?? ans.userAnswer ?? ans.answer;
+          const studAns = Array.isArray(rawStud) ? rawStud.join(', ') : (rawStud != null && String(rawStud).trim() !== '' ? String(rawStud) : 'No answer provided');
+          const rawCorrect = ans.correctAnswer ?? ans.correct ?? ans.key ?? quizQuestion.answer ?? (quizQuestion.options ? quizQuestion.options[quizQuestion.answer] : '');
+          const correctKey = Array.isArray(rawCorrect) ? rawCorrect.join(', ') : (rawCorrect != null && String(rawCorrect).trim() !== '' ? String(rawCorrect) : '—');
           return `
             <div style="background:#ffffff;border:1.5px solid ${isCorrect ? '#bbf7d0' : '#fecaca'};border-radius:12px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px;">

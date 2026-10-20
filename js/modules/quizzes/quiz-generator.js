@@ -1304,7 +1304,7 @@ async function generateQuiz() {
       const source = data._source || 'unknown';
       const qCount = data.questions.length;
       let sourceLabel = source;
-      if (source.startsWith('gemini:')) sourceLabel = '🤖 Gemini AI (' + source.split(':')[1] + ')';
+      if (source.startsWith('gemini:')) sourceLabel = 'Automated AI Generator';
       else if (source.startsWith('openai:')) sourceLabel = '🤖 OpenAI (' + source.split(':')[1] + ')';
       else if (source === 'offline-fallback') sourceLabel = '⚠️ Offline Fallback (no AI — API keys missing/exhausted)';
 
@@ -2511,7 +2511,7 @@ function renderQuizModal() {
     body.innerHTML = `
       <div class="gen-loading">
         <div class="gl-ring"></div>
-        <p style="font-weight:700;font-size:15px;color:#0f172a;margin-top:14px;">${fileCountText} with Gemini AI…</p>
+        <p style="font-weight:700;font-size:15px;color:#0f172a;margin-top:14px;">${fileCountText} and generating quiz questions…</p>
         <span class="gl-sub" style="max-width:440px;line-height:1.5;margin-top:4px;">Drafting questions, citations, and answers. For multi-page or multiple handouts, processing takes about 1–2 minutes during peak hours.</span>
       </div>`;
     foot.innerHTML = '';
