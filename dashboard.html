@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css"/>
   <link rel="stylesheet" href="css/modules/deadlines.css?v=1"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20020"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20033"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css"/>
   <link rel="stylesheet" href="css/modules/chat.css?v=20007"/>
@@ -73,14 +73,14 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--blue);flex-shrink:0;">
         <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
       </svg>
-      <input type="text" id="globalSearchInput" placeholder="Search subjects, quizzes, handouts, news (Ctrl + K)..." autocomplete="off" spellcheck="false"/>
+      <input type="text" id="globalSearchInput" placeholder="Search students, teachers, subjects, materials, announcements... (Ctrl + K)" autocomplete="off" spellcheck="false"/>
       <button type="button" id="globalSearchClearBtn" class="search-clear-btn" aria-label="Clear search" style="display:none;">✕</button>
       <kbd class="search-kbd-badge" id="searchKbdBadge">Ctrl K</kbd>
       <div class="search-results-dropdown" id="searchResultsDropdown" style="display:none;" role="listbox" aria-label="Search results"></div>
     </div>
     <div class="nav-right">
 
-      <div class="notif-wrap" id="notifWrap">
+      <div class="notif-wrap" id="notifWrap" style="order:1;">
         <button class="icon-btn" id="notifBtn" onclick="toggleNotif()" aria-label="Notifications">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
@@ -136,9 +136,12 @@
         </div>
       </div>
 
-      <div class="profile">
-        <div class="avatar" id="userAvatar">JA</div>
-        <span class="nav-username" id="userName">User</span>
+      <div class="profile" onclick="renderPage('profile')" style="cursor:pointer;order:2;" title="View Profile">
+        <div class="avatar" id="userAvatar">MS</div>
+        <div class="profile-info-text" style="display:flex;flex-direction:column;text-align:left;line-height:1.2;">
+          <span class="nav-username" id="userName" style="font-weight:700;font-size:13px;color:#0f172a;">Mr. S. Llorente Jr.</span>
+          <span class="nav-user-role" id="userRoleTitle" style="font-size:11px;color:#64748b;font-weight:500;">Administrator</span>
+        </div>
       </div>
     </div>
   </header>

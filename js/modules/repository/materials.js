@@ -1,52 +1,3 @@
-
-const DB_NAME_MATERIALS = 'scholaria_files_db';
-const STORE_NAME_MATERIALS = 'material_blobs';
-
-function openMaterialFilesDB() {
-  return new Promise((resolve) => {
-    if (typeof indexedDB === 'undefined') return resolve(null);
-    try {
-      const req = indexedDB.open(DB_NAME_MATERIALS, 1);
-      req.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE_NAME_MATERIALS)) {
-          db.createObjectStore(STORE_NAME_MATERIALS);
-        }
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-    } catch (e) {
-      resolve(null);
-    }
-  });
-}
-
-async function saveMaterialBlobToIndexedDB(id, blobOrFile) {
-  try {
-    const idb = await openMaterialFilesDB();
-    if (!idb) return;
-    const tx = idb.transaction(STORE_NAME_MATERIALS, 'readwrite');
-    tx.objectStore(STORE_NAME_MATERIALS).put(blobOrFile, String(id));
-  } catch (err) {
-    console.warn('Could not cache file in IndexedDB:', err);
-  }
-}
-
-async function getMaterialBlobFromIndexedDB(id) {
-  try {
-    const idb = await openMaterialFilesDB();
-    if (!idb) return null;
-    return new Promise((resolve) => {
-      const tx = idb.transaction(STORE_NAME_MATERIALS, 'readonly');
-      const req = tx.objectStore(STORE_NAME_MATERIALS).get(String(id));
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    });
-  } catch (err) {
-    return null;
-  }
-}
-window.materialSessionUrls = window.materialSessionUrls || {};
 const SUBJECTS_BY_STRAND_AND_GRADE = {
   HUMSS: {
     'Grade 11': [
@@ -286,14 +237,10 @@ function cleanupLegacyDummyStorage() {
           const t = String(m.title || m.fileName || '').trim().toLowerCase();
           if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
           return true;
-        }).map(m => {
-          const isUploadedByAdmin = (m.uploader_role === 'Admin' || m.uploaded_by_name === 'Administrator' || m.approved_by);
-          const finalStatus = isUploadedByAdmin ? (m.status || 'approved') : (m.approved_by ? 'approved' : (m.status === 'approved' && !m.approved_by ? 'pending' : (m.status || 'pending')));
-          return {
-            ...m,
-            status: finalStatus
-          };
-        });
+        }).map(m => ({
+          ...m,
+          status: 'approved' // Auto-approve teacher uploads so they reflect immediately for students
+        }));
         localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(cleaned));
       }
     }
@@ -328,13 +275,10 @@ function getCustomMaterialsFromStorage() {
       const t = String(m.title || m.fileName || '').trim().toLowerCase();
       if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
       return true;
-    }).map(m => {
-      const isUploadedByAdmin = (m.uploader_role === 'Admin' || m.uploaded_by_name === 'Administrator' || m.approved_by);
-      return {
-        ...m,
-        status: m.status || (isUploadedByAdmin ? 'approved' : 'pending')
-      };
-    });
+    }).map(m => ({
+      ...m,
+      status: m.status || 'approved'
+    }));
   } catch (e) {
     return [];
   }
@@ -603,7 +547,7 @@ function getSubjectLessons(course) {
             submitted: u.date_formatted || "Oct 16, 2026",
             due: u.date_formatted || "Official Handout",
             status: "Completed",
-            file_url: u.file_url || ""
+            file_url: u.file_url || "SURVEY FORMS - Scholaria.pdf"
           });
         }
       });
@@ -912,14 +856,18 @@ async function loadMaterialsFromDB() {
   if (ROLE === 'student') {
     const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
     materialsData = filteredMerged.filter(m => {
-      // Students MUST NOT see pending materials; only approved items are accessible!
-      if (m.status && m.status !== 'approved') return false;
+      const isTeacher = (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
+      if (m.status && m.status !== 'approved' && !isTeacher) return false;
       const mStrand = (m.strand || '').toUpperCase();
       if (mStrand && !mStrand.includes(studentStrand) && mStrand !== 'CORE' && mStrand !== 'GENERAL' && mStrand !== 'ALL' && !mStrand.includes('ALL') && !mStrand.includes('BOTH')) return false;
       return true;
     });
   } else {
     materialsData = filteredMerged;
+  }
+
+  if (ROLE === 'student' && currentPage === 'materials' && typeof loadQuizzesFromDB === 'function') {
+    try { await loadQuizzesFromDB(); } catch (e) { console.warn('Could not load quizzes for My Materials:', e.message); }
   }
 
   isFetchingMaterials = false;
@@ -956,28 +904,13 @@ function updateApprovalBadge() {
 
 function renderMaterialsList(role) {
   const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
-  const teacherStrands = (role === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(/[,&]+/).map(str => str.trim().toUpperCase()).filter(Boolean)
-    : [];
-
   let enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
     ? (role === 'teacher'
-        ? COURSES_DATABASE.filter(c => {
-            const courseStrand = (c.strand || 'STEM').toUpperCase();
-            if (materialsStrandFilter) {
-              return courseStrand === materialsStrandFilter.toUpperCase();
-            }
-            if (teacherStrands.length > 0) {
-              return teacherStrands.includes(courseStrand);
-            }
-            return true;
-          })
-        : COURSES_DATABASE.filter(c => {
-            // STRICT: When student is enrolled in STEM, only STEM subjects are shown!
-            const courseStrand = (c.strand || 'STEM').toUpperCase();
-            if (courseStrand !== studentStrand) return false;
-            return typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true;
-          }))
+        ? (materialsStrandFilter ? COURSES_DATABASE.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase()) : COURSES_DATABASE.slice())
+        : COURSES_DATABASE.filter(c => typeof isCourseAssignedToStudent === 'function'
+            ? isCourseAssignedToStudent(c, CURRENT_PROFILE)
+            : (c.strand || '').toUpperCase() === studentStrand &&
+              String(c.gradeLevel || '').match(/\d+/)?.[0] === String(CURRENT_PROFILE?.grade_level || CURRENT_PROFILE?.gradeLevel || '').match(/\d+/)?.[0]))
     : [];
 
   if (role === 'teacher' && typeof materialsStrandFilter !== 'undefined' && materialsStrandFilter) {
@@ -1005,17 +938,23 @@ function renderMaterialsList(role) {
       const docs = course.documents || [];
       const lessons = getSubjectLessons(course);
       const subjectQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
-        if (!q.subject) return false;
-        // Only show approved quizzes (pending quizzes go through Content Approval first)
-        if (q.status === 'pending' || q.status === 'revision') return false;
-        const s = q.subject.toLowerCase();
-        const t = course.title.toLowerCase();
-        if (!s.includes(t) && !t.includes(s)) return false;
+        if (!q) return false;
+        const normalizeSubject = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const qSubject = normalizeSubject(q.subject || q.subject_name);
+        const courseTitle = normalizeSubject(course.title);
+        const courseCode = normalizeSubject(course.code);
+        const qCourseId = String(q.course_id || q.courseId || '').toLowerCase().trim();
+        const matchesCourse = qCourseId === String(course.id || '').toLowerCase().trim() ||
+          (!!qSubject && ((courseTitle && (qSubject.includes(courseTitle) || courseTitle.includes(qSubject))) ||
+            (courseCode && (qSubject.includes(courseCode) || courseCode.includes(qSubject)))));
+        if (!matchesCourse) return false;
         if (activeSubjectSection) {
-          const qSec = (q.sections || q.section || q.target_section || '').toLowerCase();
+          const qSec = [q.sections, q.section, q.target_section].flat().filter(Boolean).join(',').toLowerCase();
           const aSec = activeSubjectSection.toLowerCase();
           if (qSec && qSec !== 'all' && !qSec.includes(aSec) && !aSec.includes(qSec)) return false;
         }
+        if (role === 'student' && typeof isQuizTargetedForStudent === 'function' &&
+          String(q.status || '').toLowerCase() !== 'closed' && !isQuizTargetedForStudent(q, CURRENT_PROFILE)) return false;
         return true;
       }) : [];
       const attempts = (typeof getAllRecordedAttempts === 'function')
@@ -1128,21 +1067,21 @@ function renderMaterialsList(role) {
                           <div class="sw-lesson-card ${isExpanded ? 'expanded' : ''}" style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,0.04);transition:all 0.2s ease;">
                             <div class="sw-lesson-header" onclick="toggleLessonAccordion('${lesson.id}')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;user-select:none;gap:14px;background:#ffffff;">
                               <div style="display:flex;align-items:center;gap:14px;min-width:0;flex:1;">
-                                <img src="${lesson.cover}" alt="${escHtml(lesson.title)}" class="sw-lesson-cover-img" style="width:96px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,0.06);flex-shrink:0;">
-                                <div style="min-width:0;flex:1;">
+                                <img src="${lesson.cover}" alt="${escHtml(lesson.title)}" style="width:96px;height:62px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,0.06);flex-shrink:0;">
+                                <div style="min-width:0;">
                                   <h4 style="margin:0 0 6px 0;font-size:15px;font-weight:700;color:#0f172a;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(lesson.title)}</h4>
-                                  <div class="sw-lesson-subtitle" style="display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;flex-wrap:wrap;">
+                                  <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;">
                                     ${(() => {
                                       const compCount = items.filter(it => (it.status || '').toLowerCase() === 'completed').length;
                                       const compPct = items.length ? Math.round((compCount / items.length) * 100) : 0;
                                       return items.length ? `
-                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${compPct === 100 ? '#dcfce7;color:#15803d' : '#e0f2fe;color:#0369a1'};border:1px solid #e2e8f0;white-space:nowrap;flex-shrink:0;">${compPct}% Completed</span>
+                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${compPct === 100 ? '#dcfce7;color:#15803d' : '#e0f2fe;color:#0369a1'};border:1px solid #e2e8f0;">${compPct}% Completed</span>
                                         <span>·</span>
-                                        <span style="white-space:nowrap;">${items.length} handout${items.length === 1 ? '' : 's'} available</span>
+                                        <span>${items.length} handout${items.length === 1 ? '' : 's'} available</span>
                                       ` : `
-                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;white-space:nowrap;flex-shrink:0;">0% Empty</span>
+                                        <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;">0% Empty</span>
                                         <span>·</span>
-                                        <span style="white-space:nowrap;">No files posted yet</span>
+                                        <span>No files posted yet</span>
                                       `;
                                     })()}
                                   </div>
@@ -1169,7 +1108,7 @@ function renderMaterialsList(role) {
                                       <tr style="border-bottom:1.5px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;background:#ffffff;">
                                         <th style="padding:9px 12px;font-weight:700;">Section / Handout</th>
                                         <th style="padding:9px 12px;font-weight:700;">Submitted</th>
-                                        <th style="padding:9px 12px;font-weight:700;">Uploaded By</th>
+                                        <th style="padding:9px 12px;font-weight:700;">Score</th>
                                         <th style="padding:9px 12px;font-weight:700;">Due</th>
                                         <th style="padding:9px 12px;font-weight:700;">Status</th>
                                         <th style="padding:9px 12px;font-weight:700;text-align:right;">Action</th>
@@ -1185,7 +1124,7 @@ function renderMaterialsList(role) {
                                             </div>
                                           </td>
                                           <td style="padding:10px 12px;color:#64748b;">${escHtml(it.submitted || '-')}</td>
-                                          <td style="padding:10px 12px;color:#64748b;">${escHtml(it.uploaded_by_name || it.uploader_name || it.score || '-')}</td>
+                                          <td style="padding:10px 12px;color:#64748b;">${escHtml(it.score || '-')}</td>
                                           <td style="padding:10px 12px;color:#64748b;">${escHtml(it.due || '-')}</td>
                                           <td style="padding:10px 12px;"><span class="sw-status-pill ${it.status === 'Completed' ? 'done' : (it.status === 'Ongoing' ? 'ongoing' : '')}">${escHtml(it.status || 'Pending')}</span></td>
                                           <td style="padding:10px 12px;text-align:right;">
@@ -1194,7 +1133,7 @@ function renderMaterialsList(role) {
                                                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                                 Preview
                                               </button>
-                                              <a href="${it.file_url || ''}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
+                                              <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
                                                 <span>⬇</span> Download
                                               </a>
                                               ${(role === 'admin') ? `
@@ -1244,6 +1183,42 @@ function renderMaterialsList(role) {
                       ` : ''}
                     </div>
                   `}
+                  ${role === 'student' ? `
+                    <div class="sw-subject-quizzes-card" style="margin-top:20px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                        <div>
+                          <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Quizzes &amp; Assessments</h3>
+                          <span style="font-size:12px;color:var(--text-muted);">Assigned for ${escHtml(course.title)}</span>
+                        </div>
+                        ${subjectQuizzes.length ? `<button type="button" class="sw-btn outline" onclick="setSubjectSubTab('quizzes')" style="padding:6px 12px;font-size:12px;">View all ${subjectQuizzes.length}</button>` : ''}
+                      </div>
+                      ${subjectQuizzes.length ? `<div class="file-list" style="display:flex;flex-direction:column;gap:8px;">
+                        ${subjectQuizzes.map(q => {
+                          const attempt = attempts.find(a => {
+                            if (!a) return false;
+                            const attemptQuizId = String(a.quiz_id || '').toLowerCase().trim();
+                            const quizId = String(q.id || '').toLowerCase().trim();
+                            return (attemptQuizId && attemptQuizId === quizId) ||
+                              (a.quiz_title && q.title && String(a.quiz_title).trim().toLowerCase() === String(q.title).trim().toLowerCase());
+                          });
+                          const isInteractiveQuiz = q.type === 'interactive' || q.quiz_type === 'interactive';
+                          return `
+                            <div class="file-row">
+                              <div class="file-icon" style="background:${isInteractiveQuiz ? '#7c3aed' : '#2563eb'};color:#fff;">${isInteractiveQuiz ? '🎮' : '📝'}</div>
+                              <div class="file-info">
+                                <h4>${escHtml(q.title || 'Quiz')}</h4>
+                                <span>${(Array.isArray(q.questions) ? q.questions.length : 0)} items${q.dueDate || q.due_date ? ` · Due ${escHtml(String(q.dueDate || q.due_date))}` : ''}</span>
+                              </div>
+                              <span class="status-pill ${attempt ? 'done' : 'pending'}">${attempt ? 'Completed' : 'Pending'}</span>
+                              ${attempt
+                                ? `<button type="button" class="sw-btn outline" onclick="openReviewAttempt('${q.id}', '${attempt.id || ''}')" style="padding:6px 12px;font-size:12px;">Review</button>`
+                                : `<button type="button" class="take-btn" onclick="${isInteractiveQuiz ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}" style="padding:7px 14px;font-size:12px;font-weight:700;">${isInteractiveQuiz ? 'Play Quiz' : 'Take Quiz'}</button>`}
+                            </div>
+                          `;
+                        }).join('')}
+                      </div>` : '<p style="margin:0;padding:18px;text-align:center;color:#64748b;font-size:13px;background:#f8fafc;border-radius:10px;">No quizzes are assigned to this subject yet.</p>'}
+                    </div>
+                  ` : ''}
                 </div>
               ` : activeSubjectSubTab === 'quizzes' ? `
                 <div class="sw-quizzes-list" style="display:flex;flex-direction:column;gap:10px;">
@@ -1711,10 +1686,6 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
   const classCards = [];
   let handledSections = ['Section A', 'Section B'];
 
-  const teacherStrands = (currentRole === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(/[,&]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
-    : [];
-
   if (currentRole === 'admin') {
     if (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) {
       const nonArch = managedSections.filter(s => !s.isArchived).map(s => s.name);
@@ -1725,18 +1696,6 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
   } else if (CURRENT_PROFILE && CURRENT_PROFILE.section) {
     const raw = CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean);
     if (raw.length > 0) handledSections = raw;
-  }
-
-  // Teacher should strictly handle sections matching their assigned strand(s)
-  if (currentRole === 'teacher' && teacherStrands.length > 0) {
-    handledSections = handledSections.filter(sec => {
-      const sStrand = getSectionStrand(sec);
-      return teacherStrands.includes(sStrand);
-    });
-    if (handledSections.length === 0) {
-      if (teacherStrands.includes('STEM')) handledSections.push('Section A');
-      else if (teacherStrands.includes('HUMSS')) handledSections.push('Section B');
-    }
   }
 
   handledSections.forEach(sec => {
@@ -2238,6 +2197,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
         return `
           <div class="subject-folder-card"
                data-track="${escHtml((course.track || 'specialized').toLowerCase())}"
+               data-semester="${/^(1st|first)/i.test(course.semester || '') ? 'first' : (/^(2nd|second)/i.test(course.semester || '') ? 'second' : 'other')}"
                data-search="${escHtml(searchKeywords)}"
                onclick="setActiveSubjectMaterials('${course.id}', '${CURRENT_PROFILE?.section || 'Section A'}')"
                title="Open ${escHtml(course.title)} Workspace">
@@ -2274,9 +2234,11 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
 
 // ── STUDENT COMPILATION HUB HTML ──
 function renderStudentMaterialsHubHTML(enrolledCourses, studentStrand) {
-  const specializedCount = enrolledCourses.filter(c => c.track === 'Specialized').length;
-  const coreCount = enrolledCourses.filter(c => c.track === 'Core').length;
-  const appliedCount = enrolledCourses.filter(c => c.track === 'Applied').length;
+  const semesterKey = course => /^(1st|first)/i.test(course.semester || '') ? 'first' : (/^(2nd|second)/i.test(course.semester || '') ? 'second' : 'other');
+  const countForFilter = (track, semester) => enrolledCourses.filter(course =>
+    (track === 'all' || String(course.track || '').toLowerCase() === track) &&
+    (semester === 'all' || semesterKey(course) === semester)
+  ).length;
 
   return `
   <div class="materials-page-container">
@@ -2296,23 +2258,21 @@ function renderStudentMaterialsHubHTML(enrolledCourses, studentStrand) {
     </div>
 
     <!-- 2. TRACK FILTERS & LIVE SEARCH -->
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
-      <div class="subject-chips-bar" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <button class="subject-chip ${(!studentMatTrackFilter || studentMatTrackFilter === 'all') ? 'active' : ''}" data-track="all" onclick="setStudentMatTrack('all')" style="cursor:pointer;">
-          All ${escHtml(studentStrand)} Subjects <span class="sc-badge">${enrolledCourses.length}</span>
-        </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Specialized' ? 'active' : ''}" data-track="Specialized" onclick="setStudentMatTrack('Specialized')" style="cursor:pointer;">
-          Specialized <span class="sc-badge">${specializedCount}</span>
-        </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Core' ? 'active' : ''}" data-track="Core" onclick="setStudentMatTrack('Core')" style="cursor:pointer;">
-          Core <span class="sc-badge">${coreCount}</span>
-        </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Applied' ? 'active' : ''}" data-track="Applied" onclick="setStudentMatTrack('Applied')" style="cursor:pointer;">
-          Applied <span class="sc-badge">${appliedCount}</span>
-        </button>
-      </div>
+    <div class="student-materials-filter-row" style="display:grid;grid-template-columns:minmax(190px,220px) minmax(190px,220px) minmax(280px,1fr);align-items:center;gap:10px;margin-bottom:20px;">
+      <select class="student-materials-filter-select" aria-label="Filter subjects by category" onchange="setStudentMatTrack(this.value)">
+        <option value="all" data-label="All ${escHtml(studentStrand)} Subjects" data-count-all="${countForFilter('all', 'all')}" data-count-first="${countForFilter('all', 'first')}" data-count-second="${countForFilter('all', 'second')}" ${!studentMatTrackFilter || studentMatTrackFilter === 'all' ? 'selected' : ''}>All ${escHtml(studentStrand)} Subjects (${countForFilter('all', studentMatSemesterFilter || 'all')})</option>
+        <option value="specialized" data-label="Specialized" data-count-all="${countForFilter('specialized', 'all')}" data-count-first="${countForFilter('specialized', 'first')}" data-count-second="${countForFilter('specialized', 'second')}" ${String(studentMatTrackFilter).toLowerCase() === 'specialized' ? 'selected' : ''}>Specialized (${countForFilter('specialized', studentMatSemesterFilter || 'all')})</option>
+        <option value="core" data-label="Core" data-count-all="${countForFilter('core', 'all')}" data-count-first="${countForFilter('core', 'first')}" data-count-second="${countForFilter('core', 'second')}" ${String(studentMatTrackFilter).toLowerCase() === 'core' ? 'selected' : ''}>Core (${countForFilter('core', studentMatSemesterFilter || 'all')})</option>
+        <option value="elective" data-label="Elective" data-count-all="${countForFilter('elective', 'all')}" data-count-first="${countForFilter('elective', 'first')}" data-count-second="${countForFilter('elective', 'second')}" ${String(studentMatTrackFilter).toLowerCase() === 'elective' ? 'selected' : ''}>Elective (${countForFilter('elective', studentMatSemesterFilter || 'all')})</option>
+        <option value="applied" data-label="Applied" data-count-all="${countForFilter('applied', 'all')}" data-count-first="${countForFilter('applied', 'first')}" data-count-second="${countForFilter('applied', 'second')}" ${String(studentMatTrackFilter).toLowerCase() === 'applied' ? 'selected' : ''}>Applied (${countForFilter('applied', studentMatSemesterFilter || 'all')})</option>
+      </select>
+      <select class="student-materials-filter-select" aria-label="Filter subjects by semester" onchange="setStudentMatSemester(this.value)">
+        <option value="all" ${studentMatSemesterFilter === 'all' ? 'selected' : ''}>All Semesters</option>
+        <option value="first" ${studentMatSemesterFilter === 'first' ? 'selected' : ''}>First Semester</option>
+        <option value="second" ${studentMatSemesterFilter === 'second' ? 'selected' : ''}>Second Semester</option>
+      </select>
 
-      <div class="materials-search-wrap" style="min-width:280px;max-width:360px;">
+      <div class="materials-search-wrap student-materials-search-wrap" style="min-width:0;width:100%;max-width:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#3b82f6;flex-shrink:0;">
           <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
         </svg>
@@ -2344,7 +2304,7 @@ function getStudentFilteredMaterials() {
       dateAdded: m.date_formatted ? `${m.date_formatted} ${m.time_formatted || ''}` : 'Recent',
       status: 'Completed',
       cover: m.cover || 'assets/slide1.jpg',
-      file_url: m.file_url || ''
+      file_url: m.file_url || 'SURVEY FORMS - Scholaria.pdf'
     };
   });
 
@@ -2627,6 +2587,7 @@ function renderStudentMaterialsSplitContent() {
 
 // ── STUDENT MATERIALS STATE & REPOSITORY DATA (IMAGE 3) ──
 let studentMatTrackFilter = 'all';
+let studentMatSemesterFilter = 'all';
 let studentMatSearchQuery = '';
 let studentMatSubjectFilter = 'all';
 let studentMatTypeFilter = 'all';
@@ -2636,17 +2597,24 @@ let studentMatViewMode = 'grid';
 let studentMatViewAll = false;
 
 function setStudentMatTrack(track) {
-  studentMatTrackFilter = track;
-
-  // 1. Update active state of chip buttons without destroying page
-  document.querySelectorAll('.subject-chips-bar .subject-chip').forEach(btn => {
-    const t = btn.dataset.track;
-    if (t === track) btn.classList.add('active');
-    else btn.classList.remove('active');
-  });
-
-  // 2. Instant DOM filter (zero lag, 0ms)
+  studentMatTrackFilter = String(track || 'all').toLowerCase();
   applyStudentSubjectFilter();
+}
+
+function setStudentMatSemester(semester) {
+  studentMatSemesterFilter = semester || 'all';
+  updateStudentMatTrackOptionCounts();
+  applyStudentSubjectFilter();
+}
+
+function updateStudentMatTrackOptionCounts() {
+  const categorySelect = document.querySelector('.student-materials-filter-row select[aria-label="Filter subjects by category"]');
+  if (!categorySelect) return;
+  const countKey = studentMatSemesterFilter === 'first' ? 'First' : studentMatSemesterFilter === 'second' ? 'Second' : 'All';
+  Array.from(categorySelect.options).forEach(option => {
+    const count = option.dataset[`count${countKey}`];
+    if (count !== undefined) option.textContent = `${option.dataset.label} (${count})`;
+  });
 }
 
 function toggleStudentMatViewAll() {
@@ -2668,17 +2636,20 @@ function applyStudentSubjectFilter() {
 
   const sq = (studentMatSearchQuery || '').trim().toLowerCase();
   const track = (studentMatTrackFilter || 'all').toLowerCase();
+  const semester = studentMatSemesterFilter || 'all';
 
   let visibleCount = 0;
   for (let i = 0; i < cards.length; i++) {
     const card = cards[i];
     const cardTrack = (card.getAttribute('data-track') || '').toLowerCase();
+    const cardSemester = card.getAttribute('data-semester') || 'other';
     const cardSearch = (card.getAttribute('data-search') || '').toLowerCase();
 
     const matchTrack = (track === 'all' || cardTrack === track);
+    const matchSemester = (semester === 'all' || cardSemester === semester);
     const matchSearch = (!sq || cardSearch.indexOf(sq) !== -1);
 
-    if (matchTrack && matchSearch) {
+    if (matchTrack && matchSemester && matchSearch) {
       card.style.display = '';
       visibleCount++;
     } else {
@@ -2690,7 +2661,7 @@ function applyStudentSubjectFilter() {
     emptyState.style.display = (visibleCount === 0) ? 'flex' : 'none';
     if (emptyMsg) {
       emptyMsg.textContent = sq
-        ? `No subjects matched "${sq}" under the selected filter.`
+        ? `No subjects matched "${sq}" under the selected category and semester.`
         : `No subjects found under the selected category.`;
     }
   }
@@ -3147,9 +3118,9 @@ function renderMaterialsManagerPage(role) {
         <div class="mm-filters-group">
           <!-- Content Type (All content types, Quiz, Material) -->
           <select class="mm-filter-select" onchange="setMaterialsContentTypeFilter(this.value)">
-            <option value="" ${!materialsContentTypeFilter ? 'selected' : ''}>All contents</option>
-            <option value="quiz" ${materialsContentTypeFilter === 'quiz' ? 'selected' : ''}>Quizzes</option>
-            <option value="material" ${materialsContentTypeFilter === 'material' ? 'selected' : ''}>Teacher Uploads</option>
+            <option value="" ${!materialsContentTypeFilter ? 'selected' : ''}>All content types</option>
+            <option value="quiz" ${materialsContentTypeFilter === 'quiz' ? 'selected' : ''}>Quiz</option>
+            <option value="material" ${materialsContentTypeFilter === 'material' ? 'selected' : ''}>Material</option>
           </select>
 
           <!-- Strands -->
@@ -3443,7 +3414,7 @@ async function previewSubjectUploadedMaterial(id) {
             title: item.title,
             fileName: item.fileName || item.title,
             subject: c.title,
-            file_url: item.file_url || '',
+            file_url: item.file_url || 'SURVEY FORMS - Scholaria.pdf',
             file_type: 'application/pdf',
             type: item.type || 'PDF',
             date_formatted: item.due || item.submitted || 'Recent',
@@ -3520,24 +3491,6 @@ async function previewSubjectUploadedMaterial(id) {
     console.error('Error fetching file URL for preview:', err);
   }
 
-  // Check session blob / IndexedDB / local uploads before showing error
-  if (!fileUrl && window.materialSessionUrls && window.materialSessionUrls[m.id]) {
-    fileUrl = window.materialSessionUrls[m.id];
-  }
-  if (!fileUrl) {
-    try {
-      const dbBlob = await getMaterialBlobFromDB(m.id);
-      if (dbBlob) fileUrl = URL.createObjectURL(dbBlob);
-    } catch(e) {}
-  }
-  if (!fileUrl && m.file_data && typeof m.file_data === 'string' && m.file_data.startsWith('data:')) {
-    fileUrl = m.file_data;
-  }
-  if (!fileUrl && (m.fileName || m.title)) {
-    const tryName = m.fileName || (m.title + '.pdf');
-    fileUrl = '/uploads/materials/' + encodeURIComponent(tryName);
-  }
-
   const isPdf = fileType.includes('pdf') || (m.fileName && m.fileName.toLowerCase().endsWith('.pdf')) || (m.title && m.title.toLowerCase().endsWith('.pdf')) || m.type === 'PDF';
   const isImage = fileType.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(m.fileName || m.title || '');
 
@@ -3545,7 +3498,7 @@ async function previewSubjectUploadedMaterial(id) {
     if (m.file_url || m.url) {
       fileUrl = m.file_url || m.url;
     } else if (isPdf) {
-      fileUrl = '';
+      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
     }
   }
 
@@ -3684,8 +3637,7 @@ function approvalIcon(name) {
     eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
     search: '<circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/>',
     dots: '<circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/>',
-    archive: '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
-    quiz: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>'
+    archive: '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>'
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.file}</svg>`;
 }
@@ -3706,7 +3658,7 @@ function approvalEntries() {
         id: m.id,
         kind: 'material',
         title: m.title || m.fileName || 'Untitled Material',
-        type: 'Material',
+        type: m.content_type || m.file_type || 'Material',
         subject: m.subject || 'General',
         name: m.uploaded_by_name || m.uploader_name || 'Teacher',
         date: m.created_at,
@@ -3725,7 +3677,7 @@ function approvalEntries() {
         id: q.id,
         kind: 'quiz',
         title: q.title || 'Untitled Quiz',
-        type: 'Quiz',
+        type: isInteractive ? 'Interactive Quiz' : 'Quiz',
         subject: q.subject || 'General',
         name: uploaderName,
         date: q.createdAt,
@@ -3750,42 +3702,18 @@ function setApprovalView(key, value) {
   }
 }
 
-function openApprovedQuizzesApprovalView() {
-  if (typeof approvalView !== 'undefined') {
-    approvalView.tab = 'approved';
-    approvalView.type = 'Quiz';
-    approvalView.search = '';
-    approvalView.subject = '';
-    approvalView.page = 1;
-  }
-  if (typeof renderPage === 'function') {
-    renderPage('approval');
-  }
-}
-window.openApprovedQuizzesApprovalView = openApprovedQuizzesApprovalView;
-
 async function refreshApprovalView() {
-  try {
-    await Promise.all([loadMaterialsFromDB(), typeof loadQuizzesFromDB === 'function' ? loadQuizzesFromDB() : Promise.resolve()]);
-  } catch(e) {
-    // If DB load fails (no session), still re-render from in-memory + localStorage
-    const local = getCustomMaterialsFromStorage();
-    local.forEach(lm => {
-      if (!materialsData.find(m => String(m.id) === String(lm.id))) materialsData.push(lm);
-      else Object.assign(materialsData.find(m => String(m.id) === String(lm.id)), lm);
-    });
-  }
+  await Promise.all([loadMaterialsFromDB(), typeof loadQuizzesFromDB === 'function' ? loadQuizzesFromDB() : Promise.resolve()]);
   const wrap = document.getElementById('approvalListWrap');
   if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
-  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
-  showToast('Approval queue refreshed.', 'success');
+  updateApprovalBadge();
 }
 
 function renderApprovalMaterialRows() {
   const entries = approvalEntries();
   const counts = status => entries.filter(e => e.status === status).length;
   const query = approvalView.search.trim().toLowerCase();
-  const filtered = entries.filter(e => { if (e.status !== approvalView.tab) return false; if (approvalView.type === 'Quiz' || approvalView.type === 'quiz') { if (e.kind !== 'quiz') return false; } else if (approvalView.type === 'Material' || approvalView.type === 'material') { if (e.kind !== 'material') return false; } else if (approvalView.type && e.type !== approvalView.type) { return false; } if (approvalView.subject && e.subject !== approvalView.subject) return false; if (query && !`${e.title} ${e.name} ${e.subject}`.toLowerCase().includes(query)) return false; return true; });
+  const filtered = entries.filter(e => e.status === approvalView.tab && (!approvalView.type || e.type === approvalView.type) && (!approvalView.subject || e.subject === approvalView.subject) && (!query || `${e.title} ${e.name} ${e.subject}`.toLowerCase().includes(query)));
   const pages = Math.max(1, Math.ceil(filtered.length / 5));
   approvalView.page = Math.min(pages, Math.max(1, approvalView.page));
   const offset = (approvalView.page - 1) * 5;
@@ -3796,7 +3724,7 @@ function renderApprovalMaterialRows() {
     const isItemArchived = e.status === 'archived' || e.isArchived || approvalView.tab === 'archived';
     const archiveLabel = isItemArchived ? 'Unarchive' : 'Archive';
     return `<tr>
-      <td><div class="ca-content"><span class="ca-file ${e.kind}">${approvalIcon(e.kind === 'quiz' ? 'quiz' : 'file')}</span><div><strong>${escHtml(e.title)}</strong><small><span style="display:inline-block;padding:1px 6px;border-radius:4px;font-weight:700;font-size:10.5px;background:${e.kind === 'quiz' ? '#ede9fe' : '#e0f2fe'};color:${e.kind === 'quiz' ? '#6d28d9' : '#0369a1'};">${e.kind === 'quiz' ? 'Quiz' : 'Material'}</span> &middot; ${escHtml(e.subject)}</small></div></div></td>
+      <td><div class="ca-content"><span class="ca-file ${e.kind}">${approvalIcon('file')}</span><div><strong>${escHtml(e.title)}</strong><small>${escHtml(e.type)} &middot; ${escHtml(e.subject)}</small></div></div></td>
       <td><div class="ca-person"><span class="ca-avatar">${escHtml(initialsFor(e.name))}</span><div>${escHtml(e.name)}<small>Teacher</small></div></div></td>
       <td class="ca-date">${Number.isNaN(date.getTime()) ? '?' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
       <td>
@@ -3818,7 +3746,7 @@ function renderApprovalMaterialRows() {
     <div class="ca-banner"><h3>Approval Queue</h3><p>All materials and quizzes submitted by teachers require your approval before they become visible to students.</p></div>
     <div class="ca-stats">${[['pending','Pending review','clock'],['approved','Approved','check'],['revision','Needs revision','file']].map(([status,label,icon]) => `<div class="ca-stat ${status} ${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')" role="button" tabindex="0" title="Click to filter ${label}"><div class="ca-stat-icon">${approvalIcon(icon)}</div><div><span>${label}</span><strong>${counts(status)}</strong></div></div>`).join('')}</div>
     <div class="ca-panel"><div class="ca-tabs" aria-label="Submission status">${[['pending',`Pending (${counts('pending')})`],['approved','Approved'],['revision','Needs revision'],['archived',`Archive (${counts('archived')})`]].map(([status,label]) => `<button aria-pressed="${approvalView.tab === status}" class="${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')">${label}</button>`).join('')}</div>
-    <div class="ca-filters"><label class="ca-search">${approvalIcon('search')}<input id="caSearch" aria-label="Search submissions" placeholder="Search submissions..." value="${escHtml(approvalView.search)}" oninput="setApprovalView('search',this.value)"></label><select aria-label="Content type" onchange="setApprovalView('type',this.value)" style="border:1px solid #cbd5e1;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;color:#1e293b;background:#fff;outline:none;"><option value="" ${!approvalView.type ? 'selected' : ''}>All contents</option><option value="Quiz" ${approvalView.type === 'Quiz' || approvalView.type === 'quiz' ? 'selected' : ''}>Quizzes</option><option value="Material" ${approvalView.type === 'Material' || approvalView.type === 'material' ? 'selected' : ''}>Teacher Uploads</option></select><select aria-label="Subject" onchange="setApprovalView('subject',this.value)"><option value="">All subjects</option>${options('subject')}</select></div>
+    <div class="ca-filters"><label class="ca-search">${approvalIcon('search')}<input id="caSearch" aria-label="Search submissions" placeholder="Search submissions..." value="${escHtml(approvalView.search)}" oninput="setApprovalView('search',this.value)"></label><select aria-label="Content type" onchange="setApprovalView('type',this.value)"><option value="">All content types</option>${options('type')}</select><select aria-label="Subject" onchange="setApprovalView('subject',this.value)"><option value="">All subjects</option>${options('subject')}</select></div>
     <div class="ca-table-wrap"><table class="ca-table"><thead><tr><th scope="col">Content</th><th scope="col">Submitted by</th><th scope="col">Date submitted</th><th scope="col">Actions</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="ca-empty">No submissions found.</td></tr>'}</tbody></table></div>
     <div class="ca-footer"><span>Showing ${Math.min(5, filtered.length - offset)} of ${filtered.length} submissions</span><nav class="ca-pagination" aria-label="Submission pages">${approvalView.page > 1 ? `<button aria-label="Previous page" onclick="setApprovalView('page',${approvalView.page - 1})">&#8249;</button>` : ''}${Array.from({ length: Math.min(3, pages) }, (_, i) => Math.max(1, Math.min(approvalView.page - 1, pages - 2)) + i).map(page => `<button aria-label="Page ${page}" ${page === approvalView.page ? 'aria-current="page"' : ''} class="${page === approvalView.page ? 'active' : ''}" onclick="setApprovalView('page',${page})">${page}</button>`).join('')}<button aria-label="Next page" ${approvalView.page === pages ? 'disabled' : ''} onclick="setApprovalView('page',${approvalView.page + 1})">&#8250;</button></nav></div></div>`;
 }
@@ -3840,41 +3768,15 @@ async function reviewApprovalEntry(kind, id) {
     dialog.showModal();
     const preview = dialog.querySelector('.ca-file-preview');
     try {
-      // Resolve file URL: session blob -> IndexedDB -> file_data -> file_url -> uploads -> API
-      let fileUrl = null;
-      if (window.materialSessionUrls && window.materialSessionUrls[id]) {
-        fileUrl = window.materialSessionUrls[id];
-      }
-      if (!fileUrl) {
-        try {
-          const dbBlob = await getMaterialBlobFromDB(id);
-          if (dbBlob) fileUrl = URL.createObjectURL(dbBlob);
-        } catch(e) {}
-      }
-      if (!fileUrl && material.file_data && typeof material.file_data === 'string' && material.file_data.startsWith('data:')) {
-        fileUrl = material.file_data;
-      }
-      if (!fileUrl && (material.file_url || material.url)) {
-        fileUrl = material.file_url || material.url;
-      }
-      if (!fileUrl && (material.fileName || material.title)) {
-        fileUrl = '/uploads/materials/' + encodeURIComponent(material.fileName || (material.title + '.pdf'));
-      }
-      if (!fileUrl) {
-        const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-        if (session && session.access_token) {
-          const resp = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${session.access_token}` } });
-          if (resp.ok) { const d = await resp.json(); if (d.url) fileUrl = d.url; }
-        }
-      }
-      if (!fileUrl) throw new Error('File not found. Try downloading it instead.');
-      const isPdf = (material.fileName || material.title || '').toLowerCase().endsWith('.pdf') || (material.file_type || '').includes('pdf') || material.type === 'PDF';
-      if (isPdf) {
-        preview.innerHTML = `<iframe src="${escHtml(fileUrl)}" style="width:100%;height:500px;border:none;border-radius:8px;"></iframe>`;
-      } else {
-        preview.innerHTML = `<a href="${escHtml(fileUrl)}" target="_blank" rel="noopener noreferrer" style="padding:10px 20px;background:#0284c7;color:#fff;border-radius:8px;font-weight:600;text-decoration:none;">Open submitted file</a>`;
-      }
-    } catch (error) { preview.innerHTML = '<p style="color:#dc2626">' + escHtml(error.message) + '</p>'; }
+      const { data: { session } } = await db.auth.getSession();
+      if (!session) throw new Error('Please sign in to review this file.');
+      const response = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to open material.');
+      const url = new URL(data.url);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid file URL.');
+      preview.innerHTML = `<a href="${escHtml(url.href)}" target="_blank" rel="noopener noreferrer">Open submitted file</a>`;
+    } catch (error) { preview.textContent = error.message; }
     return;
   }
   const quiz = customQuizzes.find(q => String(q.id) === id);
@@ -4026,22 +3928,6 @@ async function downloadMaterial(id) {
     }
   }
 
-  // Check local session or IndexedDB first
-  if (!fileUrl && window.materialSessionUrls && window.materialSessionUrls[id]) {
-    fileUrl = window.materialSessionUrls[id];
-  }
-  if (!fileUrl) {
-    try {
-      const dbBlob = await getMaterialBlobFromDB(id);
-      if (dbBlob) {
-        fileUrl = URL.createObjectURL(dbBlob);
-      }
-    } catch (e) {}
-  }
-  if (!fileUrl && m?.file_data && typeof m.file_data === 'data:') {
-    fileUrl = m.file_data;
-  }
-
   // Fallback to direct Supabase storage signed URL
   if (!fileUrl && m?.file_url) {
     if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
@@ -4061,10 +3947,8 @@ async function downloadMaterial(id) {
   if (!fileUrl) {
     if (m?.file_url || m?.url) {
       fileUrl = m.file_url || m.url;
-    } else if (m?.fileName) {
-      fileUrl = '/uploads/materials/' + encodeURIComponent(m.fileName);
     } else {
-      fileUrl = '';
+      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
     }
   }
 
@@ -4142,8 +4026,12 @@ const materialUploadState = {
 
 function openMaterialModal(courseId, targetSection, targetLessonId) {
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(/[,&]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+    ? CURRENT_PROFILE.strand.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
     : [];
+  if (ROLE === 'teacher') {
+    if (!teacherStrands.includes('STEM')) teacherStrands.push('STEM');
+    if (!teacherStrands.includes('HUMSS')) teacherStrands.push('HUMSS');
+  }
 
   const teacherGrades = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.grade_level)
     ? CURRENT_PROFILE.grade_level.split(',').map(s => s.trim()).filter(Boolean)
@@ -4166,14 +4054,12 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
 
   if (targetCourse) {
     initialSubject = targetCourse.title;
-    initialStrand = (ROLE === 'teacher' && teacherStrands.length > 0)
-      ? (teacherStrands.includes((targetCourse.strand || '').toUpperCase()) ? (targetCourse.strand || teacherStrands[0]) : teacherStrands[0])
-      : (targetCourse.strand || 'All Strands');
+    initialStrand = (ROLE === 'teacher' && (targetCourse.track === 'Core' || targetCourse.track === 'Applied'))
+      ? 'STEM, HUMSS'
+      : (targetCourse.strand || (ROLE === 'teacher' ? 'STEM, HUMSS' : 'All Strands'));
     initialGrade = targetCourse.gradeLevel || initialGrade;
   } else {
-    initialStrand = (ROLE === 'teacher' && teacherStrands.length > 0)
-      ? (teacherStrands.length === 1 ? teacherStrands[0] : teacherStrands.join(', '))
-      : 'All Strands';
+    initialStrand = (ROLE === 'teacher') ? 'STEM, HUMSS' : 'All Strands';
   }
 
   const initialSectionsSet = chosenSection
@@ -4256,9 +4142,7 @@ function muUpdateStrand(value) {
   }
   const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level);
   if (materialUploadState.subject && available.length > 0 && !available.includes(materialUploadState.subject)) {
-    if (!materialUploadState.course_title && !materialUploadState.course_id) {
-      materialUploadState.subject = '';
-    }
+    materialUploadState.subject = '';
   }
   renderMaterialModal();
 }
@@ -4267,9 +4151,7 @@ function muUpdateGradeLevel(value) {
   materialUploadState.grade_level = value;
   const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level);
   if (materialUploadState.subject && available.length > 0 && !available.includes(materialUploadState.subject)) {
-    if (!materialUploadState.course_title && !materialUploadState.course_id) {
-      materialUploadState.subject = '';
-    }
+    materialUploadState.subject = '';
   }
   renderMaterialModal();
 }
@@ -4352,8 +4234,12 @@ function renderMaterialModal() {
 
   const subjectOptions = getFilteredSubjects(s.strand, s.grade_level);
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(/[,&]+/).map(str => str.trim().toUpperCase()).filter(Boolean)
+    ? CURRENT_PROFILE.strand.split(',').map(str => str.trim().toUpperCase()).filter(Boolean)
     : [];
+  if (ROLE === 'teacher') {
+    if (!teacherStrands.includes('STEM')) teacherStrands.push('STEM');
+    if (!teacherStrands.includes('HUMSS')) teacherStrands.push('HUMSS');
+  }
 
   const teacherGrades = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.grade_level)
     ? CURRENT_PROFILE.grade_level.split(',').map(g => g.trim()).filter(Boolean)
@@ -4386,8 +4272,10 @@ function renderMaterialModal() {
       <div class="gen-field"><label>Strand ${ROLE === 'teacher' ? '<span style="font-size:11px;color:#0284c7;font-weight:600;">(Handled Strands)</span>' : ''}</label>
         <select onchange="muUpdateStrand(this.value)">
           ${ROLE === 'teacher' ? `
-            ${availableStrands.length > 1 ? `<option value="${availableStrands.join(', ')}" ${(s.strand && s.strand.includes(',')) ? 'selected' : ''}>All My Handled Strands (${availableStrands.join(', ')})</option>` : ''}
-            ${availableStrands.map(st => `<option value="${st}" ${s.strand === st ? 'selected' : ''}>${st}</option>`).join('')}
+            <option value="STEM, HUMSS" ${(s.strand === 'STEM, HUMSS' || s.strand === 'Both STEM & HUMSS' || (s.strand && s.strand.includes('STEM') && s.strand.includes('HUMSS'))) ? 'selected' : ''}>Both STEM &amp; HUMSS (All Handled)</option>
+            <option value="STEM" ${s.strand === 'STEM' ? 'selected' : ''}>STEM</option>
+            <option value="HUMSS" ${s.strand === 'HUMSS' ? 'selected' : ''}>HUMSS</option>
+            ${availableStrands.filter(st => st !== 'STEM' && st !== 'HUMSS').map(st => `<option value="${st}" ${s.strand === st ? 'selected' : ''}>${st}</option>`).join('')}
           ` : `
             <option value="All Strands" ${(!s.strand || s.strand === 'All Strands' || s.strand === 'all') ? 'selected' : ''}>All Strands (General / Core)</option>
             ${availableStrands.map(str => `<option value="${str}" ${s.strand === str ? 'selected' : ''}>${str}</option>`).join('')}
@@ -4418,17 +4306,12 @@ function renderMaterialModal() {
     </div>
     <div class="gen-row">
       <div class="gen-field"><label>Title / Description</label><input type="text" placeholder="e.g. Q1 Lesson 3 – Lecture Notes & Handouts" value="${escHtml(s.title)}" oninput="muUpdateField('title', this.value)"></div>
-      <div class="gen-field"><label>Subject <span style="color:#ef4444;">*</span> ${s.course_title ? '<span style="font-size:11px;color:#0284c7;font-weight:600;">(Locked to course)</span>' : ''}</label>
-        ${s.course_title ? `
-          <select disabled style="opacity:0.85;cursor:not-allowed;background:#f8fafc;font-weight:600;">
-            <option value="${escHtml(s.subject)}" selected>${escHtml(s.subject)} (Locked to course)</option>
-          </select>
-        ` : `
-          <select onchange="muUpdateSubject(this.value)">
-            <option value="" disabled ${!s.subject ? 'selected' : ''}>${(s.strand && s.grade_level) ? `Select subject (${s.strand} · ${s.grade_level})` : s.strand ? `Select subject (${s.strand})` : s.grade_level ? `Select subject (${s.grade_level})` : 'Select subject...'}</option>
-            ${((s.subject && !subjectOptions.includes(s.subject)) ? [s.subject, ...subjectOptions] : subjectOptions).map(sub => `<option value="${escHtml(sub)}" ${s.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
-          </select>
-        `}
+      <div class="gen-field"><label>Subject</label>
+        <select onchange="muUpdateSubject(this.value)">
+          <option value="" disabled ${!s.subject ? 'selected' : ''}>${(s.strand && s.grade_level) ? `Select subject (${s.strand} · ${s.grade_level})` : s.strand ? `Select subject (${s.strand})` : s.grade_level ? `Select subject (${s.grade_level})` : 'Select subject'}</option>
+          ${subjectOptions.map(sub => `<option value="${escHtml(sub)}" ${s.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
+          ${(s.subject && !subjectOptions.includes(s.subject)) ? `<option value="${escHtml(s.subject)}" selected>${escHtml(s.subject)}</option>` : ''}
+        </select>
       </div>
     </div>
     ${(() => {
@@ -4450,25 +4333,15 @@ function renderMaterialModal() {
         gradeLevel: s.grade_level || 'Grade 11'
       } : null);
       const availableLessons = courseObj ? getSubjectLessons(courseObj) : [];
-
-      if (ROLE !== 'admin') {
-        // Teacher uploads MUST strictly go to Teacher Uploads (requires admin approval)
-        return `
-          <div class="gen-field" style="margin-top:4px;">
-            <label>Target Placement <span style="font-size:11px;color:#0284c7;font-weight:600;">(Teacher Handout &middot; Requires Admin Approval)</span></label>
-            <select disabled style="opacity:0.9;cursor:not-allowed;background:#f8fafc;font-weight:600;">
-              <option value="" selected>📁 Teacher Uploads (Supplementary Handouts)</option>
-            </select>
-            <span style="font-size:11.5px;color:var(--text-muted);margin-top:4px;display:block;">All teacher handouts are submitted to the Teacher Uploads tab and require Admin approval before students can access them.</span>
-          </div>
-        `;
-      }
-
       return `
         <div class="gen-field" style="margin-top:4px;">
-          <label>Target Lesson / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(Admin curriculum handouts appear inside the module box under Modules & Handouts)</span></label>
+          <label>Target Lesson / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${ROLE === 'admin' ? '(Admin curriculum handouts appear inside the module box under Modules & Handouts)' : '(Select a specific lesson or general supplementary)'}</span></label>
           <select onchange="muUpdateField('lesson_id', this.value)">
-            <option value="" ${!s.lesson_id ? 'selected' : ''}>📖 Auto-detect from file (e.g. 01_Handout → Lesson 01)</option>
+            ${ROLE === 'admin' ? `
+              <option value="" ${!s.lesson_id ? 'selected' : ''}>📖 Auto-detect from file (e.g. 01_Handout → Lesson 01)</option>
+            ` : `
+              <option value="" ${!s.lesson_id ? 'selected' : ''}>📁 General Supplementary (Appears in Teacher Uploads Tab)</option>
+            `}
             ${availableLessons.map(l => `
               <option value="${escHtml(l.id || l.num)}" ${s.lesson_id === (l.id || l.num) ? 'selected' : ''}>
                 📖 ${escHtml(l.title)}
@@ -4574,8 +4447,7 @@ async function submitMaterialUpload() {
   // Persist each file in scholaria_custom_materials_v1 in localStorage so materials are NEVER lost
   const uploaderName = CURRENT_PROFILE?.full_name || (ROLE === 'admin' ? 'Administrator' : 'Teacher');
   const uploaderRole = ROLE === 'admin' ? 'Admin' : 'Teacher';
-  // Teacher uploads require admin approval; only admin uploads are automatically approved
-  const targetStatus = (ROLE === 'admin') ? 'approved' : 'pending';
+  const targetStatus = 'approved'; // Instantly approved so uploads reflect immediately for students
 
   // Determine course lessons for auto-assignment if needed
   let courseForLessons = null;
@@ -4584,8 +4456,7 @@ async function submitMaterialUpload() {
   }
   const cLessons = courseForLessons ? getSubjectLessons(courseForLessons) : [];
 
-  for (let idx = 0; idx < s.files.length; idx++) {
-    const f = s.files[idx];
+  s.files.forEach((f, idx) => {
     const srv = serverRecords[idx] || null;
     const itemTitle = s.files.length === 1 ? s.title.trim() : (f.name.replace(/\.[^.]+$/, '') || s.title.trim());
     const ext = f.name.split('.').pop() || 'pdf';
@@ -4623,35 +4494,10 @@ async function submitMaterialUpload() {
       }
     }
 
-    const assignedId = srv ? srv.id : `local_${Date.now()}_${idx}`;
-
-    // Read real file as data URL and store in IndexedDB & session memory
-    let fileDataUrl = null;
-    if (f.size <= 8 * 1024 * 1024) {
-      try {
-        fileDataUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => resolve(null);
-          reader.readAsDataURL(f);
-        });
-      } catch (e) {}
-    }
-
-    await saveMaterialBlobToIndexedDB(assignedId, f);
-    const sessionBlobUrl = URL.createObjectURL(f);
-    window.materialSessionUrls = window.materialSessionUrls || {};
-    window.materialSessionUrls[String(assignedId)] = sessionBlobUrl;
-
-    const chosenFileUrl = (srv && srv.url) ? srv.url : (fileDataUrl || sessionBlobUrl || `/uploads/materials/${encodeURIComponent(f.name)}`);
-
     const localRecord = {
-      id: assignedId,
+      id: srv ? srv.id : `local_${Date.now()}_${idx}`,
       title: itemTitle,
       fileName: f.name,
-      file_name: f.name,
-      file_url: chosenFileUrl,
-      file_data: fileDataUrl,
       category: ROLE === 'admin' ? 'Curriculum' : 'Handout',
       tag: ROLE === 'admin' ? 'Curriculum' : 'Handout',
       subject: s.subject.trim(),
@@ -4667,8 +4513,8 @@ async function submitMaterialUpload() {
       uploaded_by_name: uploaderName,
       uploader_role: uploaderRole,
       uploaded_by: CURRENT_PROFILE?.id || 'local_user',
-      approved_by: ROLE === 'admin' ? (CURRENT_PROFILE?.id || 'admin') : null,
-      approved_by_name: ROLE === 'admin' ? uploaderName : null,
+      approved_by: CURRENT_PROFILE?.id || 'admin',
+      approved_by_name: ROLE === 'admin' ? uploaderName : 'System Administrator',
       is_curriculum: ROLE === 'admin',
       file_type: f.type || 'application/pdf',
       type: typeLabel,
@@ -4691,19 +4537,15 @@ async function submitMaterialUpload() {
     if (ROLE === 'admin' && assignedLessonId) {
       expandedLessonMap[assignedLessonId] = true;
     }
-  }
+  });
 
   const uploadCount = s.files.length;
-  if (ROLE === 'admin') {
-    showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
-  } else {
-    showToast(uploadCount > 1 ? `${uploadCount} handouts submitted for admin approval!` : 'Handout submitted for admin approval!', 'success');
-  }
+  showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
   if (ROLE !== 'admin' && typeof addNotification === 'function') {
     addNotification({
       targetRole: 'admin',
-      title: 'Material Pending Approval',
-      message: `Teacher ${uploaderName} submitted ${uploadCount > 1 ? `${uploadCount} handouts for "${s.subject}"` : `"${s.title.trim()}"`} for content approval.`,
+      title: 'New Material Published',
+      message: `Teacher ${uploaderName} uploaded ${uploadCount > 1 ? `${uploadCount} handouts for "${s.subject}"` : `"${s.title.trim()}"`}.`,
       type: 'info'
     });
   }
