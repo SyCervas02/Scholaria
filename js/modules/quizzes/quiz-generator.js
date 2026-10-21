@@ -655,6 +655,11 @@ function getAvailableSubjectsForQuizGen() {
   return Array.from(subjectsSet).sort();
 }
 
+function updateQuizLesson(val) {
+  quizGen.lesson = val;
+}
+window.updateQuizLesson = updateQuizLesson;
+
 function toggleQuizStrand(s) {
   const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
   const allowedStrands = getTeacherAllowedStrands();
@@ -693,7 +698,22 @@ function toggleQuizSection(s) {
 }
 
 function updateTitle(v)  { quizGen.title = v; }
-function updateSubject(v){ quizGen.subject = v; }
+function updateSubject(v) {
+  quizGen.subject = v;
+  quizGen.lesson = ''; // reset lesson when subject changes
+  // Update lesson dropdown in-place instead of re-rendering whole modal
+  const lessonSel = document.getElementById('quizGenLessonSelect');
+  if (lessonSel) {
+    const availLessons = (typeof getRawSubjectLessons === 'function' && v)
+      ? getRawSubjectLessons({ title: v, id: 'course-' + v.toLowerCase().replace(/[^a-z0-9]+/g, '-') }).map(l => l.title || '').filter(Boolean)
+      : [];
+    lessonSel.disabled = !v;
+    lessonSel.style.background = v ? '#f8fbff' : '#f1f5f9';
+    lessonSel.style.cursor = v ? 'pointer' : 'not-allowed';
+    lessonSel.innerHTML = '<option value="" disabled selected>Select target lesson...</option>' +
+      availLessons.map(les => '<option value="' + les + '">' + les + '</option>').join('');
+  }
+}
 
 function handleFileInput(input) {
   const selectedFiles = Array.from(input.files || []);
@@ -2672,7 +2692,33 @@ function renderQuizModal() {
               ${allowedGrades.map(g => `<option value="${g}" ${quizGen.gradeLevel === g ? 'selected' : ''}>${g}</option>`).join('')}
             </select>
           </div>
-          <div class="gen-field"><label>Lesson</label><input type="text" placeholder="e.g. Lesson 3" value="${escHtml(quizGen.lesson)}" oninput="quizGen.lesson = this.value;"></div>
+          <div class="gen-field">
+          <label>Lesson</label>
+          ${(() => {
+            // Get lessons via window.getLessonsForSubject (defined in ui-helpers.js which is always loaded)
+            let availLessons = [];
+            if (quizGen.subject && typeof getRawSubjectLessons === 'function') {
+              const rLessons = getRawSubjectLessons({ title: quizGen.subject, id: 'course-' + quizGen.subject.toLowerCase().replace(/[^a-z0-9]+/g, '-') });
+              if (Array.isArray(rLessons)) availLessons = rLessons.map(l => l.title || l.name || '').filter(Boolean);
+            }
+            if (!availLessons.length && typeof window.getLessonsForSubject === 'function' && quizGen.subject) {
+              availLessons = window.getLessonsForSubject(quizGen.subject);
+            }
+            if (!availLessons.length) {
+              const subj = quizGen.subject || 'Lesson';
+              availLessons = [
+                '01 Introduction to ' + subj,
+                '02 Core Concepts & Theoretical Principles',
+                '03 Practical Applications & Problem Solving',
+                '04 Module Mastery & Academic Synthesis'
+              ];
+            }
+            return `<select id="quizGenLessonSelect" onchange="quizGen.lesson = this.value;" ${!quizGen.subject ? 'disabled' : ''} style="width:100%;border:1.5px solid var(--blue-light);border-radius:10px;padding:10px 13px;font-size:13.5px;font-family:'Plus Jakarta Sans',sans-serif;outline:none;background:${quizGen.subject ? '#f8fbff' : '#f1f5f9'};box-sizing:border-box;color:#0f172a;cursor:${quizGen.subject ? 'pointer' : 'not-allowed'};">
+              <option value="" disabled ${!quizGen.lesson ? 'selected' : ''}>Select target lesson...</option>
+              ${availLessons.map(les => `<option value="${escHtml(les)}" ${quizGen.lesson === les ? 'selected' : ''}>${escHtml(les)}</option>`).join('')}
+            </select>`;
+          })()}
+        </div>
         </div>
 
         <div class="gen-field">

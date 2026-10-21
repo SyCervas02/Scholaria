@@ -201,6 +201,10 @@ app.get('/', (req, res) => {
 
 // Ensure uploads directory exists
 const chatUploadsDir = path.join(__dirname, 'uploads', 'chat');
+const materialsUploadsDir = path.join(__dirname, 'uploads', 'materials');
+if (!fs.existsSync(materialsUploadsDir)) {
+  fs.mkdirSync(materialsUploadsDir, { recursive: true });
+}
 if (!fs.existsSync(chatUploadsDir)) {
   fs.mkdirSync(chatUploadsDir, { recursive: true });
 }

@@ -1,3 +1,52 @@
+
+const DB_NAME_MATERIALS = 'scholaria_files_db';
+const STORE_NAME_MATERIALS = 'material_blobs';
+
+function openMaterialFilesDB() {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') return resolve(null);
+    try {
+      const req = indexedDB.open(DB_NAME_MATERIALS, 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME_MATERIALS)) {
+          db.createObjectStore(STORE_NAME_MATERIALS);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+async function saveMaterialBlobToIndexedDB(id, blobOrFile) {
+  try {
+    const idb = await openMaterialFilesDB();
+    if (!idb) return;
+    const tx = idb.transaction(STORE_NAME_MATERIALS, 'readwrite');
+    tx.objectStore(STORE_NAME_MATERIALS).put(blobOrFile, String(id));
+  } catch (err) {
+    console.warn('Could not cache file in IndexedDB:', err);
+  }
+}
+
+async function getMaterialBlobFromIndexedDB(id) {
+  try {
+    const idb = await openMaterialFilesDB();
+    if (!idb) return null;
+    return new Promise((resolve) => {
+      const tx = idb.transaction(STORE_NAME_MATERIALS, 'readonly');
+      const req = tx.objectStore(STORE_NAME_MATERIALS).get(String(id));
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (err) {
+    return null;
+  }
+}
+window.materialSessionUrls = window.materialSessionUrls || {};
 const SUBJECTS_BY_STRAND_AND_GRADE = {
   HUMSS: {
     'Grade 11': [
@@ -554,7 +603,7 @@ function getSubjectLessons(course) {
             submitted: u.date_formatted || "Oct 16, 2026",
             due: u.date_formatted || "Official Handout",
             status: "Completed",
-            file_url: u.file_url || "SURVEY FORMS - Scholaria.pdf"
+            file_url: u.file_url || ""
           });
         }
       });
@@ -957,6 +1006,8 @@ function renderMaterialsList(role) {
       const lessons = getSubjectLessons(course);
       const subjectQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
         if (!q.subject) return false;
+        // Only show approved quizzes (pending quizzes go through Content Approval first)
+        if (q.status === 'pending' || q.status === 'revision') return false;
         const s = q.subject.toLowerCase();
         const t = course.title.toLowerCase();
         if (!s.includes(t) && !t.includes(s)) return false;
@@ -1118,7 +1169,7 @@ function renderMaterialsList(role) {
                                       <tr style="border-bottom:1.5px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;background:#ffffff;">
                                         <th style="padding:9px 12px;font-weight:700;">Section / Handout</th>
                                         <th style="padding:9px 12px;font-weight:700;">Submitted</th>
-                                        <th style="padding:9px 12px;font-weight:700;">Score</th>
+                                        <th style="padding:9px 12px;font-weight:700;">Uploaded By</th>
                                         <th style="padding:9px 12px;font-weight:700;">Due</th>
                                         <th style="padding:9px 12px;font-weight:700;">Status</th>
                                         <th style="padding:9px 12px;font-weight:700;text-align:right;">Action</th>
@@ -1134,7 +1185,7 @@ function renderMaterialsList(role) {
                                             </div>
                                           </td>
                                           <td style="padding:10px 12px;color:#64748b;">${escHtml(it.submitted || '-')}</td>
-                                          <td style="padding:10px 12px;color:#64748b;">${escHtml(it.score || '-')}</td>
+                                          <td style="padding:10px 12px;color:#64748b;">${escHtml(it.uploaded_by_name || it.uploader_name || it.score || '-')}</td>
                                           <td style="padding:10px 12px;color:#64748b;">${escHtml(it.due || '-')}</td>
                                           <td style="padding:10px 12px;"><span class="sw-status-pill ${it.status === 'Completed' ? 'done' : (it.status === 'Ongoing' ? 'ongoing' : '')}">${escHtml(it.status || 'Pending')}</span></td>
                                           <td style="padding:10px 12px;text-align:right;">
@@ -1143,7 +1194,7 @@ function renderMaterialsList(role) {
                                                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                                 Preview
                                               </button>
-                                              <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
+                                              <a href="${it.file_url || ''}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
                                                 <span>⬇</span> Download
                                               </a>
                                               ${(role === 'admin') ? `
@@ -2293,7 +2344,7 @@ function getStudentFilteredMaterials() {
       dateAdded: m.date_formatted ? `${m.date_formatted} ${m.time_formatted || ''}` : 'Recent',
       status: 'Completed',
       cover: m.cover || 'assets/slide1.jpg',
-      file_url: m.file_url || 'SURVEY FORMS - Scholaria.pdf'
+      file_url: m.file_url || ''
     };
   });
 
@@ -3392,7 +3443,7 @@ async function previewSubjectUploadedMaterial(id) {
             title: item.title,
             fileName: item.fileName || item.title,
             subject: c.title,
-            file_url: item.file_url || 'SURVEY FORMS - Scholaria.pdf',
+            file_url: item.file_url || '',
             file_type: 'application/pdf',
             type: item.type || 'PDF',
             date_formatted: item.due || item.submitted || 'Recent',
@@ -3469,6 +3520,24 @@ async function previewSubjectUploadedMaterial(id) {
     console.error('Error fetching file URL for preview:', err);
   }
 
+  // Check session blob / IndexedDB / local uploads before showing error
+  if (!fileUrl && window.materialSessionUrls && window.materialSessionUrls[m.id]) {
+    fileUrl = window.materialSessionUrls[m.id];
+  }
+  if (!fileUrl) {
+    try {
+      const dbBlob = await getMaterialBlobFromDB(m.id);
+      if (dbBlob) fileUrl = URL.createObjectURL(dbBlob);
+    } catch(e) {}
+  }
+  if (!fileUrl && m.file_data && typeof m.file_data === 'string' && m.file_data.startsWith('data:')) {
+    fileUrl = m.file_data;
+  }
+  if (!fileUrl && (m.fileName || m.title)) {
+    const tryName = m.fileName || (m.title + '.pdf');
+    fileUrl = '/uploads/materials/' + encodeURIComponent(tryName);
+  }
+
   const isPdf = fileType.includes('pdf') || (m.fileName && m.fileName.toLowerCase().endsWith('.pdf')) || (m.title && m.title.toLowerCase().endsWith('.pdf')) || m.type === 'PDF';
   const isImage = fileType.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(m.fileName || m.title || '');
 
@@ -3476,7 +3545,7 @@ async function previewSubjectUploadedMaterial(id) {
     if (m.file_url || m.url) {
       fileUrl = m.file_url || m.url;
     } else if (isPdf) {
-      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
+      fileUrl = '';
     }
   }
 
@@ -3681,11 +3750,35 @@ function setApprovalView(key, value) {
   }
 }
 
+function openApprovedQuizzesApprovalView() {
+  if (typeof approvalView !== 'undefined') {
+    approvalView.tab = 'approved';
+    approvalView.type = 'Quiz';
+    approvalView.search = '';
+    approvalView.subject = '';
+    approvalView.page = 1;
+  }
+  if (typeof renderPage === 'function') {
+    renderPage('approval');
+  }
+}
+window.openApprovedQuizzesApprovalView = openApprovedQuizzesApprovalView;
+
 async function refreshApprovalView() {
-  await Promise.all([loadMaterialsFromDB(), typeof loadQuizzesFromDB === 'function' ? loadQuizzesFromDB() : Promise.resolve()]);
+  try {
+    await Promise.all([loadMaterialsFromDB(), typeof loadQuizzesFromDB === 'function' ? loadQuizzesFromDB() : Promise.resolve()]);
+  } catch(e) {
+    // If DB load fails (no session), still re-render from in-memory + localStorage
+    const local = getCustomMaterialsFromStorage();
+    local.forEach(lm => {
+      if (!materialsData.find(m => String(m.id) === String(lm.id))) materialsData.push(lm);
+      else Object.assign(materialsData.find(m => String(m.id) === String(lm.id)), lm);
+    });
+  }
   const wrap = document.getElementById('approvalListWrap');
   if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
-  updateApprovalBadge();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  showToast('Approval queue refreshed.', 'success');
 }
 
 function renderApprovalMaterialRows() {
@@ -3747,15 +3840,41 @@ async function reviewApprovalEntry(kind, id) {
     dialog.showModal();
     const preview = dialog.querySelector('.ca-file-preview');
     try {
-      const { data: { session } } = await db.auth.getSession();
-      if (!session) throw new Error('Please sign in to review this file.');
-      const response = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${session.access_token}` } });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Unable to open material.');
-      const url = new URL(data.url);
-      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid file URL.');
-      preview.innerHTML = `<a href="${escHtml(url.href)}" target="_blank" rel="noopener noreferrer">Open submitted file</a>`;
-    } catch (error) { preview.textContent = error.message; }
+      // Resolve file URL: session blob -> IndexedDB -> file_data -> file_url -> uploads -> API
+      let fileUrl = null;
+      if (window.materialSessionUrls && window.materialSessionUrls[id]) {
+        fileUrl = window.materialSessionUrls[id];
+      }
+      if (!fileUrl) {
+        try {
+          const dbBlob = await getMaterialBlobFromDB(id);
+          if (dbBlob) fileUrl = URL.createObjectURL(dbBlob);
+        } catch(e) {}
+      }
+      if (!fileUrl && material.file_data && typeof material.file_data === 'string' && material.file_data.startsWith('data:')) {
+        fileUrl = material.file_data;
+      }
+      if (!fileUrl && (material.file_url || material.url)) {
+        fileUrl = material.file_url || material.url;
+      }
+      if (!fileUrl && (material.fileName || material.title)) {
+        fileUrl = '/uploads/materials/' + encodeURIComponent(material.fileName || (material.title + '.pdf'));
+      }
+      if (!fileUrl) {
+        const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+        if (session && session.access_token) {
+          const resp = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${session.access_token}` } });
+          if (resp.ok) { const d = await resp.json(); if (d.url) fileUrl = d.url; }
+        }
+      }
+      if (!fileUrl) throw new Error('File not found. Try downloading it instead.');
+      const isPdf = (material.fileName || material.title || '').toLowerCase().endsWith('.pdf') || (material.file_type || '').includes('pdf') || material.type === 'PDF';
+      if (isPdf) {
+        preview.innerHTML = `<iframe src="${escHtml(fileUrl)}" style="width:100%;height:500px;border:none;border-radius:8px;"></iframe>`;
+      } else {
+        preview.innerHTML = `<a href="${escHtml(fileUrl)}" target="_blank" rel="noopener noreferrer" style="padding:10px 20px;background:#0284c7;color:#fff;border-radius:8px;font-weight:600;text-decoration:none;">Open submitted file</a>`;
+      }
+    } catch (error) { preview.innerHTML = '<p style="color:#dc2626">' + escHtml(error.message) + '</p>'; }
     return;
   }
   const quiz = customQuizzes.find(q => String(q.id) === id);
@@ -3907,6 +4026,22 @@ async function downloadMaterial(id) {
     }
   }
 
+  // Check local session or IndexedDB first
+  if (!fileUrl && window.materialSessionUrls && window.materialSessionUrls[id]) {
+    fileUrl = window.materialSessionUrls[id];
+  }
+  if (!fileUrl) {
+    try {
+      const dbBlob = await getMaterialBlobFromDB(id);
+      if (dbBlob) {
+        fileUrl = URL.createObjectURL(dbBlob);
+      }
+    } catch (e) {}
+  }
+  if (!fileUrl && m?.file_data && typeof m.file_data === 'data:') {
+    fileUrl = m.file_data;
+  }
+
   // Fallback to direct Supabase storage signed URL
   if (!fileUrl && m?.file_url) {
     if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
@@ -3926,8 +4061,10 @@ async function downloadMaterial(id) {
   if (!fileUrl) {
     if (m?.file_url || m?.url) {
       fileUrl = m.file_url || m.url;
+    } else if (m?.fileName) {
+      fileUrl = '/uploads/materials/' + encodeURIComponent(m.fileName);
     } else {
-      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
+      fileUrl = '';
     }
   }
 
@@ -4119,7 +4256,9 @@ function muUpdateStrand(value) {
   }
   const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level);
   if (materialUploadState.subject && available.length > 0 && !available.includes(materialUploadState.subject)) {
-    materialUploadState.subject = '';
+    if (!materialUploadState.course_title && !materialUploadState.course_id) {
+      materialUploadState.subject = '';
+    }
   }
   renderMaterialModal();
 }
@@ -4128,7 +4267,9 @@ function muUpdateGradeLevel(value) {
   materialUploadState.grade_level = value;
   const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level);
   if (materialUploadState.subject && available.length > 0 && !available.includes(materialUploadState.subject)) {
-    materialUploadState.subject = '';
+    if (!materialUploadState.course_title && !materialUploadState.course_id) {
+      materialUploadState.subject = '';
+    }
   }
   renderMaterialModal();
 }
@@ -4277,18 +4418,15 @@ function renderMaterialModal() {
     </div>
     <div class="gen-row">
       <div class="gen-field"><label>Title / Description</label><input type="text" placeholder="e.g. Q1 Lesson 3 – Lecture Notes & Handouts" value="${escHtml(s.title)}" oninput="muUpdateField('title', this.value)"></div>
-      <div class="gen-field"><label>Subject <span style="color:#ef4444;">*</span></label>
-        ${typeof renderSearchableSubjectPicker === 'function' ? renderSearchableSubjectPicker({
-          id: 'materialsSubjectPicker',
-          inputId: 'materialsSubjectInput',
-          value: s.subject || '',
-          options: subjectOptions,
-          placeholder: (s.strand && s.grade_level) ? `Select or search subject (${s.strand} · ${s.grade_level})...` : 'Select from dropdown or search subject...',
-          onSelect: 'muUpdateSubject'
-        }) : `
+      <div class="gen-field"><label>Subject <span style="color:#ef4444;">*</span> ${s.course_title ? '<span style="font-size:11px;color:#0284c7;font-weight:600;">(Locked to course)</span>' : ''}</label>
+        ${s.course_title ? `
+          <select disabled style="opacity:0.85;cursor:not-allowed;background:#f8fafc;font-weight:600;">
+            <option value="${escHtml(s.subject)}" selected>${escHtml(s.subject)} (Locked to course)</option>
+          </select>
+        ` : `
           <select onchange="muUpdateSubject(this.value)">
-            <option value="" disabled ${!s.subject ? 'selected' : ''}>${(s.strand && s.grade_level) ? `Select subject (${s.strand} · ${s.grade_level})` : s.strand ? `Select subject (${s.strand})` : s.grade_level ? `Select subject (${s.grade_level})` : 'Select subject'}</option>
-            ${subjectOptions.map(sub => `<option value="${escHtml(sub)}" ${s.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
+            <option value="" disabled ${!s.subject ? 'selected' : ''}>${(s.strand && s.grade_level) ? `Select subject (${s.strand} · ${s.grade_level})` : s.strand ? `Select subject (${s.strand})` : s.grade_level ? `Select subject (${s.grade_level})` : 'Select subject...'}</option>
+            ${((s.subject && !subjectOptions.includes(s.subject)) ? [s.subject, ...subjectOptions] : subjectOptions).map(sub => `<option value="${escHtml(sub)}" ${s.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
           </select>
         `}
       </div>
@@ -4446,7 +4584,8 @@ async function submitMaterialUpload() {
   }
   const cLessons = courseForLessons ? getSubjectLessons(courseForLessons) : [];
 
-  s.files.forEach((f, idx) => {
+  for (let idx = 0; idx < s.files.length; idx++) {
+    const f = s.files[idx];
     const srv = serverRecords[idx] || null;
     const itemTitle = s.files.length === 1 ? s.title.trim() : (f.name.replace(/\.[^.]+$/, '') || s.title.trim());
     const ext = f.name.split('.').pop() || 'pdf';
@@ -4484,10 +4623,35 @@ async function submitMaterialUpload() {
       }
     }
 
+    const assignedId = srv ? srv.id : `local_${Date.now()}_${idx}`;
+
+    // Read real file as data URL and store in IndexedDB & session memory
+    let fileDataUrl = null;
+    if (f.size <= 8 * 1024 * 1024) {
+      try {
+        fileDataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(f);
+        });
+      } catch (e) {}
+    }
+
+    await saveMaterialBlobToIndexedDB(assignedId, f);
+    const sessionBlobUrl = URL.createObjectURL(f);
+    window.materialSessionUrls = window.materialSessionUrls || {};
+    window.materialSessionUrls[String(assignedId)] = sessionBlobUrl;
+
+    const chosenFileUrl = (srv && srv.url) ? srv.url : (fileDataUrl || sessionBlobUrl || `/uploads/materials/${encodeURIComponent(f.name)}`);
+
     const localRecord = {
-      id: srv ? srv.id : `local_${Date.now()}_${idx}`,
+      id: assignedId,
       title: itemTitle,
       fileName: f.name,
+      file_name: f.name,
+      file_url: chosenFileUrl,
+      file_data: fileDataUrl,
       category: ROLE === 'admin' ? 'Curriculum' : 'Handout',
       tag: ROLE === 'admin' ? 'Curriculum' : 'Handout',
       subject: s.subject.trim(),
@@ -4527,7 +4691,7 @@ async function submitMaterialUpload() {
     if (ROLE === 'admin' && assignedLessonId) {
       expandedLessonMap[assignedLessonId] = true;
     }
-  });
+  }
 
   const uploadCount = s.files.length;
   if (ROLE === 'admin') {

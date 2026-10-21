@@ -170,9 +170,9 @@ body { background: #f1f7ff; }
 .main[data-page="dashboard"] .ic-sub { font-size: 13px !important; font-weight: 600 !important; text-transform: none !important; letter-spacing: 0 !important; color: #386899 !important; }
 .main[data-page="dashboard"] .ic-icon { width: 56px !important; height: 56px !important; border-radius: 17px !important; }
 .main[data-page="dashboard"] .stat-filter-card p { white-space: normal !important; overflow: visible !important; }
-.main[data-page="dashboard"] .admin-dashboard-split { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr) !important; gap: 14px !important; }
-.main[data-page="dashboard"] .admin-dashboard-split > div { min-width: 0; gap: 14px !important; }
-.main[data-page="dashboard"] .admin-dashboard-split > div > div { border: 1px solid #d2e3ff !important; border-radius: 15px !important; padding: 18px 16px !important; box-shadow: 0 3px 12px #345c9809 !important; }
+.main[data-page="dashboard"] .admin-dashboard-split { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 18px !important; align-items: stretch !important; }
+.main[data-page="dashboard"] .admin-dashboard-split > div { min-width: 0; display: flex !important; flex-direction: column !important; justify-content: space-between !important; height: 100% !important; border: 1.5px solid var(--blue-light, #d2e3ff) !important; border-radius: 18px !important; padding: 22px !important; background: #ffffff !important; box-shadow: var(--shadow, 0 3px 12px #345c9809) !important; }
+.main[data-page="dashboard"] .admin-dashboard-split > div > div:not([style*="border"]) { border: none !important; border-radius: 0 !important; padding: 0 !important; box-shadow: none !important; }
 .main[data-page="dashboard"] .admin-dashboard-split h3 { color: #12346e !important; font-size: 16px !important; font-weight: 700 !important; }
 @media (min-width: 901px) {
   .top-nav .hamburger { position: static; flex: 0 0 36px; width: 36px; height: 36px; border-radius: 10px; background: #e7f0ff; color: #2463cf; box-shadow: none; }

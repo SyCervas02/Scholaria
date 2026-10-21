@@ -3324,7 +3324,7 @@ function teacherPage(page) {
       }
 
       return `
-      <div class="teacher-quizzes-container" style="max-width:1160px;width:100%;display:flex;flex-direction:column;gap:12px;">
+      <div class="teacher-quizzes-container" style="width:100%;display:flex;flex-direction:column;gap:12px;">
         <div class="section-hdr" style="margin-bottom:0;">
           <div>
             <h2 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 2px 0;">Quiz Manager</h2>
@@ -4170,6 +4170,25 @@ function adminPage(page) {
         return String(aud);
       }
 
+      if (typeof window.openApprovedQuizzesApprovalView !== 'function') {
+        window.openApprovedQuizzesApprovalView = function() {
+          if (typeof setApprovalView === 'function') {
+            setApprovalView('tab', 'approved');
+            setApprovalView('type', 'Quiz');
+            setApprovalView('search', '');
+            setApprovalView('subject', '');
+          } else if (typeof approvalView !== 'undefined') {
+            approvalView.tab = 'approved';
+            approvalView.type = 'Quiz';
+            approvalView.search = '';
+            approvalView.subject = '';
+            approvalView.page = 1;
+          }
+          if (typeof renderPage === 'function') {
+            renderPage('approval');
+          }
+        };
+      }
       if (typeof window.navigateToUploadedMaterial !== 'function') {
         window.navigateToUploadedMaterial = function(courseId, subject, section, materialId) {
           let targetCourse = null;
@@ -4324,6 +4343,30 @@ function adminPage(page) {
       const queueOffset = (currentQueuePage - 1) * queuePageSize;
       const pagedPendingList = pendingApprovalList.slice(queueOffset, queueOffset + queuePageSize);
 
+
+      // Dashboard Announcement Single-Item Pagination state
+      if (typeof window.dashAnnouncementPage === 'undefined') {
+        window.dashAnnouncementPage = 1;
+      }
+      const totalAncPages = Math.max(1, activeAnnouncements.length);
+      if (window.dashAnnouncementPage > totalAncPages) window.dashAnnouncementPage = totalAncPages;
+      if (window.dashAnnouncementPage < 1) window.dashAnnouncementPage = 1;
+      const currentAncPage = window.dashAnnouncementPage;
+      const featuredAnc = (activeAnnouncements.length ? activeAnnouncements[currentAncPage - 1] : null) || (allAnc.length ? allAnc[0] : null);
+
+      if (typeof window.setDashAnnouncementPage !== 'function') {
+        window.setDashAnnouncementPage = function(delta) {
+          const ancList = (typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : []).filter(a => !a.isArchived && a.status !== 'draft');
+          const total = Math.max(1, ancList.length);
+          let nextP = (window.dashAnnouncementPage || 1) + delta;
+          if (nextP < 1) nextP = 1;
+          if (nextP > total) nextP = total;
+          window.dashAnnouncementPage = nextP;
+          if (typeof renderPage === 'function') {
+            renderPage('dashboard');
+          }
+        };
+      }
       if (typeof window.setDashApprovalPage !== 'function') {
         window.setDashApprovalPage = function(delta) {
           const allEntries = typeof approvalEntries === 'function' ? approvalEntries() : [];
@@ -4445,7 +4488,7 @@ function adminPage(page) {
         </div>
 
         <!-- 7. Active Quizzes -->
-        <div class="admin-metric-card" onclick="renderPage('quiz')" title="Click to view quiz manager">
+        <div class="admin-metric-card" onclick="openApprovedQuizzesApprovalView()" title="Click to view approved quizzes in Content Approval" style="cursor:pointer;">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Active Quizzes</span>
             <div style="width:32px;height:32px;border-radius:8px;background:#fef3c7;color:#b45309;display:flex;align-items:center;justify-content:center;font-size:14px;">📝</div>
@@ -4470,22 +4513,22 @@ function adminPage(page) {
       </div>
 
       <!-- 3. ROW 2: SPLIT 2-COLUMN (APPROVALS QUEUE & INSTITUTIONAL BULLETINS HUB) -->
-      <div class="admin-dashboard-split" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 460px), 1fr));gap:20px;align-items:start;margin-bottom:22px;">
+      <div class="admin-dashboard-split" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:18px;align-items:stretch;margin-bottom:22px;">
         
         <!-- PENDING APPROVAL QUEUE CARD -->
-        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:space-between;">
-          <div>
+        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:space-between;height:100%;">
+          <div style="display:flex;flex-direction:column;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
               <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                <div style="width:34px;height:34px;border-radius:10px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">
                   🚨
                 </div>
                 <div>
                   <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Pending Approval Queue</h3>
-                  <span style="font-size:11.5px;color:var(--text-muted);">${totalPending} items awaiting administrative review</span>
+                  <span style="font-size:11.5px;color:var(--text-muted);display:block;">${totalPending} items awaiting administrative review</span>
                 </div>
               </div>
-              <div style="display:inline-flex;align-items:center;gap:10px;">
+              <div style="display:inline-flex;align-items:center;gap:10px;flex-shrink:0;">
                 ${totalQueuePages > 1 ? `
                   <div style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;padding:3px 8px;border-radius:20px;border:1px solid #e2e8f0;">
                     <button type="button" class="dash-circle-arrow" onclick="setDashApprovalPage(-1)" ${currentQueuePage <= 1 ? 'disabled style="opacity:0.35;cursor:not-allowed;"' : 'style="cursor:pointer;"'} aria-label="Previous page">
@@ -4497,7 +4540,7 @@ function adminPage(page) {
                     </button>
                   </div>
                 ` : ''}
-                <a href="javascript:void(0)" onclick="renderPage('approval')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                <a href="javascript:void(0)" onclick="renderPage('approval')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
                   Open Queue (${totalPending}) &rarr;
                 </a>
               </div>
@@ -4528,7 +4571,7 @@ function adminPage(page) {
                         </div>
                       </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:6px;">
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                       <button class="table-act-btn take" style="padding:5px 10px;font-size:11.5px;white-space:nowrap;" onclick="reviewApprovalEntry(${args})">
                         Review
                       </button>
@@ -4584,71 +4627,93 @@ function adminPage(page) {
         </div>
 
         <!-- INSTITUTIONAL BULLETINS HUB -->
-        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-          <!-- HEADER -->
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <div style="width:34px;height:34px;border-radius:10px;background:#eff6ff;color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:16px;">
-                📢
+        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:space-between;height:100%;">
+          <div style="display:flex;flex-direction:column;">
+            <!-- HEADER -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;">
+              <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+                <div style="width:34px;height:34px;border-radius:10px;background:#eff6ff;color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">
+                  📢
+                </div>
+                <div style="min-width:0;">
+                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Institutional Bulletins Hub</h3>
+                  <span style="font-size:11.5px;color:var(--text-muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Admin announcements and broadcast center</span>
+                </div>
+              </div>
+              <button class="add-btn" style="padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;flex-shrink:0;border-radius:8px;" onclick="openCreateAnnouncementModal()">
+                <span style="font-size:13px;line-height:1;font-weight:800;">+</span> Post Notice
+              </button>
+            </div>
+
+            <!-- ADMIN STATS MINI BAR -->
+            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-bottom:12px;background:#f8fafc;padding:9px 10px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
+              <div>
+                <div style="font-size:16px;font-weight:800;color:#0284c7;line-height:1.2;">${activeAnnouncements.length}</div>
+                <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:0.02em;">Broadcasts</div>
               </div>
               <div>
-                <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Institutional Bulletins Hub</h3>
-                <span style="font-size:11.5px;color:var(--text-muted);">Admin announcements and broadcast center</span>
+                <div style="font-size:16px;font-weight:800;color:${emergencyAnnouncements.length > 0 ? '#dc2626' : '#64748b'};line-height:1.2;">${emergencyAnnouncements.length}</div>
+                <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:0.02em;">Emergency</div>
+              </div>
+              <div>
+                <div style="font-size:16px;font-weight:800;color:#f59e0b;line-height:1.2;">${draftAnnouncements.length}</div>
+                <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:700;letter-spacing:0.02em;">Drafts</div>
               </div>
             </div>
-            <button class="add-btn" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" onclick="openCreateAnnouncementModal()">
-              <span>+</span> Post Notice
-            </button>
-          </div>
 
-          <!-- ADMIN STATS MINI BAR -->
-          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-bottom:14px;background:#f8fafc;padding:10px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
-            <div>
-              <div style="font-size:16px;font-weight:800;color:#0284c7;">${activeAnnouncements.length}</div>
-              <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Broadcasts</div>
-            </div>
-            <div>
-              <div style="font-size:16px;font-weight:800;color:${emergencyAnnouncements.length > 0 ? '#dc2626' : '#64748b'};">${emergencyAnnouncements.length}</div>
-              <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Emergency</div>
-            </div>
-            <div>
-              <div style="font-size:16px;font-weight:800;color:#f59e0b;">${draftAnnouncements.length}</div>
-              <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Drafts</div>
-            </div>
-          </div>
-
-          <!-- RECENT ANNOUNCEMENT ITEMS -->
-          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
-            ${recentAnnouncements.map(anc => {
-              const isEmergency = anc.category === 'emergency';
-              const tagColor = isEmergency ? '#dc2626' : anc.category === 'academic' ? '#0284c7' : anc.category === 'event' ? '#059669' : '#d97706';
-              const tagBg = isEmergency ? '#fee2e2' : anc.category === 'academic' ? '#e0f2fe' : anc.category === 'event' ? '#dcfce7' : '#fef3c7';
+            <!-- FEATURED SINGLE ANNOUNCEMENT -->
+            ${featuredAnc ? (() => {
+              const isEmergency = featuredAnc.category === 'emergency';
+              const tagColor = isEmergency ? '#dc2626' : featuredAnc.category === 'academic' ? '#0284c7' : featuredAnc.category === 'event' ? '#059669' : '#d97706';
+              const tagBg = isEmergency ? '#fee2e2' : featuredAnc.category === 'academic' ? '#e0f2fe' : featuredAnc.category === 'event' ? '#dcfce7' : '#fef3c7';
               return `
-              <div style="padding:12px 14px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;cursor:pointer;transition:border-color 0.15s, box-shadow 0.15s;" onmouseover="this.style.borderColor='var(--blue)';this.style.boxShadow='0 3px 10px rgba(0,0,0,0.05)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="openAnnouncementDetailModal('${anc.id}')">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;">
+              <div style="padding:13px 15px;background:#ffffff;border:1.5px solid #e2e8f0;border-radius:12px;cursor:pointer;transition:border-color 0.15s, box-shadow 0.15s;" onmouseover="this.style.borderColor='var(--blue)';this.style.boxShadow='0 3px 10px rgba(0,0,0,0.05)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="openAnnouncementDetailModal('${featuredAnc.id}')">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
                   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                     <span style="font-size:10px;font-weight:700;text-transform:uppercase;background:${tagBg};color:${tagColor};padding:2px 7px;border-radius:4px;letter-spacing:0.04em;">
-                      ${escHtml(anc.category || 'NOTICE')}
+                      ${escHtml(featuredAnc.category || 'NOTICE')}
                     </span>
                     <span style="font-size:10.5px;color:var(--text-muted);background:#f1f5f9;padding:1px 6px;border-radius:4px;">
-                      ${escHtml(formatAudienceSummary(anc.audience))}
+                      ${escHtml(formatAudienceSummary(featuredAnc.audience))}
                     </span>
                   </div>
-                  <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${formatTimeAgo(anc.timestamp)}</span>
+                  <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${formatTimeAgo(featuredAnc.timestamp)}</span>
                 </div>
-                <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 4px 0;line-height:1.35;">
-                  ${escHtml(anc.title)}
+                <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 4px 0;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                  ${escHtml(featuredAnc.title)}
                 </h4>
                 <p style="font-size:12px;color:var(--text-secondary);margin:0;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
-                  ${escHtml(anc.message || '')}
+                  ${escHtml(featuredAnc.message || '')}
                 </p>
               </div>`;
-            }).join('')}
+            })() : `
+              <div style="text-align:center;padding:20px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
+                <span style="font-size:24px;display:block;margin-bottom:4px;">📢</span>
+                <strong style="font-size:13px;color:#0f172a;display:block;margin-bottom:2px;">No Announcements Posted</strong>
+                <p style="font-size:11.5px;color:var(--text-muted);margin:0;">No active announcements currently broadcasted.</p>
+              </div>
+            `}
           </div>
 
-          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f1f5f9;padding-top:12px;">
-            <a href="javascript:void(0)" onclick="renderPage('announcements')" style="font-size:11.5px;color:var(--text-muted);text-decoration:none;">View all announcements</a>
-            <a href="javascript:void(0)" onclick="renderPage('announcements')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;">
+          <!-- FOOTER -->
+          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f1f5f9;padding-top:12px;margin-top:12px;gap:10px;">
+            <div style="display:inline-flex;align-items:center;gap:8px;">
+              ${totalAncPages > 1 ? `
+                <div style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;padding:2px 7px;border-radius:18px;border:1px solid #e2e8f0;">
+                  <button type="button" class="dash-circle-arrow" onclick="event.stopPropagation(); setDashAnnouncementPage(-1)" ${currentAncPage <= 1 ? 'disabled style="opacity:0.35;cursor:not-allowed;"' : 'style="cursor:pointer;"'} aria-label="Previous announcement">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3"><polyline points="15 18 9 12 15 6"/></svg>
+                  </button>
+                  <span style="font-size:10.5px;font-weight:700;color:#334155;min-width:28px;text-align:center;">${currentAncPage}/${totalAncPages}</span>
+                  <button type="button" class="dash-circle-arrow" onclick="event.stopPropagation(); setDashAnnouncementPage(1)" ${currentAncPage >= totalAncPages ? 'disabled style="opacity:0.35;cursor:not-allowed;"' : 'style="cursor:pointer;"'} aria-label="Next announcement">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              ` : ''}
+              <a href="javascript:void(0)" onclick="renderPage('announcements')" style="font-size:11.5px;color:var(--text-muted);text-decoration:none;">
+                View all ${totalAncPages > 1 ? `(${totalAncPages})` : ''}
+              </a>
+            </div>
+            <a href="javascript:void(0)" onclick="renderPage('announcements')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
               Broadcast Center &rarr;
             </a>
           </div>

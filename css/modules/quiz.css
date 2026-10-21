@@ -1,10 +1,11 @@
 /* ── QUIZ & ITEM ANALYSIS MODULE STYLES ── */
 
-.quiz-list { display: flex; flex-direction: column; gap: 10px; }
+.quiz-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .quiz-row {
   background: #f8fbff; border: 1px solid var(--blue-light);
   border-radius: 12px; padding: 14px 18px;
   display: flex; align-items: center; gap: 14px; transition: 0.2s;
+  width: 100%; box-sizing: border-box;
 }
 .quiz-row:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(37,99,235,.08); }
 .quiz-row .qz-info { flex: 1; }
