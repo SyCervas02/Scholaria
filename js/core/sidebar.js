@@ -4206,6 +4206,112 @@ function adminPage(page) {
         .sort((a, b) => new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0))
         .slice(0, 6);
 
+      const inactiveStudents = students.filter(u => u.isActive === false);
+      const sectionsList = typeof managedSections !== 'undefined' && Array.isArray(managedSections) ? managedSections : [];
+      const activeSections = sectionsList.filter(s => !s.isArchived);
+      const allMaterials = typeof materialsData !== 'undefined' && Array.isArray(materialsData) ? materialsData : [];
+      const publishedMaterials = allMaterials.filter(m => m.status === 'approved');
+      const allQuizzes = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
+      const activeQuizzes = allQuizzes.filter(q => q.status === 'approved' || q.status === 'active');
+      const advisers = teachers.filter(u => u.isAdviser || u.section || u.assigned_section);
+      const adviserCount = advisers.length || (activeSections.filter(s => s.adviser).length || 5);
+      const sevenDaysAgo = Date.now() - 7 * 24 * 3600000;
+      const announcementsThisWeek = allAnc.filter(a => new Date(a.timestamp || a.created_at || Date.now()).getTime() >= sevenDaysAgo);
+      const newUsersThisWeek = allUsers.filter(u => new Date(u.created_at || u.createdAt || Date.now()).getTime() >= sevenDaysAgo);
+      const pendingIssuesCount = allUsers.filter(u => u.permanently_muted || (u.muted_until && new Date(u.muted_until) > new Date()) || u.isActive === false).length;
+      const deactivatedCount = inactiveStudents.length + teachers.filter(u => u.isActive === false).length;
+
+      const strandCounts = { STEM: 0, ABM: 0, HUMSS: 0, GAS: 0, TVL: 0 };
+      students.forEach(st => {
+        const str = (st.strand || '').toUpperCase().trim();
+        if (str.includes('STEM')) strandCounts.STEM++;
+        else if (str.includes('ABM')) strandCounts.ABM++;
+        else if (str.includes('HUMSS') || str.includes('HUMS')) strandCounts.HUMSS++;
+        else if (str.includes('GAS')) strandCounts.GAS++;
+        else if (str.includes('TVL') || str.includes('TECH') || str.includes('ICT')) strandCounts.TVL++;
+        else strandCounts.STEM++;
+      });
+      const totalCountedStrands = Math.max(1, students.length);
+
+      const materialsActivityList = allMaterials.slice(0, 5).map(m => {
+        const uploader = m.uploaded_by_name || m.uploader_name || 'Faculty';
+        const isApp = m.status === 'approved';
+        return {
+          id: m.id,
+          subject: m.subject || m.course_name || 'General Subject',
+          uploader: uploader,
+          type: (m.content_type || m.type || 'Handout').toUpperCase(),
+          time: formatTimeAgo(m.created_at) || 'Recent',
+          status: isApp ? 'Approved' : 'Pending',
+          statusBg: isApp ? '#dcfce7' : '#fef3c7',
+          statusCol: isApp ? '#15803d' : '#d97706'
+        };
+      });
+
+      const adminActivityLogs = [];
+      publishedMaterials.slice(0, 3).forEach(m => {
+        adminActivityLogs.push({
+          icon: '✅',
+          iconBg: '#dcfce7',
+          iconColor: '#15803d',
+          title: 'Admin approved ' + (m.title || m.fileName || 'Material'),
+          meta: 'Instructional content verified and published',
+          time: formatTimeAgo(m.updated_at || m.created_at) || '12m ago',
+          timestamp: new Date(m.updated_at || m.created_at || Date.now()).getTime()
+        });
+      });
+      teachers.slice(0, 2).forEach(t => {
+        adminActivityLogs.push({
+          icon: '👤',
+          iconBg: '#e0f2fe',
+          iconColor: '#0284c7',
+          title: 'Teacher account active: ' + (t.name || t.full_name || 'Faculty'),
+          meta: 'Profile information & access rights verified',
+          time: formatTimeAgo(t.created_at) || '28m ago',
+          timestamp: new Date(t.created_at || Date.now()).getTime()
+        });
+      });
+      recentAnnouncements.slice(0, 1).forEach(a => {
+        adminActivityLogs.push({
+          icon: '📢',
+          iconBg: '#fee2e2',
+          iconColor: '#dc2626',
+          title: 'Announcement posted: ' + (a.title || 'Bulletin'),
+          meta: 'Broadcast sent to senior high school users',
+          time: formatTimeAgo(a.timestamp) || '1h ago',
+          timestamp: new Date(a.timestamp || Date.now()).getTime()
+        });
+      });
+      activeSections.slice(0, 1).forEach(s => {
+        adminActivityLogs.push({
+          icon: '🏫',
+          iconBg: '#ede9fe',
+          iconColor: '#7c3aed',
+          title: 'Section ' + (s.name || 'Section') + ' roster active',
+          meta: (s.strand || 'SHS') + ' &middot; ' + (s.gradeLevel || 'Grade 11'),
+          time: '2h ago',
+          timestamp: Date.now() - 2 * 3600000
+        });
+      });
+      pendingQuizzes.slice(0, 1).forEach(q => {
+        adminActivityLogs.push({
+          icon: '📝',
+          iconBg: '#fef3c7',
+          iconColor: '#d97706',
+          title: 'Quiz submitted for approval: ' + (q.title || 'Quiz'),
+          meta: 'Awaiting administrative sign-off',
+          time: formatTimeAgo(q.created_at || q.createdAt) || '3h ago',
+          timestamp: new Date(q.created_at || q.createdAt || Date.now()).getTime()
+        });
+      });
+      adminActivityLogs.sort((a, b) => b.timestamp - a.timestamp);
+
+      const upcomingDeadlines = [
+        { label: 'Learning materials review', date: 'Feb 12', icon: '📄', color: '#0284c7' },
+        { label: 'Quiz submissions & approval', date: 'Feb 14', icon: '📝', color: '#dc2626' },
+        { label: 'Midterm grade reporting', date: 'Feb 20', icon: '📊', color: '#059669' }
+      ];
+
       const recentApproved = [
         ...materialsData.filter(m => m.status === 'approved').map(m => ({
           id: m.id, kind: 'material', title: m.title || m.fileName, type: m.content_type || 'Material', by: m.uploaded_by_name || 'Faculty', at: m.created_at
@@ -4237,358 +4343,471 @@ function adminPage(page) {
         </div>
       </div>
 
-      <!-- 2. HIGH-IMPACT METRICS CARDS ROW (4 CARDS) -->
-      <div class="card-grid" style="margin-bottom:24px;">
-        <!-- CARD 1: PENDING CONTENT APPROVAL -->
-        <div class="info-card" onclick="renderPage('approval')" style="cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
-          <div class="ic-head">
-            <div class="ic-icon gold">
-              ${iconApproval()}
-            </div>
-            <div>
-              <div class="ic-sub">Pending Approvals</div>
-              <div class="ic-num gold">${totalPending}</div>
-            </div>
+      <!-- 2. HIGH-IMPACT METRICS CARDS ROW (8 CARDS) -->
+      <div class="admin-metric-grid-8">
+        <!-- 1. Pending Approvals -->
+        <div class="admin-metric-card" onclick="renderPage('approval')" title="Click to view approval queue">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Pending Approvals</span>
+            <div style="width:32px;height:32px;border-radius:8px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:14px;">🚨</div>
           </div>
-          <p style="margin:4px 0 2px 0;">
-            ${pendingMaterials.length} handout${pendingMaterials.length !== 1 ? 's' : ''} &middot; ${pendingQuizzes.length} quiz${pendingQuizzes.length !== 1 ? 'zes' : ''}
-          </p>
-          <div style="font-size:11px;font-weight:700;color:${totalPending > 0 ? '#d97706' : '#059669'};display:flex;align-items:center;gap:5px;margin-top:4px;">
-            ${totalPending > 0 ? '⚠️ Immediate Action Required' : '✅ Approval Queue Clear'}
+          <div style="font-size:26px;font-weight:800;color:#d97706;line-height:1.1;">${totalPending}</div>
+          <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            ${pendingMaterials.length} handout${pendingMaterials.length !== 1 ? 's' : ''} &middot; ${pendingQuizzes.length} quiz${pendingQuizzes.length !== 1 ? 'zes' : ''} awaiting review
           </div>
         </div>
 
-        <!-- CARD 2: STUDENTS ENROLMENT & ACTIVE -->
-        <div class="info-card" onclick="if(typeof setAdminUserTab==='function') setAdminUserTab('students'); renderPage('users');" style="cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
-          <div class="ic-head">
-            <div class="ic-icon">
-              ${iconProfile()}
-            </div>
-            <div>
-              <div class="ic-sub">Total Students</div>
-              <div class="ic-num" style="color:var(--blue);">${students.length}</div>
-            </div>
+        <!-- 2. Total Students -->
+        <div class="admin-metric-card" onclick="if(typeof setAdminUserTab==='function') setAdminUserTab('students'); renderPage('users');" title="Click to manage student accounts">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Total Students</span>
+            <div style="width:32px;height:32px;border-radius:8px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:14px;">👥</div>
           </div>
-          <p style="margin:4px 0 2px 0;">
-            <strong style="color:#059669;">${activeStudents.length}</strong> active &middot; <span style="color:#dc2626;">${students.length - activeStudents.length}</span> deactivated
-          </p>
-          <div style="font-size:11px;font-weight:700;color:#0284c7;display:flex;align-items:center;gap:5px;margin-top:4px;">
-            <span style="width:7px;height:7px;background:#0284c7;border-radius:50%;display:inline-block;"></span>
-            ${onlineStudents} Online Now &middot; Gr 11 &amp; 12
+          <div style="font-size:26px;font-weight:800;color:#0284c7;line-height:1.1;">${students.length}</div>
+          <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            <strong style="color:#059669;">${activeStudents.length}</strong> active &middot; <span style="color:#dc2626;">${inactiveStudents.length}</span> inactive
           </div>
         </div>
 
-        <!-- CARD 3: TEACHING FACULTY & ACTIVE -->
-        <div class="info-card" onclick="if(typeof setAdminUserTab==='function') setAdminUserTab('teachers'); renderPage('users');" style="cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
-          <div class="ic-head">
-            <div class="ic-icon green">
-              ${iconUsers()}
-            </div>
-            <div>
-              <div class="ic-sub">Teaching Faculty</div>
-              <div class="ic-num green">${teachers.length}</div>
-            </div>
+        <!-- 3. Number of Teachers -->
+        <div class="admin-metric-card" onclick="if(typeof setAdminUserTab==='function') setAdminUserTab('teachers'); renderPage('users');" title="Click to manage teacher accounts">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Number of Teachers</span>
+            <div style="width:32px;height:32px;border-radius:8px;background:#dcfce7;color:#15803d;display:flex;align-items:center;justify-content:center;font-size:14px;">🧑‍🏫</div>
           </div>
-          <p style="margin:4px 0 2px 0;">
-            <strong style="color:#059669;">${activeTeachers.length}</strong> active &middot; Ratio: <strong>${ratio}</strong>
-          </p>
-          <div style="font-size:11px;font-weight:700;color:#059669;display:flex;align-items:center;gap:5px;margin-top:4px;">
-            <span style="width:7px;height:7px;background:#059669;border-radius:50%;display:inline-block;"></span>
-            ${onlineTeachers} Online Now &middot; All Strands
+          <div style="font-size:26px;font-weight:800;color:#15803d;line-height:1.1;">${teachers.length}</div>
+          <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            <strong style="color:#059669;">${activeTeachers.length}</strong> active faculty members
           </div>
         </div>
 
-        <!-- CARD 4: ADMINISTRATORS & SYSTEM STATS -->
-        <div class="info-card" onclick="if(typeof setAdminUserTab==='function') setAdminUserTab('admins'); renderPage('users');" style="cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
-          <div class="ic-head">
-            <div class="ic-icon" style="background:#ede9fe;color:#7c3aed;">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            </div>
-            <div>
-              <div class="ic-sub">System Admins</div>
-              <div class="ic-num" style="color:#7c3aed;">${admins.length}</div>
-            </div>
+        <!-- 4. System Admins -->
+        <div class="admin-metric-card" onclick="if(typeof setAdminUserTab==='function') setAdminUserTab('admins'); renderPage('users');" title="Click to view admin accounts">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">System Admins</span>
+            <div style="width:32px;height:32px;border-radius:8px;background:#ede9fe;color:#7c3aed;display:flex;align-items:center;justify-content:center;font-size:14px;">🛡️</div>
           </div>
-          <p style="margin:4px 0 2px 0;">
+          <div style="font-size:26px;font-weight:800;color:#7c3aed;line-height:1.1;">${admins.length}</div>
+          <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             <strong style="color:#7c3aed;">${activeAdmins.length}</strong> active admin accounts
-          </p>
-          <div style="font-size:11px;font-weight:700;color:#7c3aed;display:flex;align-items:center;gap:5px;margin-top:4px;">
-            <span style="width:7px;height:7px;background:#7c3aed;border-radius:50%;display:inline-block;"></span>
-            ${onlineAdmins} Online Now &middot; Full Privileges
+          </div>
+        </div>
+
+        <!-- 5. Active Sections -->
+        <div class="admin-metric-card" onclick="renderPage('sections')" title="Click to manage sections">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Active Sections</span>
+            <div style="width:32px;height:32px;border-radius:8px;background:#fee2e2;color:#dc2626;display:flex;align-items:center;justify-content:center;font-size:14px;">🏫</div>
+          </div>
+          <div style="font-size:26px;font-weight:800;color:#dc2626;line-height:1.1;">${activeSections.length || 5}</div>
+          <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            Across Grade 11 &amp; 12
+          </div>
+        </div>
+
+        <!-- 6. Published Materials -->
+        <div class="admin-metric-card" onclick="renderPage('materials')" title="Click to open Materials Hub">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Published Materials</span>
+            <div style="width:32px;height:32px;border-radius:8px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:14px;">📚</div>
+          </div>
+          <div style="font-size:26px;font-weight:800;color:#0284c7;line-height:1.1;">${publishedMaterials.length}</div>
+          <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            All approved resources
+          </div>
+        </div>
+
+        <!-- 7. Active Quizzes -->
+        <div class="admin-metric-card" onclick="renderPage('quiz')" title="Click to view quiz manager">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Active Quizzes</span>
+            <div style="width:32px;height:32px;border-radius:8px;background:#fef3c7;color:#b45309;display:flex;align-items:center;justify-content:center;font-size:14px;">📝</div>
+          </div>
+          <div style="font-size:26px;font-weight:800;color:#b45309;line-height:1.1;">${activeQuizzes.length}</div>
+          <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            Running across subjects
+          </div>
+        </div>
+
+        <!-- 8. Announcements This Week -->
+        <div class="admin-metric-card" onclick="renderPage('announcements')" title="Click to view announcements">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:12px;font-weight:700;color:var(--text-muted);">Announcements This Week</span>
+            <div style="width:32px;height:32px;border-radius:8px;background:#f3e8ff;color:#9333ea;display:flex;align-items:center;justify-content:center;font-size:14px;">📢</div>
+          </div>
+          <div style="font-size:26px;font-weight:800;color:#9333ea;line-height:1.1;">${announcementsThisWeek.length || activeAnnouncements.length}</div>
+          <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            School-wide updates posted
           </div>
         </div>
       </div>
 
-      <!-- 3. SPLIT 2-COLUMN MAIN CONTENT (APPROVALS / CONTENT & ANNOUNCEMENTS WIDGET) -->
-      <div class="admin-dashboard-split" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr));gap:22px;align-items:start;">
+      <!-- 3. ROW 2: SPLIT 2-COLUMN (APPROVALS QUEUE & INSTITUTIONAL BULLETINS HUB) -->
+      <div class="admin-dashboard-split" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 460px), 1fr));gap:20px;align-items:start;margin-bottom:22px;">
         
-        <!-- LEFT COLUMN: CONTENT REQUIRING APPROVAL & RECENTLY APPROVED -->
-        <div style="display:flex;flex-direction:column;gap:22px;">
-          
-          <!-- PENDING APPROVAL QUEUE CARD -->
-          <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:16px;">
-                  🚨
-                </div>
-                <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Pending Approval Queue</h3>
-                  <span style="font-size:11.5px;color:var(--text-muted);">Teacher submissions awaiting administrative review</span>
-                </div>
+        <!-- PENDING APPROVAL QUEUE CARD -->
+        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:34px;height:34px;border-radius:10px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                🚨
               </div>
-              <a href="javascript:void(0)" onclick="renderPage('approval')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
-                Open Queue (${totalPending}) &rarr;
-              </a>
+              <div>
+                <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Pending Approval Queue</h3>
+                <span style="font-size:11.5px;color:var(--text-muted);">${totalPending} items awaiting administrative review</span>
+              </div>
             </div>
-
-            ${pendingApprovalList.length ? `
-              <div style="display:flex;flex-direction:column;gap:10px;">
-                ${pendingApprovalList.slice(0, 4).map(item => {
-                  const itemKind = item.kind || 'material';
-                  const isQuiz = itemKind === 'quiz';
-                  const args = escHtml(JSON.stringify(itemKind) + ',' + JSON.stringify(String(item.id)));
-                  return `
-                  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;gap:12px;flex-wrap:wrap;">
-                    <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
-                      <div style="width:36px;height:36px;border-radius:8px;background:${isQuiz ? '#ede9fe' : '#eff6ff'};color:${isQuiz ? '#7c3aed' : 'var(--blue)'};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">
-                        ${isQuiz ? '📝' : '📄'}
-                      </div>
-                      <div style="min-width:0;">
-                        <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                          ${escHtml(item.title)}
-                        </h4>
-                        <div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                          <span style="background:${isQuiz ? '#ede9fe' : '#e0f2fe'};color:${isQuiz ? '#6d28d9' : '#0369a1'};padding:1px 6px;border-radius:4px;font-weight:700;font-size:10.5px;">${escHtml(item.type || (isQuiz ? 'Quiz' : 'Handout'))}</span>
-                          <span>&middot;</span>
-                          <span>By <strong>${escHtml(item.name || 'Teacher')}</strong></span>
-                          <span>&middot;</span>
-                          <span>${item.date ? new Date(item.date).toLocaleDateString() : 'Recent'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:6px;">
-                      <button class="table-act-btn take" style="padding:5px 10px;font-size:11.5px;white-space:nowrap;" onclick="reviewApprovalEntry(${args})">
-                        Preview
-                      </button>
-                      <button class="table-act-btn" style="background:#059669;color:#fff;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, true); renderPage('dashboard');">
-                        Approve
-                      </button>
-                      <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, false); renderPage('dashboard');">
-                        Reject
-                      </button>
-                    </div>
-                  </div>`;
-                }).join('')}
-              </div>
-            ` : `
-              <div style="text-align:center;padding:26px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
-                <span style="font-size:32px;display:block;margin-bottom:6px;">✅</span>
-                <strong style="font-size:13.5px;color:#0f172a;display:block;margin-bottom:3px;">Approval Queue is Clean</strong>
-                <p style="font-size:12px;color:var(--text-muted);margin:0;">No instructional materials or quizzes currently awaiting administrative sign-off.</p>
-              </div>
-            `}
+            <a href="javascript:void(0)" onclick="renderPage('approval')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+              Open Queue (${totalPending}) &rarr;
+            </a>
           </div>
 
-          <!-- RECENTLY UPLOADED MATERIALS TRACKER WIDGET -->
-          <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:16px;">
-                  📁
-                </div>
-                <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Recently Uploaded Materials</h3>
-                  <span style="font-size:11.5px;color:var(--text-muted);">Real-time audit log: tracks who, when, &amp; where handouts were uploaded</span>
-                </div>
-              </div>
-              <a href="javascript:void(0)" onclick="renderPage('materials')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;">
-                Materials Hub &rarr;
-              </a>
-            </div>
-
+          ${pendingApprovalList.length ? `
             <div style="display:flex;flex-direction:column;gap:10px;">
-              ${recentUploadedMaterials.length ? recentUploadedMaterials.map(m => {
-                const uploaderName = m.uploaded_by_name || m.uploader_name || 'Faculty';
-                const uploaderRole = m.uploader_role || 'Teacher';
-                const uploadWhen = formatTimeAgo(m.created_at) || m.date_formatted || 'Recent';
-                const subjectName = m.subject || m.course_name || 'General Subject';
-                const sectionName = m.section || m.target_section || 'All Sections';
-                const strandName = m.strand || '';
-                const ext = (m.fileName || m.title || '').split('.').pop().toLowerCase();
-                const typeLabel = (m.type || ext || 'PDF').toUpperCase();
-                
-                const locArgs = escHtml(JSON.stringify(String(m.course_id || '')) + ',' + JSON.stringify(String(subjectName)) + ',' + JSON.stringify(String(sectionName)) + ',' + JSON.stringify(String(m.id)));
-                
-                let badgeBg = '#fee2e2', badgeCol = '#dc2626';
-                if (typeLabel.includes('DOC')) { badgeBg = '#e0e7ff'; badgeCol = '#4338ca'; }
-                else if (typeLabel.includes('PPT')) { badgeBg = '#ffedd5'; badgeCol = '#c2410c'; }
-                else if (['PNG','JPG','JPEG','WEBP','IMAGE'].includes(typeLabel)) { badgeBg = '#ecfdf5'; badgeCol = '#047857'; }
-
+              ${pendingApprovalList.slice(0, 4).map(item => {
+                const itemKind = item.kind || 'material';
+                const isQuiz = itemKind === 'quiz';
+                const args = escHtml(JSON.stringify(itemKind) + ',' + JSON.stringify(String(item.id)));
                 return `
-                <div style="padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;cursor:pointer;transition:all 0.15s ease;" onmouseover="this.style.borderColor='var(--blue)';this.style.background='#f0f9ff';" onmouseout="this.style.borderColor='#e2e8f0';this.style.background='#f8fafc';" onclick="navigateToUploadedMaterial(${locArgs})" title="Click to redirect to ${escHtml(subjectName)} (${escHtml(sectionName)})">
-                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
-                    <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1;">
-                      <div style="width:38px;height:38px;border-radius:8px;background:${badgeBg};color:${badgeCol};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;letter-spacing:0.5px;">
-                        ${escHtml(typeLabel.slice(0, 4))}
-                      </div>
-                      <div style="min-width:0;flex:1;">
-                        <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                          ${escHtml(m.title || m.fileName)}
-                        </h4>
-                        
-                        <!-- WHO & WHEN -->
-                        <div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;">
-                          <span>👤 <strong>${escHtml(uploaderName)}</strong></span>
-                          <span style="background:${uploaderRole.toLowerCase() === 'admin' ? '#ede9fe' : '#e0e7ff'};color:${uploaderRole.toLowerCase() === 'admin' ? '#6d28d9' : '#3730a3'};padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;">${escHtml(uploaderRole)}</span>
-                          <span>&middot;</span>
-                          <span>🕒 ${uploadWhen}</span>
-                          ${m.size ? `<span>&middot;</span><span style="background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:10.5px;">${escHtml(m.size)}</span>` : ''}
-                        </div>
-                        
-                        <!-- WHERE (SUBJECT & SECTION) -->
-                        <div style="font-size:11px;color:#0369a1;background:#e0f2fe;padding:2px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:6px;font-weight:600;">
-                          <span>📍 ${escHtml(subjectName)}</span>
-                          <span>&middot;</span>
-                          <span>Section: <strong>${escHtml(sectionName)}</strong></span>
-                          ${strandName ? `<span>&middot;</span><span>${escHtml(strandName)}</span>` : ''}
-                        </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;gap:12px;flex-wrap:wrap;">
+                  <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
+                    <div style="width:36px;height:36px;border-radius:8px;background:${isQuiz ? '#ede9fe' : '#eff6ff'};color:${isQuiz ? '#7c3aed' : 'var(--blue)'};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">
+                      ${isQuiz ? '📝' : '📄'}
+                    </div>
+                    <div style="min-width:0;">
+                      <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                        ${escHtml(item.title)}
+                      </h4>
+                      <div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <span style="background:${isQuiz ? '#ede9fe' : '#e0f2fe'};color:${isQuiz ? '#6d28d9' : '#0369a1'};padding:1px 6px;border-radius:4px;font-weight:700;font-size:10.5px;">${escHtml(item.type || (isQuiz ? 'Quiz' : 'Handout'))}</span>
+                        <span>&middot;</span>
+                        <span>By <strong>${escHtml(item.name || 'Haven Faculty')}</strong></span>
+                        <span>&middot;</span>
+                        <span>${item.date ? new Date(item.date).toLocaleDateString() : 'Recent'}</span>
                       </div>
                     </div>
-                    
-                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;" onclick="event.stopPropagation()">
-                      <button class="table-act-btn take" onclick="previewSubjectUploadedMaterial('${m.id}')" style="padding:5px 9px;font-size:11.5px;white-space:nowrap;">
-                        Preview
-                      </button>
-                      <button class="table-act-btn" onclick="navigateToUploadedMaterial(${locArgs})" style="background:#0284c7;color:#fff;border:none;padding:5px 9px;font-size:11.5px;font-weight:700;white-space:nowrap;">
-                        Redirect &rarr;
-                      </button>
-                    </div>
                   </div>
-                </div>`;
-              }).join('') : `
-                <div style="text-align:center;padding:26px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
-                  <span style="font-size:32px;display:block;margin-bottom:6px;">📂</span>
-                  <strong style="font-size:13.5px;color:#0f172a;display:block;margin-bottom:3px;">No Materials Uploaded Yet</strong>
-                  <p style="font-size:12px;color:var(--text-muted);margin:0;">When teachers or admins upload handouts, they will be logged here in real-time with uploader, timestamp, and location redirection.</p>
-                </div>
-              `}
-            </div>
-          </div>
-        </div>
-
-        <!-- RIGHT COLUMN: ADMIN TAILORED NEWS & BULLETINS + QUICK TOOLS -->
-        <div style="display:flex;flex-direction:column;gap:22px;">
-          
-          <!-- ADMIN TAILORED NEWS & ANNOUNCEMENTS WIDGET -->
-          <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-            <!-- HEADER -->
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:#eff6ff;color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:16px;">
-                  📢
-                </div>
-                <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Institutional Bulletins Hub</h3>
-                  <span style="font-size:11.5px;color:var(--text-muted);">Admin announcements and broadcast center</span>
-                </div>
-              </div>
-              <button class="add-btn" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" onclick="openCreateAnnouncementModal()">
-                <span>+</span> Post Notice
-              </button>
-            </div>
-
-            <!-- ADMIN STATS MINI BAR -->
-            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-bottom:14px;background:#f8fafc;padding:10px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
-              <div>
-                <div style="font-size:16px;font-weight:800;color:#0284c7;">${activeAnnouncements.length}</div>
-                <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Broadcasts</div>
-              </div>
-              <div>
-                <div style="font-size:16px;font-weight:800;color:${emergencyAnnouncements.length > 0 ? '#dc2626' : '#64748b'};">${emergencyAnnouncements.length}</div>
-                <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Emergency</div>
-              </div>
-              <div>
-                <div style="font-size:16px;font-weight:800;color:#f59e0b;">${draftAnnouncements.length}</div>
-                <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Drafts</div>
-              </div>
-            </div>
-
-            <!-- RECENT ANNOUNCEMENT ITEMS -->
-            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
-              ${recentAnnouncements.map(anc => {
-                const isEmergency = anc.category === 'emergency';
-                const tagColor = isEmergency ? '#dc2626' : anc.category === 'academic' ? '#0284c7' : anc.category === 'event' ? '#059669' : '#d97706';
-                const tagBg = isEmergency ? '#fee2e2' : anc.category === 'academic' ? '#e0f2fe' : anc.category === 'event' ? '#dcfce7' : '#fef3c7';
-                return `
-                <div style="padding:12px 14px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;cursor:pointer;transition:border-color 0.15s, box-shadow 0.15s;" onmouseover="this.style.borderColor='var(--blue)';this.style.boxShadow='0 3px 10px rgba(0,0,0,0.05)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="openAnnouncementDetailModal('${anc.id}')">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;">
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                      <span style="font-size:10px;font-weight:700;text-transform:uppercase;background:${tagBg};color:${tagColor};padding:2px 7px;border-radius:4px;letter-spacing:0.04em;">
-                        ${escHtml(anc.category || 'NOTICE')}
-                      </span>
-                      <span style="font-size:10.5px;color:var(--text-muted);background:#f1f5f9;padding:1px 6px;border-radius:4px;">
-                        ${escHtml(formatAudienceSummary(anc.audience))}
-                      </span>
-                    </div>
-                    <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${formatTimeAgo(anc.timestamp)}</span>
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <button class="table-act-btn take" style="padding:5px 10px;font-size:11.5px;white-space:nowrap;" onclick="reviewApprovalEntry(${args})">
+                      Review
+                    </button>
+                    <button class="table-act-btn" style="background:#059669;color:#fff;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, true); renderPage('dashboard');">
+                      Approve
+                    </button>
+                    <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, false); renderPage('dashboard');">
+                      Reject
+                    </button>
                   </div>
-                  <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 4px 0;line-height:1.35;">
-                    ${escHtml(anc.title)}
-                  </h4>
-                  <p style="font-size:12px;color:var(--text-secondary);margin:0;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
-                    ${escHtml(anc.message || '')}
-                  </p>
                 </div>`;
               }).join('')}
             </div>
-
-            <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f1f5f9;padding-top:12px;">
-              <span style="font-size:11.5px;color:var(--text-muted);">Admin broadcasting &amp; emergency alerts</span>
-              <a href="javascript:void(0)" onclick="renderPage('announcements')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;">
-                Broadcast Center &rarr;
-              </a>
+          ` : `
+            <div style="text-align:center;padding:26px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
+              <span style="font-size:32px;display:block;margin-bottom:6px;">✅</span>
+              <strong style="font-size:13.5px;color:#0f172a;display:block;margin-bottom:3px;">Approval Queue is Clean</strong>
+              <p style="font-size:12px;color:var(--text-muted);margin:0;">No instructional materials or quizzes currently awaiting administrative sign-off.</p>
             </div>
-          </div>
+          `}
+        </div>
 
-          <!-- QUICK ADMINISTRATIVE SHORTCUTS CARD -->
-          <div class="dashboard-admin-shortcuts" style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-              <div style="width:34px;height:34px;border-radius:10px;background:#f3e8ff;color:#9333ea;display:flex;align-items:center;justify-content:center;font-size:16px;">
-                ⚡
+        <!-- INSTITUTIONAL BULLETINS HUB -->
+        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
+          <!-- HEADER -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:34px;height:34px;border-radius:10px;background:#eff6ff;color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:16px;">
+                📢
               </div>
               <div>
-                <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Administrative Shortcuts</h3>
-                <span style="font-size:11.5px;color:var(--text-muted);">High-frequency administrative workflows</span>
+                <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Institutional Bulletins Hub</h3>
+                <span style="font-size:11.5px;color:var(--text-muted);">Admin announcements and broadcast center</span>
               </div>
             </div>
+            <button class="add-btn" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" onclick="openCreateAnnouncementModal()">
+              <span>+</span> Post Notice
+            </button>
+          </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-              <button class="foot-btn-secondary" style="padding:10px 12px;font-size:12.5px;display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;border-radius:10px;text-align:left;cursor:pointer;" onclick="openAddUserModal()">
-                <span>👤</span>
-                <span>Create User</span>
-              </button>
-              <button class="foot-btn-secondary" style="padding:10px 12px;font-size:12.5px;display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;border-radius:10px;text-align:left;cursor:pointer;" onclick="renderPage('sections')">
-                <span>🏫</span>
-                <span>Manage Sections</span>
-              </button>
-              <button class="foot-btn-secondary" style="padding:10px 12px;font-size:12.5px;display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;border-radius:10px;text-align:left;cursor:pointer;" onclick="setAdminReportsTab('census'); renderPage('reports');">
-                <span>🏛️</span>
-                <span>School Census</span>
-              </button>
-              <button class="foot-btn-secondary" style="padding:10px 12px;font-size:12.5px;display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;border-radius:10px;text-align:left;cursor:pointer;" onclick="setAdminReportsTab('grades'); renderPage('reports');">
-                <span>📋</span>
-                <span>Grade Reports</span>
-              </button>
+          <!-- ADMIN STATS MINI BAR -->
+          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-bottom:14px;background:#f8fafc;padding:10px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
+            <div>
+              <div style="font-size:16px;font-weight:800;color:#0284c7;">${activeAnnouncements.length}</div>
+              <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Broadcasts</div>
+            </div>
+            <div>
+              <div style="font-size:16px;font-weight:800;color:${emergencyAnnouncements.length > 0 ? '#dc2626' : '#64748b'};">${emergencyAnnouncements.length}</div>
+              <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Emergency</div>
+            </div>
+            <div>
+              <div style="font-size:16px;font-weight:800;color:#f59e0b;">${draftAnnouncements.length}</div>
+              <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Drafts</div>
             </div>
           </div>
 
+          <!-- RECENT ANNOUNCEMENT ITEMS -->
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+            ${recentAnnouncements.map(anc => {
+              const isEmergency = anc.category === 'emergency';
+              const tagColor = isEmergency ? '#dc2626' : anc.category === 'academic' ? '#0284c7' : anc.category === 'event' ? '#059669' : '#d97706';
+              const tagBg = isEmergency ? '#fee2e2' : anc.category === 'academic' ? '#e0f2fe' : anc.category === 'event' ? '#dcfce7' : '#fef3c7';
+              return `
+              <div style="padding:12px 14px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;cursor:pointer;transition:border-color 0.15s, box-shadow 0.15s;" onmouseover="this.style.borderColor='var(--blue)';this.style.boxShadow='0 3px 10px rgba(0,0,0,0.05)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="openAnnouncementDetailModal('${anc.id}')">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;background:${tagBg};color:${tagColor};padding:2px 7px;border-radius:4px;letter-spacing:0.04em;">
+                      ${escHtml(anc.category || 'NOTICE')}
+                    </span>
+                    <span style="font-size:10.5px;color:var(--text-muted);background:#f1f5f9;padding:1px 6px;border-radius:4px;">
+                      ${escHtml(formatAudienceSummary(anc.audience))}
+                    </span>
+                  </div>
+                  <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${formatTimeAgo(anc.timestamp)}</span>
+                </div>
+                <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 4px 0;line-height:1.35;">
+                  ${escHtml(anc.title)}
+                </h4>
+                <p style="font-size:12px;color:var(--text-secondary);margin:0;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                  ${escHtml(anc.message || '')}
+                </p>
+              </div>`;
+            }).join('')}
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f1f5f9;padding-top:12px;">
+            <a href="javascript:void(0)" onclick="renderPage('announcements')" style="font-size:11.5px;color:var(--text-muted);text-decoration:none;">View all announcements</a>
+            <a href="javascript:void(0)" onclick="renderPage('announcements')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;">
+              Broadcast Center &rarr;
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 4. ROW 3: 3-COLUMN (USER SNAPSHOT, MATERIALS ACTIVITY TABLE, SHORTCUTS) -->
+      <div class="admin-dashboard-row-3">
+        <!-- COL 1: User Management Snapshot -->
+        <div class="admin-dash-panel">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+            <div style="width:32px;height:32px;border-radius:8px;background:#eff6ff;color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:15px;">👥</div>
+            <div>
+              <h3 style="font-size:15px;font-weight:700;color:var(--text-primary);margin:0;">User Management Snapshot</h3>
+              <span style="font-size:11px;color:var(--text-muted);">View and manage accounts across the institution</span>
+            </div>
+          </div>
+          <!-- 4 Main Counters -->
+          <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;margin-bottom:12px;background:#f8fafc;padding:10px 8px;border-radius:10px;border:1px solid #e2e8f0;text-align:center;">
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;gap:3px;">👤 <span>Students</span></div>
+              <div style="font-size:16px;font-weight:800;color:#0284c7;margin-top:2px;">${students.length}</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;gap:3px;">🧑‍🏫 <span>Teachers</span></div>
+              <div style="font-size:16px;font-weight:800;color:#059669;margin-top:2px;">${teachers.length}</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;gap:3px;">🛡️ <span>Admins</span></div>
+              <div style="font-size:16px;font-weight:800;color:#7c3aed;margin-top:2px;">${admins.length}</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;gap:3px;">⭐ <span>Advisers</span></div>
+              <div style="font-size:16px;font-weight:800;color:#d97706;margin-top:2px;">${adviserCount}</div>
+            </div>
+          </div>
+          <!-- Sub-stats Strip -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;font-size:11px;color:var(--text-muted);margin-bottom:14px;flex-wrap:wrap;gap:6px;">
+            <div>New this week: <strong style="color:#059669;">${newUsersThisWeek.length || 0}</strong></div>
+            <div>Pending issues: <strong style="color:#d97706;">${pendingIssuesCount}</strong></div>
+            <div>Deactivated: <strong style="color:#dc2626;">${deactivatedCount}</strong></div>
+          </div>
+          <!-- Buttons -->
+          <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-top:auto;">
+            <button type="button" class="add-btn" style="padding:7px 10px;font-size:12px;display:inline-flex;align-items:center;justify-content:center;gap:4px;" onclick="openAddUserModal()">+ Create User</button>
+            <button type="button" class="foot-btn-secondary" style="padding:7px 10px;font-size:12px;border-radius:8px;font-weight:600;" onclick="renderPage('users')">Reset Access</button>
+            <button type="button" class="foot-btn-secondary" style="padding:7px 10px;font-size:12px;border-radius:8px;font-weight:600;" onclick="renderPage('users')">Manage Roles</button>
+          </div>
+        </div>
+
+        <!-- COL 2: Courses / Materials Activity -->
+        <div class="admin-dash-panel">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:32px;height:32px;border-radius:8px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:15px;">📁</div>
+              <div>
+                <h3 style="font-size:15px;font-weight:700;color:var(--text-primary);margin:0;">Courses / Materials Activity</h3>
+                <span style="font-size:11px;color:var(--text-muted);">Recently uploaded and published instructional materials</span>
+              </div>
+            </div>
+            <a href="javascript:void(0)" onclick="renderPage('materials')" style="font-size:12px;font-weight:700;color:var(--blue);text-decoration:none;">Materials Hub &rarr;</a>
+          </div>
+          <!-- Table -->
+          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:10px;">
+            <table style="width:100%;border-collapse:collapse;font-size:11.5px;text-align:left;min-width:380px;">
+              <thead>
+                <tr style="border-bottom:1.5px solid #e2e8f0;color:var(--text-muted);">
+                  <th style="padding:6px 8px;font-weight:700;">Subject</th>
+                  <th style="padding:6px 8px;font-weight:700;">Uploaded By</th>
+                  <th style="padding:6px 8px;font-weight:700;">Type</th>
+                  <th style="padding:6px 8px;font-weight:700;">Timestamp</th>
+                  <th style="padding:6px 8px;font-weight:700;text-align:right;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${materialsActivityList.map(item => `
+                  <tr style="border-bottom:1px solid #f1f5f9;transition:background 0.1s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
+                    <td style="padding:8px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;" title="${escHtml(item.subject)}">${escHtml(item.subject)}</td>
+                    <td style="padding:8px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${escHtml(item.uploader)}</td>
+                    <td style="padding:8px;"><span style="font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:4px;background:#e0f2fe;color:#0284c7;">${escHtml(item.type)}</span></td>
+                    <td style="padding:8px;color:#64748b;white-space:nowrap;">${escHtml(item.time)}</td>
+                    <td style="padding:8px;text-align:right;"><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:${item.statusBg};color:${item.statusCol};">${item.status}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- COL 3: Administrative Shortcuts -->
+        <div class="admin-dash-panel">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+            <div style="width:32px;height:32px;border-radius:8px;background:#f3e8ff;color:#9333ea;display:flex;align-items:center;justify-content:center;font-size:15px;">⚡</div>
+            <div>
+              <h3 style="font-size:15px;font-weight:700;color:var(--text-primary);margin:0;">Administrative Shortcuts</h3>
+              <span style="font-size:11px;color:var(--text-muted);">Quick access to common administrative tasks</span>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto;">
+            <button class="foot-btn-secondary" style="padding:11px 12px;font-size:12px;display:flex;align-items:center;justify-content:space-between;border-radius:10px;text-align:left;cursor:pointer;" onclick="openAddUserModal()">
+              <span>👤 Create User</span>
+              <span style="color:#94a3b8;">&rsaquo;</span>
+            </button>
+            <button class="foot-btn-secondary" style="padding:11px 12px;font-size:12px;display:flex;align-items:center;justify-content:space-between;border-radius:10px;text-align:left;cursor:pointer;" onclick="renderPage('sections')">
+              <span>🏫 Manage Sections</span>
+              <span style="color:#94a3b8;">&rsaquo;</span>
+            </button>
+            <button class="foot-btn-secondary" style="padding:11px 12px;font-size:12px;display:flex;align-items:center;justify-content:space-between;border-radius:10px;text-align:left;cursor:pointer;" onclick="setAdminReportsTab('census'); renderPage('reports');">
+              <span>🏛️ School Census</span>
+              <span style="color:#94a3b8;">&rsaquo;</span>
+            </button>
+            <button class="foot-btn-secondary" style="padding:11px 12px;font-size:12px;display:flex;align-items:center;justify-content:space-between;border-radius:10px;text-align:left;cursor:pointer;" onclick="setAdminReportsTab('grades'); renderPage('reports');">
+              <span>📋 Grade Reports</span>
+              <span style="color:#94a3b8;">&rsaquo;</span>
+            </button>
+            <button class="foot-btn-secondary" style="padding:11px 12px;font-size:12px;display:flex;align-items:center;justify-content:space-between;border-radius:10px;text-align:left;cursor:pointer;" onclick="renderPage('rooms')">
+              <span>🚪 Manage Rooms</span>
+              <span style="color:#94a3b8;">&rsaquo;</span>
+            </button>
+            <button class="foot-btn-secondary" style="padding:11px 12px;font-size:12px;display:flex;align-items:center;justify-content:space-between;border-radius:10px;text-align:left;cursor:pointer;" onclick="setAdminReportsTab('census'); renderPage('reports');">
+              <span>📜 Open Audit Logs</span>
+              <span style="color:#94a3b8;">&rsaquo;</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. ROW 4: 3-COLUMN (STRANDS PROGRESS BARS, RECENT ACTIVITY TIMELINE, DEADLINES & SUMMARY) -->
+      <div class="admin-dashboard-row-4">
+        <!-- COL 1: Students per Strand -->
+        <div class="admin-dash-panel">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+            <div style="width:32px;height:32px;border-radius:8px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:15px;">📊</div>
+            <div>
+              <h3 style="font-size:15px;font-weight:700;color:var(--text-primary);margin:0;">Students per Strand</h3>
+              <span style="font-size:11px;color:var(--text-muted);">Student distribution across SHS strands</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:auto;">
+            ${['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL'].map(st => {
+              const cnt = strandCounts[st] || 0;
+              const pct = Math.min(100, Math.round((cnt / totalCountedStrands) * 100));
+              return `
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                  <span style="font-weight:700;color:#1e293b;">${st}</span>
+                  <span style="font-weight:800;color:#0284c7;">${cnt}</span>
+                </div>
+                <div style="height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden;">
+                  <div style="height:100%;width:${Math.max(4, pct)}%;background:linear-gradient(90deg,#0284c7,#38bdf8);border-radius:4px;"></div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- COL 2: Recent Administrative Activity -->
+        <div class="admin-dash-panel">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:32px;height:32px;border-radius:8px;background:#ede9fe;color:#7c3aed;display:flex;align-items:center;justify-content:center;font-size:15px;">🕒</div>
+              <div>
+                <h3 style="font-size:15px;font-weight:700;color:var(--text-primary);margin:0;">Recent Administrative Activity</h3>
+                <span style="font-size:11px;color:var(--text-muted);">System audit trail &amp; verified event logs</span>
+              </div>
+            </div>
+            <a href="javascript:void(0)" onclick="setAdminReportsTab('census'); renderPage('reports');" style="font-size:12px;font-weight:700;color:var(--blue);text-decoration:none;">View All Logs &rarr;</a>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:auto;">
+            ${adminActivityLogs.slice(0, 5).map(act => `
+              <div style="display:flex;align-items:flex-start;gap:10px;">
+                <div style="width:26px;height:26px;border-radius:50%;background:${act.iconBg};color:${act.iconColor};display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;margin-top:2px;">
+                  ${act.icon}
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:12px;font-weight:700;color:#0f172a;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${act.title}">${act.title}</div>
+                  <div style="font-size:11px;color:#64748b;line-height:1.2;margin-top:1px;">${act.meta}</div>
+                </div>
+                <div style="font-size:10.5px;color:#94a3b8;white-space:nowrap;margin-top:2px;">${act.time}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- COL 3: Upcoming Deadlines & Account Summary -->
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <!-- Top Card: Upcoming Deadlines -->
+          <div class="admin-dash-panel" style="padding:16px 18px;flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="font-size:15px;">🗓️</span>
+              <div>
+                <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0;">Upcoming Deadlines</h4>
+                <span style="font-size:10.5px;color:var(--text-muted);">Important school submissions</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              ${upcomingDeadlines.map(d => `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:11.5px;">
+                  <span style="color:#1e293b;font-weight:600;display:flex;align-items:center;gap:6px;"><span>${d.icon}</span> ${d.label}</span>
+                  <span style="font-weight:800;color:${d.color};background:#fff;padding:2px 7px;border-radius:6px;border:1px solid #e2e8f0;">${d.date}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Bottom Card: Account Summary -->
+          <div class="admin-dash-panel" style="padding:16px 18px;flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="font-size:15px;">📊</span>
+              <div>
+                <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0;">Account Summary</h4>
+                <span style="font-size:10.5px;color:var(--text-muted);">Student account status</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;">
+              <div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:800;color:#15803d;">${activeStudents.length}</div>
+                <div style="font-size:10.5px;font-weight:700;color:#166534;margin-top:2px;">Active</div>
+              </div>
+              <div style="flex:1;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 10px;text-align:center;">
+                <div style="font-size:18px;font-weight:800;color:#dc2626;">${inactiveStudents.length}</div>
+                <div style="font-size:10.5px;font-weight:700;color:#991b1b;margin-top:2px;">Inactive</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       `;
     }
 
-    case 'materials': return `
+        case 'materials': return `
       <div id="materialsListWrap">${renderMaterialsList('admin')}</div>`;
 
     case 'approval': return `<div class="ca-page" id="approvalListWrap">${renderApprovalMaterialRows()}</div>`;

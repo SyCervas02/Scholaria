@@ -300,3 +300,43 @@
     gap: 12px !important;
   }
 }
+
+/* Admin Operations Dashboard Mobile and Laptop Overrides */
+@media screen and (max-width: 1024px) {
+  .admin-metric-grid-8 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  .admin-dashboard-row-3,
+  .admin-dashboard-row-4 {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .admin-metric-grid-8 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  .admin-metric-card {
+    padding: 12px 14px !important;
+  }
+  .admin-metric-card .ic-num {
+    font-size: 22px !important;
+  }
+  .admin-dash-panel {
+    padding: 16px !important;
+    border-radius: 14px !important;
+  }
+  .admin-dashboard-split {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .admin-metric-grid-8 {
+    grid-template-columns: 1fr !important;
+  }
+}
