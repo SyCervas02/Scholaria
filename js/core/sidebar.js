@@ -39,20 +39,40 @@ const SIDEBAR = {
 
 const ROLE_LABEL = { student: 'Student Portal', teacher: 'Teacher Portal', admin: 'Admin Portal' };
 
+function dismissDemoBanner() {
+  const b = document.querySelector('.demo-mode-banner');
+  if (b) b.remove();
+  document.body.classList.remove('has-demo-banner');
+  document.body.style.setProperty('--banner-h', '0px');
+}
+window.dismissDemoBanner = dismissDemoBanner;
+
 function initDashboardShell() {
-  document.getElementById('userName').textContent = CURRENT_PROFILE.full_name;
+  const userNameEl = document.getElementById('userName');
+  if (userNameEl) userNameEl.textContent = CURRENT_PROFILE.full_name;
+  const userRoleEl = document.getElementById('userRoleTitle');
+  if (userRoleEl) {
+    userRoleEl.textContent = ROLE === 'admin' ? 'Administrator' : (ROLE === 'teacher' ? 'Faculty Teacher' : 'Senior High Student');
+  }
   updateNavAvatarUI();
 
   if (CURRENT_PROFILE.is_demo) {
     document.body.classList.add('has-demo-banner');
-    if (!document.querySelector('.demo-mode-banner')) {
-      const banner = document.createElement('div');
+    document.body.style.setProperty('--banner-h', '38px');
+    let banner = document.querySelector('.demo-mode-banner');
+    if (!banner) {
+      banner = document.createElement('div');
       banner.className = 'demo-mode-banner';
-      banner.textContent = `You're viewing a demo ${ROLE} account — sample data only, nothing here is a real student's record.`;
+      banner.id = 'demoAdminBanner';
       document.body.prepend(banner);
     }
+    const msg = ROLE === 'admin'
+      ? "You're viewing a demo admin account \u2014 sample data only, nothing here is a real student or staff record."
+      : `You're viewing a demo ${ROLE} account \u2014 sample data only, nothing here is a real student's record.`;
+    banner.innerHTML = `<div class="demo-banner-content"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;color:#ea580c;flex-shrink:0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>${msg}</span></div><button type="button" class="demo-banner-close" onclick="dismissDemoBanner()" aria-label="Dismiss banner" title="Dismiss">&times;</button>`;
   } else {
     document.body.classList.remove('has-demo-banner');
+    document.body.style.setProperty('--banner-h', '0px');
     const existingBanner = document.querySelector('.demo-mode-banner');
     if (existingBanner) existingBanner.remove();
   }
@@ -2933,105 +2953,60 @@ function studentPage(page) {
 function teacherPage(page) {
   switch(page) {
     case 'dashboard': {
-      const myMaterials = materialsData.filter(m => m.uploaded_by === CURRENT_PROFILE?.id || !m.uploaded_by || m.uploaded_by === CURRENT_PROFILE?.dbId);
-      const displayMaterials = myMaterials.length ? myMaterials : materialsData;
-      const myPendingMaterials = displayMaterials.filter(m => m.status === 'pending').length;
-      const myQuizzes = customQuizzes.filter(q => 
-        !q.createdBy || 
-        q.createdBy === CURRENT_PROFILE?.id || 
-        q.createdBy === CURRENT_PROFILE?.dbId || 
-        q.isDemo ||
-        ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
-      );
-      const displayQuizzes = myQuizzes.length ? myQuizzes : customQuizzes;
-      const myActiveQuizzes = displayQuizzes.filter(q => q.status === 'active');
-      const myStrands = (CURRENT_PROFILE?.subjects || CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
-      const recentMaterials = displayMaterials.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 3);
-
-      const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
-      const unreadCount = Math.max(0, allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft).length - (typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds().size : 0));
-
-      return `
-      <div class="welcome-banner">
-        <div class="banner-content">
-          <div class="welcome-text-box">
-            <h1>WELCOME BACK</h1>
-            <h2>Haven of Wisdom Academy — Teacher Portal</h2>
-          </div>
-          <div class="rainbow-trails"><div class="trail blue-trail"></div><div class="trail yellow-trail"></div></div>
-        </div>
-      </div>
-      <div class="card-grid">
-        <div class="stat-filter-card" onclick="renderPage('classrec')" style="cursor:pointer;">
-          <div class="ic-icon">${iconUsers()}</div>
-          <div class="ic-content">
-            <div class="ic-sub">My Classes</div>
-            <div class="ic-num">${myStrands.length || 3}</div>
-            <p>${myStrands.length ? escHtml(myStrands.join(', ')) : 'ICT, CS, TVL — Grade 11 & 12'}</p>
-          </div>
-        </div>
-        <div class="stat-filter-card" onclick="renderPage('materials')" style="cursor:pointer;">
-          <div class="ic-icon gold">${iconFolder()}</div>
-          <div class="ic-content">
-            <div class="ic-sub">Materials Uploaded</div>
-            <div class="ic-num gold">${myMaterials.length || 12}</div>
-            <p>${myPendingMaterials || 0} pending admin approval</p>
-          </div>
-        </div>
-        <div class="stat-filter-card" onclick="renderPage('quiz')" style="cursor:pointer;">
-          <div class="ic-icon green">${iconQuiz()}</div>
-          <div class="ic-content">
-            <div class="ic-sub">Active Quizzes</div>
-            <div class="ic-num green">${myActiveQuizzes.length}</div>
-            <p>${myQuizzes.length} total across all handled subjects</p>
-          </div>
-        </div>
-        <div class="stat-filter-card" onclick="renderPage('announcements')" style="cursor:pointer;border-color:${unreadCount > 0 ? '#fca5a5' : '#e2e8f0'};">
-          <div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div>
-          <div class="ic-content">
-            <div class="ic-sub">Unread News</div>
-            <div class="ic-num" style="color:#dc2626;">${unreadCount}</div>
-            <p>School announcements & events</p>
-          </div>
-        </div>
-      </div>
-      <div class="teacher-dashboard-split">
-      <div class="teacher-dashboard-main">
-      <div id="coursesWidgetContainer">
-        ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
-      </div>
-      <div class="dashboard-assessments-panel">
-        <div class="section-hdr">
-          <h2>Active Quizzes & Assessments</h2>
-          <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
-        </div>
-        <div class="quiz-list">
-          ${myActiveQuizzes.length ? myActiveQuizzes.map(q => {
-            const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
-            return `
-            <div class="quiz-row">
-              <div class="qz-info">
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                  <h4>${escHtml(q.title)}</h4>
-                  ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;">🎮 Interactive</span>' : ''}
-                </div>
-                <span>${escHtml(q.meta || '')}</span>
-              </div>
-              <span class="status-pill ongoing">Active</span>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <button class="take-btn" style="padding:6px 12px;font-size:12px;" onclick="openTakeQuizModal('${q.id}')">Preview</button>
-                ${isInter ? `<button class="take-btn" style="padding:6px 12px;font-size:12px;background:linear-gradient(135deg,#0284c7,#8b5cf6);" onclick="openInteractiveQuiz('${q.id}')">🎮 Play</button>` : ''}
-                <button class="foot-btn-secondary" style="padding:6px 12px;font-size:12px;border-color:var(--blue);color:var(--blue);" onclick="setAnalysisQuiz('${q.id}')">📊 Analysis</button>
-                <button class="foot-btn-secondary" style="padding:6px 12px;font-size:12px;border-color:#f59e0b;color:#d97706;background:#fef3c7;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">🏆 Leaderboard</button>
-              </div>
-            </div>`;
-          }).join('')
-            : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No active quizzes right now. Create a new quiz in Quiz Manager to assign to your students.</p>`}
-        </div>
-      </div>
-      </div>
-      <aside class="teacher-dashboard-side">${renderDashboardQuickLinks('teacher')}</aside>
-      </div>`;
+      const demo = !!CURRENT_PROFILE?.is_demo;
+      const own = item => !item.uploaded_by || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(item.uploaded_by);
+      const materials = materialsData.filter(own);
+      const quizzes = customQuizzes.filter(q => (!q.isDemo || demo) && (!q.createdBy || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(q.createdBy)));
+      const active = quizzes.filter(q => q.status === 'active');
+      const news = (typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : []).filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft);
+      const read = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
+      const attempts = classRecAttemptsCache.filter(a => quizzes.some(q => String(q.id) === String(a.quiz_id)));
+      const strands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
+      const go = page => `renderPage('${page}')`;
+      const icon = (svg, tone='blue') => `<span class="td-icon td-${tone}">${svg}</span>`;
+      const empty = text => `<p class="td-empty">${text}</p>`;
+      const row = (title, sub, side='', tone='purple', svg=iconQuiz(), action='quiz') => `<button type="button" class="td-row" onclick="${go(action)}">${icon(svg,tone)}<span class="td-row-copy"><strong>${escHtml(title)}</strong><small>${escHtml(sub)}</small></span><span class="td-row-side">${side}</span></button>`;
+      const panel = (title, svg, content, page, cls='') => `<section class="td-panel ${cls}"><header>${icon(svg)}<h3>${title}</h3><button type="button" class="td-link" onclick="${go(page)}">View All</button></header>${content}</section>`;
+      const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
+      const metrics = [
+        ['My Classes',demo?2:strands.length,'Classes handled','classrec',iconUsers(),'blue'],
+        ['Total Students',demo?68:new Set(attempts.map(a=>a.student_id).filter(Boolean)).size,'Across all classes','classrec',iconUsers(),'green'],
+        ['Materials Uploaded',demo?12:materials.length,'This semester','materials',iconFolder(),'orange'],
+        ['Published Lessons',demo?8:materials.filter(m=>m.status==='approved').length,'Ready for students','materials',iconFolder(),'purple'],
+        ['Active Quizzes',demo?3:active.length,'Currently ongoing','quiz',iconQuiz(),'purple'],
+        ['Upcoming Deadlines',demo?5:active.filter(q=>{const t=new Date(q.dueDate||q.due_date).getTime()-Date.now();return t>=0&&t<=604800000;}).length,'Within 7 days','quiz',iconRecord(),'pink'],
+        ['Unread News',demo?2:news.filter(a=>!read.has(String(a.id))).length,'School announcements','announcements',iconAnnouncement(),'pink'],
+        ['Unread Messages',demo?7:'--','Students & parents','chats',iconChat(),'blue']
+      ];
+      const pending = demo ? [
+        ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
+        ['Reflection Paper','Komunikasyon at Pananaliksik - Grade 11 - HUMSS',5,'Feb 3, 2025'],
+        ['Group Project Report','Research in Daily Life - Grade 11 - STEM',2,'Feb 4, 2025'],
+        ['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM',4,'Feb 5, 2025']
+      ].map(r=>row(r[0],r[1],`<b>${r[2]}</b> submissions<small>Due: ${r[3]}</small>`)).join('') : empty('No submissions awaiting review.');
+      const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials')).join('') || empty('No materials uploaded yet.');
+      const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : news.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
+      const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : strands).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned.');
+      const assessments = demo ? [['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM'],['Essay: Role of Media in Society','Komunikasyon at Pananaliksik - Grade 11 - HUMSS'],['Quiz 1 - 21st Century Literature','Research in Daily Life - Grade 11 - STEM']].map(q=>row(q[0],q[1],'<em>Ongoing</em>')).join('') : active.slice(0,3).map(q=>row(q.title,q.subject||q.meta||'','<em>Ongoing</em>')).join('') || empty('No active quizzes right now.');
+      const eventItems = demo ? [
+        {title:'Faculty Meeting',detail:'All Teachers',when:'8:00 AM - 10:00 AM',date:'2025-02-03'},
+        {title:'Submission of Quarter 3 Grades',detail:'Faculty',when:'All Day',date:'2025-02-07'},
+        {title:'Parent-Teacher Conference',detail:'Grade 11 Level',when:'1:00 PM - 4:00 PM',date:'2025-02-10'},
+        {title:'Foundation Day',detail:'Whole School',when:'All Day',date:'2025-02-14'}
+      ] : news.filter(n=>n.category==='event' && new Date(n.event_date||n.eventDate)>=new Date(new Date().setHours(0,0,0,0))).map(n=>({title:n.title,detail:n.message||'',when:n.event_time||'',date:n.event_date||n.eventDate})).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,4);
+      const events = eventItems.map(e=>{const d=new Date(/^\d{4}-\d{2}-\d{2}$/.test(e.date)?e.date+'T00:00:00':e.date);const valid=!Number.isNaN(d.getTime());return `<button type="button" class="td-event" onclick="${go('announcements')}"><span class="td-event-date"><small>${valid?d.toLocaleDateString('en-US',{month:'short'}):''}</small><strong>${valid?d.getDate():''}</strong></span><span><strong>${escHtml(e.title)}</strong><small>${escHtml(e.detail)}</small><small>${escHtml(e.when)}</small></span></button>`;}).join('') || empty('No upcoming school events scheduled.');
+      return `<div class="teacher-reference-dashboard">
+        <section class="td-hero"><div><h1>WELCOME BACK</h1><h2>Haven of Wisdom Academy - Teacher Portal</h2><p>Here's what needs your attention today.</p></div><img src="assets/dashboard-books.svg" alt=""/><blockquote>&ldquo; Teaching is a work of heart.<br>Thank you for making a difference<br>in every student's journey. &rdquo;</blockquote></section>
+        <div class="td-metrics">${metrics.map(m=>`<button type="button" class="td-metric td-${m[5]}" onclick="${go(m[3])}">${icon(m[4],m[5])}<span><span class="td-label">${m[0]}</span><strong>${m[1]}</strong><small>${m[2]}</small></span></button>`).join('')}</div>
+        <div class="td-grid">
+          <section class="td-panel td-subjects"><div id="coursesWidgetContainer">${typeof renderCoursesWidgetHTML==='function'?renderCoursesWidgetHTML():empty('No subjects assigned.')}</div></section>
+          ${panel('Pending Submissions / To Review',iconRecord(),pending,'classrec','td-pending')}
+          ${panel('Upcoming School Events',iconCalendar(),events,'announcements','td-events')}
+          ${panel('My Class Sections',iconUsers(),sections,'classrec','td-sections')}
+          ${panel('Recently Added Materials',iconFolder(),recent,'materials','td-materials')}
+          ${panel('Latest Class Announcements',iconAnnouncement(),announcements,'announcements','td-announcements')}
+          ${panel('Active Quizzes & Assessments',iconQuiz(),`<button type="button" class="td-create" onclick="openQuizModal()">+ Create Quiz</button>${assessments}`,'quiz','td-assessments')}
+        </div></div>`;
     }
 
     case 'materials': return `
@@ -3091,7 +3066,7 @@ function teacherPage(page) {
       }
 
       return `
-      <div class="teacher-quizzes-container" style="max-width:1160px;width:100%;display:flex;flex-direction:column;gap:12px;">
+      <div class="teacher-quizzes-container" style="width:100%;flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;">
         <div class="section-hdr" style="margin-bottom:0;">
           <div>
             <h2 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 2px 0;">Quiz Manager</h2>
@@ -3169,7 +3144,7 @@ function teacherPage(page) {
         </div>
 
         <!-- QUIZ LIST -->
-        <div class="quiz-list" style="display:flex;flex-direction:column;gap:8px;">
+        <div class="quiz-list" style="display:flex;flex:1;flex-direction:column;gap:8px;">
         ${filtered.length ? filtered.map(q => {
           const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
           const itemsCount = (q.questions || []).length;
@@ -3241,7 +3216,7 @@ function teacherPage(page) {
           </div>`;
         }).join('')
           : `
-          <div style="text-align:center;padding:40px 20px;background:#fff;border-radius:14px;border:1px dashed #cbd5e1;">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:250px;text-align:center;padding:40px 20px;background:#fff;border-radius:14px;border:1px dashed #cbd5e1;">
             <div style="font-size:36px;margin-bottom:12px;">📝</div>
             <h3 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:6px;">No Quizzes Found</h3>
             <p style="color:var(--text-muted);font-size:13px;max-width:420px;margin:0 auto 16px;">
@@ -3694,482 +3669,552 @@ function setAdminReportsTab(tab) {
 function adminPage(page) {
   switch(page) {
     case 'dashboard': {
-      const allUsers = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
-      const students = allUsers.filter(u => u.role === 'student');
-      const teachers = allUsers.filter(u => u.role === 'teacher');
-      const admins = allUsers.filter(u => u.role === 'admin');
+      const isDemo = !!CURRENT_PROFILE?.is_demo;
+      const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
+      const students = users.filter(u=>u.role==='student');
+      const teachers = users.filter(u=>u.role==='teacher');
+      const admins = users.filter(u=>u.role==='admin');
+      const activeStudents = students.filter(u=>u.isActive!==false).length;
+      const sections = typeof managedSections !== 'undefined' ? managedSections : [];
+      const entries = typeof approvalEntries==='function' ? approvalEntries().filter(e=>e.status==='pending') : [];
+      const announcements = typeof getStoredAnnouncements==='function' ? getStoredAnnouncements() : [];
+      const live = announcements.filter(n=>!n.isArchived && n.status!=='draft' && !n.isDraft);
+      const drafts = announcements.filter(n=>n.status==='draft'||n.isDraft);
+      const emergencies = live.filter(n=>n.category==='emergency');
 
-      // Active status tracking
-      const activeStudents = students.filter(u => u.isActive !== false);
-      const activeTeachers = teachers.filter(u => u.isActive !== false);
-      const activeAdmins = admins.filter(u => u.isActive !== false);
+      const count = (sample, value) => (isDemo || typeof value === 'undefined' || value === null) ? sample : value;
 
-      function isUserOnline(u) {
-        if (u.online_status === 'online' || u.onlineStatus === 'online') return true;
-        const ts = u.lastActive || u.last_active_at;
-        if (!ts) return false;
-        const diffMins = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
-        return diffMins <= 15;
-      }
+      const adSvg = {
+        shield: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z"/></svg>`,
+        user: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`,
+        users: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`,
+        approvalCheck: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12 2.5 2.5 5-5"/></svg>`,
+        doc: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+        folder: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`,
+        quiz: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+        megaphone: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`,
+        siren: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="2" y1="8" x2="4" y2="8"/><line x1="20" y1="8" x2="22" y2="8"/><line x1="12" y1="2" x2="12" y2="4"/></svg>`,
+        clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+        calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+        bars: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 19h4v-7H4v7zm6 0h4V5h-4v14zm6 0h4v-9h-4v9z"/></svg>`,
+        lightning: `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+        temple: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 10v7h3v-7H4zm6 0v7h3v-7h-3zm8 0v7h3v-7h-3zM2 22h19v-3H2v3zm9.5-19L2 7v2h19V7l-9.5-4z"/></svg>`,
+        room: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="12" x2="12.01" y2="12"/></svg>`,
+        audit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="m9 14 2 2 4-4"/></svg>`,
+        key: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-1.5 1.5L14 9l-2-2-4 4 2 2-6 6a3 3 0 1 0 4.24-4.24L10 13l2 2 3.5-3.5 1.5-1.5 4-4Z"/></svg>`,
+        gear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+        mortarboard: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3 1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>`,
+        dots: `<svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;"><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="12" r="2"/></svg>`,
+        checkCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+        alertCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+        infoCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
+        alertTriangle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+      };
 
-      const onlineStudents = students.filter(isUserOnline).length;
-      const onlineTeachers = teachers.filter(isUserOnline).length;
-      const onlineAdmins = admins.filter(isUserOnline).length;
+      const metricsData = [
+        { label: 'Pending Approvals', val: count(4, entries.length), sub: '2 handouts &bull; 2 quizzes<br>awaiting review', icon: adSvg.approvalCheck, color: '#ea580c', bg: '#ffedd5', page: 'approval' },
+        { label: 'Total Students', val: count(125, students.length), sub: '<span style="color:#10b981;font-weight:700;">120 active</span> &bull; <span style="color:#ef4444;font-weight:700;">5 inactive</span>', icon: adSvg.user, color: '#2563eb', bg: '#dbeafe', page: 'users' },
+        { label: 'Number of Teachers', val: count(10, teachers.length), sub: '<span style="color:#10b981;font-weight:700;">9 active</span>', icon: adSvg.users, color: '#059669', bg: '#d1fae5', page: 'users' },
+        { label: 'System Admins', val: count(2, admins.length), sub: '<span style="color:#7c3aed;font-weight:700;">2 active</span> admin accounts', icon: adSvg.shield, color: '#7c3aed', bg: '#ede9fe', page: 'users' },
+        { label: 'Active Sections', val: count(5, sections.length), sub: 'Across Grade 11 &amp; 12', icon: adSvg.doc, color: '#e11d48', bg: '#ffe4e6', page: 'sections' },
+        { label: 'Published Materials', val: count(48, materialsData.filter(m=>m.status==='approved').length), sub: 'All approved resources', icon: adSvg.folder, color: '#0891b2', bg: '#cffafe', page: 'materials' },
+        { label: 'Active Quizzes', val: count(9, customQuizzes.filter(q=>q.status==='active').length), sub: 'Running across all subjects', icon: adSvg.quiz, color: '#d97706', bg: '#fef3c7', page: 'quiz' },
+        { label: 'Announcements<br>This Week', val: count(6, live.length), sub: 'School-wide updates<br>posted', icon: adSvg.megaphone, color: '#9333ea', bg: '#f3e8ff', page: 'announcements' }
+      ];
 
-      // Pending items needing approval
-      const allApprovalEntries = typeof approvalEntries === 'function' ? approvalEntries() : [];
-      const pendingApprovalList = allApprovalEntries.filter(e => e.status === 'pending');
-      const pendingMaterials = materialsData.filter(m => m.status === 'pending');
-      const pendingQuizzes = customQuizzes.filter(q => q.status === 'pending');
-      const totalPending = pendingApprovalList.length || (pendingMaterials.length + pendingQuizzes.length);
+      const queueItems = [
+        { title: 'General Mathematics \u2014 Worksheet 3', author: 'Uploaded by Haven Faculty', type: 'Handout', isQuiz: false, time1: 'Submitted today', time2: 'Feb 10, 2025 10:24 AM', iconColor: '#2563eb', iconBg: '#eff6ff', icon: adSvg.doc, id: 'qm1' },
+        { title: 'Komunikasyon sa Wika \u2014 Quiz 2', author: 'Uploaded by Haven Faculty', type: 'Quiz', isQuiz: true, time1: 'Due this week', time2: 'Feb 9, 2025 4:10 PM', iconColor: '#db2777', iconBg: '#fdf2f8', icon: adSvg.quiz, id: 'qm2' },
+        { title: 'Research in Daily Life \u2014 Performance Task', author: 'Uploaded by Haven Faculty', type: 'Handout', isQuiz: false, time1: 'Submitted today', time2: 'Feb 9, 2025 2:35 PM', iconColor: '#059669', iconBg: '#ecfdf5', icon: adSvg.doc, id: 'qm3' },
+        { title: 'Empowerment Technologies \u2014 Quiz 1', author: 'Uploaded by Haven Faculty', type: 'Quiz', isQuiz: true, time1: 'Submitted yesterday', time2: 'Feb 8, 2025 11:20 AM', iconColor: '#d97706', iconBg: '#fffbeb', icon: adSvg.quiz, id: 'qm4' }
+      ];
 
-      // Student to Teacher Ratio
-      const ratio = teachers.length > 0 ? `1 : ${Math.max(1, Math.round(students.length / teachers.length))}` : '1 : 23';
+      const bulletins = [
+        { icon: adSvg.megaphone, color: '#ea580c', title: 'Midterm Examination Schedule', desc: 'Please be guided with the midterm exam schedule for AY 2024\u20132025.', date: 'Feb 9, 2025', time: '10:30 AM' },
+        { icon: adSvg.calendar, color: '#d97706', title: 'SHS Intramurals 2025', desc: 'Upcoming program and general guidelines.', date: 'Feb 7, 2025', time: '2:15 PM' },
+        { icon: adSvg.alertTriangle, color: '#dc2626', title: 'Suspension of Classes (Feb 12)', desc: 'Classes in all levels are suspended due to expected weather conditions.', date: 'Feb 6, 2025', time: '9:00 AM' }
+      ];
 
-      // Announcements for Admin Widget
-      const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
-      const activeAnnouncements = allAnc.filter(a => !a.isArchived && a.status !== 'draft');
-      const emergencyAnnouncements = allAnc.filter(a => a.category === 'emergency' && !a.isArchived);
-      const draftAnnouncements = allAnc.filter(a => a.status === 'draft' || a.isDraft);
-      const recentAnnouncements = allAnc.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 3);
+      const matRows = [
+        { subj: 'General Mathematics', user: 'Haven Faculty', type: 'Handout', isQuiz: false, time: 'Feb 10, 10:24 AM', status: 'Pending', isPending: true },
+        { subj: 'Komunikasyon sa Wika', user: 'Haven Faculty', type: 'Quiz', isQuiz: true, time: 'Feb 9, 4:10 PM', status: 'Pending', isPending: true },
+        { subj: 'Research in Daily Life', user: 'Haven Faculty', type: 'Handout', isQuiz: false, time: 'Feb 9, 2:35 PM', status: 'Approved', isPending: false },
+        { subj: 'Oral Communication', user: 'Mr. D. Cruz', type: 'Handout', isQuiz: false, time: 'Feb 8, 5:20 PM', status: 'Approved', isPending: false }
+      ];
 
-      function formatTimeAgo(ts) {
-        if (!ts) return '';
-        const diffMins = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
-        if (diffMins < 1) return 'Just now';
-        if (diffMins < 60) return `${diffMins}m ago`;
-        const diffHours = Math.floor(diffMins / 60);
-        if (diffHours < 24) return `${diffHours}h ago`;
-        return `${Math.floor(diffHours / 24)}d ago`;
-      }
+      const strandList = [
+        { name: 'STEM', count: 35, pct: 85 },
+        { name: 'ABM', count: 25, pct: 58 },
+        { name: 'HUMSS', count: 30, pct: 72 },
+        { name: 'GAS', count: 20, pct: 47 },
+        { name: 'TVL', count: 15, pct: 35 }
+      ];
 
-      function formatAudienceSummary(aud) {
-        if (!aud || !aud.length) return 'All School';
-        if (Array.isArray(aud)) {
-          if (aud.includes('All Students') && aud.includes('All Teachers')) return 'All Students & Faculty';
-          if (aud.includes('All Students')) return 'All Students';
-          if (aud.includes('All Teachers')) return 'Faculty Only';
-          return aud[0];
-        }
-        return String(aud);
-      }
+      const activityList = [
+        { icon: adSvg.checkCircle, color: '#10b981', title: 'Admin approved General Mathematics \u2014 Worksheet 3', desc: 'Content has been approved and published.', time: '12 minutes ago' },
+        { icon: adSvg.user, color: '#2563eb', title: 'Teacher account updated: Ma. Lopez', desc: 'Profile information and access rights modified.', time: '28 minutes ago' },
+        { icon: adSvg.megaphone, color: '#f43f5e', title: 'Announcement posted: Midterm Schedule', desc: 'Broadcast sent to all Senior High School users.', time: '1 hour ago' },
+        { icon: adSvg.users, color: '#06b6d4', title: 'Section HUMSS-11 roster updated', desc: '5 students added, 1 removed.', time: '2 hours ago' },
+        { icon: adSvg.quiz, color: '#f59e0b', title: 'Quiz approval requested by Haven Faculty', desc: 'Empowerment Technologies \u2014 Quiz 1', time: '3 hours ago' }
+      ];
 
-      if (typeof window.navigateToUploadedMaterial !== 'function') {
-        window.navigateToUploadedMaterial = function(courseId, subject, section, materialId) {
-          let targetCourse = null;
-          if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
-            if (courseId) {
-              targetCourse = COURSES_DATABASE.find(c => c.id === courseId);
-            }
-            if (!targetCourse && subject) {
-              const sLow = String(subject).toLowerCase().trim();
-              targetCourse = COURSES_DATABASE.find(c => (c.title || '').toLowerCase().trim() === sLow || (c.code || '').toLowerCase().trim() === sLow);
-            }
-          }
-          const cId = targetCourse ? targetCourse.id : (courseId || (typeof COURSES_DATABASE !== 'undefined' && COURSES_DATABASE[0] ? COURSES_DATABASE[0].id : null));
-          const sec = section && section !== 'All' ? section : 'Section A';
-
-          if (cId && typeof setActiveSubjectMaterials === 'function') {
-            setActiveSubjectMaterials(cId, sec, false);
-          }
-          if (typeof setSubjectSubTab === 'function') {
-            setSubjectSubTab('uploads');
-          }
-          if (typeof renderPage === 'function') {
-            renderPage('materials');
-          }
-          if (typeof showToast === 'function') {
-            showToast(`Redirected to ${targetCourse ? targetCourse.title : (subject || 'Subject')} (${sec}) — Uploads tab`, 'info');
-          }
-        };
-      }
-
-      const recentUploadedMaterials = (typeof materialsData !== 'undefined' ? materialsData : [])
-        .filter(m => m && (m.title || m.fileName))
-        .slice()
-        .sort((a, b) => new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0))
-        .slice(0, 6);
-
-      const recentApproved = [
-        ...materialsData.filter(m => m.status === 'approved').map(m => ({
-          id: m.id, kind: 'material', title: m.title || m.fileName, type: m.content_type || 'Material', by: m.uploaded_by_name || 'Faculty', at: m.created_at
-        })),
-        ...customQuizzes.filter(q => q.status === 'approved' || q.status === 'active').map(q => ({
-          id: q.id, kind: 'quiz', title: q.title, type: 'Quiz', by: allUsers.find(u => u.dbId === q.createdBy)?.name || 'Faculty', at: q.createdAt || q.created_at
-        }))
-      ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 4);
-
-      return `
-      <!-- 1. EXECUTIVE WELCOME BANNER -->
-      <div class="welcome-banner" style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 60%,#0284c7 100%);">
-        <div class="banner-content">
-          <div class="welcome-text-box">
-            <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.12);padding:4px 12px;border-radius:20px;font-size:11.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#38bdf8;margin-bottom:8px;backdrop-filter:blur(6px);">
-              <span>🛡️</span> ADMINISTRATIVE CONTROL CENTER &middot; HAVEN OF WISDOM ACADEMY
+      return `<div class="admin-reference-dashboard">
+        <!-- ── HERO BANNER ── -->
+        <section class="ad-hero">
+          <div class="ad-hero-left">
+            <div class="ad-hero-pill">
+              <span class="ad-hero-pill-icon">&#10022;</span>
+              <span>ADMINISTRATIVE CONTROL CENTER &bull; HAVEN OF WISDOM ACADEMY</span>
             </div>
             <h1>ADMIN OPERATIONS DASHBOARD</h1>
-            <h2>Senior High School Department &middot; Institutional Overview</h2>
+            <h2>Senior High School Department &bull; Institutional Overview</h2>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <button class="add-btn" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25);backdrop-filter:blur(6px);padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;" onclick="openCreateAnnouncementModal()">
-              <span>📢</span> Post Notice
-            </button>
-            <button class="add-btn" style="background:#0284c7;color:#fff;border:none;box-shadow:0 4px 14px rgba(2,132,199,0.4);padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;" onclick="renderPage('approval')">
-              <span>🚨</span> Approvals (${totalPending})
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. HIGH-IMPACT METRICS CARDS ROW (4 CARDS) -->
-      <div class="card-grid" style="margin-bottom:24px;">
-        <!-- CARD 1: PENDING CONTENT APPROVAL -->
-        <div class="info-card" onclick="renderPage('approval')" style="cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
-          <div class="ic-head">
-            <div class="ic-icon gold">
-              ${iconApproval()}
+          <div class="ad-hero-right">
+            <div class="ad-hero-tagline">
+              Empowering Education.<br>Building Brighter Futures.
             </div>
-            <div>
-              <div class="ic-sub">Pending Approvals</div>
-              <div class="ic-num gold">${totalPending}</div>
-            </div>
-          </div>
-          <p style="margin:4px 0 2px 0;">
-            ${pendingMaterials.length} handout${pendingMaterials.length !== 1 ? 's' : ''} &middot; ${pendingQuizzes.length} quiz${pendingQuizzes.length !== 1 ? 'zes' : ''}
-          </p>
-          <div style="font-size:11px;font-weight:700;color:${totalPending > 0 ? '#d97706' : '#059669'};display:flex;align-items:center;gap:5px;margin-top:4px;">
-            ${totalPending > 0 ? '⚠️ Immediate Action Required' : '✅ Approval Queue Clear'}
-          </div>
-        </div>
-
-        <!-- CARD 2: STUDENTS ENROLMENT & ACTIVE -->
-        <div class="info-card" onclick="if(typeof setAdminUserTab==='function') setAdminUserTab('students'); renderPage('users');" style="cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
-          <div class="ic-head">
-            <div class="ic-icon">
-              ${iconProfile()}
-            </div>
-            <div>
-              <div class="ic-sub">Total Students</div>
-              <div class="ic-num" style="color:var(--blue);">${students.length}</div>
-            </div>
-          </div>
-          <p style="margin:4px 0 2px 0;">
-            <strong style="color:#059669;">${activeStudents.length}</strong> active &middot; <span style="color:#dc2626;">${students.length - activeStudents.length}</span> deactivated
-          </p>
-          <div style="font-size:11px;font-weight:700;color:#0284c7;display:flex;align-items:center;gap:5px;margin-top:4px;">
-            <span style="width:7px;height:7px;background:#0284c7;border-radius:50%;display:inline-block;"></span>
-            ${onlineStudents} Online Now &middot; Gr 11 &amp; 12
-          </div>
-        </div>
-
-        <!-- CARD 3: TEACHING FACULTY & ACTIVE -->
-        <div class="info-card" onclick="if(typeof setAdminUserTab==='function') setAdminUserTab('teachers'); renderPage('users');" style="cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
-          <div class="ic-head">
-            <div class="ic-icon green">
-              ${iconUsers()}
-            </div>
-            <div>
-              <div class="ic-sub">Teaching Faculty</div>
-              <div class="ic-num green">${teachers.length}</div>
-            </div>
-          </div>
-          <p style="margin:4px 0 2px 0;">
-            <strong style="color:#059669;">${activeTeachers.length}</strong> active &middot; Ratio: <strong>${ratio}</strong>
-          </p>
-          <div style="font-size:11px;font-weight:700;color:#059669;display:flex;align-items:center;gap:5px;margin-top:4px;">
-            <span style="width:7px;height:7px;background:#059669;border-radius:50%;display:inline-block;"></span>
-            ${onlineTeachers} Online Now &middot; All Strands
-          </div>
-        </div>
-
-        <!-- CARD 4: ADMINISTRATORS & SYSTEM STATS -->
-        <div class="info-card" onclick="if(typeof setAdminUserTab==='function') setAdminUserTab('admins'); renderPage('users');" style="cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform=''">
-          <div class="ic-head">
-            <div class="ic-icon" style="background:#ede9fe;color:#7c3aed;">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            </div>
-            <div>
-              <div class="ic-sub">System Admins</div>
-              <div class="ic-num" style="color:#7c3aed;">${admins.length}</div>
-            </div>
-          </div>
-          <p style="margin:4px 0 2px 0;">
-            <strong style="color:#7c3aed;">${activeAdmins.length}</strong> active admin accounts
-          </p>
-          <div style="font-size:11px;font-weight:700;color:#7c3aed;display:flex;align-items:center;gap:5px;margin-top:4px;">
-            <span style="width:7px;height:7px;background:#7c3aed;border-radius:50%;display:inline-block;"></span>
-            ${onlineAdmins} Online Now &middot; Full Privileges
-          </div>
-        </div>
-      </div>
-
-      <!-- 3. SPLIT 2-COLUMN MAIN CONTENT (APPROVALS / CONTENT & ANNOUNCEMENTS WIDGET) -->
-      <div class="admin-dashboard-split" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr));gap:22px;align-items:start;">
-        
-        <!-- LEFT COLUMN: CONTENT REQUIRING APPROVAL & RECENTLY APPROVED -->
-        <div style="display:flex;flex-direction:column;gap:22px;">
-          
-          <!-- PENDING APPROVAL QUEUE CARD -->
-          <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:16px;">
-                  🚨
-                </div>
-                <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Pending Approval Queue</h3>
-                  <span style="font-size:11.5px;color:var(--text-muted);">Teacher submissions awaiting administrative review</span>
-                </div>
-              </div>
-              <a href="javascript:void(0)" onclick="renderPage('approval')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
-                Open Queue (${totalPending}) &rarr;
-              </a>
-            </div>
-
-            ${pendingApprovalList.length ? `
-              <div style="display:flex;flex-direction:column;gap:10px;">
-                ${pendingApprovalList.slice(0, 4).map(item => {
-                  const itemKind = item.kind || 'material';
-                  const isQuiz = itemKind === 'quiz';
-                  const args = escHtml(JSON.stringify(itemKind) + ',' + JSON.stringify(String(item.id)));
-                  return `
-                  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;gap:12px;flex-wrap:wrap;">
-                    <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
-                      <div style="width:36px;height:36px;border-radius:8px;background:${isQuiz ? '#ede9fe' : '#eff6ff'};color:${isQuiz ? '#7c3aed' : 'var(--blue)'};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">
-                        ${isQuiz ? '📝' : '📄'}
-                      </div>
-                      <div style="min-width:0;">
-                        <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                          ${escHtml(item.title)}
-                        </h4>
-                        <div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                          <span style="background:${isQuiz ? '#ede9fe' : '#e0f2fe'};color:${isQuiz ? '#6d28d9' : '#0369a1'};padding:1px 6px;border-radius:4px;font-weight:700;font-size:10.5px;">${escHtml(item.type || (isQuiz ? 'Quiz' : 'Handout'))}</span>
-                          <span>&middot;</span>
-                          <span>By <strong>${escHtml(item.name || 'Teacher')}</strong></span>
-                          <span>&middot;</span>
-                          <span>${item.date ? new Date(item.date).toLocaleDateString() : 'Recent'}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:6px;">
-                      <button class="table-act-btn take" style="padding:5px 10px;font-size:11.5px;white-space:nowrap;" onclick="reviewApprovalEntry(${args})">
-                        Preview
-                      </button>
-                      <button class="table-act-btn" style="background:#059669;color:#fff;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, true); renderPage('dashboard');">
-                        Approve
-                      </button>
-                      <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, false); renderPage('dashboard');">
-                        Reject
-                      </button>
-                    </div>
-                  </div>`;
-                }).join('')}
-              </div>
-            ` : `
-              <div style="text-align:center;padding:26px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
-                <span style="font-size:32px;display:block;margin-bottom:6px;">✅</span>
-                <strong style="font-size:13.5px;color:#0f172a;display:block;margin-bottom:3px;">Approval Queue is Clean</strong>
-                <p style="font-size:12px;color:var(--text-muted);margin:0;">No instructional materials or quizzes currently awaiting administrative sign-off.</p>
-              </div>
-            `}
-          </div>
-
-          <!-- RECENTLY UPLOADED MATERIALS TRACKER WIDGET -->
-          <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:16px;">
-                  📁
-                </div>
-                <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Recently Uploaded Materials</h3>
-                  <span style="font-size:11.5px;color:var(--text-muted);">Real-time audit log: tracks who, when, &amp; where handouts were uploaded</span>
-                </div>
-              </div>
-              <a href="javascript:void(0)" onclick="renderPage('materials')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;">
-                Materials Hub &rarr;
-              </a>
-            </div>
-
-            <div style="display:flex;flex-direction:column;gap:10px;">
-              ${recentUploadedMaterials.length ? recentUploadedMaterials.map(m => {
-                const uploaderName = m.uploaded_by_name || m.uploader_name || 'Faculty';
-                const uploaderRole = m.uploader_role || 'Teacher';
-                const uploadWhen = formatTimeAgo(m.created_at) || m.date_formatted || 'Recent';
-                const subjectName = m.subject || m.course_name || 'General Subject';
-                const sectionName = m.section || m.target_section || 'All Sections';
-                const strandName = m.strand || '';
-                const ext = (m.fileName || m.title || '').split('.').pop().toLowerCase();
-                const typeLabel = (m.type || ext || 'PDF').toUpperCase();
-                
-                const locArgs = escHtml(JSON.stringify(String(m.course_id || '')) + ',' + JSON.stringify(String(subjectName)) + ',' + JSON.stringify(String(sectionName)) + ',' + JSON.stringify(String(m.id)));
-                
-                let badgeBg = '#fee2e2', badgeCol = '#dc2626';
-                if (typeLabel.includes('DOC')) { badgeBg = '#e0e7ff'; badgeCol = '#4338ca'; }
-                else if (typeLabel.includes('PPT')) { badgeBg = '#ffedd5'; badgeCol = '#c2410c'; }
-                else if (['PNG','JPG','JPEG','WEBP','IMAGE'].includes(typeLabel)) { badgeBg = '#ecfdf5'; badgeCol = '#047857'; }
-
-                return `
-                <div style="padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;cursor:pointer;transition:all 0.15s ease;" onmouseover="this.style.borderColor='var(--blue)';this.style.background='#f0f9ff';" onmouseout="this.style.borderColor='#e2e8f0';this.style.background='#f8fafc';" onclick="navigateToUploadedMaterial(${locArgs})" title="Click to redirect to ${escHtml(subjectName)} (${escHtml(sectionName)})">
-                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
-                    <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1;">
-                      <div style="width:38px;height:38px;border-radius:8px;background:${badgeBg};color:${badgeCol};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;letter-spacing:0.5px;">
-                        ${escHtml(typeLabel.slice(0, 4))}
-                      </div>
-                      <div style="min-width:0;flex:1;">
-                        <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                          ${escHtml(m.title || m.fileName)}
-                        </h4>
-                        
-                        <!-- WHO & WHEN -->
-                        <div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:5px;">
-                          <span>👤 <strong>${escHtml(uploaderName)}</strong></span>
-                          <span style="background:${uploaderRole.toLowerCase() === 'admin' ? '#ede9fe' : '#e0e7ff'};color:${uploaderRole.toLowerCase() === 'admin' ? '#6d28d9' : '#3730a3'};padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;">${escHtml(uploaderRole)}</span>
-                          <span>&middot;</span>
-                          <span>🕒 ${uploadWhen}</span>
-                          ${m.size ? `<span>&middot;</span><span style="background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:10.5px;">${escHtml(m.size)}</span>` : ''}
-                        </div>
-                        
-                        <!-- WHERE (SUBJECT & SECTION) -->
-                        <div style="font-size:11px;color:#0369a1;background:#e0f2fe;padding:2px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:6px;font-weight:600;">
-                          <span>📍 ${escHtml(subjectName)}</span>
-                          <span>&middot;</span>
-                          <span>Section: <strong>${escHtml(sectionName)}</strong></span>
-                          ${strandName ? `<span>&middot;</span><span>${escHtml(strandName)}</span>` : ''}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;" onclick="event.stopPropagation()">
-                      <button class="table-act-btn take" onclick="previewSubjectUploadedMaterial('${m.id}')" style="padding:5px 9px;font-size:11.5px;white-space:nowrap;">
-                        Preview
-                      </button>
-                      <button class="table-act-btn" onclick="navigateToUploadedMaterial(${locArgs})" style="background:#0284c7;color:#fff;border:none;padding:5px 9px;font-size:11.5px;font-weight:700;white-space:nowrap;">
-                        Redirect &rarr;
-                      </button>
-                    </div>
-                  </div>
-                </div>`;
-              }).join('') : `
-                <div style="text-align:center;padding:26px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
-                  <span style="font-size:32px;display:block;margin-bottom:6px;">📂</span>
-                  <strong style="font-size:13.5px;color:#0f172a;display:block;margin-bottom:3px;">No Materials Uploaded Yet</strong>
-                  <p style="font-size:12px;color:var(--text-muted);margin:0;">When teachers or admins upload handouts, they will be logged here in real-time with uploader, timestamp, and location redirection.</p>
-                </div>
-              `}
-            </div>
-          </div>
-        </div>
-
-        <!-- RIGHT COLUMN: ADMIN TAILORED NEWS & BULLETINS + QUICK TOOLS -->
-        <div style="display:flex;flex-direction:column;gap:22px;">
-          
-          <!-- ADMIN TAILORED NEWS & ANNOUNCEMENTS WIDGET -->
-          <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-            <!-- HEADER -->
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:#eff6ff;color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:16px;">
-                  📢
-                </div>
-                <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Institutional Bulletins Hub</h3>
-                  <span style="font-size:11.5px;color:var(--text-muted);">Admin announcements and broadcast center</span>
-                </div>
-              </div>
-              <button class="add-btn" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" onclick="openCreateAnnouncementModal()">
-                <span>+</span> Post Notice
+            <div class="ad-hero-btns">
+              <button type="button" class="ad-hero-btn-notice" onclick="openCreateAnnouncementModal()">
+                <span style="display:inline-flex;width:15px;height:15px;">${adSvg.megaphone}</span>
+                <span>Post Notice</span>
+              </button>
+              <button type="button" class="ad-hero-btn-approvals" onclick="renderPage('approval')">
+                <span style="display:inline-flex;width:15px;height:15px;color:#ef4444;">${adSvg.siren}</span>
+                <span>Approvals (${count(4, entries.length)})</span>
               </button>
             </div>
+          </div>
+        </section>
 
-            <!-- ADMIN STATS MINI BAR -->
-            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;margin-bottom:14px;background:#f8fafc;padding:10px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
-              <div>
-                <div style="font-size:16px;font-weight:800;color:#0284c7;">${activeAnnouncements.length}</div>
-                <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Broadcasts</div>
+        <!-- ── 8 METRIC CARDS ROW ── -->
+        <div class="ad-metrics">
+          ${metricsData.map(m => `
+            <div class="ad-m-card" onclick="renderPage('${m.page}')">
+              <div class="ad-m-card-top">
+                <div class="ad-m-icon" style="background:${m.bg};color:${m.color};">
+                  ${m.icon}
+                </div>
+                <div class="ad-m-info">
+                  <span class="ad-m-label">${m.label}</span>
+                  <strong class="ad-m-num" style="color:${m.color};">${m.val}</strong>
+                </div>
               </div>
-              <div>
-                <div style="font-size:16px;font-weight:800;color:${emergencyAnnouncements.length > 0 ? '#dc2626' : '#64748b'};">${emergencyAnnouncements.length}</div>
-                <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Emergency</div>
-              </div>
-              <div>
-                <div style="font-size:16px;font-weight:800;color:#f59e0b;">${draftAnnouncements.length}</div>
-                <div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;font-weight:600;">Drafts</div>
-              </div>
+              <div class="ad-m-foot">${m.sub}</div>
             </div>
+          `).join('')}
+        </div>
 
-            <!-- RECENT ANNOUNCEMENT ITEMS -->
-            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
-              ${recentAnnouncements.map(anc => {
-                const isEmergency = anc.category === 'emergency';
-                const tagColor = isEmergency ? '#dc2626' : anc.category === 'academic' ? '#0284c7' : anc.category === 'event' ? '#059669' : '#d97706';
-                const tagBg = isEmergency ? '#fee2e2' : anc.category === 'academic' ? '#e0f2fe' : anc.category === 'event' ? '#dcfce7' : '#fef3c7';
-                return `
-                <div style="padding:12px 14px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;cursor:pointer;transition:border-color 0.15s, box-shadow 0.15s;" onmouseover="this.style.borderColor='var(--blue)';this.style.boxShadow='0 3px 10px rgba(0,0,0,0.05)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="openAnnouncementDetailModal('${anc.id}')">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;">
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                      <span style="font-size:10px;font-weight:700;text-transform:uppercase;background:${tagBg};color:${tagColor};padding:2px 7px;border-radius:4px;letter-spacing:0.04em;">
-                        ${escHtml(anc.category || 'NOTICE')}
-                      </span>
-                      <span style="font-size:10.5px;color:var(--text-muted);background:#f1f5f9;padding:1px 6px;border-radius:4px;">
-                        ${escHtml(formatAudienceSummary(anc.audience))}
-                      </span>
-                    </div>
-                    <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${formatTimeAgo(anc.timestamp)}</span>
+        <!-- ── ROW 2: PRIMARY GRID ── -->
+        <div class="ad-primary-grid">
+          <!-- Pending Approval Queue -->
+          <div class="ad-panel ad-panel-queue">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#fee2e2;color:#dc2626;">
+                  ${adSvg.siren}
+                </div>
+                <div>
+                  <h3>Pending Approval Queue</h3>
+                  <p>${count(4, entries.length)} items awaiting administrative review</p>
+                </div>
+              </div>
+              <a href="#" class="ad-panel-link" onclick="renderPage('approval'); return false;">Open Queue &rarr;</a>
+            </div>
+            <div class="ad-queue-list">
+              ${queueItems.map(item => `
+                <div class="ad-queue-row">
+                  <div class="ad-queue-icon" style="background:${item.iconBg};color:${item.iconColor};">
+                    ${item.icon}
                   </div>
-                  <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 4px 0;line-height:1.35;">
-                    ${escHtml(anc.title)}
-                  </h4>
-                  <p style="font-size:12px;color:var(--text-secondary);margin:0;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
-                    ${escHtml(anc.message || '')}
-                  </p>
-                </div>`;
-              }).join('')}
-            </div>
-
-            <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f1f5f9;padding-top:12px;">
-              <span style="font-size:11.5px;color:var(--text-muted);">Admin broadcasting &amp; emergency alerts</span>
-              <a href="javascript:void(0)" onclick="renderPage('announcements')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;">
-                Broadcast Center &rarr;
-              </a>
+                  <div class="ad-queue-meta">
+                    <div class="ad-queue-title">${item.title}</div>
+                    <div class="ad-queue-author">${item.author}</div>
+                  </div>
+                  <span class="ad-queue-pill ${item.isQuiz ? 'quiz' : 'handout'}">${item.type}</span>
+                  <div class="ad-queue-time">
+                    <div>${item.time1}</div>
+                    <div>${item.time2}</div>
+                  </div>
+                  <div class="ad-queue-actions">
+                    <button type="button" class="ad-btn-review" onclick="renderPage('approval')">Review</button>
+                    <button type="button" class="ad-btn-approve" onclick="renderPage('approval')">Approve</button>
+                    <button type="button" class="ad-btn-dots" onclick="renderPage('approval')">${adSvg.dots}</button>
+                  </div>
+                </div>
+              `).join('')}
             </div>
           </div>
 
-          <!-- QUICK ADMINISTRATIVE SHORTCUTS CARD -->
-          <div class="dashboard-admin-shortcuts" style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-              <div style="width:34px;height:34px;border-radius:10px;background:#f3e8ff;color:#9333ea;display:flex;align-items:center;justify-content:center;font-size:16px;">
-                ⚡
+          <!-- Institutional Bulletins Hub -->
+          <div class="ad-panel ad-panel-bulletins">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                  ${adSvg.megaphone}
+                </div>
+                <div>
+                  <h3>Institutional Bulletins Hub</h3>
+                  <p>Admin announcements and broadcast center</p>
+                </div>
               </div>
-              <div>
-                <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Administrative Shortcuts</h3>
-                <span style="font-size:11.5px;color:var(--text-muted);">High-frequency administrative workflows</span>
+              <button type="button" class="ad-btn-primary" onclick="openCreateAnnouncementModal()">
+                + Post Notice
+              </button>
+            </div>
+            <div class="ad-bulletins-stats">
+              <div class="ad-bstat-box" style="background:#eff6ff;">
+                <div class="ad-bstat-num" style="color:#2563eb;">${count(6, live.length)}</div>
+                <div class="ad-bstat-lbl" style="color:#2563eb;">BROADCASTS</div>
+              </div>
+              <div class="ad-bstat-box" style="background:#fef2f2;">
+                <div class="ad-bstat-num" style="color:#ef4444;">${count(1, emergencies.length)}</div>
+                <div class="ad-bstat-lbl" style="color:#ef4444;">EMERGENCY</div>
+              </div>
+              <div class="ad-bstat-box" style="background:#fffbeb;">
+                <div class="ad-bstat-num" style="color:#d97706;">${count(2, drafts.length)}</div>
+                <div class="ad-bstat-lbl" style="color:#d97706;">DRAFTS</div>
               </div>
             </div>
+            <div class="ad-bulletins-list">
+              ${bulletins.map(b => `
+                <div class="ad-bulletin-item" onclick="renderPage('announcements')">
+                  <div class="ad-bulletin-icon" style="color:${b.color};">
+                    ${b.icon}
+                  </div>
+                  <div class="ad-bulletin-body">
+                    <div class="ad-bulletin-title">${b.title}</div>
+                    <div class="ad-bulletin-desc">${b.desc}</div>
+                  </div>
+                  <div class="ad-bulletin-time">
+                    <div>${b.date}</div>
+                    <div>${b.time}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <div class="ad-bulletins-footer">
+              <a href="#" class="ad-panel-link" onclick="renderPage('announcements'); return false;">View all announcements</a>
+              <a href="#" class="ad-panel-link" onclick="renderPage('announcements'); return false;">Broadcast Center &rarr;</a>
+            </div>
+          </div>
+        </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-              <button class="foot-btn-secondary" style="padding:10px 12px;font-size:12.5px;display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;border-radius:10px;text-align:left;cursor:pointer;" onclick="openAddUserModal()">
-                <span>👤</span>
+        <!-- ── ROW 3: MIDDLE GRID ── -->
+        <div class="ad-middle-grid">
+          <!-- User Management Snapshot -->
+          <div class="ad-panel ad-panel-users">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                  ${adSvg.users}
+                </div>
+                <div>
+                  <h3>User Management Snapshot</h3>
+                  <p>View and manage user accounts across the institution</p>
+                </div>
+              </div>
+            </div>
+            <div class="ad-user-roles">
+              <div class="ad-urole-box" style="background:#eff6ff;" onclick="renderPage('users')">
+                <div class="ad-urole-icon" style="color:#2563eb;">${adSvg.user}</div>
+                <div>
+                  <div class="ad-urole-num" style="color:#2563eb;">${count(125, students.length)}</div>
+                  <div class="ad-urole-lbl">Students</div>
+                </div>
+              </div>
+              <div class="ad-urole-box" style="background:#f0fdf4;" onclick="renderPage('users')">
+                <div class="ad-urole-icon" style="color:#10b981;">${adSvg.users}</div>
+                <div>
+                  <div class="ad-urole-num" style="color:#10b981;">${count(10, teachers.length)}</div>
+                  <div class="ad-urole-lbl">Teachers</div>
+                </div>
+              </div>
+              <div class="ad-urole-box" style="background:#faf5ff;" onclick="renderPage('users')">
+                <div class="ad-urole-icon" style="color:#7c3aed;">${adSvg.shield}</div>
+                <div>
+                  <div class="ad-urole-num" style="color:#7c3aed;">${count(2, admins.length)}</div>
+                  <div class="ad-urole-lbl">Admins</div>
+                </div>
+              </div>
+              <div class="ad-urole-box" style="background:#fff7ed;" onclick="renderPage('users')">
+                <div class="ad-urole-icon" style="color:#ea580c;">${adSvg.mortarboard}</div>
+                <div>
+                  <div class="ad-urole-num" style="color:#ea580c;">5</div>
+                  <div class="ad-urole-lbl">Advisers</div>
+                </div>
+              </div>
+            </div>
+            <div class="ad-user-status-bar">
+              <div class="ad-ustatus-item">
+                <span style="color:#10b981;display:inline-flex;width:14px;height:14px;">${adSvg.checkCircle}</span>
+                <span>New this week</span>
+                <strong style="color:#10b981;">7</strong>
+              </div>
+              <div class="ad-ustatus-item">
+                <span style="color:#ef4444;display:inline-flex;width:14px;height:14px;">${adSvg.alertCircle}</span>
+                <span>Pending account issues</span>
+                <strong style="color:#ef4444;">2</strong>
+              </div>
+              <div class="ad-ustatus-item">
+                <span style="color:#64748b;display:inline-flex;width:14px;height:14px;">${adSvg.infoCircle}</span>
+                <span>Deactivated accounts</span>
+                <strong style="color:#64748b;">5</strong>
+              </div>
+            </div>
+            <div class="ad-user-actions-row">
+              <button type="button" class="ad-btn-user-main" onclick="openAddUserModal()">
+                <span style="display:inline-flex;width:14px;height:14px;">${adSvg.user}</span>
                 <span>Create User</span>
               </button>
-              <button class="foot-btn-secondary" style="padding:10px 12px;font-size:12.5px;display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;border-radius:10px;text-align:left;cursor:pointer;" onclick="renderPage('sections')">
-                <span>🏫</span>
-                <span>Manage Sections</span>
+              <button type="button" class="ad-btn-user-sub" onclick="renderPage('users')">
+                <span style="display:inline-flex;width:14px;height:14px;color:#2563eb;">${adSvg.key}</span>
+                <span>Reset Access</span>
               </button>
-              <button class="foot-btn-secondary" style="padding:10px 12px;font-size:12.5px;display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;border-radius:10px;text-align:left;cursor:pointer;" onclick="setAdminReportsTab('census'); renderPage('reports');">
-                <span>🏛️</span>
-                <span>School Census</span>
-              </button>
-              <button class="foot-btn-secondary" style="padding:10px 12px;font-size:12.5px;display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;border-radius:10px;text-align:left;cursor:pointer;" onclick="setAdminReportsTab('grades'); renderPage('reports');">
-                <span>📋</span>
-                <span>Grade Reports</span>
+              <button type="button" class="ad-btn-user-sub" onclick="renderPage('users')">
+                <span style="display:inline-flex;width:14px;height:14px;color:#2563eb;">${adSvg.gear}</span>
+                <span>Manage Roles</span>
               </button>
             </div>
           </div>
 
+          <!-- Course / Materials Activity -->
+          <div class="ad-panel ad-panel-materials">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#fffbeb;color:#d97706;">
+                  ${adSvg.folder}
+                </div>
+                <div>
+                  <h3>Course / Materials Activity</h3>
+                  <p>Recently uploaded and published instructional materials</p>
+                </div>
+              </div>
+              <a href="#" class="ad-panel-link" onclick="renderPage('materials'); return false;">Materials Hub &rarr;</a>
+            </div>
+            <div class="ad-mat-table-wrap">
+              <table class="ad-mat-table">
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th>Uploaded by</th>
+                    <th>Type</th>
+                    <th>Timestamp</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${matRows.map(m => `
+                    <tr>
+                      <td style="font-weight:600;">${m.subj}</td>
+                      <td style="color:#64748b;">${m.user}</td>
+                      <td>
+                        <span class="ad-tbl-pill ${m.isQuiz ? 'pink' : 'blue'}">${m.type}</span>
+                      </td>
+                      <td style="color:#64748b;">${m.time}</td>
+                      <td>
+                        <span class="ad-tbl-pill ${m.isPending ? 'orange' : 'green'}">${m.status}</span>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Administrative Shortcuts -->
+          <div class="ad-panel ad-panel-shortcuts">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#f3e8ff;color:#9333ea;">
+                  ${adSvg.lightning}
+                </div>
+                <div>
+                  <h3>Administrative Shortcuts</h3>
+                  <p>Quick access to common administrative tasks</p>
+                </div>
+              </div>
+            </div>
+            <div class="ad-shortcuts-grid">
+              <button type="button" class="ad-shortcut-btn" onclick="openAddUserModal()">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.users}</span>
+                  <span>Create User</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('sections')">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.doc}</span>
+                  <span>Manage Sections</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('reports'); if(typeof setAdminReportsTab==='function') setAdminReportsTab('census');">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.temple}</span>
+                  <span>School Census</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('reports'); if(typeof setAdminReportsTab==='function') setAdminReportsTab('grades');">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.doc}</span>
+                  <span>Grade Reports</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('rooms')">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.room}</span>
+                  <span>Manage Rooms</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('reports'); if(typeof setAdminReportsTab==='function') setAdminReportsTab('census');">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.audit}</span>
+                  <span>Open Audit Logs</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-      `;
+
+        <!-- ── ROW 4: BOTTOM GRID ── -->
+        <div class="ad-bottom-grid">
+          <!-- Students per Strand -->
+          <div class="ad-panel ad-panel-strands">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                  ${adSvg.bars}
+                </div>
+                <div>
+                  <h3>Students per Strand</h3>
+                  <p>Student distribution across SHS strands</p>
+                </div>
+              </div>
+            </div>
+            <div class="ad-strand-list">
+              ${strandList.map(s => `
+                <div class="ad-strand-row">
+                  <strong>${s.name}</strong>
+                  <div class="ad-strand-track">
+                    <div class="ad-strand-fill" style="width:${s.pct}%;"></div>
+                  </div>
+                  <b>${s.count}</b>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Recent Administrative Activity -->
+          <div class="ad-panel ad-panel-activity">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                  ${adSvg.clock}
+                </div>
+                <div>
+                  <h3>Recent Administrative Activity</h3>
+                </div>
+              </div>
+              <a href="#" class="ad-panel-link" onclick="renderPage('reports'); return false;">View All Logs &rarr;</a>
+            </div>
+            <div class="ad-activity-list">
+              ${activityList.map(a => `
+                <div class="ad-activity-item">
+                  <div class="ad-activity-icon" style="background:${a.color};color:#fff;">
+                    ${a.icon}
+                  </div>
+                  <div class="ad-activity-content">
+                    <div class="ad-activity-title">${a.title}</div>
+                    <div class="ad-activity-desc">${a.desc}</div>
+                  </div>
+                  <div class="ad-activity-time">${a.time}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Upcoming Deadlines & Account Summary (Stacked) -->
+          <div class="ad-side-stack">
+            <!-- Upcoming Deadlines -->
+            <div class="ad-panel ad-panel-deadlines">
+              <div class="ad-panel-header" style="margin-bottom:8px;">
+                <div class="ad-panel-title-wrap">
+                  <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                    ${adSvg.calendar}
+                  </div>
+                  <div>
+                    <h3>Upcoming Deadlines</h3>
+                    <p>Important school submissions</p>
+                  </div>
+                </div>
+              </div>
+              <div class="ad-deadline-list">
+                <div class="ad-deadline-item">
+                  <div class="ad-dl-left">
+                    <span class="ad-dl-icon" style="color:#2563eb;">${adSvg.doc}</span>
+                    <span>Learning materials</span>
+                  </div>
+                  <span class="ad-dl-pill blue">Feb 12</span>
+                </div>
+                <div class="ad-deadline-item">
+                  <div class="ad-dl-left">
+                    <span class="ad-dl-icon" style="color:#ef4444;">${adSvg.quiz}</span>
+                    <span>Quiz submissions</span>
+                  </div>
+                  <span class="ad-dl-pill pink">Feb 14</span>
+                </div>
+                <div class="ad-deadline-item">
+                  <div class="ad-dl-left">
+                    <span class="ad-dl-icon" style="color:#2563eb;">${adSvg.bars}</span>
+                    <span>Grade reports</span>
+                  </div>
+                  <span class="ad-dl-pill blue">Feb 20</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Account Summary -->
+            <div class="ad-panel ad-panel-accounts">
+              <div class="ad-panel-header" style="margin-bottom:8px;">
+                <div class="ad-panel-title-wrap">
+                  <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                    ${adSvg.user}
+                  </div>
+                  <div>
+                    <h3>Account Summary</h3>
+                    <p>Student account status</p>
+                  </div>
+                </div>
+              </div>
+              <div class="ad-acc-summary-grid">
+                <div class="ad-acc-tile active">
+                  <div class="ad-acc-icon-badge">
+                    <span style="display:inline-flex;width:16px;height:16px;">${adSvg.user}</span>
+                  </div>
+                  <div>
+                    <div class="ad-acc-num">120</div>
+                    <div class="ad-acc-lbl">Active</div>
+                  </div>
+                </div>
+                <div class="ad-acc-tile inactive">
+                  <div class="ad-acc-icon-badge">
+                    <span style="display:inline-flex;width:16px;height:16px;">${adSvg.user}</span>
+                  </div>
+                  <div>
+                    <div class="ad-acc-num">5</div>
+                    <div class="ad-acc-lbl">Inactive</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
     }
 
     case 'materials': return `
@@ -4992,7 +5037,7 @@ function renderPage(page) {
   if (!mainContent) return;
   mainContent.dataset.page = page;
   mainContent.innerHTML = getPageContent(ROLE, page);
-  if (page === 'dashboard') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
+  if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
 
