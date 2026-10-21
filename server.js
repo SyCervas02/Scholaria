@@ -241,6 +241,14 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Client-safe dynamic Supabase config endpoint
+app.get('/api/config', (req, res) => {
+  res.json({
+    supabaseUrl: process.env.SUPABASE_URL || 'https://qxpsbewbgdwkermxeeso.supabase.co',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
+  });
+});
+
 
 // Every /api/ route returns live data, never a static asset
 app.use('/api/', (req, res, next) => {

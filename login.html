@@ -1663,7 +1663,7 @@
         startSlideTimer();
     }
 
-    function openLoginModal() {
+    window.openLoginModal = function openLoginModal() {
         const overlay = document.getElementById('loginModalOverlay');
         if (overlay) {
             overlay.classList.add('open');
@@ -1671,7 +1671,7 @@
         }
     }
 
-    function closeLoginModal() {
+    window.closeLoginModal = function closeLoginModal() {
         const overlay = document.getElementById('loginModalOverlay');
         if (overlay) {
             overlay.classList.remove('open');
