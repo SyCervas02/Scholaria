@@ -428,11 +428,7 @@ function closeQuizModal(redirect = true) {
     modal.style.display = 'none';
   }
   if (redirect && (document.getElementById('quizMakerContainer') || window.location.pathname.endsWith('quiz-maker.html') || window.location.href.includes('quiz-maker.html'))) {
-    window.location.href = 'dashboard.html?page=quiz';
-    return;
-  }
-  if (typeof renderPage === 'function' && typeof currentPage !== 'undefined' && currentPage !== 'quiz') {
-    renderPage('quiz');
+    window.location.href = 'dashboard.html';
   }
 }
 
@@ -604,18 +600,7 @@ function distributeCountToFormats(total) {
 }
 
 function getAvailableSubjectsForQuizGen() {
-  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
-  const allowedStrands = isTeacher ? getTeacherAllowedStrands() : [];
-
-  let selectedStrands = Array.from(quizGen.strands);
-  if (isTeacher && allowedStrands.length > 0) {
-    if (selectedStrands.length === 0) {
-      selectedStrands = allowedStrands;
-    } else {
-      selectedStrands = selectedStrands.filter(st => allowedStrands.includes(st));
-    }
-  }
-
+  const selectedStrands = Array.from(quizGen.strands);
   const subjectsSet = new Set();
 
   // If teacher has assigned subjects in their profile, include them
@@ -623,15 +608,10 @@ function getAvailableSubjectsForQuizGen() {
     CURRENT_PROFILE.subjects.split(',').map(s => s.trim()).filter(Boolean).forEach(sub => subjectsSet.add(sub));
   }
 
-  // If COURSES_DATABASE exists, pull from courses database matching the selected/allowed strands
+  // If COURSES_DATABASE exists, pull from courses database
   if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
     COURSES_DATABASE.forEach(c => {
-      const cStrand = (c.strand || '').toUpperCase();
-      if (selectedStrands.length > 0) {
-        if (selectedStrands.map(s => s.toUpperCase()).includes(cStrand)) {
-          if (c.title) subjectsSet.add(c.title);
-        }
-      } else if (!isTeacher) {
+      if (selectedStrands.length === 0 || selectedStrands.includes(c.strand) || c.track === 'Core' || c.track === 'Applied') {
         if (c.title) subjectsSet.add(c.title);
       }
     });
@@ -639,13 +619,7 @@ function getAvailableSubjectsForQuizGen() {
 
   // Include mapped subjects by strand
   if (selectedStrands.length === 0) {
-    if (!isTeacher) {
-      Object.values(SUBJECTS_BY_STRAND).forEach(list => list.forEach(s => subjectsSet.add(s)));
-    } else if (allowedStrands.length > 0) {
-      allowedStrands.forEach(st => {
-        (SUBJECTS_BY_STRAND[st] || []).forEach(s => subjectsSet.add(s));
-      });
-    }
+    Object.values(SUBJECTS_BY_STRAND).forEach(list => list.forEach(s => subjectsSet.add(s)));
   } else {
     selectedStrands.forEach(st => {
       (SUBJECTS_BY_STRAND[st] || []).forEach(s => subjectsSet.add(s));
@@ -654,11 +628,6 @@ function getAvailableSubjectsForQuizGen() {
 
   return Array.from(subjectsSet).sort();
 }
-
-function updateQuizLesson(val) {
-  quizGen.lesson = val;
-}
-window.updateQuizLesson = updateQuizLesson;
 
 function toggleQuizStrand(s) {
   const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
@@ -698,22 +667,7 @@ function toggleQuizSection(s) {
 }
 
 function updateTitle(v)  { quizGen.title = v; }
-function updateSubject(v) {
-  quizGen.subject = v;
-  quizGen.lesson = ''; // reset lesson when subject changes
-  // Update lesson dropdown in-place instead of re-rendering whole modal
-  const lessonSel = document.getElementById('quizGenLessonSelect');
-  if (lessonSel) {
-    const availLessons = (typeof getRawSubjectLessons === 'function' && v)
-      ? getRawSubjectLessons({ title: v, id: 'course-' + v.toLowerCase().replace(/[^a-z0-9]+/g, '-') }).map(l => l.title || '').filter(Boolean)
-      : [];
-    lessonSel.disabled = !v;
-    lessonSel.style.background = v ? '#f8fbff' : '#f1f5f9';
-    lessonSel.style.cursor = v ? 'pointer' : 'not-allowed';
-    lessonSel.innerHTML = '<option value="" disabled selected>Select target lesson...</option>' +
-      availLessons.map(les => '<option value="' + les + '">' + les + '</option>').join('');
-  }
-}
+function updateSubject(v){ quizGen.subject = v; }
 
 function handleFileInput(input) {
   const selectedFiles = Array.from(input.files || []);
@@ -759,9 +713,8 @@ function handleFileInput(input) {
 }
 
 async function extractAllFilesText() {
-  quizGen.fileText = '';
-  quizGen.questions = [];
   if (!quizGen.files || quizGen.files.length === 0) {
+    quizGen.fileText = '';
     quizGen.isExtracting = false;
     renderQuizModal();
     return;
@@ -825,23 +778,7 @@ function extractSingleFileText(file, ext, maxChars = 20000) {
             for (let i = 1; i <= maxPages; i++) {
               const page = await pdf.getPage(i);
               const content = await page.getTextContent();
-              let pageStr = '';
-              let lastY = null;
-              for (const item of (content.items || [])) {
-                if (!item || typeof item.str !== 'string') continue;
-                const curY = Array.isArray(item.transform) ? item.transform[5] : null;
-                if (lastY !== null && curY !== null && Math.abs(curY - lastY) > 5) {
-                  pageStr += '\n';
-                } else if (pageStr.length > 0 && !pageStr.endsWith(' ') && !pageStr.endsWith('\n')) {
-                  pageStr += ' ';
-                }
-                pageStr += item.str;
-                if (item.hasEOL) {
-                  pageStr += '\n';
-                }
-                lastY = curY;
-              }
-              pageStr = pageStr.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+              const pageStr = content.items.map(it => it.str).join(' ');
               text += `[Document: ${file.name} | Page: ${i}]\n${pageStr}\n\n`;
               if (text.length > maxChars) break;
             }
@@ -913,13 +850,9 @@ function extractSingleFileText(file, ext, maxChars = 20000) {
           const dataUrl = reader.result;
           let extractedText = '';
 
-          // 1. Try Gemini Vision OCR via Scholaria server
-          const serverBase = (typeof API_BASE !== 'undefined' && API_BASE) 
-            ? API_BASE 
-            : (window.location.origin.includes(':5500') ? 'http://localhost:3001' : window.location.origin);
-
+          // 1. Try Gemini Vision OCR via server
           try {
-            const res = await fetch(`${serverBase}/api/quiz/extract-image`, {
+            const res = await fetch('/api/quiz/extract-image', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -938,24 +871,12 @@ function extractSingleFileText(file, ext, maxChars = 20000) {
             console.warn('[ImageExtract] Server vision failed/skipped:', netErr);
           }
 
-          // 2. Client-side Tesseract.js OCR fallback with strict garbage-line filter
+          // 2. Client-side Tesseract.js OCR fallback
           if (!extractedText && typeof Tesseract !== 'undefined') {
             try {
               const ocrRes = await Tesseract.recognize(dataUrl, 'eng');
               if (ocrRes && ocrRes.data && ocrRes.data.text) {
-                const rawLines = ocrRes.data.text.split('\n');
-                const cleanLines = rawLines.map(l => l.trim()).filter(l => {
-                  if (l.length < 4) return false;
-                  // Reject lines composed mostly of symbol noise, broken brackets, or high non-alpha ratio
-                  const symbolCount = (l.match(/[»«\\|/\[\]{}~@#$%^&*_=<>©®\(\),;]/g) || []).length;
-                  if (symbolCount > 1 || (symbolCount / l.length) > 0.08) return false;
-                  const alphaCount = (l.match(/[a-zA-Z]/g) || []).length;
-                  if ((alphaCount / l.length) < 0.7) return false;
-                  if (/\b\d+\b/.test(l)) return false;
-                  if (/encyclop[æe]dia britannica|all rights reserved|getty images|shutterstock/i.test(l)) return false;
-                  return true;
-                });
-                extractedText = cleanLines.join('\n').trim();
+                extractedText = ocrRes.data.text.trim();
               }
             } catch (tessErr) {
               console.warn('[ImageExtract] Tesseract fallback failed:', tessErr);
@@ -984,8 +905,6 @@ function removeFile(fileName) {
   quizGen.files = (quizGen.files || []).filter(f => f.name !== fileName);
   quizGen.file = quizGen.files[0] || null;
   quizGen.totalSizeBytes = (quizGen.files || []).reduce((sum, f) => sum + (f.size || 0), 0);
-  quizGen.fileText = '';
-  quizGen.questions = [];
   extractAllFilesText();
 }
 
@@ -1324,7 +1243,7 @@ async function generateQuiz() {
       const source = data._source || 'unknown';
       const qCount = data.questions.length;
       let sourceLabel = source;
-      if (source.startsWith('gemini:')) sourceLabel = 'Automated AI Generator';
+      if (source.startsWith('gemini:')) sourceLabel = '🤖 Gemini AI (' + source.split(':')[1] + ')';
       else if (source.startsWith('openai:')) sourceLabel = '🤖 OpenAI (' + source.split(':')[1] + ')';
       else if (source === 'offline-fallback') sourceLabel = '⚠️ Offline Fallback (no AI — API keys missing/exhausted)';
 
@@ -1395,18 +1314,6 @@ function applyGeneratedQuestions(list, isDemo) {
     obj.source_page = cleanPage;
     obj.sourceMaterial = sourceFile;
     obj.source_material = sourceFile;
-
-    // Strip accidental "According to <file>" leaks from question text while preserving citation metadata
-    if (typeof obj.question === 'string') {
-      let qText = obj.question.trim();
-      qText = qText.replace(/^(?:according\s+to|in|based\s+on|as\s+stated\s+in|from)\s+["']?[^"'\n,:–-]+\.(?:pdf|docx?|txt|xlsx?)["']?[\s,:–-]+/i, '');
-      qText = qText.replace(/^(?:according\s+to|in|based\s+on|as\s+stated\s+in|from)\s+(?:the\s+)?(?:handout|material|document|module|file|reading)[\s,:–-]+/i, '');
-      qText = qText.trim();
-      if (qText.length > 0) {
-        qText = qText.charAt(0).toUpperCase() + qText.slice(1);
-      }
-      obj.question = qText;
-    }
 
     if (obj.answer && typeof obj.answer === 'string') {
       obj.answer = cleanQuizTerm(obj.answer);
@@ -2138,7 +2045,7 @@ async function saveQuiz() {
 
     if (isStandalone) {
       setTimeout(() => {
-        window.location.href = 'dashboard.html?page=quiz';
+        window.location.href = 'dashboard.html';
       }, 1200);
     }
   } catch (err) {
@@ -2531,7 +2438,7 @@ function renderQuizModal() {
     body.innerHTML = `
       <div class="gen-loading">
         <div class="gl-ring"></div>
-        <p style="font-weight:700;font-size:15px;color:#0f172a;margin-top:14px;">${fileCountText} and generating quiz questions…</p>
+        <p style="font-weight:700;font-size:15px;color:#0f172a;margin-top:14px;">${fileCountText} with Gemini AI…</p>
         <span class="gl-sub" style="max-width:440px;line-height:1.5;margin-top:4px;">Drafting questions, citations, and answers. For multi-page or multiple handouts, processing takes about 1–2 minutes during peak hours.</span>
       </div>`;
     foot.innerHTML = '';
@@ -2669,19 +2576,11 @@ function renderQuizModal() {
           </div>
           <div class="gen-field">
             <label>Subject <span style="color:#ef4444;">*</span></label>
-            ${typeof renderSearchableSubjectPicker === 'function' ? renderSearchableSubjectPicker({
-              id: 'quizGenSubjectPicker',
-              inputId: 'quizGenSubjectSelect',
-              value: quizGen.subject || '',
-              options: getAvailableSubjectsForQuizGen(),
-              placeholder: quizGen.strands.size > 0 ? 'Select from dropdown or search subject...' : 'Select from dropdown or search subject (All Strands)...',
-              onSelect: 'updateSubject'
-            }) : `
-              <select id="quizGenSubjectSelect" onchange="updateSubject(this.value)">
-                <option value="" disabled ${!quizGen.subject ? 'selected' : ''}>${quizGen.strands.size > 0 ? 'Select subject' : 'Select subject (All Strands)'}</option>
-                ${getAvailableSubjectsForQuizGen().map(sub => `<option value="${escHtml(sub)}" ${quizGen.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
-              </select>
-            `}
+            <select id="quizGenSubjectSelect" onchange="updateSubject(this.value)">
+              <option value="" disabled ${!quizGen.subject ? 'selected' : ''}>${quizGen.strands.size > 0 ? 'Select subject' : 'Select subject (All Strands)'}</option>
+              ${getAvailableSubjectsForQuizGen().map(sub => `<option value="${escHtml(sub)}" ${quizGen.subject === sub ? 'selected' : ''}>${escHtml(sub)}</option>`).join('')}
+              ${(quizGen.subject && !getAvailableSubjectsForQuizGen().includes(quizGen.subject)) ? `<option value="${escHtml(quizGen.subject)}" selected>${escHtml(quizGen.subject)}</option>` : ''}
+            </select>
           </div>
         </div>
 
@@ -2692,33 +2591,7 @@ function renderQuizModal() {
               ${allowedGrades.map(g => `<option value="${g}" ${quizGen.gradeLevel === g ? 'selected' : ''}>${g}</option>`).join('')}
             </select>
           </div>
-          <div class="gen-field">
-          <label>Lesson</label>
-          ${(() => {
-            // Get lessons via window.getLessonsForSubject (defined in ui-helpers.js which is always loaded)
-            let availLessons = [];
-            if (quizGen.subject && typeof getRawSubjectLessons === 'function') {
-              const rLessons = getRawSubjectLessons({ title: quizGen.subject, id: 'course-' + quizGen.subject.toLowerCase().replace(/[^a-z0-9]+/g, '-') });
-              if (Array.isArray(rLessons)) availLessons = rLessons.map(l => l.title || l.name || '').filter(Boolean);
-            }
-            if (!availLessons.length && typeof window.getLessonsForSubject === 'function' && quizGen.subject) {
-              availLessons = window.getLessonsForSubject(quizGen.subject);
-            }
-            if (!availLessons.length) {
-              const subj = quizGen.subject || 'Lesson';
-              availLessons = [
-                '01 Introduction to ' + subj,
-                '02 Core Concepts & Theoretical Principles',
-                '03 Practical Applications & Problem Solving',
-                '04 Module Mastery & Academic Synthesis'
-              ];
-            }
-            return `<select id="quizGenLessonSelect" onchange="quizGen.lesson = this.value;" ${!quizGen.subject ? 'disabled' : ''} style="width:100%;border:1.5px solid var(--blue-light);border-radius:10px;padding:10px 13px;font-size:13.5px;font-family:'Plus Jakarta Sans',sans-serif;outline:none;background:${quizGen.subject ? '#f8fbff' : '#f1f5f9'};box-sizing:border-box;color:#0f172a;cursor:${quizGen.subject ? 'pointer' : 'not-allowed'};">
-              <option value="" disabled ${!quizGen.lesson ? 'selected' : ''}>Select target lesson...</option>
-              ${availLessons.map(les => `<option value="${escHtml(les)}" ${quizGen.lesson === les ? 'selected' : ''}>${escHtml(les)}</option>`).join('')}
-            </select>`;
-          })()}
-        </div>
+          <div class="gen-field"><label>Lesson</label><input type="text" placeholder="e.g. Lesson 3" value="${escHtml(quizGen.lesson)}" oninput="quizGen.lesson = this.value;"></div>
         </div>
 
         <div class="gen-field">
@@ -3474,6 +3347,7 @@ function previewGeneratedInteractiveQuiz() {
     timerPerQuestion: typeof quizGen.timerPerQuestion === 'number' ? quizGen.timerPerQuestion : 30,
     questions: quizGen.questions.map(q => Object.assign({}, q, { _quiz_type: 'interactive' })),
     is_demo: false,
+    is_preview: true,
     isPreview: true
   };
   if (typeof openInteractiveQuiz === 'function') {

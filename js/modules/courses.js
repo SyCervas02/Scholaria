@@ -2277,6 +2277,22 @@ function isCourseOpenForStudent(course) {
   return courseStrand === studentStrand || courseStrand === 'ALL' || course.track === 'Core' || course.track === 'Applied';
 }
 
+function isCourseAssignedToStudent(course, profile = CURRENT_PROFILE) {
+  if (!course) return false;
+  const normalizeStrand = value => {
+    const normalized = String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    return normalized === 'TVL-ICT' || normalized === 'TVL ICT' ? 'TVL' : normalized;
+  };
+  const gradeNumber = value => Number(String(value || '').match(/\d+/)?.[0]) || null;
+  const studentStrand = normalizeStrand(profile?.strand);
+  const courseStrand = normalizeStrand(course.strand);
+  const studentGrade = gradeNumber(profile?.grade_level || profile?.gradeLevel);
+  const courseGrade = gradeNumber(course.gradeLevel || course.grade_level);
+  const strandMatches = !studentStrand || courseStrand === studentStrand || ['ALL', 'ALL STRANDS', 'GENERAL'].includes(courseStrand);
+  const gradeMatches = !studentGrade || !courseGrade || courseGrade === studentGrade;
+  return strandMatches && gradeMatches;
+}
+
 function handleCourseClick(courseId) {
   const course = COURSES_DATABASE.find(c => c.id === courseId);
   if (!course) return;
@@ -2309,13 +2325,13 @@ function renderCoursesWidgetHTML() {
   const isTeacher = (typeof ROLE !== 'undefined' ? ROLE : (CURRENT_PROFILE?.role || 'student')) === 'teacher';
   const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
   const teacherStrands = (isTeacher && CURRENT_PROFILE?.strand)
-    ? CURRENT_PROFILE.strand.split(/[,&]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+    ? CURRENT_PROFILE.strand.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
     : [];
 
   let enrolledList = [];
   if (isTeacher) {
     if (teacherStrands.length > 0) {
-      enrolledList = COURSES_DATABASE.filter(c => teacherStrands.includes((c.strand || '').toUpperCase()));
+      enrolledList = COURSES_DATABASE.filter(c => teacherStrands.includes((c.strand || '').toUpperCase()) || (c.track || '').toLowerCase() === 'core');
     } else {
       enrolledList = COURSES_DATABASE.slice();
     }
@@ -2328,7 +2344,7 @@ function renderCoursesWidgetHTML() {
       <div class="cw-hdr" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
         <div class="cw-title-wrap" style="display:flex;flex-direction:column;gap:4px;">
           <h3 class="cw-title" style="margin:0;font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">${isTeacher ? 'My Handled Subjects' : 'My Enrolled Subjects'}</h3>
-          <p class="cw-subtitle" style="margin:0;font-size:12.5px;color:#64748b;font-weight:500;">${isTeacher ? `DepEd Senior High School Curriculum (${teacherStrands.length ? teacherStrands.join(', ') : 'STEM'} · S.Y. 2026–2027)` : `DepEd Official Senior High School Curriculum (${studentStrand} Strand · S.Y. 2026–2027)`}</p>
+          <p class="cw-subtitle" style="margin:0;font-size:12.5px;color:#64748b;font-weight:500;">${isTeacher ? `DepEd Senior High School Curriculum (${teacherStrands.length ? teacherStrands.join(', ') : 'STEM, HUMSS'} · S.Y. 2026–2027)` : `DepEd Official Senior High School Curriculum (${studentStrand} Strand · S.Y. 2026–2027)`}</p>
         </div>
         <div class="cw-nav-btns" style="display:flex;align-items:center;gap:8px;">
           <button type="button" class="cw-slide-btn prev" onclick="scrollCoursesGrid('left')" title="Scroll left" aria-label="Previous subjects" style="width:36px;height:36px;border-radius:50%;background:#ffffff;border:1.5px solid #e2e8f0;color:#64748b;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.04);">

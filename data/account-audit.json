@@ -315,5 +315,85 @@
     },
     "is_active": true,
     "updated_at": "2026-10-20T13:48:48.151Z"
+  },
+  "HWA-2026-009": {
+    "user_id": "4452b6aa-01d9-444f-aab0-7d9728d6d228",
+    "school_id": "HWA-2026-009",
+    "name": "Aiden Alistair Austin",
+    "role": "student",
+    "email": "aidenaustain@gmail.com",
+    "strand": "STEM",
+    "grade_level": "Grade 12",
+    "section": null,
+    "created_at": "2026-10-21T09:55:12.741Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-21T09:55:12.741Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-21T09:55:13.579Z"
+  },
+  "HWA-2026-010": {
+    "user_id": "d0d7dad5-dd89-43b5-9505-79e3ed2d5461",
+    "school_id": "HWA-2026-010",
+    "name": "Caleb Christopher Clark Sr.",
+    "role": "student",
+    "email": "calebchristopher@gmail.com",
+    "strand": "ABM",
+    "grade_level": "Grade 12",
+    "section": null,
+    "created_at": "2026-10-21T09:55:14.419Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-21T09:55:14.419Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-21T09:55:15.073Z"
+  },
+  "HWA-2026-011": {
+    "user_id": "e46dabb5-3323-43a1-a57a-4df585d9f76f",
+    "school_id": "HWA-2026-011",
+    "name": "Benjamin Blake Brown",
+    "role": "student",
+    "email": "benjaminbrown@gmail.com",
+    "strand": "HUMSS",
+    "grade_level": "Grade 11",
+    "section": null,
+    "created_at": "2026-10-21T10:01:38.715Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-21T10:01:38.715Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-21T10:01:39.844Z"
+  },
+  "HWA-2026-012": {
+    "user_id": "a6de25ca-a4fc-42f6-8764-3e1069506b84",
+    "school_id": "HWA-2026-012",
+    "name": "Dylan Derek Duncan III",
+    "role": "student",
+    "email": "dylanduncan@gmail.com",
+    "strand": "TVL",
+    "grade_level": "Grade 11",
+    "section": null,
+    "created_at": "2026-10-21T10:02:53.374Z",
+    "created_by": {
+      "id": "37dec3c9-60c3-40de-91b9-08625bbde473",
+      "name": "Zoey Namek Ashton",
+      "school_id": "HWA-A-2026-001",
+      "role": "admin",
+      "created_at": "2026-10-21T10:02:53.374Z"
+    },
+    "is_active": true,
+    "updated_at": "2026-10-21T10:02:54.565Z"
   }
 }
