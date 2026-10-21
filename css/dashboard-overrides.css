@@ -3958,6 +3958,10 @@ button,
   word-break: break-word;
 }
 
+.main[data-page="analysis"] .info-card .ic-num {
+  font-family: 'Inter', sans-serif !important;
+}
+
 .stat-filter-card .ic-num.compact,
 .info-card .ic-num.compact {
   font-size: 18px !important;
