@@ -536,3 +536,295 @@ body { background: #f1f7ff; }
 @container dashboard (max-width:520px) { .admin-reference-dashboard .ad-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } .admin-reference-dashboard .ad-shortcuts { grid-template-columns:repeat(2,minmax(0,1fr)); } .admin-reference-dashboard .ad-bottom-side { display:flex; } .admin-reference-dashboard .ad-hero { padding:18px; } .admin-reference-dashboard .ad-hero h1 { font-size:22px; } .admin-reference-dashboard .ad-hero h2 { font-size:14px; } .admin-reference-dashboard .ad-queue-row .ad-actions { width:100%; justify-content:flex-end; } }
 /* Keep long metric labels readable at laptop widths. */
 @container dashboard (min-width:1101px) and (max-width:1250px) { .admin-reference-dashboard .ad-metric>div { flex-wrap:wrap; } .admin-reference-dashboard .ad-metric>div>span:last-child { flex:1; min-width:75px; } }
+
+/* Admin dashboard visual refresh, scoped to the existing admin dashboard markup. */
+.admin-reference-dashboard {
+  gap: 18px;
+  color: #173b79;
+}
+.admin-reference-dashboard .ad-hero {
+  min-height: 118px;
+  padding: 18px 28px;
+  border-radius: 15px;
+  background: linear-gradient(112deg, #203f9c 0%, #3868ed 52%, #52c8d2 100%);
+  box-shadow: 0 8px 20px #1e40af20;
+}
+.admin-reference-dashboard .ad-hero-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  color: #b6eeff;
+  background: #ffffff25;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.admin-reference-dashboard .ad-hero-pill-icon { color: #a7eaff; }
+.admin-reference-dashboard .ad-hero h1 { margin: 0 0 4px; font-size: 23px; font-weight: 800; }
+.admin-reference-dashboard .ad-hero h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.admin-reference-dashboard .ad-hero-right { display: flex; align-items: center; gap: 18px; }
+.admin-reference-dashboard .ad-hero-tagline { color: #ffffffce; font-size: 12px; line-height: 1.5; text-align: right; }
+.admin-reference-dashboard .ad-hero-btns { display: flex; gap: 10px; }
+.admin-reference-dashboard .ad-hero-btns button,
+.admin-reference-dashboard .ad-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid #ffffff55;
+  border-radius: 9px;
+  color: #fff;
+  background: #ffffff24;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.admin-reference-dashboard .ad-hero-btns .ad-hero-btn-approvals { background: #087ebc; border-color: #087ebc; }
+.admin-reference-dashboard .ad-hero-btns svg,
+.admin-reference-dashboard .ad-panel-icon svg,
+.admin-reference-dashboard .ad-queue-icon svg,
+.admin-reference-dashboard .ad-bulletin-icon svg,
+.admin-reference-dashboard .ad-activity-icon svg { width: 17px; height: 17px; }
+.admin-reference-dashboard .ad-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.admin-reference-dashboard .ad-m-card {
+  min-width: 0;
+  min-height: 116px;
+  padding: 16px 18px;
+  border: 1px solid #e5edfa;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 4px 14px #234a8010;
+  cursor: pointer;
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.admin-reference-dashboard .ad-m-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px #234a8018; }
+.admin-reference-dashboard .ad-m-card-top { display: grid; grid-template-columns: minmax(0, 1fr) 34px; align-items: start; gap: 8px; }
+.admin-reference-dashboard .ad-m-info { display: contents; }
+.admin-reference-dashboard .ad-m-label { grid-column: 1; grid-row: 1; color: #8599bb; font-size: 12px; font-weight: 700; line-height: 1.4; }
+.admin-reference-dashboard .ad-m-num { grid-column: 1; grid-row: 2; font-size: 28px; line-height: 1.2; }
+.admin-reference-dashboard .ad-m-icon { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 9px; }
+.admin-reference-dashboard .ad-m-icon svg { width: 16px; height: 16px; }
+.admin-reference-dashboard .ad-m-foot { margin-top: 5px; color: #6e83a5; font-size: 11px; line-height: 1.45; }
+.admin-reference-dashboard .ad-primary-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.admin-reference-dashboard .ad-middle-grid { grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.42fr) minmax(0, 1fr); gap: 16px; }
+.admin-reference-dashboard .ad-bottom-grid { grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.42fr) minmax(0, 1fr); gap: 16px; }
+.admin-reference-dashboard .ad-panel {
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid #e4ecf8;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 5px 18px #234a8010;
+}
+.admin-reference-dashboard .ad-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.admin-reference-dashboard .ad-panel-title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.admin-reference-dashboard .ad-panel-title-wrap > div:last-child { min-width: 0; }
+.admin-reference-dashboard .ad-panel-icon { display: flex; flex: 0 0 34px; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; }
+.admin-reference-dashboard .ad-panel h3 { color: #183c76; font-size: 16px; font-weight: 750; line-height: 1.35; }
+.admin-reference-dashboard .ad-panel-header p { margin: 2px 0 0; color: #8799b6; font-size: 11px; line-height: 1.4; }
+.admin-reference-dashboard .ad-panel-link { color: #2864e9; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.admin-reference-dashboard .ad-panel-link:hover { text-decoration: underline; }
+.admin-reference-dashboard .ad-queue-list,
+.admin-reference-dashboard .ad-bulletins-list,
+.admin-reference-dashboard .ad-activity-list,
+.admin-reference-dashboard .ad-deadline-list { display: flex; flex-direction: column; gap: 8px; }
+.admin-reference-dashboard .ad-queue-row { display: grid; grid-template-columns: 36px minmax(120px, 1fr) auto auto auto; align-items: center; gap: 10px; padding: 10px 12px; margin: 0; border: 1px solid #e6edf7; border-radius: 12px; background: #f8fafd; }
+.admin-reference-dashboard .ad-queue-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 9px; }
+.admin-reference-dashboard .ad-queue-meta { min-width: 0; }
+.admin-reference-dashboard .ad-queue-title { overflow: hidden; color: #142f58; font-size: 12px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.admin-reference-dashboard .ad-queue-author,
+.admin-reference-dashboard .ad-queue-time { color: #8798b2; font-size: 10px; line-height: 1.5; }
+.admin-reference-dashboard .ad-queue-pill,
+.admin-reference-dashboard .ad-tbl-pill,
+.admin-reference-dashboard .ad-dl-pill { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 6px; background: #e0f2fe; color: #0879b7; font-size: 10px; font-weight: 750; white-space: nowrap; }
+.admin-reference-dashboard .ad-queue-pill.quiz,
+.admin-reference-dashboard .ad-tbl-pill.pink,
+.admin-reference-dashboard .ad-dl-pill.pink { background: #fff0f3; color: #db2777; }
+.admin-reference-dashboard .ad-tbl-pill.orange { background: #fff7e6; color: #c87900; }
+.admin-reference-dashboard .ad-tbl-pill.green { background: #e8fbf1; color: #079455; }
+.admin-reference-dashboard .ad-queue-actions { display: flex; gap: 5px; }
+.admin-reference-dashboard .ad-queue-actions button { padding: 6px 9px; border: 0; border-radius: 7px; color: #fff; background: #2864e9; font-size: 10px; font-weight: 700; }
+.admin-reference-dashboard .ad-queue-actions .ad-btn-approve { background: #07966c; }
+.admin-reference-dashboard .ad-queue-actions .ad-btn-dots { color: #dc4646; background: #fff0f0; }
+.admin-reference-dashboard .ad-bulletins-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; padding: 8px; border: 1px solid #e5edf7; border-radius: 12px; background: #f8fafd; }
+.admin-reference-dashboard .ad-bstat-box { padding: 3px; border-radius: 8px; text-align: center; }
+.admin-reference-dashboard .ad-bstat-num { font-size: 18px; font-weight: 800; }
+.admin-reference-dashboard .ad-bstat-lbl { color: #8294b0; font-size: 9px; font-weight: 800; }
+.admin-reference-dashboard .ad-bulletin-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 10px; border: 1px solid #e6edf7; border-radius: 11px; cursor: pointer; }
+.admin-reference-dashboard .ad-bulletin-item:first-child { border-color: #8eb4ff; box-shadow: 0 3px 12px #2864e912; }
+.admin-reference-dashboard .ad-bulletin-icon { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: #eef4ff; }
+.admin-reference-dashboard .ad-bulletin-title { color: #17345f; font-size: 12px; font-weight: 750; }
+.admin-reference-dashboard .ad-bulletin-desc { display: -webkit-box; overflow: hidden; color: #6f83a2; font-size: 11px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.admin-reference-dashboard .ad-bulletin-time { color: #93a3bb; font-size: 10px; text-align: right; white-space: nowrap; }
+.admin-reference-dashboard .ad-bulletins-footer { display: flex; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 9px; border-top: 1px solid #edf1f7; }
+.admin-reference-dashboard .ad-user-roles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.admin-reference-dashboard .ad-urole-box { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 8px 6px; border: 1px solid #e5edf8; border-radius: 9px; cursor: pointer; }
+.admin-reference-dashboard .ad-urole-icon { display: flex; width: 18px; height: 18px; flex: 0 0 18px; }
+.admin-reference-dashboard .ad-urole-icon svg { width: 16px; height: 16px; }
+.admin-reference-dashboard .ad-urole-num { font-size: 16px; font-weight: 800; }
+.admin-reference-dashboard .ad-urole-lbl { color: #8294b0; font-size: 9px; }
+.admin-reference-dashboard .ad-user-status-bar { display: flex; flex-wrap: wrap; gap: 9px; margin: 10px 0; padding: 9px; border: 1px solid #e5edf8; border-radius: 9px; color: #7588a5; font-size: 10px; }
+.admin-reference-dashboard .ad-ustatus-item { display: inline-flex; align-items: center; gap: 4px; }
+.admin-reference-dashboard .ad-user-actions-row { display: flex; gap: 7px; }
+.admin-reference-dashboard .ad-user-actions-row button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 35px; padding: 7px 10px; border: 1px solid #dfe9f8; border-radius: 8px; color: #38577f; background: #fff; font-size: 11px; font-weight: 700; }
+.admin-reference-dashboard .ad-user-actions-row .ad-btn-user-main { color: #fff; border-color: #2864e9; background: #2864e9; }
+.admin-reference-dashboard .ad-mat-table-wrap { overflow-x: auto; }
+.admin-reference-dashboard .ad-mat-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 10px; }
+.admin-reference-dashboard .ad-mat-table th { padding: 8px 6px; color: #8294b0; font-weight: 700; white-space: nowrap; }
+.admin-reference-dashboard .ad-mat-table td { padding: 8px 6px; border-top: 1px solid #edf1f7; color: #18365f; white-space: nowrap; }
+.admin-reference-dashboard .ad-shortcuts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 34px; }
+.admin-reference-dashboard .ad-shortcut-btn { display: flex; align-items: center; justify-content: space-between; gap: 7px; min-width: 0; min-height: 36px; padding: 7px 9px; border: 1px solid #e2ebf8; border-radius: 8px; color: #4a6283; background: #fff; font-size: 10px; font-weight: 650; }
+.admin-reference-dashboard .ad-sc-left { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.admin-reference-dashboard .ad-sc-icon { display: inline-flex; width: 14px; height: 14px; color: #6d48b7; }
+.admin-reference-dashboard .ad-sc-icon svg { width: 14px; height: 14px; }
+.admin-reference-dashboard .ad-sc-arrow { color: #3970eb; font-size: 17px; }
+.admin-reference-dashboard .ad-strand-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) 22px; align-items: center; gap: 8px; padding: 7px 0; color: #203c65; font-size: 11px; }
+.admin-reference-dashboard .ad-strand-row b { color: #0584ca; text-align: right; }
+.admin-reference-dashboard .ad-strand-track { height: 7px; overflow: hidden; border-radius: 99px; background: #eaf0f7; }
+.admin-reference-dashboard .ad-strand-fill { height: 100%; border-radius: inherit; background: #22a6df; }
+.admin-reference-dashboard .ad-activity-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #edf1f7; }
+.admin-reference-dashboard .ad-activity-icon { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; }
+.admin-reference-dashboard .ad-activity-title { color: #203b61; font-size: 11px; font-weight: 700; line-height: 1.4; }
+.admin-reference-dashboard .ad-activity-desc,
+.admin-reference-dashboard .ad-activity-time { color: #8799b4; font-size: 10px; line-height: 1.4; }
+.admin-reference-dashboard .ad-side-stack { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.admin-reference-dashboard .ad-deadline-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px; border: 1px solid #e6edf6; border-radius: 8px; color: #2c456a; font-size: 10px; }
+.admin-reference-dashboard .ad-dl-left { display: inline-flex; align-items: center; gap: 7px; }
+.admin-reference-dashboard .ad-dl-icon { display: inline-flex; width: 15px; height: 15px; }
+.admin-reference-dashboard .ad-dl-icon svg { width: 15px; height: 15px; }
+.admin-reference-dashboard .ad-acc-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.admin-reference-dashboard .ad-acc-tile { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px; border: 1px solid #d8f5e3; border-radius: 9px; background: #effcf4; color: #078645; text-align: center; }
+.admin-reference-dashboard .ad-acc-tile.inactive { border-color: #ffd9d9; background: #fff2f2; color: #e44444; }
+.admin-reference-dashboard .ad-acc-num { font-size: 18px; font-weight: 800; }
+.admin-reference-dashboard .ad-acc-lbl { font-size: 10px; font-weight: 700; }
+@container dashboard (max-width: 1100px) {
+  .admin-reference-dashboard .ad-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-reference-dashboard .ad-middle-grid,
+  .admin-reference-dashboard .ad-bottom-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-reference-dashboard .ad-panel-shortcuts,
+  .admin-reference-dashboard .ad-side-stack { grid-column: 1 / -1; }
+  .admin-reference-dashboard .ad-side-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-reference-dashboard .ad-shortcuts-grid { margin-top: 14px; }
+}
+@container dashboard (max-width: 800px) {
+  .admin-reference-dashboard .ad-primary-grid,
+  .admin-reference-dashboard .ad-middle-grid,
+  .admin-reference-dashboard .ad-bottom-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-reference-dashboard .ad-side-stack { display: flex; grid-column: auto; }
+  .admin-reference-dashboard .ad-panel-shortcuts { grid-column: auto; }
+  .admin-reference-dashboard .ad-hero-right { width: 100%; justify-content: space-between; }
+  .admin-reference-dashboard .ad-hero-tagline { display: none; }
+  .admin-reference-dashboard .ad-panel { padding: 14px; }
+  .admin-reference-dashboard .ad-bulletin-item { grid-template-columns: 32px minmax(0, 1fr); }
+  .admin-reference-dashboard .ad-bulletin-time { display: none; }
+}
+
+/* Preserve the reference card layout and tune only text for the sidebar-open width. */
+.admin-reference-dashboard { gap: 18px; }
+.admin-reference-dashboard .ad-hero-pill { font-size: 12px; }
+.admin-reference-dashboard .ad-panel-icon { width: 38px; height: 38px; flex-basis: 38px; }
+.admin-reference-dashboard .ad-panel-icon svg { width: 19px; height: 19px; }
+.admin-reference-dashboard .ad-m-icon { width: 38px; height: 38px; }
+.admin-reference-dashboard .ad-m-icon svg { width: 18px; height: 18px; }
+.admin-reference-dashboard .ad-queue-icon { width: 40px; height: 40px; }
+.admin-reference-dashboard .ad-bulletin-icon { width: 32px; height: 32px; }
+.admin-reference-dashboard .ad-bulletin-item { grid-template-columns: 32px minmax(0, 1fr) auto; }
+.admin-reference-dashboard .ad-panel h3 { font-size: var(--dash-title, 16px); }
+.admin-reference-dashboard .ad-queue-title,
+.admin-reference-dashboard .ad-bulletin-title,
+.admin-reference-dashboard .ad-activity-title { font-size: var(--dash-body, 13px); }
+.admin-reference-dashboard .ad-queue-author,
+.admin-reference-dashboard .ad-queue-time,
+.admin-reference-dashboard .ad-bulletin-desc,
+.admin-reference-dashboard .ad-bulletin-time,
+.admin-reference-dashboard .ad-activity-desc,
+.admin-reference-dashboard .ad-activity-time { font-size: var(--dash-small, 11px); }
+@container dashboard (max-width: 1250px) {
+  .admin-reference-dashboard .ad-m-label { font-size: var(--dash-small, 11px); line-height: 1.4; }
+  .admin-reference-dashboard .ad-m-foot,
+  .admin-reference-dashboard .ad-panel-header p { font-size: var(--dash-small, 11px); line-height: 1.45; }
+  .admin-reference-dashboard .ad-mat-table { font-size: 10px; }
+  .admin-reference-dashboard .ad-mat-table th,
+  .admin-reference-dashboard .ad-mat-table td { padding: 8px 4px; }
+  .admin-reference-dashboard .ad-shortcut-btn,
+  .admin-reference-dashboard .ad-strand-row,
+  .admin-reference-dashboard .ad-deadline-item { font-size: var(--dash-small, 11px); }
+  .admin-reference-dashboard .ad-queue-meta,
+  .admin-reference-dashboard .ad-bulletin-body,
+  .admin-reference-dashboard .ad-activity-content,
+  .admin-reference-dashboard .ad-sc-left { min-width: 0; overflow-wrap: anywhere; }
+  .admin-reference-dashboard .ad-queue-title,
+  .admin-reference-dashboard .ad-queue-author,
+  .admin-reference-dashboard .ad-bulletin-title,
+  .admin-reference-dashboard .ad-bulletin-desc,
+  .admin-reference-dashboard .ad-activity-title,
+  .admin-reference-dashboard .ad-activity-desc,
+  .admin-reference-dashboard .ad-shortcut-btn { overflow-wrap: anywhere; }
+}
+@container dashboard (max-width: 650px) {
+  .admin-reference-dashboard .ad-user-roles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-reference-dashboard .ad-user-actions-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .admin-reference-dashboard .ad-user-actions-row button { min-width: 0; padding: 7px 5px; font-size: 11px; word-break: normal; overflow-wrap: normal; }
+  .admin-reference-dashboard .ad-urole-box { justify-content: flex-start; gap: 8px; padding: 9px; }
+  .admin-reference-dashboard .ad-urole-lbl { font-size: 11px; word-break: normal; overflow-wrap: normal; }
+  .admin-reference-dashboard .ad-queue-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-areas: "icon meta pill" ". time actions";
+    column-gap: 8px;
+    row-gap: 6px;
+  }
+  .admin-reference-dashboard .ad-queue-icon { grid-area: icon; }
+  .admin-reference-dashboard .ad-queue-meta { grid-area: meta; }
+  .admin-reference-dashboard .ad-queue-pill { grid-area: pill; }
+  .admin-reference-dashboard .ad-queue-time { grid-area: time; min-width: 0; }
+  .admin-reference-dashboard .ad-queue-actions { grid-area: actions; display: flex; gap: 5px; }
+  .admin-reference-dashboard .ad-queue-actions button { min-width: 0; padding: 7px 8px; font-size: 11px; white-space: nowrap; word-break: normal; }
+  .admin-reference-dashboard .ad-queue-title,
+  .admin-reference-dashboard .ad-queue-author,
+  .admin-reference-dashboard .ad-queue-time { overflow-wrap: anywhere; }
+  .admin-reference-dashboard .ad-queue-title,
+  .admin-reference-dashboard .ad-bulletin-title { overflow: visible; text-overflow: clip; white-space: normal; }
+}
+
+/* Enlarge dashboard typography while leaving the eight summary cards untouched. */
+.admin-reference-dashboard .ad-hero h1 { font-size: 26px; }
+.admin-reference-dashboard .ad-hero h2 { font-size: 18px; }
+.admin-reference-dashboard .ad-hero-pill,
+.admin-reference-dashboard .ad-hero-btns button { font-size: 13px; }
+.admin-reference-dashboard .ad-panel h3 { font-size: 18px; }
+.admin-reference-dashboard .ad-panel-header p { font-size: 12px; }
+.admin-reference-dashboard .ad-panel-link { font-size: 13px; }
+.admin-reference-dashboard .ad-queue-title,
+.admin-reference-dashboard .ad-bulletin-title,
+.admin-reference-dashboard .ad-activity-title { font-size: 14px; }
+.admin-reference-dashboard .ad-queue-author,
+.admin-reference-dashboard .ad-queue-time,
+.admin-reference-dashboard .ad-bulletin-desc,
+.admin-reference-dashboard .ad-bulletin-time,
+.admin-reference-dashboard .ad-activity-desc,
+.admin-reference-dashboard .ad-activity-time { font-size: 12px; }
+.admin-reference-dashboard .ad-queue-pill,
+.admin-reference-dashboard .ad-queue-actions button,
+.admin-reference-dashboard .ad-tbl-pill,
+.admin-reference-dashboard .ad-bstat-lbl,
+.admin-reference-dashboard .ad-sc-arrow,
+.admin-reference-dashboard .ad-acc-lbl { font-size: 11px; }
+.admin-reference-dashboard .ad-bstat-num,
+.admin-reference-dashboard .ad-acc-num { font-size: 20px; }
+.admin-reference-dashboard .ad-urole-num { font-size: 18px; }
+.admin-reference-dashboard .ad-urole-lbl,
+.admin-reference-dashboard .ad-user-status-bar,
+.admin-reference-dashboard .ad-mat-table,
+.admin-reference-dashboard .ad-shortcut-btn,
+.admin-reference-dashboard .ad-strand-row,
+.admin-reference-dashboard .ad-deadline-item { font-size: 12px; }
+.admin-reference-dashboard .ad-mat-table th,
+.admin-reference-dashboard .ad-mat-table td { font-size: 12px; }
+.admin-reference-dashboard .ad-user-actions-row button { font-size: 12px; }

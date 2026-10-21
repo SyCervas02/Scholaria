@@ -2277,6 +2277,22 @@ function isCourseOpenForStudent(course) {
   return courseStrand === studentStrand || courseStrand === 'ALL' || course.track === 'Core' || course.track === 'Applied';
 }
 
+function isCourseAssignedToStudent(course, profile = CURRENT_PROFILE) {
+  if (!course) return false;
+  const normalizeStrand = value => {
+    const normalized = String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    return normalized === 'TVL-ICT' || normalized === 'TVL ICT' ? 'TVL' : normalized;
+  };
+  const gradeNumber = value => Number(String(value || '').match(/\d+/)?.[0]) || null;
+  const studentStrand = normalizeStrand(profile?.strand);
+  const courseStrand = normalizeStrand(course.strand);
+  const studentGrade = gradeNumber(profile?.grade_level || profile?.gradeLevel);
+  const courseGrade = gradeNumber(course.gradeLevel || course.grade_level);
+  const strandMatches = !studentStrand || courseStrand === studentStrand || ['ALL', 'ALL STRANDS', 'GENERAL'].includes(courseStrand);
+  const gradeMatches = !studentGrade || !courseGrade || courseGrade === studentGrade;
+  return strandMatches && gradeMatches;
+}
+
 function handleCourseClick(courseId) {
   const course = COURSES_DATABASE.find(c => c.id === courseId);
   if (!course) return;

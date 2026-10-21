@@ -866,6 +866,10 @@ async function loadMaterialsFromDB() {
     materialsData = filteredMerged;
   }
 
+  if (ROLE === 'student' && currentPage === 'materials' && typeof loadQuizzesFromDB === 'function') {
+    try { await loadQuizzesFromDB(); } catch (e) { console.warn('Could not load quizzes for My Materials:', e.message); }
+  }
+
   isFetchingMaterials = false;
   updateApprovalBadge();
   if (currentPage === 'materials' || currentPage === 'approval') {
@@ -903,12 +907,10 @@ function renderMaterialsList(role) {
   let enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
     ? (role === 'teacher'
         ? (materialsStrandFilter ? COURSES_DATABASE.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase()) : COURSES_DATABASE.slice())
-        : COURSES_DATABASE.filter(c => {
-            // STRICT: When student is enrolled in STEM, only STEM subjects are shown!
-            const courseStrand = (c.strand || 'STEM').toUpperCase();
-            if (courseStrand !== studentStrand) return false;
-            return typeof isCourseOpenForStudent === 'function' ? isCourseOpenForStudent(c) : true;
-          }))
+        : COURSES_DATABASE.filter(c => typeof isCourseAssignedToStudent === 'function'
+            ? isCourseAssignedToStudent(c, CURRENT_PROFILE)
+            : (c.strand || '').toUpperCase() === studentStrand &&
+              String(c.gradeLevel || '').match(/\d+/)?.[0] === String(CURRENT_PROFILE?.grade_level || CURRENT_PROFILE?.gradeLevel || '').match(/\d+/)?.[0]))
     : [];
 
   if (role === 'teacher' && typeof materialsStrandFilter !== 'undefined' && materialsStrandFilter) {
@@ -936,15 +938,22 @@ function renderMaterialsList(role) {
       const docs = course.documents || [];
       const lessons = getSubjectLessons(course);
       const subjectQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
-        if (!q.subject) return false;
-        const s = q.subject.toLowerCase();
-        const t = course.title.toLowerCase();
-        if (!s.includes(t) && !t.includes(s)) return false;
+        if (!q) return false;
+        const qSubject = String(q.subject || q.subject_name || '').toLowerCase().trim();
+        const courseTitle = String(course.title || '').toLowerCase().trim();
+        const courseCode = String(course.code || '').toLowerCase().trim();
+        const qCourseId = String(q.course_id || q.courseId || '').toLowerCase().trim();
+        const matchesCourse = qCourseId === String(course.id || '').toLowerCase().trim() ||
+          (!!qSubject && ((courseTitle && (qSubject.includes(courseTitle) || courseTitle.includes(qSubject))) ||
+            (courseCode && (qSubject.includes(courseCode) || courseCode.includes(qSubject)))));
+        if (!matchesCourse) return false;
         if (activeSubjectSection) {
-          const qSec = (q.sections || q.section || q.target_section || '').toLowerCase();
+          const qSec = [q.sections, q.section, q.target_section].flat().filter(Boolean).join(',').toLowerCase();
           const aSec = activeSubjectSection.toLowerCase();
           if (qSec && qSec !== 'all' && !qSec.includes(aSec) && !aSec.includes(qSec)) return false;
         }
+        if (role === 'student' && typeof isQuizTargetedForStudent === 'function' &&
+          String(q.status || '').toLowerCase() !== 'closed' && !isQuizTargetedForStudent(q, CURRENT_PROFILE)) return false;
         return true;
       }) : [];
       const attempts = (typeof getAllRecordedAttempts === 'function')
@@ -1173,6 +1182,42 @@ function renderMaterialsList(role) {
                       ` : ''}
                     </div>
                   `}
+                  ${role === 'student' && subjectQuizzes.length ? `
+                    <div class="sw-subject-quizzes-card" style="margin-top:20px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                        <div>
+                          <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Quizzes &amp; Assessments</h3>
+                          <span style="font-size:12px;color:var(--text-muted);">Assigned for ${escHtml(course.title)}</span>
+                        </div>
+                        <button type="button" class="sw-btn outline" onclick="setSubjectSubTab('quizzes')" style="padding:6px 12px;font-size:12px;">View all ${subjectQuizzes.length}</button>
+                      </div>
+                      <div class="file-list" style="display:flex;flex-direction:column;gap:8px;">
+                        ${subjectQuizzes.map(q => {
+                          const attempt = attempts.find(a => {
+                            if (!a) return false;
+                            const attemptQuizId = String(a.quiz_id || '').toLowerCase().trim();
+                            const quizId = String(q.id || '').toLowerCase().trim();
+                            return (attemptQuizId && attemptQuizId === quizId) ||
+                              (a.quiz_title && q.title && String(a.quiz_title).trim().toLowerCase() === String(q.title).trim().toLowerCase());
+                          });
+                          const isInteractiveQuiz = q.type === 'interactive' || q.quiz_type === 'interactive';
+                          return `
+                            <div class="file-row">
+                              <div class="file-icon" style="background:${isInteractiveQuiz ? '#7c3aed' : '#2563eb'};color:#fff;">${isInteractiveQuiz ? '🎮' : '📝'}</div>
+                              <div class="file-info">
+                                <h4>${escHtml(q.title || 'Quiz')}</h4>
+                                <span>${(Array.isArray(q.questions) ? q.questions.length : 0)} items${q.dueDate || q.due_date ? ` · Due ${escHtml(String(q.dueDate || q.due_date))}` : ''}</span>
+                              </div>
+                              <span class="status-pill ${attempt ? 'done' : 'pending'}">${attempt ? 'Completed' : 'Pending'}</span>
+                              ${attempt
+                                ? `<button type="button" class="sw-btn outline" onclick="openReviewAttempt('${q.id}', '${attempt.id || ''}')" style="padding:6px 12px;font-size:12px;">Review</button>`
+                                : `<button type="button" class="take-btn" onclick="${isInteractiveQuiz ? `openInteractiveQuiz('${q.id}')` : `openTakeQuizModal('${q.id}')`}" style="padding:7px 14px;font-size:12px;font-weight:700;">${isInteractiveQuiz ? 'Play Quiz' : 'Take Quiz'}</button>`}
+                            </div>
+                          `;
+                        }).join('')}
+                      </div>
+                    </div>
+                  ` : ''}
                 </div>
               ` : activeSubjectSubTab === 'quizzes' ? `
                 <div class="sw-quizzes-list" style="display:flex;flex-direction:column;gap:10px;">
@@ -2190,6 +2235,7 @@ function renderStudentMaterialsHubHTML(enrolledCourses, studentStrand) {
   const specializedCount = enrolledCourses.filter(c => c.track === 'Specialized').length;
   const coreCount = enrolledCourses.filter(c => c.track === 'Core').length;
   const appliedCount = enrolledCourses.filter(c => c.track === 'Applied').length;
+  const electiveCount = enrolledCourses.filter(c => c.track === 'Elective').length;
 
   return `
   <div class="materials-page-container">
@@ -2222,6 +2268,9 @@ function renderStudentMaterialsHubHTML(enrolledCourses, studentStrand) {
         </button>
         <button class="subject-chip ${studentMatTrackFilter === 'Applied' ? 'active' : ''}" data-track="Applied" onclick="setStudentMatTrack('Applied')" style="cursor:pointer;">
           Applied <span class="sc-badge">${appliedCount}</span>
+        </button>
+        <button class="subject-chip ${studentMatTrackFilter === 'Elective' ? 'active' : ''}" data-track="Elective" onclick="setStudentMatTrack('Elective')" style="cursor:pointer;">
+          Elective <span class="sc-badge">${electiveCount}</span>
         </button>
       </div>
 

@@ -3347,6 +3347,7 @@ function previewGeneratedInteractiveQuiz() {
     timerPerQuestion: typeof quizGen.timerPerQuestion === 'number' ? quizGen.timerPerQuestion : 30,
     questions: quizGen.questions.map(q => Object.assign({}, q, { _quiz_type: 'interactive' })),
     is_demo: false,
+    is_preview: true,
     isPreview: true
   };
   if (typeof openInteractiveQuiz === 'function') {

@@ -7,7 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css"/>
   <link rel="stylesheet" href="css/modules/deadlines.css?v=1"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20020"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20033"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css"/>
   <link rel="stylesheet" href="css/modules/chat.css?v=20007"/>
@@ -63,7 +63,7 @@
     </div>
     <div class="nav-right">
 
-      <div class="notif-wrap" id="notifWrap">
+      <div class="notif-wrap" id="notifWrap" style="order:1;">
         <button class="icon-btn" id="notifBtn" onclick="toggleNotif()" aria-label="Notifications">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
@@ -119,14 +119,7 @@
         </div>
       </div>
 
-      <button class="icon-btn" id="topNavChatBtn" onclick="renderPage('chats')" aria-label="Chats" title="Chats">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        <span class="badge" id="chatBadge" style="background:#ef4444;">2</span>
-      </button>
-
-      <div class="profile" onclick="renderPage('profile')" style="cursor:pointer;" title="View Profile">
+      <div class="profile" onclick="renderPage('profile')" style="cursor:pointer;order:2;" title="View Profile">
         <div class="avatar" id="userAvatar">MS</div>
         <div class="profile-info-text" style="display:flex;flex-direction:column;text-align:left;line-height:1.2;">
           <span class="nav-username" id="userName" style="font-weight:700;font-size:13px;color:#0f172a;">Mr. S. Llorente Jr.</span>

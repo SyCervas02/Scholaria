@@ -1492,11 +1492,11 @@ function renderDashboardQuickLinks(role) {
 let studentSubjectShelfTab = 'enrolled';
 
 function getStudentDashboardSubjects(tab = 'enrolled') {
-  if (typeof COURSES_DATABASE === 'undefined' || typeof isCourseOpenForStudent !== 'function') return [];
+  if (typeof COURSES_DATABASE === 'undefined' || typeof isCourseAssignedToStudent !== 'function') return [];
   const gradeNumber = value => Number(String(value || '').match(/\d+/)?.[0]) || null;
   const grade = gradeNumber(CURRENT_PROFILE?.grade_level || CURRENT_PROFILE?.gradeLevel);
   return COURSES_DATABASE.filter(course => {
-    if (!isCourseOpenForStudent(course)) return false;
+    if (!isCourseAssignedToStudent(course, CURRENT_PROFILE)) return false;
     const courseGrade = gradeNumber(course.gradeLevel);
     const completed = course.status === 'completed' || (grade && courseGrade && courseGrade < grade);
     if (tab === 'completed') return Boolean(completed);
@@ -3285,22 +3285,33 @@ function teacherPage(page) {
       const lowestScore = validScores.length ? Math.round(Math.min(...validScores)) : null;
       const passingCount = validScores.filter(s => s >= 75).length;
       const passRate = validScores.length ? Math.round((passingCount / validScores.length) * 100) : null;
+      const showingStudentSubmissions = analysisActiveTab === 'students';
 
       return `
-      <div class="section-hdr">
-        <div>
+      <div class="section-hdr analysis-report-header">
+        <div class="analysis-report-heading">
           <h2>Item Analysis Report</h2>
           <span style="font-size:12px;color:var(--text-muted);">Psychometric item discrimination, accuracy rates, and question difficulty breakdown</span>
         </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <select class="user-filter-select" onchange="setAnalysisSectionFilter(this.value)">
-            <option value="">All Handled Sections</option>
-            ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
-          </select>
-          <select class="user-filter-select" onchange="setAnalysisQuiz(this.value)">
-            ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
-          </select>
-          <button class="add-btn" style="background:var(--blue-light);color:var(--blue);" onclick="loadAttemptsForAnalysis('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
+        <div class="analysis-filter-container">
+          <div class="analysis-tab-bar" role="tablist" aria-label="Item analysis views">
+            <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('questions')">
+              <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${rows.length}</span>
+            </button>
+            <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('students')">
+              <span class="analysis-tab-icon" aria-hidden="true">${iconUsers()}</span> Student Submissions <span class="analysis-tab-count">${attemptCount}</span>
+            </button>
+          </div>
+          <div class="analysis-filters-row">
+            <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)">
+              <option value="">All Handled Sections</option>
+              ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+            </select>
+            <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)">
+              ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
+            </select>
+            <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
+          </div>
         </div>
       </div>
 
@@ -3354,6 +3365,31 @@ function teacherPage(page) {
         <div class="ann-meta" style="margin-top:8px;">Live psychometric breakdown recomputed from submitted student attempts.</div>
       </div>
 
+      ${showingStudentSubmissions ? `
+      <div class="score-table analysis-student-submissions">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:50px;">#</th>
+              <th>Student</th>
+              <th>Section</th>
+              <th style="text-align:center;">Score</th>
+              <th>Submitted</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${attempts.length ? attempts.map((attempt, index) => `
+              <tr>
+                <td style="font-weight:700;color:var(--blue);">${index + 1}</td>
+                <td style="font-weight:600;color:#0f172a;">${escHtml(attempt.student_name || attempt.studentName || attempt.name || 'Student')}</td>
+                <td>${escHtml(attempt.section || attempt.section_name || '—')}</td>
+                <td style="text-align:center;font-weight:700;color:var(--blue);">${attempt.score != null ? escHtml(String(attempt.score)) : escHtml(String(attempt.score_percentage ?? '—'))}${attempt.total_items && attempt.score != null ? ` / ${escHtml(String(attempt.total_items))}` : ''}</td>
+                <td>${attempt.submitted_at ? escHtml(new Date(attempt.submitted_at).toLocaleDateString()) : '—'}</td>
+              </tr>`).join('')
+              : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:30px;">No student submissions found for this quiz and section.</td></tr>`}
+          </tbody>
+        </table>
+      </div>` : `
       <!-- QUESTION ACCURACY TABLE -->
       <div class="score-table">
         <table>
@@ -3394,7 +3430,7 @@ function teacherPage(page) {
               : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">No question items found in this quiz.</td></tr>`}
           </tbody>
         </table>
-      </div>`;
+      </div>`}`;
     }
 
 

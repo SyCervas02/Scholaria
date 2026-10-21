@@ -3,13 +3,30 @@
 let analysisSelectedQuizId = null;
 let analysisSectionFilter = '';
 let analysisSearchQuery = '';
+let analysisActiveTab = 'questions';
 let analysisAttemptsCache = {};
 let analysisFetchInFlightFor = null;
+
+function setAnalysisTab(tab) {
+  analysisActiveTab = tab === 'students' ? 'students' : 'questions';
+  if (typeof renderPage === 'function') renderPage('analysis');
+}
+window.setAnalysisTab = setAnalysisTab;
 
 function setAnalysisSectionFilter(sec) {
   analysisSectionFilter = sec;
   if (typeof renderPage === 'function') renderPage('analysis');
 }
+
+function refreshAnalysisReport(quizId) {
+  if (!quizId) return;
+  analysisSectionFilter = '';
+  analysisSearchQuery = '';
+  delete analysisAttemptsCache[quizId];
+  loadAttemptsForAnalysis(quizId, true);
+  if (typeof renderPage === 'function') renderPage('analysis');
+}
+window.refreshAnalysisReport = refreshAnalysisReport;
 
 function setAnalysisQuiz(quizId) {
   analysisSelectedQuizId = quizId;
@@ -19,6 +36,26 @@ function setAnalysisQuiz(quizId) {
 function setAnalysisSearchQuery(q) {
   analysisSearchQuery = q.toLowerCase().trim();
   if (typeof renderPage === 'function') renderPage('analysis');
+}
+
+function isPreviewOrTeacherAttempt(attempt) {
+  if (!attempt) return true;
+  if (attempt.is_preview === true || attempt.isPreview === true || attempt.preview === true) return true;
+  if (typeof ROLE === 'undefined' || ROLE !== 'teacher') return false;
+
+  const attemptStudentId = String(attempt.student_id || attempt.studentId || attempt.user_id || '').trim().toLowerCase();
+  const profile = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE : null;
+  const teacherIds = profile
+    ? [profile.id, profile.dbId, profile.school_id].filter(Boolean).map(id => String(id).trim().toLowerCase())
+    : [];
+  if (attemptStudentId && teacherIds.includes(attemptStudentId)) return true;
+
+  const users = typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : [];
+  const submitter = users.find(user => {
+    const userIds = [user.id, user.dbId, user.school_id].filter(Boolean).map(id => String(id).trim().toLowerCase());
+    return attemptStudentId && userIds.includes(attemptStudentId);
+  });
+  return String(submitter?.role || '').toLowerCase() === 'teacher';
 }
 
 function getAttemptsForAnalysis(quizId, secFilter = '') {
@@ -74,6 +111,9 @@ function getAttemptsForAnalysis(quizId, secFilter = '') {
   });
 
   let uniqueAttempts = Array.from(attemptsByKey.values());
+
+  // Item analysis counts real student submissions only; previews and teacher test runs are excluded.
+  uniqueAttempts = uniqueAttempts.filter(a => !isPreviewOrTeacherAttempt(a));
 
   // Filter by section if specified
   if (secFilter) {
@@ -266,8 +306,8 @@ function buildAnalysisRows(quiz, attempts) {
   });
 }
 
-async function loadAttemptsForAnalysis(quizId) {
-  if (!quizId || analysisFetchInFlightFor === quizId) return;
+async function loadAttemptsForAnalysis(quizId, force = false) {
+  if (!quizId || (analysisFetchInFlightFor === quizId && !force)) return;
   analysisFetchInFlightFor = quizId;
   try {
     if (typeof db !== 'undefined' && db) {
