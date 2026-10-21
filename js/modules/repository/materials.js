@@ -939,9 +939,10 @@ function renderMaterialsList(role) {
       const lessons = getSubjectLessons(course);
       const subjectQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
         if (!q) return false;
-        const qSubject = String(q.subject || q.subject_name || '').toLowerCase().trim();
-        const courseTitle = String(course.title || '').toLowerCase().trim();
-        const courseCode = String(course.code || '').toLowerCase().trim();
+        const normalizeSubject = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const qSubject = normalizeSubject(q.subject || q.subject_name);
+        const courseTitle = normalizeSubject(course.title);
+        const courseCode = normalizeSubject(course.code);
         const qCourseId = String(q.course_id || q.courseId || '').toLowerCase().trim();
         const matchesCourse = qCourseId === String(course.id || '').toLowerCase().trim() ||
           (!!qSubject && ((courseTitle && (qSubject.includes(courseTitle) || courseTitle.includes(qSubject))) ||
@@ -1182,16 +1183,16 @@ function renderMaterialsList(role) {
                       ` : ''}
                     </div>
                   `}
-                  ${role === 'student' && subjectQuizzes.length ? `
+                  ${role === 'student' ? `
                     <div class="sw-subject-quizzes-card" style="margin-top:20px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;">
                       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
                         <div>
                           <h3 style="margin:0;font-size:15.5px;font-weight:700;color:#0f172a;">Quizzes &amp; Assessments</h3>
                           <span style="font-size:12px;color:var(--text-muted);">Assigned for ${escHtml(course.title)}</span>
                         </div>
-                        <button type="button" class="sw-btn outline" onclick="setSubjectSubTab('quizzes')" style="padding:6px 12px;font-size:12px;">View all ${subjectQuizzes.length}</button>
+                        ${subjectQuizzes.length ? `<button type="button" class="sw-btn outline" onclick="setSubjectSubTab('quizzes')" style="padding:6px 12px;font-size:12px;">View all ${subjectQuizzes.length}</button>` : ''}
                       </div>
-                      <div class="file-list" style="display:flex;flex-direction:column;gap:8px;">
+                      ${subjectQuizzes.length ? `<div class="file-list" style="display:flex;flex-direction:column;gap:8px;">
                         ${subjectQuizzes.map(q => {
                           const attempt = attempts.find(a => {
                             if (!a) return false;
@@ -1215,7 +1216,7 @@ function renderMaterialsList(role) {
                             </div>
                           `;
                         }).join('')}
-                      </div>
+                      </div>` : '<p style="margin:0;padding:18px;text-align:center;color:#64748b;font-size:13px;background:#f8fafc;border-radius:10px;">No quizzes are assigned to this subject yet.</p>'}
                     </div>
                   ` : ''}
                 </div>

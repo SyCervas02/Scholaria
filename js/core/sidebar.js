@@ -789,6 +789,57 @@ function updateProfileNamePreview() {
   if (heroName) heroName.textContent = assembled || 'Your Full Name';
 }
 
+async function confirmPasswordChange() {
+  const button = document.getElementById('pfConfirmPasswordBtn');
+  const currentPassword = document.getElementById('pfCurrentPassword')?.value || '';
+  const newPassword = document.getElementById('pfNewPassword')?.value || '';
+  const confirmPassword = document.getElementById('pfConfirmPassword')?.value || '';
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    showToast('Enter your current password, new password, and confirmation to change your password.', 'error');
+    return;
+  }
+  if (newPassword.length < 6) {
+    showToast('New password must be at least 6 characters.', 'error');
+    document.getElementById('pfNewPassword')?.focus();
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast('New password and confirmation do not match.', 'error');
+    document.getElementById('pfConfirmPassword')?.focus();
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Updating...';
+  }
+  try {
+    const { data: authData, error: authUserError } = await db.auth.getUser();
+    const authEmail = authData?.user?.email || CURRENT_PROFILE.email;
+    if (authUserError || !authEmail) throw new Error('Could not verify the signed-in account.');
+
+    const { error: reauthError } = await db.auth.signInWithPassword({ email: authEmail, password: currentPassword });
+    if (reauthError) throw new Error('Current password is incorrect.');
+
+    const { error: passwordError } = await db.auth.updateUser({ password: newPassword });
+    if (passwordError) throw passwordError;
+
+    showToast('Password updated successfully', 'success');
+    document.getElementById('pfCurrentPassword').value = '';
+    document.getElementById('pfNewPassword').value = '';
+    document.getElementById('pfConfirmPassword').value = '';
+  } catch (error) {
+    console.warn('Password update error:', error);
+    showToast(error.message || 'Could not update password.', 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Confirm Password';
+    }
+  }
+}
+
 async function saveUserProfile() {
   const saveBtn = document.getElementById('pfSaveBtn');
   if (saveBtn) {
@@ -817,7 +868,6 @@ async function saveUserProfile() {
     const onlineStatus = document.getElementById('pfOnlineStatus')?.value || 'online';
     const statusMessage = (document.getElementById('pfStatusMsg')?.value || '').trim();
     const avatarUrl = document.getElementById('pfAvatarDataUrl')?.value || CURRENT_PROFILE.avatar_url || null;
-    const newPassword = document.getElementById('pfNewPassword')?.value;
 
     // 2. Strict Philippine Mobile Validation (Exactly 11 digits starting with 09)
     if (contactNumber) {
@@ -848,22 +898,7 @@ async function saveUserProfile() {
       }
     }
 
-    // 4. Update Password if specified
-    if (newPassword && newPassword.length >= 6) {
-      try {
-        const { error: pwdErr } = await db.auth.updateUser({ password: newPassword });
-        if (pwdErr) {
-          console.warn('Password update error:', pwdErr);
-          showToast('Could not update password: ' + pwdErr.message, 'error');
-        } else {
-          showToast('Password updated successfully', 'success');
-        }
-      } catch (pe) {
-        console.warn('Password error:', pe);
-      }
-    }
-
-    // 5. Build comprehensive profile update payload
+    // 4. Build comprehensive profile update payload
     const updatePayload = {
       full_name: fullName,
       first_name: firstName,
@@ -1273,21 +1308,20 @@ function buildProfilePage(role) {
           </div>
 
           <div class="pf-field">
-            <label>Update Password</label>
+            <label for="pfCurrentPassword">Current Password</label>
+            <input type="password" id="pfCurrentPassword" placeholder="Enter current password" autocomplete="current-password" />
+          </div>
+          <div class="pf-field">
+            <label for="pfNewPassword">New Password</label>
             <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
-            <span style="font-size:11px;color:var(--text-muted);">Leave empty to keep your existing login password</span>
+          </div>
+          <div class="pf-field">
+            <label for="pfConfirmPassword">Confirm New Password</label>
+            <input type="password" id="pfConfirmPassword" placeholder="Confirm new password" autocomplete="new-password" />
+            <button type="button" id="pfConfirmPasswordBtn" class="add-btn" style="display:block;width:100%;height:36px;margin-top:10px;padding:0 14px;font-size:13px;border-radius:9px;font-weight:700;" onclick="confirmPasswordChange()">Confirm Password</button>
+            <span style="font-size:11px;color:var(--text-muted);display:block;margin-top:8px;">Enter your current password and matching new passwords, then confirm to apply the change.</span>
           </div>
 
-          <div style="padding-top:12px;border-top:1px solid #f1f5f9;margin-top:4px;">
-            <label style="font-size:11.5px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Two-Factor Authentication (2FA)</label>
-            <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:12px;line-height:1.4;">
-              Secure your account using time-based one-time passwords (TOTP) from <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong>.
-            </p>
-            <button type="button" class="foot-btn-secondary" style="border-color:var(--blue);color:var(--blue);display:inline-flex;align-items:center;gap:6px;width:100%;justify-content:center;height:38px;" onclick="openTwoFactorModal()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              Configure Authenticator 2FA
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -1589,31 +1623,28 @@ function renderStudentDashboardActivity() {
 
 function renderStudentDeadlinesWidgetHTML() {
   const allQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []);
-  const visibleQuizzes = allQuizzes.filter(q =>
-    (q.status === 'active' || q.status === 'approved' || q.status === 'closed' || q.isDemo) &&
-    (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
-  );
-
-  const attemptsByQuiz = new Map(
-    (typeof myQuizAttempts !== 'undefined' ? myQuizAttempts : []).map(a => [String(a.quiz_id), a])
-  );
+  const attemptsByQuiz = new Map((typeof myQuizAttempts !== 'undefined' ? myQuizAttempts : []).map(a => [String(a.quiz_id), a]));
+  const visibleQuizzes = allQuizzes.filter(q => {
+    if (!q || q.isDemo) return false;
+    const status = String(q.status || '').toLowerCase();
+    const isAvailable = ['active', 'approved', 'ongoing'].includes(status);
+    const isCompletedClosedQuiz = status === 'closed' && attemptsByQuiz.has(String(q.id));
+    if (!isAvailable && !isCompletedClosedQuiz) return false;
+    return typeof isQuizTargetedForStudent !== 'function' ||
+      isQuizTargetedForStudent(isCompletedClosedQuiz ? { ...q, status: 'active' } : q, CURRENT_PROFILE);
+  });
 
   const now = Date.now();
-  const items = visibleQuizzes.map((q, idx) => {
+  const items = visibleQuizzes.map(q => {
     let rawDue = q.dueDate || q.due_date;
     let dateObj = rawDue ? new Date(rawDue) : null;
-    if (!dateObj || isNaN(dateObj.getTime())) {
-      // Deterministic fallback based on created date or ID
-      const base = q.createdAt ? new Date(q.createdAt).getTime() : (q.created_at ? new Date(q.created_at).getTime() : (now - 86400000 * 2));
-      dateObj = new Date(base + ((idx % 7) * 2 + 1) * 86400000);
-      dateObj.setHours(19, 0, 0, 0);
-    }
+    if (dateObj && Number.isNaN(dateObj.getTime())) dateObj = null;
 
-    const dueMs = dateObj.getTime();
+    const dueMs = dateObj ? dateObj.getTime() : null;
     const isAttempted = attemptsByQuiz.has(String(q.id));
     const attempt = attemptsByQuiz.get(String(q.id));
-    const isOverdue = !isAttempted && (now > dueMs);
-    const isDueSoon = !isAttempted && !isOverdue;
+    const isOverdue = !isAttempted && dueMs !== null && now > dueMs;
+    const isDueSoon = !isAttempted && dueMs !== null && !isOverdue;
 
     // Time ago since the teacher posted it (for pending quizzes)
     const createdAtRaw = q.createdAt || q.created_at;
@@ -1631,18 +1662,13 @@ function renderStudentDeadlinesWidgetHTML() {
         else postTimeAgo = 'Just now';
       }
     }
-    if (!postTimeAgo) {
-      const pseudoHours = ((idx % 8) * 3 + 2);
-      postTimeAgo = pseudoHours >= 24 ? `${Math.floor(pseudoHours / 24)} days ago` : `${pseudoHours} hours ago`;
-    }
-
-    const dayNum = dateObj.getDate();
-    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-    const monthShort = dateObj.toLocaleDateString('en-US', { month: 'short' });
-    const monthLong = dateObj.toLocaleDateString('en-US', { month: 'long' });
-    const monthNum = dateObj.getMonth() + 1;
-    const time24 = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    const time12 = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const dayNum = dateObj ? dateObj.getDate() : null;
+    const dayName = dateObj ? dateObj.toLocaleDateString('en-US', { weekday: 'short' }) : '';
+    const monthShort = dateObj ? dateObj.toLocaleDateString('en-US', { month: 'short' }) : '';
+    const monthLong = dateObj ? dateObj.toLocaleDateString('en-US', { month: 'long' }) : '';
+    const monthNum = dateObj ? dateObj.getMonth() + 1 : null;
+    const time24 = dateObj ? dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+    const time12 = dateObj ? dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
 
     const status = isAttempted ? 'done' : (isOverdue ? 'overdue' : 'due');
     const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
@@ -1654,7 +1680,7 @@ function renderStudentDeadlinesWidgetHTML() {
       title: q.title || 'Academic Assessment',
       subject: q.subject || 'General Academic',
       lesson: q.lesson || '',
-      itemCount: (q.questions || []).length || 10,
+      itemCount: (q.questions || []).length,
       isInter,
       dueMs,
       dateObj,
@@ -1665,8 +1691,8 @@ function renderStudentDeadlinesWidgetHTML() {
       monthNum,
       time24,
       time12,
-      dueTag: `(due ${dayNum} ${monthShort}, ${time24})`,
-      fullDateStr: `${dayName}, ${monthShort} ${dayNum} · ${time12}`,
+      dueTag: dateObj ? `(due ${dayNum} ${monthShort}, ${time24})` : '',
+      fullDateStr: dateObj ? `${dayName}, ${monthShort} ${dayNum} · ${time12}` : '',
       postTimeAgo,
       status,
       isAttempted,
@@ -1698,11 +1724,12 @@ function renderStudentDeadlinesWidgetHTML() {
       type: i.isInter ? 'Interactive Quiz' : 'Quiz',
       typeClass: i.isInter ? 'interactive' : 'quiz',
       isInter: i.isInter,
-      deadline: `${i.monthShort} ${i.dayNum}, 2025 ${i.time12}`,
+      deadline: i.dateObj ? `${i.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${i.time12}` : 'No due date',
       status: i.isAttempted ? 'Completed' : 'Pending',
       quizId: i.id,
       isCompleted: i.isAttempted,
       pct: i.pct,
+      dateObj: i.dateObj,
       monthNum: i.monthNum,
       monthShort: i.monthShort,
       monthLong: i.monthLong,
@@ -1710,140 +1737,7 @@ function renderStudentDeadlinesWidgetHTML() {
     };
   });
 
-  // Academic fallback items matching ELMS dashboard design
-  const defaultTasks = [
-    {
-      id: 'task-cyber',
-      subject: 'Cyber security',
-      icon: '🛡️',
-      iconBg: '#2563eb',
-      title: 'Quiz 1 - Module 3',
-      type: 'Quiz',
-      typeClass: 'quiz',
-      isInter: false,
-      deadline: 'Sep 5, 2025 10:00 AM',
-      monthNum: 9,
-      monthShort: 'Sep',
-      monthLong: 'September',
-      dueMs: new Date('2025-09-05T10:00:00').getTime(),
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('cyber'))?.id || (allQuizzes[0]?.id || null)
-    },
-    {
-      id: 'task-math',
-      subject: 'General Mathematics',
-      icon: '∑',
-      iconBg: '#7c3aed',
-      title: 'Activity 2 - Problem Set',
-      type: 'Assignment',
-      typeClass: 'assignment',
-      isInter: false,
-      deadline: 'Sep 6, 2025 11:59 PM',
-      monthNum: 9,
-      monthShort: 'Sep',
-      monthLong: 'September',
-      dueMs: new Date('2025-09-06T23:59:00').getTime(),
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('math'))?.id || null
-    },
-    {
-      id: 'task-bio',
-      subject: 'General Biology 1',
-      icon: '🌿',
-      iconBg: '#16a34a',
-      title: 'Quiz 1 - Cell Structure',
-      type: 'Quiz',
-      typeClass: 'quiz',
-      isInter: false,
-      deadline: 'Sep 8, 2025 09:00 AM',
-      monthNum: 9,
-      monthShort: 'Sep',
-      monthLong: 'September',
-      dueMs: new Date('2025-09-08T09:00:00').getTime(),
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('bio'))?.id || null
-    },
-    {
-      id: 'task-precalc',
-      subject: 'Pre-Calculus',
-      icon: '📈',
-      iconBg: '#0284c7',
-      title: 'Performance Task',
-      type: 'Performance Task',
-      typeClass: 'performance',
-      isInter: false,
-      deadline: 'Sep 10, 2025 11:59 PM',
-      monthNum: 9,
-      monthShort: 'Sep',
-      monthLong: 'September',
-      dueMs: new Date('2025-09-10T23:59:00').getTime(),
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('calc'))?.id || null
-    },
-    {
-      id: 'task-oral',
-      subject: 'Oral Communication',
-      icon: '💬',
-      iconBg: '#0284c7',
-      title: 'Quiz 2 - Speech Analysis',
-      type: 'Interactive Quiz',
-      typeClass: 'interactive',
-      isInter: true,
-      deadline: 'Sep 12, 2025 10:00 AM',
-      monthNum: 9,
-      monthShort: 'Sep',
-      monthLong: 'September',
-      dueMs: new Date('2025-09-12T10:00:00').getTime(),
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('oral') || (q.subject || '').toLowerCase().includes('comm'))?.id || null
-    },
-    {
-      id: 'task-reading',
-      subject: 'Reading and Writing Skills',
-      icon: '📖',
-      iconBg: '#9333ea',
-      title: 'Activity 1 - Essay',
-      type: 'Assignment',
-      typeClass: 'assignment',
-      isInter: false,
-      deadline: 'Sep 15, 2025 11:59 PM',
-      monthNum: 9,
-      monthShort: 'Sep',
-      monthLong: 'September',
-      dueMs: new Date('2025-09-15T23:59:00').getTime(),
-      status: 'Pending',
-      quizId: allQuizzes.find(q => (q.subject || '').toLowerCase().includes('reading') || (q.subject || '').toLowerCase().includes('writing'))?.id || null
-    },
-    {
-      id: 'task-stem',
-      subject: 'STEM',
-      icon: '⚛️',
-      iconBg: '#06b6d4',
-      title: 'Project Submission',
-      type: 'Project',
-      typeClass: 'project',
-      isInter: false,
-      deadline: 'Sep 18, 2025 11:59 PM',
-      monthNum: 9,
-      monthShort: 'Sep',
-      monthLong: 'September',
-      dueMs: new Date('2025-09-18T23:59:00').getTime(),
-      status: 'Completed',
-      isCompleted: true,
-      quizId: allQuizzes.find(q => (q.strand || '').toLowerCase().includes('stem'))?.id || null
-    }
-  ];
-
-  // Update default tasks if user has taken any linked quiz
-  defaultTasks.forEach(dt => {
-    if (dt.quizId && attemptsByQuiz.has(String(dt.quizId))) {
-      dt.status = 'Completed';
-      dt.isCompleted = true;
-    }
-  });
-
-  // All combined tasks
-  const allCombinedTasks = [...liveQuizTasks, ...defaultTasks];
+  const allCombinedTasks = liveQuizTasks;
   const pendingTasksCount = allCombinedTasks.filter(t => (t.status || '').toLowerCase() === 'pending').length;
   const totalTasksCount = allCombinedTasks.length;
 
@@ -1894,19 +1788,7 @@ function renderStudentDeadlinesWidgetHTML() {
   });
 
   // Unique Subject options
-  const subjectOptions = [
-    'Cyber security',
-    'General Mathematics',
-    'General Biology 1',
-    'Pre-Calculus',
-    'General Physics 1',
-    'General Chemistry 1',
-    'Empowerment Technologies (ICT)',
-    'Earth and Life Science',
-    'Oral Communication',
-    'Reading and Writing Skills',
-    'STEM'
-  ];
+  const subjectOptions = [];
   allCombinedTasks.forEach(t => {
     if (t.subject && !subjectOptions.some(s => s.toLowerCase() === t.subject.toLowerCase())) {
       subjectOptions.push(t.subject);
@@ -1914,12 +1796,7 @@ function renderStudentDeadlinesWidgetHTML() {
   });
 
   // Month options
-  const monthOptions = [
-    { val: '9', label: 'September 2025' },
-    { val: '10', label: 'October 2025' },
-    { val: '11', label: 'November 2025' },
-    { val: '12', label: 'December 2025' }
-  ];
+  const monthOptions = [];
   allCombinedTasks.forEach(t => {
     if (t.monthNum && !monthOptions.some(m => m.val === String(t.monthNum))) {
       monthOptions.push({
@@ -2007,7 +1884,7 @@ function renderStudentDeadlinesWidgetHTML() {
                 No tasks or quizzes found matching your filters.
               </td>
             </tr>
-          ` : displayTasks.slice(0, 10).map(t => {
+          ` : displayTasks.map(t => {
             const clickHandler = t.quizId
               ? (t.isCompleted ? `openReviewAttempt('${t.quizId}')` : `openTakeQuizModal('${t.quizId}')`)
               : `showToast('Assessment details for ${escHtml(t.title)}', 'info')`;
@@ -2068,19 +1945,24 @@ function studentPage(page) {
     case 'dashboard': {
       const mySubjects = [...new Set(materialsData.map(m => m.subject).filter(Boolean))];
       const attemptedQuizIds = new Set(myQuizAttempts.map(a => a.quiz_id));
+      const now = Date.now();
       const availableQuizzes = customQuizzes.filter(q =>
-        !attemptedQuizIds.has(q.id) && (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
+        ['active', 'approved', 'ongoing'].includes(String(q.status || '').toLowerCase()) &&
+        !q.isDemo &&
+        !attemptedQuizIds.has(String(q.id)) &&
+        (!(q.dueDate || q.due_date) || !Number.isFinite(new Date(q.dueDate || q.due_date).getTime()) || new Date(q.dueDate || q.due_date).getTime() >= now) &&
+        (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
       );
       const latestAttempt = myQuizAttempts[0] || null;
       const latestQuizTitle = latestAttempt ? (customQuizzes.find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
       const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : 63;
 
-      const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function' 
+      const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function'
         ? getStudentDashboardSubjects('enrolled').length
-        : 14;
+        : 0;
 
-      const completedQuizzesCount = myQuizAttempts.length || 7;
-      const pendingQuizzesCount = availableQuizzes.length || 9;
+      const completedQuizzesCount = myQuizAttempts.length;
+      const pendingQuizzesCount = availableQuizzes.length;
       const totalQuizzesTracked = completedQuizzesCount + pendingQuizzesCount;
       const progressPct = totalQuizzesTracked > 0 ? Math.round((completedQuizzesCount / totalQuizzesTracked) * 100) : 44;
       const C = 238.76;
@@ -2090,7 +1972,8 @@ function studentPage(page) {
 
       const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
       const readAnc = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
-      const unreadCount = Math.max(3, allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft).length - readAnc.size);
+      const activeAnnouncements = allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft && !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()));
+      const unreadCount = activeAnnouncements.filter(a => !readAnc.has(String(a.id))).length;
 
       const studentName = (CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || 'Michael').trim();
       const firstName = studentName.split(/\s+/)[0] || 'Michael';
@@ -2139,7 +2022,7 @@ function studentPage(page) {
           </div>
           <div class="stat-card-info">
             <div class="stat-card-label">Enrolled Subjects</div>
-            <div class="stat-card-num blue">${enrolledCoursesCount || 14}</div>
+            <div class="stat-card-num blue">${enrolledCoursesCount}</div>
             <div class="stat-card-desc">Across all your courses</div>
           </div>
           <span class="stat-card-arrow">›</span>
@@ -2151,7 +2034,7 @@ function studentPage(page) {
           </div>
           <div class="stat-card-info">
             <div class="stat-card-label">Available Quizzes</div>
-            <div class="stat-card-num orange">${availableQuizzes.length || 9}</div>
+            <div class="stat-card-num orange">${availableQuizzes.length}</div>
             <div class="stat-card-desc">New test material waiting</div>
           </div>
           <span class="stat-card-arrow">›</span>
