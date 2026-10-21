@@ -4240,7 +4240,7 @@ function adminPage(page) {
           id: m.id,
           subject: m.subject || m.course_name || 'General Subject',
           uploader: uploader,
-          type: (m.content_type || m.type || 'Handout').toUpperCase(),
+          type: (m.content_type && m.content_type.toLowerCase().includes('quiz') ? 'QUIZ' : (m.file_type && m.file_type.includes('quiz') ? 'QUIZ' : 'MATERIAL')),
           time: formatTimeAgo(m.created_at) || 'Recent',
           status: isApp ? 'Approved' : 'Pending',
           statusBg: isApp ? '#dcfce7' : '#fef3c7',
@@ -4311,6 +4311,33 @@ function adminPage(page) {
         { label: 'Quiz submissions & approval', date: 'Feb 14', icon: '📝', color: '#dc2626' },
         { label: 'Midterm grade reporting', date: 'Feb 20', icon: '📊', color: '#059669' }
       ];
+
+      // Dashboard Approval Queue Pagination state
+      if (typeof window.dashApprovalPage === 'undefined') {
+        window.dashApprovalPage = 1;
+      }
+      const queuePageSize = 3;
+      const totalQueuePages = Math.max(1, Math.ceil(pendingApprovalList.length / queuePageSize));
+      if (window.dashApprovalPage > totalQueuePages) window.dashApprovalPage = totalQueuePages;
+      if (window.dashApprovalPage < 1) window.dashApprovalPage = 1;
+      const currentQueuePage = window.dashApprovalPage;
+      const queueOffset = (currentQueuePage - 1) * queuePageSize;
+      const pagedPendingList = pendingApprovalList.slice(queueOffset, queueOffset + queuePageSize);
+
+      if (typeof window.setDashApprovalPage !== 'function') {
+        window.setDashApprovalPage = function(delta) {
+          const allEntries = typeof approvalEntries === 'function' ? approvalEntries() : [];
+          const pending = allEntries.filter(e => e.status === 'pending');
+          const totalPages = Math.max(1, Math.ceil(pending.length / 3));
+          let nextP = (window.dashApprovalPage || 1) + delta;
+          if (nextP < 1) nextP = 1;
+          if (nextP > totalPages) nextP = totalPages;
+          window.dashApprovalPage = nextP;
+          if (typeof renderPage === 'function') {
+            renderPage('dashboard');
+          }
+        };
+      }
 
       const recentApproved = [
         ...materialsData.filter(m => m.status === 'approved').map(m => ({
@@ -4446,68 +4473,114 @@ function adminPage(page) {
       <div class="admin-dashboard-split" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 460px), 1fr));gap:20px;align-items:start;margin-bottom:22px;">
         
         <!-- PENDING APPROVAL QUEUE CARD -->
-        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <div style="width:34px;height:34px;border-radius:10px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:16px;">
-                🚨
+        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:space-between;">
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div style="width:34px;height:34px;border-radius:10px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:16px;">
+                  🚨
+                </div>
+                <div>
+                  <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Pending Approval Queue</h3>
+                  <span style="font-size:11.5px;color:var(--text-muted);">${totalPending} items awaiting administrative review</span>
+                </div>
               </div>
-              <div>
-                <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Pending Approval Queue</h3>
-                <span style="font-size:11.5px;color:var(--text-muted);">${totalPending} items awaiting administrative review</span>
+              <div style="display:inline-flex;align-items:center;gap:10px;">
+                ${totalQueuePages > 1 ? `
+                  <div style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;padding:3px 8px;border-radius:20px;border:1px solid #e2e8f0;">
+                    <button type="button" class="dash-circle-arrow" onclick="setDashApprovalPage(-1)" ${currentQueuePage <= 1 ? 'disabled style="opacity:0.35;cursor:not-allowed;"' : 'style="cursor:pointer;"'} aria-label="Previous page">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <span style="font-size:11px;font-weight:700;color:#334155;min-width:30px;text-align:center;">${currentQueuePage}/${totalQueuePages}</span>
+                    <button type="button" class="dash-circle-arrow" onclick="setDashApprovalPage(1)" ${currentQueuePage >= totalQueuePages ? 'disabled style="opacity:0.35;cursor:not-allowed;"' : 'style="cursor:pointer;"'} aria-label="Next page">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                  </div>
+                ` : ''}
+                <a href="javascript:void(0)" onclick="renderPage('approval')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                  Open Queue (${totalPending}) &rarr;
+                </a>
               </div>
             </div>
-            <a href="javascript:void(0)" onclick="renderPage('approval')" style="font-size:12.5px;font-weight:700;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
-              Open Queue (${totalPending}) &rarr;
-            </a>
-          </div>
 
-          ${pendingApprovalList.length ? `
-            <div style="display:flex;flex-direction:column;gap:10px;">
-              ${pendingApprovalList.slice(0, 4).map(item => {
-                const itemKind = item.kind || 'material';
-                const isQuiz = itemKind === 'quiz';
-                const args = escHtml(JSON.stringify(itemKind) + ',' + JSON.stringify(String(item.id)));
-                return `
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;gap:12px;flex-wrap:wrap;">
-                  <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
-                    <div style="width:36px;height:36px;border-radius:8px;background:${isQuiz ? '#ede9fe' : '#eff6ff'};color:${isQuiz ? '#7c3aed' : 'var(--blue)'};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">
-                      ${isQuiz ? '📝' : '📄'}
-                    </div>
-                    <div style="min-width:0;">
-                      <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                        ${escHtml(item.title)}
-                      </h4>
-                      <div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                        <span style="background:${isQuiz ? '#ede9fe' : '#e0f2fe'};color:${isQuiz ? '#6d28d9' : '#0369a1'};padding:1px 6px;border-radius:4px;font-weight:700;font-size:10.5px;">${escHtml(item.type || (isQuiz ? 'Quiz' : 'Handout'))}</span>
-                        <span>&middot;</span>
-                        <span>By <strong>${escHtml(item.name || 'Haven Faculty')}</strong></span>
-                        <span>&middot;</span>
-                        <span>${item.date ? new Date(item.date).toLocaleDateString() : 'Recent'}</span>
+            ${pagedPendingList.length ? `
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                ${pagedPendingList.map(item => {
+                  const itemKind = item.kind || 'material';
+                  const isQuiz = itemKind === 'quiz';
+                  const args = escHtml(JSON.stringify(itemKind) + ',' + JSON.stringify(String(item.id)));
+                  return `
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;gap:12px;flex-wrap:wrap;">
+                    <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
+                      <div style="width:36px;height:36px;border-radius:8px;background:${isQuiz ? '#ede9fe' : '#eff6ff'};color:${isQuiz ? '#7c3aed' : 'var(--blue)'};display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">
+                        ${isQuiz ? '📝' : '📄'}
+                      </div>
+                      <div style="min-width:0;">
+                        <h4 style="font-size:13.5px;font-weight:700;color:#0f172a;margin:0 0 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                          ${escHtml(item.title)}
+                        </h4>
+                        <div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                          <span style="background:${isQuiz ? '#ede9fe' : '#e0f2fe'};color:${isQuiz ? '#6d28d9' : '#0369a1'};padding:1px 6px;border-radius:4px;font-weight:700;font-size:10.5px;">${isQuiz ? 'Quiz' : 'Material'}</span>
+                          <span>&middot;</span>
+                          <span>By <strong>${escHtml(item.name || 'Haven Faculty')}</strong></span>
+                          <span>&middot;</span>
+                          <span>${item.date ? new Date(item.date).toLocaleDateString() : 'Recent'}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:6px;">
-                    <button class="table-act-btn take" style="padding:5px 10px;font-size:11.5px;white-space:nowrap;" onclick="reviewApprovalEntry(${args})">
-                      Review
-                    </button>
-                    <button class="table-act-btn" style="background:#059669;color:#fff;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, true); renderPage('dashboard');">
-                      Approve
-                    </button>
-                    <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, false); renderPage('dashboard');">
-                      Reject
-                    </button>
-                  </div>
-                </div>`;
-              }).join('')}
-            </div>
-          ` : `
-            <div style="text-align:center;padding:26px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
-              <span style="font-size:32px;display:block;margin-bottom:6px;">✅</span>
-              <strong style="font-size:13.5px;color:#0f172a;display:block;margin-bottom:3px;">Approval Queue is Clean</strong>
-              <p style="font-size:12px;color:var(--text-muted);margin:0;">No instructional materials or quizzes currently awaiting administrative sign-off.</p>
-            </div>
-          `}
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <button class="table-act-btn take" style="padding:5px 10px;font-size:11.5px;white-space:nowrap;" onclick="reviewApprovalEntry(${args})">
+                        Review
+                      </button>
+                      <button class="table-act-btn" style="background:#059669;color:#fff;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, true); renderPage('dashboard');">
+                        Approve
+                      </button>
+                      <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:5px 10px;font-size:11.5px;font-weight:700;white-space:nowrap;" onclick="runApprovalAction(${args}, false); renderPage('dashboard');">
+                        Reject
+                      </button>
+                    </div>
+                  </div>`;
+                }).join('')}
+              </div>
+            ` : `
+              <div style="text-align:center;padding:20px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
+                <span style="font-size:26px;display:block;margin-bottom:4px;">✅</span>
+                <strong style="font-size:13px;color:#0f172a;display:block;margin-bottom:2px;">Approval Queue is Clear</strong>
+                <p style="font-size:11.5px;color:var(--text-muted);margin:0;">No instructional materials or quizzes currently awaiting administrative review.</p>
+              </div>
+            `}
+
+            ${pagedPendingList.length < 3 && recentApproved.length ? `
+              <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #cbd5e1;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                  <span style="font-size:11.5px;font-weight:700;color:var(--text-muted);display:inline-flex;align-items:center;gap:6px;">
+                    <span>📋</span> Recently Approved &middot; Live in Portal
+                  </span>
+                  <a href="javascript:void(0)" onclick="setApprovalView('tab','approved'); renderPage('approval');" style="font-size:11px;font-weight:700;color:var(--blue);text-decoration:none;">View All &rarr;</a>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  ${recentApproved.slice(0, Math.max(1, 3 - pagedPendingList.length)).map(item => `
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;gap:8px;">
+                      <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+                        <span style="font-size:14px;flex-shrink:0;">${item.kind === 'quiz' ? '📝' : '📄'}</span>
+                        <div style="min-width:0;">
+                          <div style="font-size:12.5px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                            ${escHtml(item.title)}
+                          </div>
+                          <div style="font-size:11px;color:#64748b;">
+                            <strong style="color:${item.kind === 'quiz' ? '#6d28d9' : '#0369a1'};">${item.kind === 'quiz' ? 'Quiz' : 'Material'}</strong> &middot; By ${escHtml(item.by || 'Teacher')}
+                          </div>
+                        </div>
+                      </div>
+                      <span style="font-size:10px;font-weight:800;background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:5px;border:1px solid #86efac;white-space:nowrap;">
+                        Approved
+                      </span>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
         </div>
 
         <!-- INSTITUTIONAL BULLETINS HUB -->

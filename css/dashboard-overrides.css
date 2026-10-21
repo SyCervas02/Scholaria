@@ -4396,3 +4396,31 @@ button,
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Dashboard Approval Queue Circular Navigation Arrows */
+.dash-circle-arrow {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #1e293b;
+  color: #ffffff;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.dash-circle-arrow:hover:not(:disabled) {
+  background: #0284c7;
+  transform: scale(1.08);
+}
+
+.dash-circle-arrow:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

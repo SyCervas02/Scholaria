@@ -3096,9 +3096,9 @@ function renderMaterialsManagerPage(role) {
         <div class="mm-filters-group">
           <!-- Content Type (All content types, Quiz, Material) -->
           <select class="mm-filter-select" onchange="setMaterialsContentTypeFilter(this.value)">
-            <option value="" ${!materialsContentTypeFilter ? 'selected' : ''}>All content types</option>
-            <option value="quiz" ${materialsContentTypeFilter === 'quiz' ? 'selected' : ''}>Quiz</option>
-            <option value="material" ${materialsContentTypeFilter === 'material' ? 'selected' : ''}>Material</option>
+            <option value="" ${!materialsContentTypeFilter ? 'selected' : ''}>All contents</option>
+            <option value="quiz" ${materialsContentTypeFilter === 'quiz' ? 'selected' : ''}>Quizzes</option>
+            <option value="material" ${materialsContentTypeFilter === 'material' ? 'selected' : ''}>Teacher Uploads</option>
           </select>
 
           <!-- Strands -->
@@ -3615,7 +3615,8 @@ function approvalIcon(name) {
     eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
     search: '<circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/>',
     dots: '<circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/>',
-    archive: '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>'
+    archive: '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
+    quiz: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>'
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.file}</svg>`;
 }
@@ -3636,7 +3637,7 @@ function approvalEntries() {
         id: m.id,
         kind: 'material',
         title: m.title || m.fileName || 'Untitled Material',
-        type: m.content_type || m.file_type || 'Material',
+        type: 'Material',
         subject: m.subject || 'General',
         name: m.uploaded_by_name || m.uploader_name || 'Teacher',
         date: m.created_at,
@@ -3655,7 +3656,7 @@ function approvalEntries() {
         id: q.id,
         kind: 'quiz',
         title: q.title || 'Untitled Quiz',
-        type: isInteractive ? 'Interactive Quiz' : 'Quiz',
+        type: 'Quiz',
         subject: q.subject || 'General',
         name: uploaderName,
         date: q.createdAt,
@@ -3691,7 +3692,7 @@ function renderApprovalMaterialRows() {
   const entries = approvalEntries();
   const counts = status => entries.filter(e => e.status === status).length;
   const query = approvalView.search.trim().toLowerCase();
-  const filtered = entries.filter(e => e.status === approvalView.tab && (!approvalView.type || e.type === approvalView.type) && (!approvalView.subject || e.subject === approvalView.subject) && (!query || `${e.title} ${e.name} ${e.subject}`.toLowerCase().includes(query)));
+  const filtered = entries.filter(e => { if (e.status !== approvalView.tab) return false; if (approvalView.type === 'Quiz' || approvalView.type === 'quiz') { if (e.kind !== 'quiz') return false; } else if (approvalView.type === 'Material' || approvalView.type === 'material') { if (e.kind !== 'material') return false; } else if (approvalView.type && e.type !== approvalView.type) { return false; } if (approvalView.subject && e.subject !== approvalView.subject) return false; if (query && !`${e.title} ${e.name} ${e.subject}`.toLowerCase().includes(query)) return false; return true; });
   const pages = Math.max(1, Math.ceil(filtered.length / 5));
   approvalView.page = Math.min(pages, Math.max(1, approvalView.page));
   const offset = (approvalView.page - 1) * 5;
@@ -3702,7 +3703,7 @@ function renderApprovalMaterialRows() {
     const isItemArchived = e.status === 'archived' || e.isArchived || approvalView.tab === 'archived';
     const archiveLabel = isItemArchived ? 'Unarchive' : 'Archive';
     return `<tr>
-      <td><div class="ca-content"><span class="ca-file ${e.kind}">${approvalIcon('file')}</span><div><strong>${escHtml(e.title)}</strong><small>${escHtml(e.type)} &middot; ${escHtml(e.subject)}</small></div></div></td>
+      <td><div class="ca-content"><span class="ca-file ${e.kind}">${approvalIcon(e.kind === 'quiz' ? 'quiz' : 'file')}</span><div><strong>${escHtml(e.title)}</strong><small><span style="display:inline-block;padding:1px 6px;border-radius:4px;font-weight:700;font-size:10.5px;background:${e.kind === 'quiz' ? '#ede9fe' : '#e0f2fe'};color:${e.kind === 'quiz' ? '#6d28d9' : '#0369a1'};">${e.kind === 'quiz' ? 'Quiz' : 'Material'}</span> &middot; ${escHtml(e.subject)}</small></div></div></td>
       <td><div class="ca-person"><span class="ca-avatar">${escHtml(initialsFor(e.name))}</span><div>${escHtml(e.name)}<small>Teacher</small></div></div></td>
       <td class="ca-date">${Number.isNaN(date.getTime()) ? '?' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
       <td>
@@ -3724,7 +3725,7 @@ function renderApprovalMaterialRows() {
     <div class="ca-banner"><h3>Approval Queue</h3><p>All materials and quizzes submitted by teachers require your approval before they become visible to students.</p></div>
     <div class="ca-stats">${[['pending','Pending review','clock'],['approved','Approved','check'],['revision','Needs revision','file']].map(([status,label,icon]) => `<div class="ca-stat ${status} ${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')" role="button" tabindex="0" title="Click to filter ${label}"><div class="ca-stat-icon">${approvalIcon(icon)}</div><div><span>${label}</span><strong>${counts(status)}</strong></div></div>`).join('')}</div>
     <div class="ca-panel"><div class="ca-tabs" aria-label="Submission status">${[['pending',`Pending (${counts('pending')})`],['approved','Approved'],['revision','Needs revision'],['archived',`Archive (${counts('archived')})`]].map(([status,label]) => `<button aria-pressed="${approvalView.tab === status}" class="${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')">${label}</button>`).join('')}</div>
-    <div class="ca-filters"><label class="ca-search">${approvalIcon('search')}<input id="caSearch" aria-label="Search submissions" placeholder="Search submissions..." value="${escHtml(approvalView.search)}" oninput="setApprovalView('search',this.value)"></label><select aria-label="Content type" onchange="setApprovalView('type',this.value)"><option value="">All content types</option>${options('type')}</select><select aria-label="Subject" onchange="setApprovalView('subject',this.value)"><option value="">All subjects</option>${options('subject')}</select></div>
+    <div class="ca-filters"><label class="ca-search">${approvalIcon('search')}<input id="caSearch" aria-label="Search submissions" placeholder="Search submissions..." value="${escHtml(approvalView.search)}" oninput="setApprovalView('search',this.value)"></label><select aria-label="Content type" onchange="setApprovalView('type',this.value)" style="border:1px solid #cbd5e1;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;color:#1e293b;background:#fff;outline:none;"><option value="" ${!approvalView.type ? 'selected' : ''}>All contents</option><option value="Quiz" ${approvalView.type === 'Quiz' || approvalView.type === 'quiz' ? 'selected' : ''}>Quizzes</option><option value="Material" ${approvalView.type === 'Material' || approvalView.type === 'material' ? 'selected' : ''}>Teacher Uploads</option></select><select aria-label="Subject" onchange="setApprovalView('subject',this.value)"><option value="">All subjects</option>${options('subject')}</select></div>
     <div class="ca-table-wrap"><table class="ca-table"><thead><tr><th scope="col">Content</th><th scope="col">Submitted by</th><th scope="col">Date submitted</th><th scope="col">Actions</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="ca-empty">No submissions found.</td></tr>'}</tbody></table></div>
     <div class="ca-footer"><span>Showing ${Math.min(5, filtered.length - offset)} of ${filtered.length} submissions</span><nav class="ca-pagination" aria-label="Submission pages">${approvalView.page > 1 ? `<button aria-label="Previous page" onclick="setApprovalView('page',${approvalView.page - 1})">&#8249;</button>` : ''}${Array.from({ length: Math.min(3, pages) }, (_, i) => Math.max(1, Math.min(approvalView.page - 1, pages - 2)) + i).map(page => `<button aria-label="Page ${page}" ${page === approvalView.page ? 'aria-current="page"' : ''} class="${page === approvalView.page ? 'active' : ''}" onclick="setApprovalView('page',${page})">${page}</button>`).join('')}<button aria-label="Next page" ${approvalView.page === pages ? 'disabled' : ''} onclick="setApprovalView('page',${approvalView.page + 1})">&#8250;</button></nav></div></div>`;
 }
