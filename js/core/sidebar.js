@@ -3166,105 +3166,60 @@ function studentPage(page) {
 function teacherPage(page) {
   switch(page) {
     case 'dashboard': {
-      const myMaterials = materialsData.filter(m => m.uploaded_by === CURRENT_PROFILE?.id || !m.uploaded_by || m.uploaded_by === CURRENT_PROFILE?.dbId);
-      const displayMaterials = myMaterials.length ? myMaterials : materialsData;
-      const myPendingMaterials = displayMaterials.filter(m => m.status === 'pending').length;
-      const myQuizzes = customQuizzes.filter(q => 
-        !q.createdBy || 
-        q.createdBy === CURRENT_PROFILE?.id || 
-        q.createdBy === CURRENT_PROFILE?.dbId || 
-        q.isDemo ||
-        ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
-      );
-      const displayQuizzes = myQuizzes.length ? myQuizzes : customQuizzes;
-      const myActiveQuizzes = displayQuizzes.filter(q => q.status === 'active');
-      const myStrands = (CURRENT_PROFILE?.subjects || CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
-      const recentMaterials = displayMaterials.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 3);
-
-      const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
-      const unreadCount = Math.max(0, allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft).length - (typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds().size : 0));
-
-      return `
-      <div class="welcome-banner">
-        <div class="banner-content">
-          <div class="welcome-text-box">
-            <h1>WELCOME BACK</h1>
-            <h2>Haven of Wisdom Academy — Teacher Portal</h2>
-          </div>
-          <div class="rainbow-trails"><div class="trail blue-trail"></div><div class="trail yellow-trail"></div></div>
-        </div>
-      </div>
-      <div class="card-grid">
-        <div class="stat-filter-card" onclick="renderPage('classrec')" style="cursor:pointer;">
-          <div class="ic-icon">${iconUsers()}</div>
-          <div class="ic-content">
-            <div class="ic-sub">My Classes</div>
-            <div class="ic-num">${myStrands.length || 3}</div>
-            <p>${myStrands.length ? escHtml(myStrands.join(', ')) : 'ICT, CS, TVL — Grade 11 & 12'}</p>
-          </div>
-        </div>
-        <div class="stat-filter-card" onclick="renderPage('materials')" style="cursor:pointer;">
-          <div class="ic-icon gold">${iconFolder()}</div>
-          <div class="ic-content">
-            <div class="ic-sub">Materials Uploaded</div>
-            <div class="ic-num gold">${myMaterials.length || 12}</div>
-            <p>${myPendingMaterials || 0} pending admin approval</p>
-          </div>
-        </div>
-        <div class="stat-filter-card" onclick="renderPage('quiz')" style="cursor:pointer;">
-          <div class="ic-icon green">${iconQuiz()}</div>
-          <div class="ic-content">
-            <div class="ic-sub">Active Quizzes</div>
-            <div class="ic-num green">${myActiveQuizzes.length}</div>
-            <p>${myQuizzes.length} total across all handled subjects</p>
-          </div>
-        </div>
-        <div class="stat-filter-card" onclick="renderPage('announcements')" style="cursor:pointer;border-color:${unreadCount > 0 ? '#fca5a5' : '#e2e8f0'};">
-          <div class="ic-icon" style="background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></div>
-          <div class="ic-content">
-            <div class="ic-sub">Unread News</div>
-            <div class="ic-num" style="color:#dc2626;">${unreadCount}</div>
-            <p>School announcements & events</p>
-          </div>
-        </div>
-      </div>
-      <div class="teacher-dashboard-split">
-      <div class="teacher-dashboard-main">
-      <div id="coursesWidgetContainer">
-        ${typeof renderCoursesWidgetHTML === 'function' ? renderCoursesWidgetHTML() : ''}
-      </div>
-      <div class="dashboard-assessments-panel">
-        <div class="section-hdr">
-          <h2>Active Quizzes & Assessments</h2>
-          <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
-        </div>
-        <div class="quiz-list">
-          ${myActiveQuizzes.length ? myActiveQuizzes.map(q => {
-            const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
-            return `
-            <div class="quiz-row">
-              <div class="qz-info">
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                  <h4>${escHtml(q.title)}</h4>
-                  ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;">🎮 Interactive</span>' : ''}
-                </div>
-                <span>${escHtml(q.meta || '')}</span>
-              </div>
-              <span class="status-pill ongoing">Active</span>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <button class="take-btn" style="padding:6px 12px;font-size:12px;" onclick="openTakeQuizModal('${q.id}')">Preview</button>
-                ${isInter ? `<button class="take-btn" style="padding:6px 12px;font-size:12px;background:linear-gradient(135deg,#0284c7,#8b5cf6);" onclick="openInteractiveQuiz('${q.id}')">🎮 Play</button>` : ''}
-                <button class="foot-btn-secondary" style="padding:6px 12px;font-size:12px;border-color:var(--blue);color:var(--blue);" onclick="setAnalysisQuiz('${q.id}')">📊 Analysis</button>
-                <button class="foot-btn-secondary" style="padding:6px 12px;font-size:12px;border-color:#f59e0b;color:#d97706;background:#fef3c7;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">🏆 Leaderboard</button>
-              </div>
-            </div>`;
-          }).join('')
-            : `<p style="padding:20px;color:var(--text-muted);font-size:13px;">No active quizzes right now. Create a new quiz in Quiz Manager to assign to your students.</p>`}
-        </div>
-      </div>
-      </div>
-      <aside class="teacher-dashboard-side">${renderDashboardQuickLinks('teacher')}</aside>
-      </div>`;
+      const demo = !!CURRENT_PROFILE?.is_demo;
+      const own = item => !item.uploaded_by || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(item.uploaded_by);
+      const materials = materialsData.filter(own);
+      const quizzes = customQuizzes.filter(q => (!q.isDemo || demo) && (!q.createdBy || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(q.createdBy)));
+      const active = quizzes.filter(q => q.status === 'active');
+      const news = (typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : []).filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft);
+      const read = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
+      const attempts = classRecAttemptsCache.filter(a => quizzes.some(q => String(q.id) === String(a.quiz_id)));
+      const strands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
+      const go = page => `renderPage('${page}')`;
+      const icon = (svg, tone='blue') => `<span class="td-icon td-${tone}">${svg}</span>`;
+      const empty = text => `<p class="td-empty">${text}</p>`;
+      const row = (title, sub, side='', tone='purple', svg=iconQuiz(), action='quiz') => `<button type="button" class="td-row" onclick="${go(action)}">${icon(svg,tone)}<span class="td-row-copy"><strong>${escHtml(title)}</strong><small>${escHtml(sub)}</small></span><span class="td-row-side">${side}</span></button>`;
+      const panel = (title, svg, content, page, cls='') => `<section class="td-panel ${cls}"><header>${icon(svg)}<h3>${title}</h3><button type="button" class="td-link" onclick="${go(page)}">View All</button></header>${content}</section>`;
+      const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
+      const metrics = [
+        ['My Classes',demo?2:strands.length,'Classes handled','classrec',iconUsers(),'blue'],
+        ['Total Students',demo?68:new Set(attempts.map(a=>a.student_id).filter(Boolean)).size,'Across all classes','classrec',iconUsers(),'green'],
+        ['Materials Uploaded',demo?12:materials.length,'This semester','materials',iconFolder(),'orange'],
+        ['Published Lessons',demo?8:materials.filter(m=>m.status==='approved').length,'Ready for students','materials',iconFolder(),'purple'],
+        ['Active Quizzes',demo?3:active.length,'Currently ongoing','quiz',iconQuiz(),'purple'],
+        ['Upcoming Deadlines',demo?5:active.filter(q=>{const t=new Date(q.dueDate||q.due_date).getTime()-Date.now();return t>=0&&t<=604800000;}).length,'Within 7 days','quiz',iconRecord(),'pink'],
+        ['Unread News',demo?2:news.filter(a=>!read.has(String(a.id))).length,'School announcements','announcements',iconAnnouncement(),'pink'],
+        ['Unread Messages',demo?7:'--','Students & parents','chats',iconChat(),'blue']
+      ];
+      const pending = demo ? [
+        ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
+        ['Reflection Paper','Komunikasyon at Pananaliksik - Grade 11 - HUMSS',5,'Feb 3, 2025'],
+        ['Group Project Report','Research in Daily Life - Grade 11 - STEM',2,'Feb 4, 2025'],
+        ['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM',4,'Feb 5, 2025']
+      ].map(r=>row(r[0],r[1],`<b>${r[2]}</b> submissions<small>Due: ${r[3]}</small>`)).join('') : empty('No submissions awaiting review.');
+      const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials')).join('') || empty('No materials uploaded yet.');
+      const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : news.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
+      const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : strands).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned.');
+      const assessments = demo ? [['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM'],['Essay: Role of Media in Society','Komunikasyon at Pananaliksik - Grade 11 - HUMSS'],['Quiz 1 - 21st Century Literature','Research in Daily Life - Grade 11 - STEM']].map(q=>row(q[0],q[1],'<em>Ongoing</em>')).join('') : active.slice(0,3).map(q=>row(q.title,q.subject||q.meta||'','<em>Ongoing</em>')).join('') || empty('No active quizzes right now.');
+      const eventItems = demo ? [
+        {title:'Faculty Meeting',detail:'All Teachers',when:'8:00 AM - 10:00 AM',date:'2025-02-03'},
+        {title:'Submission of Quarter 3 Grades',detail:'Faculty',when:'All Day',date:'2025-02-07'},
+        {title:'Parent-Teacher Conference',detail:'Grade 11 Level',when:'1:00 PM - 4:00 PM',date:'2025-02-10'},
+        {title:'Foundation Day',detail:'Whole School',when:'All Day',date:'2025-02-14'}
+      ] : news.filter(n=>n.category==='event' && new Date(n.event_date||n.eventDate)>=new Date(new Date().setHours(0,0,0,0))).map(n=>({title:n.title,detail:n.message||'',when:n.event_time||'',date:n.event_date||n.eventDate})).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,4);
+      const events = eventItems.map(e=>{const d=new Date(/^\d{4}-\d{2}-\d{2}$/.test(e.date)?e.date+'T00:00:00':e.date);const valid=!Number.isNaN(d.getTime());return `<button type="button" class="td-event" onclick="${go('announcements')}"><span class="td-event-date"><small>${valid?d.toLocaleDateString('en-US',{month:'short'}):''}</small><strong>${valid?d.getDate():''}</strong></span><span><strong>${escHtml(e.title)}</strong><small>${escHtml(e.detail)}</small><small>${escHtml(e.when)}</small></span></button>`;}).join('') || empty('No upcoming school events scheduled.');
+      return `<div class="teacher-reference-dashboard">
+        <section class="td-hero"><div><h1>WELCOME BACK</h1><h2>Haven of Wisdom Academy - Teacher Portal</h2><p>Here's what needs your attention today.</p></div><img src="assets/dashboard-books.svg" alt=""/><blockquote>&ldquo; Teaching is a work of heart.<br>Thank you for making a difference<br>in every student's journey. &rdquo;</blockquote></section>
+        <div class="td-metrics">${metrics.map(m=>`<button type="button" class="td-metric td-${m[5]}" onclick="${go(m[3])}">${icon(m[4],m[5])}<span><span class="td-label">${m[0]}</span><strong>${m[1]}</strong><small>${m[2]}</small></span></button>`).join('')}</div>
+        <div class="td-grid">
+          <section class="td-panel td-subjects"><div id="coursesWidgetContainer">${typeof renderCoursesWidgetHTML==='function'?renderCoursesWidgetHTML():empty('No subjects assigned.')}</div></section>
+          ${panel('Pending Submissions / To Review',iconRecord(),pending,'classrec','td-pending')}
+          ${panel('Upcoming School Events',iconCalendar(),events,'announcements','td-events')}
+          ${panel('My Class Sections',iconUsers(),sections,'classrec','td-sections')}
+          ${panel('Recently Added Materials',iconFolder(),recent,'materials','td-materials')}
+          ${panel('Latest Class Announcements',iconAnnouncement(),announcements,'announcements','td-announcements')}
+          ${panel('Active Quizzes & Assessments',iconQuiz(),`<button type="button" class="td-create" onclick="openQuizModal()">+ Create Quiz</button>${assessments}`,'quiz','td-assessments')}
+        </div></div>`;
     }
 
     case 'materials': return `
@@ -5765,7 +5720,7 @@ function renderPage(page) {
   if (!mainContent) return;
   mainContent.dataset.page = page;
   mainContent.innerHTML = getPageContent(ROLE, page);
-  if (page === 'dashboard') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
+  if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
 
