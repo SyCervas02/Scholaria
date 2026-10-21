@@ -982,6 +982,59 @@ function updateProfileNamePreview() {
   if (heroName) heroName.textContent = assembled || 'Your Full Name';
 }
 
+
+async function confirmPasswordChange() {
+  const button = document.getElementById('pfConfirmPasswordBtn');
+  const currentPassword = document.getElementById('pfCurrentPassword')?.value || '';
+  const newPassword = document.getElementById('pfNewPassword')?.value || '';
+  const confirmPassword = document.getElementById('pfConfirmPassword')?.value || '';
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    showToast('Enter your current password, new password, and confirmation to change your password.', 'error');
+    return;
+  }
+  if (newPassword.length < 6) {
+    showToast('New password must be at least 6 characters.', 'error');
+    document.getElementById('pfNewPassword')?.focus();
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast('New password and confirmation do not match.', 'error');
+    document.getElementById('pfConfirmPassword')?.focus();
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Updating...';
+  }
+  try {
+    const { data: authData, error: authUserError } = await db.auth.getUser();
+    const authEmail = authData?.user?.email || CURRENT_PROFILE.email;
+    if (authUserError || !authEmail) throw new Error('Could not verify the signed-in account.');
+
+    const { error: reauthError } = await db.auth.signInWithPassword({ email: authEmail, password: currentPassword });
+    if (reauthError) throw new Error('Current password is incorrect.');
+
+    const { error: passwordError } = await db.auth.updateUser({ password: newPassword });
+    if (passwordError) throw passwordError;
+
+    showToast('Password updated successfully', 'success');
+    document.getElementById('pfCurrentPassword').value = '';
+    document.getElementById('pfNewPassword').value = '';
+    document.getElementById('pfConfirmPassword').value = '';
+  } catch (error) {
+    console.warn('Password update error:', error);
+    showToast(error.message || 'Could not update password.', 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Confirm Password';
+    }
+  }
+}
+window.confirmPasswordChange = confirmPasswordChange;
+
 async function saveUserProfile() {
   const saveBtn = document.getElementById('pfSaveBtn');
   if (saveBtn) {
@@ -1486,19 +1539,20 @@ function buildProfilePage(role) {
           </div>
 
           <div class="pf-field">
-            <label>Update Password</label>
-            <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
-            <span style="font-size:11px;color:var(--text-muted);">Leave empty to keep your existing login password</span>
+            <label for="pfCurrentPassword">Current Password</label>
+            <input type="password" id="pfCurrentPassword" placeholder="Enter current password" autocomplete="current-password" />
           </div>
-
-          <div style="padding-top:12px;border-top:1px solid #f1f5f9;margin-top:4px;">
-            <label style="font-size:11.5px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Two-Factor Authentication (2FA)</label>
-            <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:12px;line-height:1.4;">
-              Secure your account using time-based one-time passwords (TOTP) from <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong>.
-            </p>
-            <button type="button" class="foot-btn-secondary" style="border-color:var(--blue);color:var(--blue);display:inline-flex;align-items:center;gap:6px;width:100%;justify-content:center;height:38px;" onclick="openTwoFactorModal()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              Configure Authenticator 2FA
+          <div class="pf-field">
+            <label for="pfNewPassword">New Password</label>
+            <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
+          </div>
+          <div class="pf-field">
+            <label for="pfConfirmPassword">Confirm New Password</label>
+            <input type="password" id="pfConfirmPassword" placeholder="Confirm new password" autocomplete="new-password" />
+          </div>
+          <div style="margin-top:10px;">
+            <button type="button" id="pfConfirmPasswordBtn" class="foot-btn-secondary" style="width:100%;justify-content:center;height:38px;" onclick="confirmPasswordChange()">
+              Confirm Password
             </button>
           </div>
         </div>
@@ -2290,10 +2344,10 @@ function studentPage(page) {
 
       const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function' 
         ? getStudentDashboardSubjects('enrolled').length
-        : 14;
+        : 0;
 
-      const completedQuizzesCount = myQuizAttempts.length || 7;
-      const pendingQuizzesCount = availableQuizzes.length || 9;
+      const completedQuizzesCount = myQuizAttempts.length;
+      const pendingQuizzesCount = availableQuizzes.length;
       const totalQuizzesTracked = completedQuizzesCount + pendingQuizzesCount;
       const progressPct = totalQuizzesTracked > 0 ? Math.round((completedQuizzesCount / totalQuizzesTracked) * 100) : 44;
       const C = 238.76;
@@ -2352,7 +2406,7 @@ function studentPage(page) {
           </div>
           <div class="stat-card-info">
             <div class="stat-card-label">Enrolled Subjects</div>
-            <div class="stat-card-num blue">${enrolledCoursesCount || 14}</div>
+            <div class="stat-card-num blue">${enrolledCoursesCount}</div>
             <div class="stat-card-desc">Across all your courses</div>
           </div>
           <span class="stat-card-arrow">›</span>
@@ -2364,7 +2418,7 @@ function studentPage(page) {
           </div>
           <div class="stat-card-info">
             <div class="stat-card-label">Available Quizzes</div>
-            <div class="stat-card-num orange">${availableQuizzes.length || 9}</div>
+            <div class="stat-card-num orange">${availableQuizzes.length}</div>
             <div class="stat-card-desc">New test material waiting</div>
           </div>
           <span class="stat-card-arrow">›</span>
