@@ -704,6 +704,31 @@ body { background: #f1f7ff; }
 .admin-reference-dashboard .ad-acc-tile.inactive { border-color: #ffd9d9; background: #fff2f2; color: #e44444; }
 .admin-reference-dashboard .ad-acc-num { font-size: 18px; font-weight: 800; }
 .admin-reference-dashboard .ad-acc-lbl { font-size: 10px; font-weight: 700; }
+
+/* My Materials category, semester, and search controls share a single aligned row. */
+.main[data-page="materials"] .student-materials-filter-row { align-items: center; }
+.main[data-page="materials"] .student-materials-filter-select {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 34px 0 12px;
+  border: 1px solid #dce7f5;
+  border-radius: 10px;
+  color: #29466d;
+  background: #fff;
+  font: 600 12px Inter, sans-serif;
+  box-shadow: 0 1px 2px #173b7908;
+}
+.main[data-page="materials"] .student-materials-filter-select:focus { outline: 2px solid #b9d2ff; border-color: #74a8ff; }
+.main[data-page="materials"] .student-materials-search-wrap { align-self: center; }
+@media (max-width: 820px) {
+  .main[data-page="materials"] .student-materials-filter-row { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .main[data-page="materials"] .student-materials-search-wrap { grid-column: 1 / -1; }
+}
+@media (max-width: 520px) {
+  .main[data-page="materials"] .student-materials-filter-row { grid-template-columns: minmax(0, 1fr) !important; }
+  .main[data-page="materials"] .student-materials-search-wrap { grid-column: auto; }
+}
 @container dashboard (max-width: 1100px) {
   .admin-reference-dashboard .ad-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-reference-dashboard .ad-middle-grid,
@@ -828,3 +853,49 @@ body { background: #f1f7ff; }
 .admin-reference-dashboard .ad-mat-table th,
 .admin-reference-dashboard .ad-mat-table td { font-size: 12px; }
 .admin-reference-dashboard .ad-user-actions-row button { font-size: 12px; }
+
+/* Visual-only port of symon_branch's admin dashboard layout and palette. */
+.admin-reference-dashboard { gap: 16px; color: #0f172a; }
+.admin-reference-dashboard .ad-hero {
+  min-height: 118px;
+  padding: 18px 28px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0284c7 100%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .16);
+}
+.admin-reference-dashboard .ad-hero h1 { color: #fff; font-size: 25px; font-weight: 800; }
+.admin-reference-dashboard .ad-hero h2 { color: #f1f5f9; font-size: 16px; font-weight: 700; }
+.admin-reference-dashboard .ad-hero-pill { color: #7dd3fc; background: rgba(255,255,255,.12); }
+.admin-reference-dashboard .ad-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.admin-reference-dashboard .ad-m-card {
+  min-height: 116px;
+  padding: 16px 18px;
+  border: 1.5px solid #e8eef8;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .045);
+}
+.admin-reference-dashboard .ad-m-card:hover { border-color: #93c5fd; box-shadow: 0 6px 18px rgba(15, 23, 42, .08); }
+.admin-reference-dashboard .ad-primary-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; }
+.admin-reference-dashboard .ad-middle-grid,
+.admin-reference-dashboard .ad-bottom-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.admin-reference-dashboard .ad-panel {
+  padding: 20px;
+  border: 1.5px solid #e8eef8;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 3px 14px rgba(15, 23, 42, .055);
+}
+.admin-reference-dashboard .ad-panel h3 { color: #0f172a; }
+.admin-reference-dashboard .ad-panel-header p { color: #718096; }
+@container dashboard (max-width: 1180px) {
+  .admin-reference-dashboard .ad-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .admin-reference-dashboard .ad-middle-grid,
+  .admin-reference-dashboard .ad-bottom-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container dashboard (max-width: 900px) {
+  .admin-reference-dashboard .ad-primary-grid,
+  .admin-reference-dashboard .ad-middle-grid,
+  .admin-reference-dashboard .ad-bottom-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-reference-dashboard .ad-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

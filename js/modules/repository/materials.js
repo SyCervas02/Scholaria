@@ -2196,6 +2196,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
         return `
           <div class="subject-folder-card"
                data-track="${escHtml((course.track || 'specialized').toLowerCase())}"
+               data-semester="${/^(1st|first)/i.test(course.semester || '') ? 'first' : (/^(2nd|second)/i.test(course.semester || '') ? 'second' : 'other')}"
                data-search="${escHtml(searchKeywords)}"
                onclick="setActiveSubjectMaterials('${course.id}', '${CURRENT_PROFILE?.section || 'Section A'}')"
                title="Open ${escHtml(course.title)} Workspace">
@@ -2232,10 +2233,11 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
 
 // ── STUDENT COMPILATION HUB HTML ──
 function renderStudentMaterialsHubHTML(enrolledCourses, studentStrand) {
-  const specializedCount = enrolledCourses.filter(c => c.track === 'Specialized').length;
-  const coreCount = enrolledCourses.filter(c => c.track === 'Core').length;
-  const appliedCount = enrolledCourses.filter(c => c.track === 'Applied').length;
-  const electiveCount = enrolledCourses.filter(c => c.track === 'Elective').length;
+  const semesterKey = course => /^(1st|first)/i.test(course.semester || '') ? 'first' : (/^(2nd|second)/i.test(course.semester || '') ? 'second' : 'other');
+  const countForFilter = (track, semester) => enrolledCourses.filter(course =>
+    (track === 'all' || String(course.track || '').toLowerCase() === track) &&
+    (semester === 'all' || semesterKey(course) === semester)
+  ).length;
 
   return `
   <div class="materials-page-container">
@@ -2255,26 +2257,21 @@ function renderStudentMaterialsHubHTML(enrolledCourses, studentStrand) {
     </div>
 
     <!-- 2. TRACK FILTERS & LIVE SEARCH -->
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
-      <div class="subject-chips-bar" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <button class="subject-chip ${(!studentMatTrackFilter || studentMatTrackFilter === 'all') ? 'active' : ''}" data-track="all" onclick="setStudentMatTrack('all')" style="cursor:pointer;">
-          All ${escHtml(studentStrand)} Subjects <span class="sc-badge">${enrolledCourses.length}</span>
-        </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Specialized' ? 'active' : ''}" data-track="Specialized" onclick="setStudentMatTrack('Specialized')" style="cursor:pointer;">
-          Specialized <span class="sc-badge">${specializedCount}</span>
-        </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Core' ? 'active' : ''}" data-track="Core" onclick="setStudentMatTrack('Core')" style="cursor:pointer;">
-          Core <span class="sc-badge">${coreCount}</span>
-        </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Applied' ? 'active' : ''}" data-track="Applied" onclick="setStudentMatTrack('Applied')" style="cursor:pointer;">
-          Applied <span class="sc-badge">${appliedCount}</span>
-        </button>
-        <button class="subject-chip ${studentMatTrackFilter === 'Elective' ? 'active' : ''}" data-track="Elective" onclick="setStudentMatTrack('Elective')" style="cursor:pointer;">
-          Elective <span class="sc-badge">${electiveCount}</span>
-        </button>
-      </div>
+    <div class="student-materials-filter-row" style="display:grid;grid-template-columns:minmax(190px,220px) minmax(190px,220px) minmax(280px,1fr);align-items:center;gap:10px;margin-bottom:20px;">
+      <select class="student-materials-filter-select" aria-label="Filter subjects by category" onchange="setStudentMatTrack(this.value)">
+        <option value="all" data-label="All ${escHtml(studentStrand)} Subjects" data-count-all="${countForFilter('all', 'all')}" data-count-first="${countForFilter('all', 'first')}" data-count-second="${countForFilter('all', 'second')}" ${!studentMatTrackFilter || studentMatTrackFilter === 'all' ? 'selected' : ''}>All ${escHtml(studentStrand)} Subjects (${countForFilter('all', studentMatSemesterFilter || 'all')})</option>
+        <option value="specialized" data-label="Specialized" data-count-all="${countForFilter('specialized', 'all')}" data-count-first="${countForFilter('specialized', 'first')}" data-count-second="${countForFilter('specialized', 'second')}" ${String(studentMatTrackFilter).toLowerCase() === 'specialized' ? 'selected' : ''}>Specialized (${countForFilter('specialized', studentMatSemesterFilter || 'all')})</option>
+        <option value="core" data-label="Core" data-count-all="${countForFilter('core', 'all')}" data-count-first="${countForFilter('core', 'first')}" data-count-second="${countForFilter('core', 'second')}" ${String(studentMatTrackFilter).toLowerCase() === 'core' ? 'selected' : ''}>Core (${countForFilter('core', studentMatSemesterFilter || 'all')})</option>
+        <option value="elective" data-label="Elective" data-count-all="${countForFilter('elective', 'all')}" data-count-first="${countForFilter('elective', 'first')}" data-count-second="${countForFilter('elective', 'second')}" ${String(studentMatTrackFilter).toLowerCase() === 'elective' ? 'selected' : ''}>Elective (${countForFilter('elective', studentMatSemesterFilter || 'all')})</option>
+        <option value="applied" data-label="Applied" data-count-all="${countForFilter('applied', 'all')}" data-count-first="${countForFilter('applied', 'first')}" data-count-second="${countForFilter('applied', 'second')}" ${String(studentMatTrackFilter).toLowerCase() === 'applied' ? 'selected' : ''}>Applied (${countForFilter('applied', studentMatSemesterFilter || 'all')})</option>
+      </select>
+      <select class="student-materials-filter-select" aria-label="Filter subjects by semester" onchange="setStudentMatSemester(this.value)">
+        <option value="all" ${studentMatSemesterFilter === 'all' ? 'selected' : ''}>All Semesters</option>
+        <option value="first" ${studentMatSemesterFilter === 'first' ? 'selected' : ''}>First Semester</option>
+        <option value="second" ${studentMatSemesterFilter === 'second' ? 'selected' : ''}>Second Semester</option>
+      </select>
 
-      <div class="materials-search-wrap" style="min-width:280px;max-width:360px;">
+      <div class="materials-search-wrap student-materials-search-wrap" style="min-width:0;width:100%;max-width:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#3b82f6;flex-shrink:0;">
           <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
         </svg>
@@ -2589,6 +2586,7 @@ function renderStudentMaterialsSplitContent() {
 
 // ── STUDENT MATERIALS STATE & REPOSITORY DATA (IMAGE 3) ──
 let studentMatTrackFilter = 'all';
+let studentMatSemesterFilter = 'all';
 let studentMatSearchQuery = '';
 let studentMatSubjectFilter = 'all';
 let studentMatTypeFilter = 'all';
@@ -2598,17 +2596,24 @@ let studentMatViewMode = 'grid';
 let studentMatViewAll = false;
 
 function setStudentMatTrack(track) {
-  studentMatTrackFilter = track;
-
-  // 1. Update active state of chip buttons without destroying page
-  document.querySelectorAll('.subject-chips-bar .subject-chip').forEach(btn => {
-    const t = btn.dataset.track;
-    if (t === track) btn.classList.add('active');
-    else btn.classList.remove('active');
-  });
-
-  // 2. Instant DOM filter (zero lag, 0ms)
+  studentMatTrackFilter = String(track || 'all').toLowerCase();
   applyStudentSubjectFilter();
+}
+
+function setStudentMatSemester(semester) {
+  studentMatSemesterFilter = semester || 'all';
+  updateStudentMatTrackOptionCounts();
+  applyStudentSubjectFilter();
+}
+
+function updateStudentMatTrackOptionCounts() {
+  const categorySelect = document.querySelector('.student-materials-filter-row select[aria-label="Filter subjects by category"]');
+  if (!categorySelect) return;
+  const countKey = studentMatSemesterFilter === 'first' ? 'First' : studentMatSemesterFilter === 'second' ? 'Second' : 'All';
+  Array.from(categorySelect.options).forEach(option => {
+    const count = option.dataset[`count${countKey}`];
+    if (count !== undefined) option.textContent = `${option.dataset.label} (${count})`;
+  });
 }
 
 function toggleStudentMatViewAll() {
@@ -2630,17 +2635,20 @@ function applyStudentSubjectFilter() {
 
   const sq = (studentMatSearchQuery || '').trim().toLowerCase();
   const track = (studentMatTrackFilter || 'all').toLowerCase();
+  const semester = studentMatSemesterFilter || 'all';
 
   let visibleCount = 0;
   for (let i = 0; i < cards.length; i++) {
     const card = cards[i];
     const cardTrack = (card.getAttribute('data-track') || '').toLowerCase();
+    const cardSemester = card.getAttribute('data-semester') || 'other';
     const cardSearch = (card.getAttribute('data-search') || '').toLowerCase();
 
     const matchTrack = (track === 'all' || cardTrack === track);
+    const matchSemester = (semester === 'all' || cardSemester === semester);
     const matchSearch = (!sq || cardSearch.indexOf(sq) !== -1);
 
-    if (matchTrack && matchSearch) {
+    if (matchTrack && matchSemester && matchSearch) {
       card.style.display = '';
       visibleCount++;
     } else {
@@ -2652,7 +2660,7 @@ function applyStudentSubjectFilter() {
     emptyState.style.display = (visibleCount === 0) ? 'flex' : 'none';
     if (emptyMsg) {
       emptyMsg.textContent = sq
-        ? `No subjects matched "${sq}" under the selected filter.`
+        ? `No subjects matched "${sq}" under the selected category and semester.`
         : `No subjects found under the selected category.`;
     }
   }
