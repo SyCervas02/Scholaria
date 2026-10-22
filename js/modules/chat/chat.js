@@ -4,12 +4,14 @@ let chatConversations = [];
 let activeConversationId = null;
 let seenMessageIds = new Set();
 let chatRealtimeChannel = null;
+let pendingChatAttachment = null;
 const newChatState = { selected: new Set(), search: '', loaded: false, directory: [] };
 const chatListState = { search: '', role: 'all' };
 
 function resetChatState() {
   chatConversations = [];
   activeConversationId = null;
+  pendingChatAttachment = null;
   seenMessageIds = new Set();
   newChatState.selected = new Set();
   newChatState.search = '';
@@ -272,6 +274,37 @@ function renderMessages(conv, msgs) {
 
 window._chatAttachmentMap = window._chatAttachmentMap || {};
 
+function getChatAttachmentUrl(attach) {
+  if (!attach) return '';
+  const serverBase = window.API_BASE || (window.location.origin.includes(':5500') ? 'http://localhost:3001' : window.location.origin);
+  if (attach.data) return attach.data;
+  if (!attach.url) return '';
+  try { return new URL(attach.url, serverBase).href; } catch (_) { return `${serverBase}${attach.url}`; }
+}
+
+function toggleChatAttachmentMenu(msgId) {
+  const menu = document.getElementById(`chatAttachmentMenu-${msgId}`);
+  if (!menu) return;
+  document.querySelectorAll('.chat-attachment-menu.open').forEach(el => {
+    if (el !== menu) el.classList.remove('open');
+  });
+  menu.classList.toggle('open');
+}
+
+function downloadChatAttachment(msgId) {
+  const entry = window._chatAttachmentMap?.[msgId];
+  if (!entry?.attach) return;
+  const a = document.createElement('a');
+  a.href = getChatAttachmentUrl(entry.attach);
+  a.download = entry.attach.name || 'attachment';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  document.getElementById(`chatAttachmentMenu-${msgId}`)?.classList.remove('open');
+}
+window.toggleChatAttachmentMenu = toggleChatAttachmentMenu;
+window.downloadChatAttachment = downloadChatAttachment;
+
 function messageBubbleHtml(conv, m) {
   const mine = String(m.sender_id) === String(CURRENT_PROFILE?.id);
   const showName = (conv.isGroup || !mine) && m.sender_name && !mine;
@@ -285,13 +318,19 @@ function messageBubbleHtml(conv, m) {
       created_at: m.created_at
     };
     const isImg = (attach.mime || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|svg)$/i.test(attach.name);
-    const serverBase = window.API_BASE || (window.location.origin.includes(':5500') ? 'http://localhost:3001' : window.location.origin);
-    const fileUrl = attach.url ? (attach.url.startsWith('http') ? attach.url : `${serverBase}${attach.url}`) : attach.data;
+    const fileUrl = getChatAttachmentUrl(attach);
 
     bodyHtml = `
-      <div class="chat-attachment-card" style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">
+      <div class="chat-attachment-card" style="position:relative;display:flex;flex-direction:column;gap:8px;padding:4px 0;">
+        <div class="chat-attachment-actions">
+          <button type="button" class="chat-attachment-more" onclick="event.stopPropagation();toggleChatAttachmentMenu('${m.id}')" aria-label="Attachment actions" title="Attachment actions">⋯</button>
+          <div class="chat-attachment-menu" id="chatAttachmentMenu-${m.id}">
+            <button type="button" onclick="event.stopPropagation();openChatAttachmentOverview('${m.id}');document.getElementById('chatAttachmentMenu-${m.id}')?.classList.remove('open')">Preview</button>
+            <button type="button" onclick="event.stopPropagation();downloadChatAttachment('${m.id}')">Download</button>
+          </div>
+        </div>
         ${isImg ? `
-          <img src="${fileUrl}" alt="${escHtml(attach.name)}" style="max-width:260px;max-height:220px;border-radius:10px;object-fit:cover;cursor:pointer;border:1px solid rgba(0,0,0,0.08);transition:transform 0.15s ease;" onclick="openChatAttachmentOverview('${m.id}')" title="Click to view overview" onmouseover="this.style.opacity='0.92'" onmouseout="this.style.opacity='1'"/>
+          <img src="${escHtml(fileUrl)}" alt="${escHtml(attach.name)}" onerror="this.closest('.chat-attachment-card')?.classList.add('image-load-failed')" style="max-width:260px;max-height:220px;border-radius:10px;object-fit:cover;border:1px solid rgba(0,0,0,0.08);"/>
         ` : ''}
         <div style="display:flex;align-items:center;gap:10px;background:rgba(${mine ? '255,255,255,0.18' : '0,0,0,0.06'});padding:8px 12px;border-radius:10px;min-width:210px;">
           <span style="font-size:22px;cursor:pointer;" onclick="openChatAttachmentOverview('${m.id}')" title="View overview">${isImg ? '🖼️' : '📄'}</span>
@@ -446,11 +485,19 @@ function renderInputArea() {
     return;
   }
 
+  const pendingAttachmentHtml = pendingChatAttachment ? `
+    <div class="cw-pending-attachment" title="Attachment ready to send">
+      <span class="cw-pending-attachment-icon">${pendingChatAttachment.mime?.startsWith('image/') ? '🖼️' : '📎'}</span>
+      <span class="cw-pending-attachment-name">${escHtml(pendingChatAttachment.name)}</span>
+      <span class="cw-pending-attachment-size">${formatChatFileSize(pendingChatAttachment.size)}</span>
+      <button type="button" class="cw-pending-attachment-remove" onclick="clearPendingChatAttachment()" aria-label="Remove attachment">×</button>
+    </div>` : '';
+
   area.innerHTML = `
-    <button class="cw-attachment-btn" id="cwAttachmentBtn" title="Attach file (max 5MB)" aria-label="Attach file" onclick="triggerChatAttachment()" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l8-8a4 4 0 0 1 5.7 5.7l-8 8a2 2 0 0 1-2.8-2.8L15 6"/></svg></button>
-    <input type="file" id="cwFileInput" style="display:none;" onchange="handleChatFileUpload(event)" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt">
-    <button class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" aria-label="Choose emoji" onclick="toggleEmojiPicker(event)" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 8h.01M16 8h.01"/></svg></button>
+    <button type="button" class="cw-attachment-btn" id="cwAttachmentBtn" title="Attach file (max 5MB)" aria-label="Attach file" onclick="event.preventDefault();event.stopPropagation();triggerChatAttachment()" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l8-8a4 4 0 0 1 5.7 5.7l-8 8a2 2 0 0 1-2.8-2.8L15 6"/></svg></button>
+    <button type="button" class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" aria-label="Choose emoji" onclick="toggleEmojiPicker(event)" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 8h.01M16 8h.01"/></svg></button>
     <div class="emoji-picker" id="cwEmojiPicker"></div>
+    ${pendingAttachmentHtml}
     <input type="text" id="cwInput" aria-label="Message" placeholder="${activeConversationId ? 'Type a message…' : 'Select a conversation to start messaging'}" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMsg();}" ${activeConversationId ? '' : 'disabled'}>
     <button class="cw-send" aria-label="Send message" onclick="sendChatMsg()" ${activeConversationId ? '' : 'disabled'}>${iconSend()}</button>`;
 }
@@ -469,12 +516,39 @@ function triggerChatAttachment() {
     showToast('Please select a conversation first', 'info');
     return;
   }
-  const fileInput = document.getElementById('cwFileInput');
+  let fileInput = document.getElementById('cwFilePicker');
+  if (!fileInput) {
+    fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'cwFilePicker';
+    fileInput.accept = 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
+    fileInput.style.display = 'none';
+    fileInput.addEventListener('change', handleChatFileUpload);
+    document.body.appendChild(fileInput);
+  }
   if (fileInput) {
+    const returnState = JSON.stringify({ conversationId: activeConversationId, page: 'chats' });
+    try {
+      localStorage.setItem('scholaria_chat_attachment_return', returnState);
+      sessionStorage.setItem('scholaria_chat_attachment_return', returnState);
+    } catch (_) {}
     fileInput.value = '';
     fileInput.click();
   }
 }
+
+function clearChatAttachmentReturnState() {
+  try {
+    localStorage.removeItem('scholaria_chat_attachment_return');
+    sessionStorage.removeItem('scholaria_chat_attachment_return');
+  } catch (_) {}
+}
+
+function clearPendingChatAttachment() {
+  pendingChatAttachment = null;
+  renderInputArea();
+}
+window.clearPendingChatAttachment = clearPendingChatAttachment;
 
 async function handleChatFileUpload(event) {
   const file = event.target.files && event.target.files[0];
@@ -487,6 +561,7 @@ async function handleChatFileUpload(event) {
     return;
   }
 
+  const messageDraft = document.getElementById('cwInput')?.value || '';
   showToast(`Uploading ${file.name}…`, 'info');
 
   const { data: { session } } = await db.auth.getSession();
@@ -509,6 +584,7 @@ async function handleChatFileUpload(event) {
 
       if (upRes.ok) {
         const upData = await upRes.json();
+        if (!upData.url) throw new Error('Upload completed without a file URL');
         attachmentPayload = JSON.stringify({
           type: 'attachment',
           name: upData.name || file.name,
@@ -519,6 +595,7 @@ async function handleChatFileUpload(event) {
       } else {
         const errJson = await upRes.json().catch(() => ({}));
         console.warn('Chat upload failed:', upRes.status, errJson);
+        showToast(errJson.error || 'Attachment upload failed. Please try again.', 'error');
       }
     } catch (upErr) {
       console.warn('Chat upload network error:', upErr);
@@ -528,7 +605,8 @@ async function handleChatFileUpload(event) {
   if (!attachmentPayload) {
     // If backend upload failed, fallback to inline base64 ONLY if small enough for messages_body_check (<= 4000 chars)
     if (file.size > 2500) {
-      showToast('Could not upload attachment. Please ensure Scholaria backend server is running.', 'error');
+      showToast('Could not upload attachment. The file server is unavailable, so it was not sent.', 'error');
+      clearChatAttachmentReturnState();
       event.target.value = '';
       return;
     }
@@ -542,7 +620,11 @@ async function handleChatFileUpload(event) {
         mime: file.type || 'application/octet-stream',
         data: dataUrl
       });
-      await sendChatRawMessage(payload);
+      pendingChatAttachment = JSON.parse(payload);
+      renderInputArea();
+      const draftInput = document.getElementById('cwInput');
+      if (draftInput) draftInput.value = messageDraft;
+      showToast('Attachment is ready. Press Send to send it.', 'success');
     };
     reader.onerror = function() {
       showToast('Failed to read file', 'error');
@@ -553,7 +635,11 @@ async function handleChatFileUpload(event) {
   }
 
   event.target.value = '';
-  await sendChatRawMessage(attachmentPayload);
+  pendingChatAttachment = JSON.parse(attachmentPayload);
+  renderInputArea();
+  const draftInput = document.getElementById('cwInput');
+  if (draftInput) draftInput.value = messageDraft;
+  showToast('Attachment is ready. Press Send to send it.', 'success');
 }
 
 async function sendChatRawMessage(text) {
@@ -654,9 +740,13 @@ async function sendChatMsg() {
   const input = document.getElementById('cwInput');
   if (!input) return;
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && !pendingChatAttachment) return;
   input.value = '';
-  await sendChatRawMessage(text);
+  const attachment = pendingChatAttachment;
+  pendingChatAttachment = null;
+  clearChatAttachmentReturnState();
+  await sendChatRawMessage(attachment ? JSON.stringify(attachment) : text);
+  if (currentPage === 'chats') renderInputArea();
 }
 
 function ensureChatRealtimeSubscription() {
@@ -726,6 +816,11 @@ function ncToggleContact(id) {
 function ncFilterContacts(v) {
   newChatState.search = v;
   renderNewChatModal();
+  const searchInput = document.querySelector('#newChatModalBody .nc-search');
+  if (searchInput) {
+    searchInput.focus();
+    searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+  }
 }
 function renderNewChatModal() {
   const body = document.getElementById('newChatModalBody');

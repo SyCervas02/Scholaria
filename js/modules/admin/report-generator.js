@@ -12,7 +12,9 @@ function closeAcademicReportModal() {
 function triggerPrintReport() {
   const prevTitle = document.title;
   if (activeReportType === 'section') {
-    document.title = `Master_Grade_Sheet_${(activeReportSection || 'Section').replace(/\s+/g, '_')}`;
+    document.title = activeReportSection
+      ? `Master_Grade_Sheet_${activeReportSection.replace(/\s+/g, '_')}`
+      : 'Master_Grade_Sheets_All_Sections';
   } else if (activeReportType === 'student') {
     const studentObj = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).find(u => u.dbId === activeReportStudent || u.id === activeReportStudent || u.name === activeReportStudent);
     const sName = studentObj?.name || activeReportStudent || 'Student';
@@ -23,11 +25,56 @@ function triggerPrintReport() {
   if (body) body.scrollTop = 0;
   window.scrollTo(0, 0);
 
-  window.print();
+  // Wait for the report DOM and print styles to settle before Chromium captures it.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => window.print());
+  });
 
   setTimeout(() => {
     document.title = prevTitle;
   }, 1000);
+}
+
+/**
+ * Opens every section handled by the teacher as one print-ready report,
+ * with a page break between sections.
+ */
+function openAllSectionReportsModal() {
+  const summaries = typeof buildSectionSummaryEntries === 'function' ? buildSectionSummaryEntries() : [];
+  const sectionNames = summaries.map(s => s.section).filter(Boolean);
+  const fallbackSections = typeof managedSections !== 'undefined'
+    ? managedSections.map(s => s.name).filter(Boolean)
+    : [];
+  const sections = [...new Set(sectionNames.length ? sectionNames : fallbackSections)];
+  const body = document.getElementById('academicReportModalBody');
+  const head = document.getElementById('academicReportModalHead');
+  const modal = document.getElementById('academicReportModal');
+  if (!body || !head || !modal || !sections.length) return;
+
+  const reports = [];
+  sections.forEach((sectionName, index) => {
+    openSectionReportModal(sectionName);
+    reports.push(`${index ? '<div style="page-break-before:always;break-before:page;"></div>' : ''}${body.innerHTML}`);
+  });
+
+  activeReportType = 'section';
+  activeReportSection = null;
+  head.innerHTML = `
+    <div>
+      <h3 style="font-size:17px;font-weight:800;color:#0f172a;margin-bottom:2px;">Print & Export Preview — All Sections</h3>
+      <span style="font-size:12px;color:var(--text-muted);">${sections.length} handled sections · each section starts on a separate page</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="gen-btn" style="background:#1e293b;color:#fff;display:inline-flex;align-items:center;gap:6px;padding:7px 16px;" onclick="triggerPrintReport()">
+        Print / Save PDF
+      </button>
+      <button class="modal-x" onclick="closeAcademicReportModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  `;
+  body.innerHTML = reports.join('');
+  modal.classList.add('active');
 }
 
 /**
@@ -113,23 +160,23 @@ function openSectionReportModal(sectionName) {
       </div>
 
       <!-- SUMMARY KPI STATS -->
-      <div class="report-kpi-row">
-        <div class="report-kpi-card">
+      <div class="report-kpi-row" style="display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;width:100% !important;gap:12px !important;">
+        <div class="report-kpi-card" style="flex:1 1 0 !important;min-width:0 !important;width:auto !important;">
           <div class="kpi-label">Total Enrolled</div>
           <div class="kpi-value">${sectionStudents.length}</div>
           <div class="kpi-sub">Students in Roster</div>
         </div>
-        <div class="report-kpi-card">
+        <div class="report-kpi-card" style="flex:1 1 0 !important;min-width:0 !important;width:auto !important;">
           <div class="kpi-label">Class Average</div>
           <div class="kpi-value ${classAvg !== null && classAvg >= 80 ? 'text-green' : ''}">${classAvg !== null ? classAvg.toFixed(2) + '%' : '—'}</div>
           <div class="kpi-sub">Combined Performance</div>
         </div>
-        <div class="report-kpi-card">
+        <div class="report-kpi-card" style="flex:1 1 0 !important;min-width:0 !important;width:auto !important;">
           <div class="kpi-label">Passing Rate</div>
           <div class="kpi-value ${passingRate !== null && passingRate >= 75 ? 'text-green' : 'text-amber'}">${passingRate !== null ? passingRate + '%' : '—'}</div>
           <div class="kpi-sub">${passingCount} of ${sectionStudents.length} Passing</div>
         </div>
-        <div class="report-kpi-card">
+        <div class="report-kpi-card" style="flex:1 1 0 !important;min-width:0 !important;width:auto !important;">
           <div class="kpi-label">Grade Range</div>
           <div class="kpi-value" style="font-size:15px;margin-top:4px;">${highestScore}% / ${lowestScore}%</div>
           <div class="kpi-sub">Highest / Lowest</div>
@@ -143,7 +190,6 @@ function openSectionReportModal(sectionName) {
             <tr>
               <th style="width:36px;text-align:center;">#</th>
               <th>Student Full Name</th>
-              <th>Student ID</th>
               <th>Strand</th>
               ${quizzes.map((q, idx) => `<th style="text-align:center;font-size:11px;" title="${escHtml(q.title)}">Q${idx + 1}</th>`).join('')}
               <th style="text-align:center;">Taken</th>
@@ -159,7 +205,6 @@ function openSectionReportModal(sectionName) {
                 <tr>
                   <td style="text-align:center;color:#64748b;font-weight:600;">${index + 1}</td>
                   <td><strong>${escHtml(st.name)}</strong></td>
-                  <td><code class="report-code">${escHtml(st.key)}</code></td>
                   <td>${escHtml(st.strand)}</td>
                   ${quizzes.map(q => {
                     const sc = st.quizScores?.[q.id]?.scorePct;
@@ -178,7 +223,7 @@ function openSectionReportModal(sectionName) {
               `;
             }).join('') : `
               <tr>
-                <td colspan="${7 + quizzes.length}" style="text-align:center;padding:30px;color:#94a3b8;">
+                <td colspan="${6 + quizzes.length}" style="text-align:center;padding:30px;color:#94a3b8;">
                   No student records available for this section.
                 </td>
               </tr>

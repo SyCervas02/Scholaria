@@ -89,11 +89,30 @@ function initDashboardShell() {
     sidebarMenu.appendChild(a);
   });
 
-  renderPage('dashboard');
+  const requestedPage = new URLSearchParams(window.location.search).get('page');
+  let attachmentReturn = null;
+  try {
+    const savedReturn = localStorage.getItem('scholaria_chat_attachment_return')
+      || sessionStorage.getItem('scholaria_chat_attachment_return');
+    attachmentReturn = savedReturn ? JSON.parse(savedReturn) : null;
+    localStorage.removeItem('scholaria_chat_attachment_return');
+    sessionStorage.removeItem('scholaria_chat_attachment_return');
+  } catch (_) {}
+  if (typeof resetChatState === 'function') resetChatState();
+  const initialPage = attachmentReturn?.conversationId
+    ? 'chats'
+    : (requestedPage === 'quiz' && (ROLE === 'teacher' || ROLE === 'admin') ? 'quiz' : 'dashboard');
+  renderPage(initialPage);
+  if (attachmentReturn?.conversationId) {
+    setTimeout(async () => {
+      if (currentPage !== 'chats') renderPage('chats');
+      if (typeof loadConversationsFromDB === 'function') await loadConversationsFromDB();
+      if (typeof openConversation === 'function') openConversation(attachmentReturn.conversationId);
+    }, 450);
+  }
   refreshNotificationsUI();
   if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
   if (typeof showNewsAlertIfNeeded === 'function') showNewsAlertIfNeeded();
-  if (typeof resetChatState === 'function') resetChatState();
   loadConversationsFromDB().then(ensureChatRealtimeSubscription);
 }
 
@@ -117,6 +136,12 @@ let isFetchingClassRecAttempts = false;
 function setClassRecSectionFilter(sec) {
   classRecSectionFilter = sec;
   if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function printClassRecordSection(section) {
+  const targetSection = section || classRecSectionFilter || classRecExpandedSection || (managedSections[0]?.name || 'Section A');
+  classRecSectionFilter = targetSection;
+  if (typeof openSectionReportModal === 'function') openSectionReportModal(targetSection);
 }
 
 function openExpandedSectionView(sec) {
@@ -3274,7 +3299,7 @@ function teacherPage(page) {
         </table>
       </div>` : `
       <!-- QUESTION ACCURACY TABLE -->
-      <div class="score-table">
+      <div class="score-table analysis-question-table">
         <table>
           <thead>
             <tr>
@@ -3347,7 +3372,7 @@ function teacherPage(page) {
               <option value="">All Handled Sections</option>
               ${SECTIONS.map(sec => `<option value="${sec}" ${classRecSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
             </select>
-            <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openSectionReportModal('${escHtml(targetPrintSec)}')">
+            <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openAllSectionReportsModal()">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               Print Grade Summary
             </button>
@@ -3410,7 +3435,7 @@ function teacherPage(page) {
                         Expand Record
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
                       </button>
-                      <button class="table-act-btn review" title="Print Master Sheet" onclick="event.stopPropagation(); openSectionReportModal('${escHtml(s.section)}')">
+                      <button class="table-act-btn review" title="Print Master Sheet" onclick="event.stopPropagation(); printClassRecordSection('${escHtml(s.section)}')">
                         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Print
                       </button>
@@ -3444,7 +3469,7 @@ function teacherPage(page) {
             <button type="button" class="anc-archive-tab ${classRecSubView === 'matrix' ? 'active' : ''}" style="padding:6px 12px;font-size:12px;" onclick="setClassRecSubView('matrix')">📑 Quiz Matrix Columns</button>
           </div>
 
-          <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openSectionReportModal('${escHtml(classRecExpandedSection)}')">
+          <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="printClassRecordSection('${escHtml(classRecExpandedSection)}')">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             Print Master Sheet
           </button>

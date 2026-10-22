@@ -432,6 +432,17 @@ function closeQuizModal(redirect = true) {
   }
 }
 
+// The standalone Quiz Maker page must always return to the Quiz Manager,
+// not the dashboard landing page, when the user cancels creation.
+function cancelQuizMaker() {
+  if (document.getElementById('quizMakerContainer')) {
+    window.location.assign('dashboard.html?page=quiz');
+    return;
+  }
+  closeQuizModal(false);
+}
+window.cancelQuizMaker = cancelQuizMaker;
+
 if (typeof SUBJECTS_BY_STRAND === 'undefined') {
   window.SUBJECTS_BY_STRAND = {
     STEM: [
@@ -2536,7 +2547,7 @@ function renderQuizModal() {
     `;
 
     foot.innerHTML = `
-      <button class="foot-btn-secondary" onclick="closeQuizModal()">Cancel</button>
+      <button class="foot-btn-secondary" onclick="cancelQuizMaker()">Cancel</button>
       <button class="gen-btn" onclick="nextQuizStep()">Next: Quiz Description &rarr;</button>
     `;
     return;
