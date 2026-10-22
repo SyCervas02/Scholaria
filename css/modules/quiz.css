@@ -1,10 +1,11 @@
 /* ── QUIZ & ITEM ANALYSIS MODULE STYLES ── */
 
-.quiz-list { display: flex; flex-direction: column; gap: 10px; }
+.quiz-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
 .quiz-row {
   background: #f8fbff; border: 1px solid var(--blue-light);
   border-radius: 12px; padding: 14px 18px;
   display: flex; align-items: center; gap: 14px; transition: 0.2s;
+  width: 100%; box-sizing: border-box;
 }
 .quiz-row:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(37,99,235,.08); }
 .quiz-row .qz-info { flex: 1; }
@@ -44,8 +45,8 @@
 .soon-tag { position: absolute; top: 12px; right: 12px; font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; background: #fef3c7; color: #d97706; padding: 3px 8px; border-radius: 50px; }
 
 .gen-field label { display: block; font-size: 11.5px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 7px; }
-.gen-field input[type=text], .gen-field select { width: 100%; border: 1.5px solid var(--blue-light); border-radius: 10px; padding: 10px 13px; font-size: 13.5px; font-family: 'Plus Jakarta Sans', sans-serif; outline: none; background: #f8fbff; transition: .2s; color: var(--text-primary); }
-.gen-field input[type=text]:focus, .gen-field select:focus { border-color: var(--blue); background: #fff; }
+.gen-field input[type=text], .gen-field input[type=number], .gen-field select { width: 100%; border: 1.5px solid var(--blue-light); border-radius: 10px; padding: 10px 13px; font-size: 13.5px; font-family: 'Plus Jakarta Sans', sans-serif; outline: none; background: #f8fbff; transition: .2s; color: var(--text-primary); box-sizing: border-box; }
+.gen-field input[type=text]:focus, .gen-field input[type=number]:focus, .gen-field select:focus { border-color: var(--blue); background: #fff; }
 .gen-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
 .dropzone { display: block; border: 1.5px dashed var(--blue-mid); border-radius: 14px; padding: 22px; text-align: center; cursor: pointer; transition: .2s; background: #f8fbff; }
@@ -765,7 +766,7 @@
   align-items: stretch !important;
   justify-content: flex-start !important;
   overflow: hidden !important;
-  font-family: 'Plus Jakarta Sans', 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
   padding: 0 !important;
   margin: 0 !important;
   border-radius: 0 !important;
@@ -805,9 +806,9 @@
 }
 
 .sq-brand-text {
-  font-family: 'Syne', 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Poppins', sans-serif;
   font-size: 17px;
-  font-weight: 800;
+  font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
 }

@@ -1035,7 +1035,7 @@ async function submitQuizAttempt(isAutoSubmit = false) {
   const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
   const studentId = prof.id || prof.school_id || 'stud_1';
   const studentName = prof.full_name || 'Student';
-  const section = prof.section || 'Section A';
+  const section = prof.section || 'Unassigned';
   const strand = prof.strand || 'STEM';
   const subject = quiz?.subject || strand;
 
@@ -1405,7 +1405,7 @@ async function openClassLeaderboardModal(quiz) {
         <div style="position: absolute; top: -6px; right: -14px; font-size: 18px;">✨</div>
         <div style="position: absolute; bottom: 4px; left: -14px; font-size: 18px;">⭐</div>
       </div>
-      <h2 style="font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: #1e3a8a; margin: 4px 0 6px 0; letter-spacing: -0.02em;">Class Leaderboard</h2>
+      <h2 style="font-family: 'Poppins', sans-serif; font-size: 28px; font-weight: 700; color: #1e3a8a; margin: 4px 0 6px 0; letter-spacing: -0.02em;">Class Leaderboard</h2>
       <p style="font-size: 14px; color: #64748b; font-weight: 600; margin: 0;">Verified student rankings and completion times on this assessment</p>
     </div>
 

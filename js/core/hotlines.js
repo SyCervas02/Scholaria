@@ -59,17 +59,106 @@ function renderHotlinesUI() {
     if (hotlines.length === 0) {
       adminList.innerHTML = `<p style="padding:20px;text-align:center;color:#64748b;font-size:13px;">No hotlines configured.</p>`;
     } else {
-      adminList.innerHTML = hotlines.map(hl => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:8px;">
-          <div>
-            <div style="font-weight:700;font-size:14px;color:#0f172a;">${hl.icon} ${hl.name}</div>
-            <div style="font-size:12px;color:#64748b;">Short: ${hl.shortName} • Num: ${hl.number} • Tel: ${hl.tel}</div>
+      adminList.innerHTML = hotlines.map(hl => {
+        const isEditing = editingHotlineId === hl.id;
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:${isEditing ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isEditing ? '#0284c7' : '#e2e8f0'};border-radius:12px;margin-bottom:8px;transition:all 0.15s ease;">
+            <div style="flex:1;min-width:0;padding-right:10px;">
+              <div style="font-weight:700;font-size:13.5px;color:#0f172a;display:flex;align-items:center;gap:6px;">
+                <span>${hl.icon || '📞'}</span>
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${hl.name}</span>
+                ${isEditing ? '<span style="font-size:10px;background:#0284c7;color:#fff;padding:1px 6px;border-radius:4px;font-weight:800;letter-spacing:0.5px;">EDITING</span>' : ''}
+              </div>
+              <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                Short: <strong style="color:#334155;">${hl.shortName}</strong> • Num: <strong style="color:#b91c1c;">${hl.number}</strong> • Tel: <span>${hl.tel}</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              <button type="button" onclick="editHotline('${hl.id}')" style="background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;" title="Edit this hotline">
+                ✏️ Edit
+              </button>
+              <button type="button" onclick="deleteHotline('${hl.id}')" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;" title="Delete this hotline">
+                Delete
+              </button>
+            </div>
           </div>
-          <button onclick="deleteHotline('${hl.id}')" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Delete</button>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
   }
+}
+
+let editingHotlineId = null;
+
+function editHotline(id) {
+  const hotlines = getStoredHotlines();
+  const hl = hotlines.find(h => h.id === id);
+  if (!hl) return;
+
+  editingHotlineId = id;
+
+  const nameInput = document.getElementById('newHlName');
+  const shortInput = document.getElementById('newHlShort');
+  const numInput = document.getElementById('newHlNum');
+  const telInput = document.getElementById('newHlTel');
+  const iconInput = document.getElementById('newHlIcon');
+
+  if (nameInput) nameInput.value = hl.name || '';
+  if (shortInput) shortInput.value = hl.shortName || '';
+  if (numInput) numInput.value = hl.number || '';
+  if (telInput) telInput.value = hl.tel || '';
+  if (iconInput) iconInput.value = hl.icon || '📞';
+
+  const formTitle = document.getElementById('manageHlFormTitle');
+  if (formTitle) {
+    formTitle.innerHTML = `✏️ Edit Hotline: <span style="color:#0284c7;font-weight:800;">${hl.shortName || hl.name}</span>`;
+  }
+
+  const saveBtn = document.getElementById('saveHlBtn') || document.querySelector('#manageHotlinesModal button[onclick*="addNewHotline"]');
+  if (saveBtn) {
+    saveBtn.textContent = 'Save Changes';
+    saveBtn.style.background = '#0284c7';
+  }
+
+  const cancelBtn = document.getElementById('cancelEditHlBtn');
+  if (cancelBtn) cancelBtn.style.display = 'inline-block';
+
+  renderHotlinesUI();
+
+  if (nameInput) {
+    nameInput.focus();
+    nameInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function cancelEditHotline() {
+  editingHotlineId = null;
+
+  const nameInput = document.getElementById('newHlName');
+  const shortInput = document.getElementById('newHlShort');
+  const numInput = document.getElementById('newHlNum');
+  const telInput = document.getElementById('newHlTel');
+  const iconInput = document.getElementById('newHlIcon');
+
+  if (nameInput) nameInput.value = '';
+  if (shortInput) shortInput.value = '';
+  if (numInput) numInput.value = '';
+  if (telInput) telInput.value = '';
+  if (iconInput) iconInput.value = '';
+
+  const formTitle = document.getElementById('manageHlFormTitle');
+  if (formTitle) formTitle.textContent = 'Add New Hotline';
+
+  const saveBtn = document.getElementById('saveHlBtn') || document.querySelector('#manageHotlinesModal button[onclick*="addNewHotline"]');
+  if (saveBtn) {
+    saveBtn.textContent = 'Add Hotline';
+    saveBtn.style.background = '#0284c7';
+  }
+
+  const cancelBtn = document.getElementById('cancelEditHlBtn');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+
+  renderHotlinesUI();
 }
 
 function openManageHotlinesModal() {
@@ -79,16 +168,17 @@ function openManageHotlinesModal() {
 }
 
 function closeManageHotlinesModal() {
+  cancelEditHotline();
   const modal = document.getElementById('manageHotlinesModal');
   if (modal) modal.classList.remove('active');
 }
 
 function addNewHotline() {
-  const name = document.getElementById('newHlName').value.trim();
-  const shortName = document.getElementById('newHlShort').value.trim();
-  const number = document.getElementById('newHlNum').value.trim();
-  const tel = document.getElementById('newHlTel').value.trim();
-  const icon = document.getElementById('newHlIcon').value.trim() || '📞';
+  const name = (document.getElementById('newHlName')?.value || '').trim();
+  const shortName = (document.getElementById('newHlShort')?.value || '').trim();
+  const number = (document.getElementById('newHlNum')?.value || '').trim();
+  const tel = (document.getElementById('newHlTel')?.value || '').trim();
+  const icon = (document.getElementById('newHlIcon')?.value || '').trim() || '📞';
 
   if (!name || !shortName || !number || !tel) {
     if (typeof showToast === 'function') showToast('Please fill out all required fields', 'error');
@@ -97,6 +187,45 @@ function addNewHotline() {
   }
 
   const hotlines = getStoredHotlines();
+
+  if (editingHotlineId) {
+    const idx = hotlines.findIndex(h => h.id === editingHotlineId);
+    if (idx !== -1) {
+      hotlines[idx] = {
+        ...hotlines[idx],
+        name,
+        shortName,
+        number,
+        tel,
+        icon
+      };
+      saveHotlines(hotlines);
+
+      // Sync updated hotline into stored announcements if attached
+      try {
+        if (typeof getStoredAnnouncements === 'function' && typeof saveAnnouncements === 'function') {
+          const ancs = getStoredAnnouncements();
+          let anyUpdated = false;
+          ancs.forEach(a => {
+            if (a.hotlines && Array.isArray(a.hotlines)) {
+              a.hotlines.forEach((h, hIdx) => {
+                if (h.id === editingHotlineId) {
+                  a.hotlines[hIdx] = { ...h, name, shortName, number, tel, icon };
+                  anyUpdated = true;
+                }
+              });
+            }
+          });
+          if (anyUpdated) saveAnnouncements(ancs);
+        }
+      } catch (e) {}
+
+      cancelEditHotline();
+      if (typeof showToast === 'function') showToast('Hotline updated successfully!', 'success');
+      return;
+    }
+  }
+
   hotlines.push({
     id: 'hl_' + Date.now(),
     name,
@@ -107,18 +236,14 @@ function addNewHotline() {
   });
   
   saveHotlines(hotlines);
-  
-  // Clear inputs
-  document.getElementById('newHlName').value = '';
-  document.getElementById('newHlShort').value = '';
-  document.getElementById('newHlNum').value = '';
-  document.getElementById('newHlTel').value = '';
-  document.getElementById('newHlIcon').value = '📞';
-  
+  cancelEditHotline();
   if (typeof showToast === 'function') showToast('Hotline added successfully!', 'success');
 }
 
 function deleteHotline(id) {
+  if (editingHotlineId === id) {
+    cancelEditHotline();
+  }
   if (!confirm('Are you sure you want to delete this hotline?')) return;
   const hotlines = getStoredHotlines();
   const updated = hotlines.filter(h => h.id !== id);

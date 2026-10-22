@@ -359,9 +359,9 @@
 }
 
 .anc-card-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Poppins', sans-serif;
   font-size: 17px;
-  font-weight: 800;
+  font-weight: 700;
   color: #0f172a;
   margin-bottom: 8px;
 }
@@ -460,9 +460,9 @@
 }
 
 .anc-widget-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Poppins', sans-serif;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   color: #0f172a;
   margin-bottom: 12px;
 }

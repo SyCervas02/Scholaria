@@ -1,40 +1,135 @@
-const DEFAULT_SEED_USERS = [
-  { name: 'Student John Doe', id: 'HWA-2026-002', dbId: 'seed_stud_1', role: 'student', gradeLevel: 'Grade 11', strand: 'STEM', section: 'Section A', createdAt: '2026-08-19', permanentlyMuted: true, strikes: 1 },
-  { name: 'Esguerra, Michael N.', id: 'HWA-2026-001', dbId: 'seed_stud_2', role: 'student', gradeLevel: 'Grade 11', strand: 'STEM', section: 'Section A', createdAt: '2026-07-21' },
-  { name: 'Joseph Andrew Asis', id: 'HWA-DEMO-001', dbId: 'seed_stud_3', role: 'student', gradeLevel: 'Grade 12', strand: 'STEM', section: 'Section A', createdAt: '2026-07-04' },
-  { name: 'Cervas, Symon Pete T.', id: 'HWA-2024-002', dbId: 'seed_stud_4', role: 'student', gradeLevel: 'Grade 12', strand: 'HUMSS', section: 'Section A', createdAt: '2026-06-29' }
-];
+const DEFAULT_SEED_USERS = [];
+const DEFAULT_SEED_ADMINS = [];
 
-const DEFAULT_SEED_ADMINS = [
-  { name: 'Senior High School Head Administrator', id: 'HWA-A-2026-001', dbId: 'seed_admin_1', role: 'admin', email: 'admin@hwa.edu.ph', createdAt: '2026-01-10T08:00:00Z', lastActive: new Date().toISOString() }
-];
-
+const CREDENTIAL_SLIP_STORAGE_KEY = 'scholaria_credential_slip_records';
 const ADMIN_HANDOUTS_STORAGE_KEY = 'scholaria_admin_handout_records';
+const ORIGINS_STORAGE_KEY = 'scholaria_account_origins_v1';
+const USER_SECTIONS_STORAGE_KEY = 'scholaria_user_sections_map_v2';
 
-function getAdminHandoutRecords() {
+function getUserSectionsMap() {
   try {
-    const raw = localStorage.getItem(ADMIN_HANDOUTS_STORAGE_KEY);
+    const raw = localStorage.getItem(USER_SECTIONS_STORAGE_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch (_) {
     return {};
   }
 }
 
-function saveAdminHandoutRecord(rec) {
+function saveUserSectionToStorage(userKey, sectionVal) {
   try {
-    const all = getAdminHandoutRecords();
-    all[rec.school_id] = {
-      ...rec,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem(ADMIN_HANDOUTS_STORAGE_KEY, JSON.stringify(all));
+    if (!userKey) return;
+    const map = getUserSectionsMap();
+    if (sectionVal) {
+      map[userKey] = sectionVal;
+    } else {
+      map[userKey] = '';
+    }
+    localStorage.setItem(USER_SECTIONS_STORAGE_KEY, JSON.stringify(map));
   } catch (_) {}
 }
 
-function getAdminHandoutRecord(schoolId) {
-  const all = getAdminHandoutRecords();
+async function persistUserSectionChange(userOrId, sectionStr) {
+  let userId = null;
+  let schoolId = null;
+  if (typeof userOrId === 'object' && userOrId !== null) {
+    userId = userOrId.dbId || userOrId.id;
+    schoolId = userOrId.id || userOrId.school_id;
+  } else {
+    userId = userOrId;
+  }
+
+  // 1. Immediately cache in localStorage for instant reload resilience (both ID and School ID)
+  if (userId) saveUserSectionToStorage(userId, sectionStr);
+  if (schoolId) saveUserSectionToStorage(schoolId, sectionStr);
+
+  // 2. Call backend administrative update endpoint (bypasses Supabase RLS using service role)
+  try {
+    let token = null;
+    if (typeof db !== 'undefined' && db?.auth?.getSession) {
+      const { data } = await db.auth.getSession();
+      token = data?.session?.access_token;
+    }
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    await fetch(`${API_BASE}/api/admin/update-user-sections`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ user_id: userId, school_id: schoolId, section: sectionStr })
+    });
+  } catch (err) {
+    console.warn('Backend section sync notice:', err);
+  }
+
+  // 3. Fallback direct client update
+  if (userId && typeof db !== 'undefined' && db?.from) {
+    try {
+      await db.from('users').update({ section: sectionStr }).eq('id', userId);
+    } catch (_) {}
+  }
+}
+
+function getLocalOriginRecords() {
+  try {
+    const raw = localStorage.getItem(ORIGINS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveLocalOriginRecord(rec) {
+  try {
+    const all = getLocalOriginRecords();
+    const key = rec.school_id || rec.user_id;
+    if (key) {
+      all[key] = {
+        ...(all[key] || {}),
+        ...rec,
+        cached_at: new Date().toISOString()
+      };
+      localStorage.setItem(ORIGINS_STORAGE_KEY, JSON.stringify(all));
+    }
+  } catch (_) {}
+}
+
+function getCredentialSlipRecords() {
+  try {
+    const raw = localStorage.getItem(CREDENTIAL_SLIP_STORAGE_KEY);
+    const legacy = localStorage.getItem(ADMIN_HANDOUTS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const parsedLegacy = legacy ? JSON.parse(legacy) : {};
+    return { ...parsedLegacy, ...parsed };
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveCredentialSlipRecord(rec) {
+  try {
+    const all = getCredentialSlipRecords();
+    const key = rec.school_id || rec.user_id;
+    if (key) {
+      all[key] = {
+        ...(all[key] || {}),
+        ...rec,
+        savedAt: new Date().toISOString()
+      };
+      localStorage.setItem(CREDENTIAL_SLIP_STORAGE_KEY, JSON.stringify(all));
+      localStorage.setItem(ADMIN_HANDOUTS_STORAGE_KEY, JSON.stringify(all));
+    }
+  } catch (_) {}
+}
+
+function getCredentialSlipRecord(schoolId) {
+  const all = getCredentialSlipRecords();
   return all[schoolId] || null;
 }
+
+// Backwards compatibility aliases:
+function getAdminHandoutRecords() { return getCredentialSlipRecords(); }
+function saveAdminHandoutRecord(rec) { return saveCredentialSlipRecord(rec); }
+function getAdminHandoutRecord(schoolId) { return getCredentialSlipRecord(schoolId); }
 
 function generateComplexPasswordClient(length = 14) {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -106,40 +201,164 @@ function setAdminUserTab(tab) {
     wrap.innerHTML = renderUserManagementContent();
   }
 }
+if (typeof window !== 'undefined') {
+  window.setAdminUserTab = setAdminUserTab;
+}
 
-function formatDateCreated(ts) {
+function formatExactDateTime(ts) {
   if (!ts) return '—';
   try {
     const d = new Date(ts);
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    }) + ' · ' + d.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
   } catch {
     return '—';
   }
 }
 
-function formatLastActiveHtml(lastActive, createdAt) {
-  if (!lastActive) {
-    return `<span style="color:#d97706;font-size:12px;font-weight:600;background:#fef3c7;padding:2px 8px;border-radius:4px;">Pending first login</span>`;
-  }
-  const date = new Date(lastActive);
-  if (isNaN(date.getTime())) {
-    return `<span style="color:#94a3b8;font-size:12px;">—</span>`;
-  }
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
+function formatDateCreated(ts) {
+  return formatExactDateTime(ts);
+}
 
-  if (diffMins < 5) {
-    return `<span style="color:#10b981;font-weight:700;font-size:12px;display:inline-flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;background:#10b981;border-radius:50%;display:inline-block;box-shadow:0 0 6px #10b981;"></span> Online now</span>`;
+function formatDateWithOriginHtml(u) {
+  const dateStr = formatExactDateTime(u.createdAt);
+  let originLabel = '';
+  if (u.origin && u.origin.name) {
+    originLabel = `<div style="font-size:11px;color:#2563eb;font-weight:600;display:inline-flex;align-items:center;gap:3px;margin-top:2px;white-space:nowrap;" title="Created by ${escHtml(u.origin.name)} (${escHtml(u.origin.school_id || u.origin.role || 'Admin')})">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px;flex-shrink:0;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+      <span>by <strong>${escHtml(u.origin.name)}</strong></span>
+    </div>`;
+  } else {
+    originLabel = `<div style="font-size:10.5px;color:#94a3b8;font-style:italic;margin-top:2px;white-space:nowrap;">Institutional Initial</div>`;
   }
-  if (diffHours < 1) {
-    return `<span style="color:#475569;font-size:12px;">Active ${diffMins}m ago</span>`;
+
+  return `<div style="white-space:nowrap;">
+    <div style="font-size:12px;color:var(--text-primary);font-weight:600;white-space:nowrap;">${dateStr}</div>
+    ${originLabel}
+  </div>`;
+}
+
+function formatLastActiveHtml(lastActive, createdAt) {
+  const ts = lastActive || createdAt;
+  if (!ts) {
+    return `<span style="color:#94a3b8;font-size:12px;font-style:italic;white-space:nowrap;">No recorded session</span>`;
   }
-  if (diffHours < 24) {
-    return `<span style="color:#475569;font-size:12px;">Active ${diffHours}h ago</span>`;
+
+  const formatted = formatExactDateTime(ts);
+  let statusBadge = '';
+  try {
+    const diffMs = Date.now() - new Date(ts).getTime();
+    if (!isNaN(diffMs)) {
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 15) {
+        statusBadge = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#059669;font-weight:600;white-space:nowrap;"><span style="width:6px;height:6px;background:#10b981;border-radius:50%;box-shadow:0 0 6px #10b981;"></span> Online Now</span>`;
+      } else if (diffHours < 1) {
+        statusBadge = `<span style="font-size:11px;color:#64748b;white-space:nowrap;">${Math.max(1, diffMins)}m ago</span>`;
+      } else if (diffHours < 24) {
+        statusBadge = `<span style="font-size:11px;color:#64748b;white-space:nowrap;">${diffHours}h ago</span>`;
+      } else if (diffDays < 7) {
+        statusBadge = `<span style="font-size:11px;color:#64748b;white-space:nowrap;">${diffDays}d ago</span>`;
+      }
+    }
+  } catch (_) {}
+
+  return `<div style="white-space:nowrap;">
+    <div style="font-size:12px;color:var(--text-primary);font-weight:600;white-space:nowrap;">${formatted}</div>
+    ${statusBadge ? `<div style="margin-top:2px;white-space:nowrap;">${statusBadge}</div>` : ''}
+  </div>`;
+}
+
+function formatAccountStatusBadge(u) {
+  const active = u.isActive !== false;
+  if (active) {
+    return `<span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
+      <span style="width:6px;height:6px;background:#10b981;border-radius:50%;box-shadow:0 0 6px #10b981;"></span> Active
+    </span>`;
   }
-  return `<span style="color:#64748b;font-size:12px;">${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>`;
+  return `<span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;" title="Permissions revoked by administration">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" style="width:11px;height:11px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Deactivated
+  </span>`;
+}
+
+function renderUserDeactivationAction(u) {
+  const isSelf = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && (CURRENT_PROFILE.id === u.dbId || CURRENT_PROFILE.school_id === u.id));
+  if (isSelf) {
+    return `<span style="color:#94a3b8;font-size:11.5px;font-style:italic;" title="You cannot deactivate your own active session">You (Active)</span>`;
+  }
+
+  const active = u.isActive !== false;
+  const targetId = u.dbId || u.id;
+  if (active) {
+    return `<span class="action-link" style="color:#dc2626;font-weight:600;cursor:pointer;white-space:nowrap;" onclick="adminToggleUserStatus('${escHtml(targetId)}', false, '${escHtml(u.name)}')">Deactivate</span>`;
+  } else {
+    return `<span class="action-link" style="color:#059669;font-weight:600;cursor:pointer;white-space:nowrap;" onclick="adminToggleUserStatus('${escHtml(targetId)}', true, '${escHtml(u.name)}')">Reactivate</span>`;
+  }
+}
+
+async function adminToggleUserStatus(userId, shouldActivate, name) {
+  const actionWord = shouldActivate ? 'reactivate' : 'deactivate';
+  const confirmMsg = shouldActivate
+    ? `Reactivate account for "${name}"?\n\nThis will restore login privileges and all associated system permissions.`
+    : `Deactivate account for "${name}"?\n\n⚠️ Deactivation will immediately revoke all system permissions, terminate active sessions, and block future logins. (Accounts are preserved for administrative and academic audit integrity).`;
+
+  if (!confirm(confirmMsg)) return;
+
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) {
+    if (typeof showToast === 'function') showToast('Your session has expired — please sign in again', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/toggle-user-status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        is_active: shouldActivate
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      if (typeof showToast === 'function') showToast(data.error || `Failed to ${actionWord} account`, 'error');
+      return;
+    }
+
+    if (typeof showToast === 'function') {
+      showToast(data.message || `Account successfully ${shouldActivate ? 'reactivated' : 'deactivated'}`, shouldActivate ? 'success' : 'info');
+    }
+
+    // Update locally in registeredUsers
+    registeredUsers = registeredUsers.map(u => {
+      if (u.dbId === userId || u.id === userId) {
+        return { ...u, isActive: shouldActivate };
+      }
+      return u;
+    });
+
+    const wrap = document.getElementById('userManagementContentWrap');
+    if (wrap) {
+      wrap.innerHTML = renderUserManagementContent();
+    }
+    filterUserTable();
+  } catch (err) {
+    if (typeof showToast === 'function') showToast(`Could not reach the server to ${actionWord} user`, 'error');
+  }
 }
 
 function renderStudentRow(u) {
@@ -151,14 +370,22 @@ function renderStudentRow(u) {
     ? `<span class="action-link" style="color:#2563eb;font-weight:600;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`
     : `<span class="action-link" style="color:#d97706;font-weight:600;" onclick="adminMuteUser('${escHtml(targetId)}')">Mute</span>`;
   return `<tr>
-    <td><strong>${escHtml(u.name)}</strong></td>
-    <td><code style="font-size:12px;background:#f0f6ff;padding:2px 6px;border-radius:4px;color:var(--blue);">${escHtml(u.id)}</code></td>
-    <td><span class="au-grade-pill on" style="padding:2px 8px;font-size:11px;">${escHtml(u.gradeLevel || 'Grade 11')}</span></td>
-    <td><span class="role-tag student">${escHtml(u.strand || 'N/A')}</span></td>
-    <td>${isUnassigned ? '<span style="color:#d97706;font-weight:600;font-size:12px;background:#fef3c7;padding:2px 8px;border-radius:4px;">Unassigned</span>' : `<span class="sec-badge grade">${escHtml(u.section)}</span>`}</td>
-    <td class="date-val">${formatDateCreated(u.createdAt)}</td>
-    <td>${chatStatusHtml(u)}</td>
-    <td><span class="action-link" onclick="openMassAssignForSingleStudent('${escHtml(targetId)}')">Assign Section</span>${isAdmin ? ` &nbsp; ${actionBtn}` : ''}</td>
+    <td style="white-space:nowrap;"><strong style="white-space:nowrap;">${escHtml(u.name)}</strong></td>
+    <td style="white-space:nowrap;"><code style="font-size:12px;background:#f0f6ff;padding:3px 8px;border-radius:4px;color:var(--blue);font-family:'JetBrains Mono',monospace;white-space:nowrap;display:inline-block;">${escHtml(u.id)}</code></td>
+    <td style="white-space:nowrap;"><span class="au-grade-pill on" style="padding:2px 8px;font-size:11px;white-space:nowrap;display:inline-block;">${escHtml(u.gradeLevel || 'Grade 11')}</span></td>
+    <td style="white-space:nowrap;"><span class="role-tag student" style="white-space:nowrap;display:inline-block;">${escHtml(u.strand || 'N/A')}</span></td>
+    <td style="white-space:nowrap;">${isUnassigned ? '<span style="color:#d97706;font-weight:600;font-size:12px;background:#fef3c7;padding:2px 8px;border-radius:4px;white-space:nowrap;display:inline-block;">Unassigned</span>' : `<span class="sec-badge grade" style="white-space:nowrap;display:inline-flex;align-items:center;">${escHtml(u.section)}</span>`}</td>
+    <td class="date-val" style="white-space:nowrap;">${formatDateWithOriginHtml(u)}</td>
+    <td style="white-space:nowrap;">${formatAccountStatusBadge(u)}</td>
+    <td style="white-space:nowrap;">${chatStatusHtml(u)}</td>
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:10px;white-space:nowrap;">
+        <span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
+        <span class="action-link" style="white-space:nowrap;" onclick="openMassAssignForSingleStudent('${escHtml(targetId)}')">Assign</span>
+        ${isAdmin ? actionBtn : ''}
+        ${isAdmin ? renderUserDeactivationAction(u) : ''}
+      </div>
+    </td>
   </tr>`;
 }
 
@@ -167,17 +394,94 @@ function renderTeacherRow(u) {
   const isMuted = u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()) || (u.strikes && u.strikes > 0);
   const targetId = u.dbId || u.id;
   const actionBtn = isMuted
-    ? `<span class="action-link" style="color:#2563eb;font-weight:600;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`
-    : `<span class="action-link" style="color:#d97706;font-weight:600;" onclick="adminMuteUser('${escHtml(targetId)}')">Mute</span>`;
+    ? `<span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`
+    : `<span class="action-link" style="color:#d97706;font-weight:600;white-space:nowrap;" onclick="adminMuteUser('${escHtml(targetId)}')">Mute</span>`;
+  const secHtml = u.section
+    ? `<span class="sec-badge grade" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;" onclick="openAssignTeacherSectionsModal('${escHtml(targetId)}')" title="Click to reassign handled section(s)">
+        ${escHtml(u.section)}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </span>`
+    : `<button type="button" class="action-link" style="color:#d97706;background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;padding:0;display:inline-flex;align-items:center;gap:3px;white-space:nowrap;" onclick="openAssignTeacherSectionsModal('${escHtml(targetId)}')">
+        <span>+ Assign Section</span>
+      </button>`;
+
   return `<tr>
-    <td><strong>${escHtml(u.name)}</strong></td>
-    <td><code style="font-size:12px;background:#fffbeb;padding:2px 6px;border-radius:4px;color:#d97706;">${escHtml(u.id)}</code></td>
-    <td><span class="role-tag teacher">${escHtml(u.subjects || u.strand || 'General')}</span></td>
-    <td><span style="font-size:12px;font-weight:600;color:var(--text-secondary);">Grade 11 & 12</span></td>
-    <td>${escHtml(u.section || 'All / None')}</td>
-    <td class="date-val">${formatDateCreated(u.createdAt)}</td>
-    <td>${chatStatusHtml(u)}</td>
-    <td><span class="action-link">Edit</span> &nbsp; <span class="action-link" style="color:#dc2626">Deactivate</span>${isAdmin ? ` &nbsp; ${actionBtn}` : ''}</td>
+    <td style="white-space:nowrap;"><strong style="white-space:nowrap;">${escHtml(u.name)}</strong></td>
+    <td style="white-space:nowrap;"><code style="font-size:12px;background:#fffbeb;padding:3px 8px;border-radius:4px;color:#d97706;font-family:'JetBrains Mono',monospace;white-space:nowrap;display:inline-block;">${escHtml(u.id)}</code></td>
+    <td style="white-space:nowrap;"><span class="role-tag teacher" style="white-space:nowrap;display:inline-block;">${escHtml(u.subjects || u.strand || 'General')}</span></td>
+    <td style="white-space:nowrap;"><span style="font-size:12px;font-weight:600;color:var(--text-secondary);white-space:nowrap;">Grade 11 & 12</span></td>
+    <td style="white-space:nowrap;">${secHtml}</td>
+    <td class="date-val" style="white-space:nowrap;">${formatDateWithOriginHtml(u)}</td>
+    <td style="white-space:nowrap;">${formatAccountStatusBadge(u)}</td>
+    <td style="white-space:nowrap;">${chatStatusHtml(u)}</td>
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:10px;white-space:nowrap;">
+        <span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
+        <span class="action-link" style="color:#0284c7;font-weight:600;white-space:nowrap;cursor:pointer;" onclick="openAssignTeacherSectionsModal('${escHtml(targetId)}')">Assign Section</span>
+        ${isAdmin ? actionBtn : ''}
+        ${isAdmin ? renderUserDeactivationAction(u) : ''}
+      </div>
+    </td>
+  </tr>`;
+}
+
+function renderDeactivatedRow(u) {
+  const isAdmin = (typeof ROLE !== 'undefined' && ROLE === 'admin') || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role === 'admin');
+  const targetId = u.dbId || u.id;
+
+  let roleBadge = '';
+  if (u.role === 'admin') {
+    roleBadge = `<span class="role-tag" style="background:#fef3c7;color:#b45309;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Admin
+    </span>`;
+  } else if (u.role === 'teacher') {
+    roleBadge = `<span class="role-tag teacher" style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> Teacher
+    </span>`;
+  } else {
+    roleBadge = `<span class="role-tag student" style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg> Student
+    </span>`;
+  }
+
+  let strandDeptHtml = '';
+  if (u.role === 'admin') {
+    strandDeptHtml = `<span style="color:#64748b;font-size:12px;font-style:italic;white-space:nowrap;">Department Administration</span>`;
+  } else if (u.role === 'teacher') {
+    strandDeptHtml = `<span class="role-tag teacher" style="white-space:nowrap;display:inline-block;">${escHtml(u.subjects || u.strand || 'General')}</span>`;
+  } else {
+    strandDeptHtml = `<span class="role-tag student" style="white-space:nowrap;display:inline-block;">${escHtml(u.strand || 'N/A')}</span> ${u.gradeLevel ? `<span style="font-size:11px;color:#64748b;margin-left:4px;white-space:nowrap;">${escHtml(u.gradeLevel)}</span>` : ''}`;
+  }
+
+  let secHtml = '';
+  if (u.role === 'admin') {
+    secHtml = `<span style="color:#94a3b8;font-style:italic;font-size:12px;">—</span>`;
+  } else if (u.role === 'teacher') {
+    secHtml = u.section ? `<span class="sec-badge grade" style="white-space:nowrap;">${escHtml(u.section)}</span>` : `<span style="color:#94a3b8;font-style:italic;font-size:12px;">All / None</span>`;
+  } else {
+    const isUnassigned = !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—';
+    secHtml = isUnassigned
+      ? `<span style="color:#94a3b8;font-style:italic;font-size:12px;">Unassigned</span>`
+      : `<span class="sec-badge grade" style="white-space:nowrap;">${escHtml(u.section)}</span>`;
+  }
+
+  return `<tr style="background:#fffafa;">
+    <td style="white-space:nowrap;">
+      <strong style="color:var(--text-primary);white-space:nowrap;">${escHtml(u.name)}</strong>
+      ${u.email ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px;white-space:nowrap;">${escHtml(u.email)}</div>` : ''}
+    </td>
+    <td style="white-space:nowrap;">${roleBadge}</td>
+    <td style="white-space:nowrap;"><code style="font-size:12px;background:#fef2f2;border:1px solid #fee2e2;padding:3px 8px;border-radius:4px;color:#b91c1c;font-family:'JetBrains Mono',monospace;white-space:nowrap;display:inline-block;">${escHtml(u.id)}</code></td>
+    <td style="white-space:nowrap;">${strandDeptHtml}</td>
+    <td style="white-space:nowrap;">${secHtml}</td>
+    <td class="date-val" style="white-space:nowrap;">${formatDateWithOriginHtml(u)}</td>
+    <td style="white-space:nowrap;">${formatAccountStatusBadge(u)}</td>
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:10px;white-space:nowrap;">
+        <span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
+        ${isAdmin ? `<span class="action-link" style="color:#059669;font-weight:700;white-space:nowrap;cursor:pointer;" onclick="adminToggleUserStatus('${escHtml(targetId)}', true, '${escHtml(u.name)}')">Reactivate</span>` : ''}
+      </div>
+    </td>
   </tr>`;
 }
 
@@ -190,67 +494,54 @@ function renderAdminRow(u) {
     .slice(0, 2)
     .toUpperCase() || 'AD';
 
-  const handout = getAdminHandoutRecord(u.id);
   const isInstitutionalEmail = !u.email || u.email.endsWith('@admin.hwa.edu.ph');
 
   return `<tr>
-    <td>
-      <div style="display:flex;align-items:center;gap:12px;">
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:12px;white-space:nowrap;">
         <div style="width:36px;height:36px;border-radius:10px;background:#0f172a;color:#f59e0b;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px;border:1.5px solid #d97706;box-shadow:0 2px 8px rgba(0,0,0,0.12);flex-shrink:0;">
           ${initials}
         </div>
-        <div>
-          <strong style="color:var(--text-primary);font-size:13.5px;">${escHtml(u.name)}</strong>
-          <div style="font-size:11.5px;color:#64748b;display:flex;align-items:center;gap:4px;margin-top:2px;">
+        <div style="white-space:nowrap;">
+          <strong style="color:var(--text-primary);font-size:13.5px;white-space:nowrap;">${escHtml(u.name)}</strong>
+          <div style="font-size:11.5px;color:#64748b;display:flex;align-items:center;gap:4px;margin-top:2px;white-space:nowrap;">
             <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" style="width:12px;height:12px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             Department Administrator
           </div>
         </div>
       </div>
     </td>
-    <td>
-      <span style="font-size:13px;color:#ea580c;font-weight:700;letter-spacing:0.4px;">${escHtml(u.id)}</span>
+    <td style="white-space:nowrap;">
+      <span style="font-size:13px;color:#ea580c;font-weight:700;letter-spacing:0.4px;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${escHtml(u.id)}</span>
     </td>
-    <td>
+    <td style="white-space:nowrap;">
       ${!isInstitutionalEmail
-        ? `<div style="font-size:12.5px;color:var(--text-primary);display:inline-flex;align-items:center;gap:6px;">
+        ? `<div style="font-size:12.5px;color:var(--text-primary);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">
             <svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" style="width:13px;height:13px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             ${escHtml(u.email)}
            </div>`
-        : `<span style="color:#94a3b8;font-size:12px;font-style:italic;">None provided (Optional)</span>`
+        : `<span style="color:#94a3b8;font-size:12px;font-style:italic;white-space:nowrap;">None provided (Optional)</span>`
       }
     </td>
-    <td class="date-val">${formatDateCreated(u.createdAt)}</td>
-    <td>
+    <td class="date-val" style="white-space:nowrap;">${formatDateWithOriginHtml(u)}</td>
+    <td style="white-space:nowrap;">
       ${formatLastActiveHtml(u.lastActive, u.createdAt)}
     </td>
-    <td>
-      <span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
-        <span style="width:6px;height:6px;background:#10b981;border-radius:50%;"></span> Active
-      </span>
+    <td style="white-space:nowrap;">
+      ${formatAccountStatusBadge(u)}
     </td>
-    <td>
-      <div style="display:flex;align-items:center;gap:12px;">
-        ${handout ? `<span class="action-link" style="color:#ea580c;font-weight:600;white-space:nowrap;" onclick="viewAdminHandoutModal('${escHtml(u.id)}')">View Handout</span>` : ''}
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:12px;white-space:nowrap;">
+        <span class="action-link" style="color:#ea580c;font-weight:600;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
         <span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="openAdminResetPasswordPrompt('${escHtml(u.dbId || u.id)}', '${escHtml(u.name)}')">Reset Password</span>
+        ${renderUserDeactivationAction(u)}
       </div>
     </td>
   </tr>`;
 }
 
 function viewAdminHandoutModal(schoolId) {
-  const handout = getAdminHandoutRecord(schoolId);
-  if (!handout) {
-    if (typeof showToast === 'function') showToast('No saved handout card found for this admin ID', 'info');
-    return;
-  }
-  showAdminHandoutModal({
-    school_id: handout.school_id,
-    name: handout.name,
-    temp_password: handout.temp_password,
-    recovery_email: handout.recovery_email,
-    email: handout.recovery_email
-  });
+  viewUserCredentialSlip(schoolId);
 }
 
 async function openAdminResetPasswordPrompt(userId, name) {
@@ -279,27 +570,47 @@ async function openAdminResetPasswordPrompt(userId, name) {
       return;
     }
 
-    saveAdminHandoutRecord({
+    const adminSlip = {
       school_id: data.school_id,
       name: data.name || name,
+      role: 'admin',
       temp_password: data.temp_password,
-      created_at: new Date().toISOString()
-    });
+      created_at: new Date().toISOString(),
+      created_by: {
+        id: CURRENT_PROFILE?.id,
+        name: CURRENT_PROFILE?.full_name || 'Administrator',
+        school_id: CURRENT_PROFILE?.school_id || 'ADMIN',
+        role: 'admin'
+      }
+    };
+    saveCredentialSlipRecord(adminSlip);
 
     if (typeof showToast === 'function') showToast(`New password generated for ${name}!`, 'success');
-    showAdminHandoutModal(data);
+    showOfficialCredentialSlipModal([adminSlip]);
   } catch (err) {
     if (typeof showToast === 'function') showToast('Could not reach the server to reset password', 'error');
   }
 }
 
 function renderUserManagementContent() {
-  const students = registeredUsers.filter(u => u.role === 'student');
-  const teachers = registeredUsers.filter(u => u.role === 'teacher');
-  const admins = registeredUsers.filter(u => u.role === 'admin');
+  const students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
+  const teachers = registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false);
+  const admins = registeredUsers.filter(u => u.role === 'admin' && u.isActive !== false);
+  const deactivated = registeredUsers.filter(u => u.isActive === false);
   const isStudentTab = adminUserTab === 'students';
   const isTeacherTab = adminUserTab === 'teachers';
   const isAdminTab = adminUserTab === 'admins';
+  const isDeactivatedTab = adminUserTab === 'deactivated';
+
+  const rolePriority = { admin: 1, teacher: 2, student: 3 };
+  const sortedDeactivated = [...deactivated].sort((a, b) => {
+    const pA = rolePriority[a.role] || 99;
+    const pB = rolePriority[b.role] || 99;
+    if (pA !== pB) return pA - pB;
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
 
   return `
     <div class="um-tabs">
@@ -312,13 +623,25 @@ function renderUserManagementContent() {
       <button class="um-tab admin-tab ${isAdminTab ? 'active' : ''}" onclick="setAdminUserTab('admins')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Administrators <span class="um-badge">${admins.length}</span>
       </button>
+      <button class="um-tab deactivated-tab ${isDeactivatedTab ? 'active' : ''}" style="${isDeactivatedTab ? 'background:#fef2f2;border-color:#fecaca;color:#991b1b;font-weight:700;' : 'color:#b91c1c;'}" onclick="setAdminUserTab('deactivated')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Deactivated Accounts <span class="um-badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">${deactivated.length}</span>
+      </button>
     </div>
 
     <div class="user-search-row">
       <div class="user-search-wrap">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input type="text" id="userSearchInput" placeholder="${isAdminTab ? 'Search admins by name, ID, or email…' : 'Search by name, ID, or strand…'}" oninput="filterUserTable()">
+        <input type="text" id="userSearchInput" placeholder="${isAdminTab ? 'Search admins by name, ID, or email…' : isDeactivatedTab ? 'Search deactivated accounts by name, ID, role, or strand…' : 'Search by name, ID, or strand…'}" oninput="filterUserTable()">
       </div>
+
+      ${isDeactivatedTab ? `
+        <select class="user-filter-select" id="deactivatedRoleFilter" onchange="filterUserTable()">
+          <option value="">All Roles (Admin → Teacher → Student)</option>
+          <option value="admin">Administrators</option>
+          <option value="teacher">Teachers</option>
+          <option value="student">Students</option>
+        </select>
+      ` : ''}
 
       ${isStudentTab ? `
         <select class="user-filter-select" id="userGradeFilter" onchange="filterUserTable()">
@@ -355,14 +678,26 @@ function renderUserManagementContent() {
     <div class="user-table" id="userTableWrap">
       <table>
         <thead>
-          ${isStudentTab ? `
+          ${isDeactivatedTab ? `
+            <tr>
+              <th>Account Name</th>
+              <th>Role</th>
+              <th>School / Employee ID</th>
+              <th>Department / Handled Strand</th>
+              <th>Assigned Section</th>
+              <th>Date & Origin</th>
+              <th>Account Status</th>
+              <th>Actions</th>
+            </tr>
+          ` : isStudentTab ? `
             <tr>
               <th>Student Name</th>
               <th>Student ID</th>
               <th>Grade Level</th>
               <th>Strand</th>
               <th>Section</th>
-              <th>Date Registered</th>
+              <th>Date & Origin</th>
+              <th>Account Status</th>
               <th>Chat Access</th>
               <th>Actions</th>
             </tr>
@@ -373,7 +708,8 @@ function renderUserManagementContent() {
               <th>Strands Handled</th>
               <th>Grade Level</th>
               <th>Section Handled</th>
-              <th>Date Registered</th>
+              <th>Date & Origin</th>
+              <th>Account Status</th>
               <th>Chat Access</th>
               <th>Actions</th>
             </tr>
@@ -382,7 +718,7 @@ function renderUserManagementContent() {
               <th>Administrator</th>
               <th>Admin ID</th>
               <th>Recovery Email</th>
-              <th>Date Created</th>
+              <th>Date & Origin</th>
               <th>Latest Activity</th>
               <th>Account Status</th>
               <th>Actions</th>
@@ -390,16 +726,18 @@ function renderUserManagementContent() {
           `}
         </thead>
         <tbody id="userTableBody">
-          ${isStudentTab
-            ? students.map(u => renderStudentRow(u)).join('')
-            : isTeacherTab
-              ? teachers.map(u => renderTeacherRow(u)).join('')
-              : admins.map(u => renderAdminRow(u)).join('')
+          ${isDeactivatedTab
+            ? sortedDeactivated.map(u => renderDeactivatedRow(u)).join('')
+            : isStudentTab
+              ? students.map(u => renderStudentRow(u)).join('')
+              : isTeacherTab
+                ? teachers.map(u => renderTeacherRow(u)).join('')
+                : admins.map(u => renderAdminRow(u)).join('')
           }
         </tbody>
       </table>
-      <div id="userNoResults" style="${(isStudentTab ? students.length : isTeacherTab ? teachers.length : admins.length) === 0 ? '' : 'display:none;'}padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
-        No ${isStudentTab ? 'students' : isTeacherTab ? 'teachers' : 'administrators'} found matching the filter criteria.
+      <div id="userNoResults" style="${(isDeactivatedTab ? deactivated.length : isStudentTab ? students.length : isTeacherTab ? teachers.length : admins.length) === 0 ? '' : 'display:none;'}padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
+        No ${isDeactivatedTab ? 'deactivated accounts' : isStudentTab ? 'students' : isTeacherTab ? 'teachers' : 'administrators'} found matching the filter criteria.
       </div>
     </div>
   `;
@@ -409,28 +747,102 @@ async function loadUsersFromDB() {
   if (isFetchingUsers) return;
   isFetchingUsers = true;
   try {
-    const { data, error } = await db.from('users').select('*').order('created_at', { ascending: false });
-    if (error) { console.error('Failed to load users:', error.message); return; }
-    const fetchedUsers = (data || []).map(u => ({
-      name: u.full_name,
-      id: u.school_id,
-      role: u.role,
-      detail: u.role === 'student'
-        ? `${u.strand || ''} — ${u.grade_level || ''}`
-        : (u.role === 'teacher' ? (u.section ? `${u.subjects || u.strand || ''} (${u.section})` : (u.subjects || u.strand || '')) : 'School Administrator'),
-      strand: u.strand || '',
-      gradeLevel: u.grade_level || '',
-      section: u.section || '',
-      subjects: u.subjects || '',
-      email: u.email || '',
-      recoveryEmail: u.email || '',
-      createdAt: u.created_at || null,
-      lastActive: u.last_active_at || u.created_at || null,
-      dbId: u.id,
-      permanentlyMuted: !!u.permanently_muted,
-      mutedUntil: u.muted_until || null,
-      strikes: u.profanity_strikes || 0
-    }));
+    let auditMap = {};
+    try {
+      const { data: { session } } = await db.auth.getSession();
+      if (session) {
+        const auditRes = await fetch(`${API_BASE}/api/admin/account-audit`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (auditRes.ok) {
+          const auditJson = await auditRes.json();
+          auditMap = auditJson.records || {};
+        }
+      }
+    } catch (_) {}
+    const localAudits = getLocalOriginRecords();
+
+    let data = [];
+    try {
+      if (typeof API_BASE !== 'undefined' && typeof db !== 'undefined' && db.auth) {
+        const { data: sessionData } = await db.auth.getSession().catch(() => ({ data: {} }));
+        if (sessionData?.session?.access_token) {
+          const uRes = await fetch(`${API_BASE}/api/users`, {
+            headers: { 'Authorization': `Bearer ${sessionData.session.access_token}` }
+          });
+          if (uRes.ok) {
+            const uJson = await uRes.json();
+            if (uJson && Array.isArray(uJson.users)) {
+              data = uJson.users;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (!data.length && typeof db !== 'undefined' && db) {
+      const { data: dbData, error } = await db.from('users').select('*').order('created_at', { ascending: false });
+      if (!error && Array.isArray(dbData)) data = dbData;
+    }
+
+    // Also harvest any students from class_records to guarantee they are never missing for teachers
+    try {
+      if (typeof db !== 'undefined' && db) {
+        const { data: crStudents } = await db.from('class_records').select('student_id, student_name, section, strand').order('submitted_at', { ascending: false });
+        if (crStudents && crStudents.length) {
+          crStudents.forEach(cs => {
+            const exists = data.some(existing =>
+              (existing.id && existing.id === cs.student_id) ||
+              (existing.school_id && existing.school_id === cs.student_id) ||
+              (existing.full_name && existing.full_name.toLowerCase().trim() === (cs.student_name || '').toLowerCase().trim())
+            );
+            if (!exists) {
+              data.push({
+                id: cs.student_id,
+                school_id: cs.student_id,
+                full_name: cs.student_name,
+                role: 'student',
+                section: cs.section || 'Unassigned',
+                strand: cs.strand || 'STEM',
+                is_active: true
+              });
+            }
+          });
+        }
+      }
+    } catch (_) {}
+    const savedSectionMap = getUserSectionsMap();
+    const fetchedUsers = (data || []).map(u => {
+      const auditInfo = auditMap[u.school_id] || auditMap[u.id] || localAudits[u.school_id] || localAudits[u.id] || null;
+      const origin = auditInfo?.created_by || null;
+      const cachedSec = savedSectionMap[u.school_id] ?? savedSectionMap[u.id];
+      const effectiveSection = (cachedSec !== undefined && cachedSec !== null) ? cachedSec : (u.section || '');
+
+      return {
+        name: u.full_name,
+        id: u.school_id,
+        school_id: u.school_id,
+        role: u.role,
+        detail: u.role === 'student'
+          ? `${u.strand || ''} — ${u.grade_level || ''}`
+          : (u.role === 'teacher' ? (effectiveSection ? `${u.subjects || u.strand || ''} (${effectiveSection})` : (u.subjects || u.strand || '')) : 'School Administrator'),
+        strand: u.strand || '',
+        gradeLevel: u.grade_level || '',
+        section: effectiveSection,
+        subjects: u.subjects || '',
+        email: u.email || '',
+        recoveryEmail: u.email || '',
+        createdAt: u.created_at || null,
+        lastActive: u.last_active_at || u.created_at || null,
+        dbId: u.id,
+        isActive: u.is_active !== false,
+        origin: origin,
+        statusHistory: auditInfo?.status_history || [],
+        permanentlyMuted: !!u.permanently_muted,
+        mutedUntil: u.muted_until || null,
+        strikes: u.profanity_strikes || 0
+      };
+    });
 
     const existingNames = new Set(fetchedUsers.map(u => u.name.toLowerCase()));
     const missingSeeds = DEFAULT_SEED_USERS.filter(su => !existingNames.has(su.name.toLowerCase()));
@@ -546,35 +958,64 @@ function filterUserTable() {
   const grade = document.getElementById('userGradeFilter')?.value || '';
   const strand = document.getElementById('userStrandFilter')?.value || '';
   const dateSort = document.getElementById('userDateSort')?.value || 'newest';
+  const deactivatedRole = document.getElementById('deactivatedRoleFilter')?.value || '';
 
   const isStudentTab = adminUserTab === 'students';
   const isTeacherTab = adminUserTab === 'teachers';
   const isAdminTab = adminUserTab === 'admins';
+  const isDeactivatedTab = adminUserTab === 'deactivated';
 
-  let list = registeredUsers.filter(u => {
-    if (isStudentTab) return u.role === 'student';
-    if (isTeacherTab) return u.role === 'teacher';
-    return u.role === 'admin';
-  });
+  let list = [];
 
-  list = list.filter(u => {
-    const matchSearch = !q || (u.name + ' ' + u.id + ' ' + (u.subjects || '') + ' ' + (u.strand || '') + ' ' + (u.email || '')).toLowerCase().includes(q);
-    if (isAdminTab) return matchSearch;
+  if (isDeactivatedTab) {
+    list = registeredUsers.filter(u => u.isActive === false);
+    if (deactivatedRole) {
+      list = list.filter(u => u.role === deactivatedRole);
+    }
+    if (strand) {
+      list = list.filter(u => (u.strand && u.strand.includes(strand)) || (u.subjects && u.subjects.includes(strand)));
+    }
+    if (q) {
+      list = list.filter(u => (u.name + ' ' + u.id + ' ' + (u.subjects || '') + ' ' + (u.strand || '') + ' ' + (u.email || '') + ' ' + (u.role || '')).toLowerCase().includes(q));
+    }
 
-    const matchGrade = !grade || u.gradeLevel === grade;
-    const matchStrand = !strand || (u.strand && u.strand.includes(strand)) || (u.subjects && u.subjects.includes(strand));
-    const secFilter = document.getElementById('userSectionFilter')?.value || '';
-    const matchSection = !secFilter ? true :
-      secFilter === 'Unassigned' ? (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—') :
-      (u.section || '').trim().toLowerCase() === secFilter.trim().toLowerCase();
-    return matchSearch && matchGrade && matchStrand && matchSection;
-  });
+    // Strict hierarchy: Admin first, Teacher second, Student last
+    const rolePriority = { admin: 1, teacher: 2, student: 3 };
+    list.sort((a, b) => {
+      const pA = rolePriority[a.role] || 99;
+      const pB = rolePriority[b.role] || 99;
+      if (pA !== pB) return pA - pB;
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateSort === 'oldest' ? timeA - timeB : timeB - timeA;
+    });
+  } else {
+    list = registeredUsers.filter(u => {
+      if (u.isActive === false) return false;
+      if (isStudentTab) return u.role === 'student';
+      if (isTeacherTab) return u.role === 'teacher';
+      return u.role === 'admin';
+    });
 
-  list.sort((a, b) => {
-    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return dateSort === 'oldest' ? timeA - timeB : timeB - timeA;
-  });
+    list = list.filter(u => {
+      const matchSearch = !q || (u.name + ' ' + u.id + ' ' + (u.subjects || '') + ' ' + (u.strand || '') + ' ' + (u.email || '')).toLowerCase().includes(q);
+      if (isAdminTab) return matchSearch;
+
+      const matchGrade = !grade || u.gradeLevel === grade;
+      const matchStrand = !strand || (u.strand && u.strand.includes(strand)) || (u.subjects && u.subjects.includes(strand));
+      const secFilter = document.getElementById('userSectionFilter')?.value || '';
+      const matchSection = !secFilter ? true :
+        secFilter === 'Unassigned' ? (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—') :
+        (u.section || '').trim().toLowerCase() === secFilter.trim().toLowerCase();
+      return matchSearch && matchGrade && matchStrand && matchSection;
+    });
+
+    list.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateSort === 'oldest' ? timeA - timeB : timeB - timeA;
+    });
+  }
 
   const tbody = document.getElementById('userTableBody');
   const noRes = document.getElementById('userNoResults');
@@ -582,6 +1023,7 @@ function filterUserTable() {
 
   if (tbody) {
     tbody.innerHTML = list.map(u => {
+      if (isDeactivatedTab) return renderDeactivatedRow(u);
       if (isStudentTab) return renderStudentRow(u);
       if (isTeacherTab) return renderTeacherRow(u);
       return renderAdminRow(u);
@@ -603,12 +1045,32 @@ let massAssignFilterMode = 'unassigned'; // 'unassigned' | 'all'
 let massAssignSearchQuery = '';
 let massAssignGradeFilter = '';
 let massAssignStrandFilter = '';
+let sectionViewTab = 'active'; // 'active' | 'archived'
+
+function setSectionViewTab(tab) {
+  sectionViewTab = tab;
+  filterSectionsView();
+}
 
 function renderSectionsTabContent() {
-  const unassignedStudents = registeredUsers.filter(u => u.role === 'student' && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—'));
-  const targetDefaultSection = managedSections[0]?.name || 'Section A';
+  const unassignedStudents = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—'));
+  const targetDefaultSection = managedSections.find(s => !s.isArchived)?.name || managedSections[0]?.name || 'Section A';
+  const activeCount = managedSections.filter(s => !s.isArchived).length;
+  const archivedCount = managedSections.filter(s => s.isArchived).length;
 
   return `
+    <!-- ── ACTIVE VS ARCHIVED SECTION TABS ── -->
+    <div style="display:flex;align-items:center;margin-bottom:16px;">
+      <div style="display:inline-flex;background:#f1f5f9;padding:4px;border-radius:12px;gap:6px;border:1px solid #e2e8f0;">
+        <button type="button" class="anc-archive-tab ${sectionViewTab === 'active' ? 'active' : ''}" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="setSectionViewTab('active')">
+          🏫 Active Sections (${activeCount})
+        </button>
+        <button type="button" class="anc-archive-tab ${sectionViewTab === 'archived' ? 'active' : ''}" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="setSectionViewTab('archived')">
+          📦 Archived Sections (${archivedCount})
+        </button>
+      </div>
+    </div>
+
     ${unassignedStudents.length > 0 ? `
       <div class="sec-unassigned-banner">
         <div class="sec-unassigned-info">
@@ -627,7 +1089,7 @@ function renderSectionsTabContent() {
     <div class="user-search-row">
       <div class="user-search-wrap">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input type="text" id="sectionSearchInput" placeholder="Search section by name, adviser, or room…" value="${escHtml(sectionSearchQuery)}" oninput="filterSectionsView()">
+        <input type="text" id="sectionSearchInput" placeholder="Search by section name only…" value="${escHtml(sectionSearchQuery)}" oninput="filterSectionsView()">
       </div>
 
       <select class="user-filter-select" id="sectionGradeFilterSelect" onchange="filterSectionsView()">
@@ -643,7 +1105,6 @@ function renderSectionsTabContent() {
         <option value="ABM" ${sectionStrandFilter === 'ABM' ? 'selected' : ''}>ABM</option>
         <option value="TVL" ${sectionStrandFilter === 'TVL' ? 'selected' : ''}>TVL</option>
       </select>
-
     </div>
 
     <div class="sections-grid" id="sectionsGridWrap">
@@ -662,16 +1123,13 @@ function filterSectionsView() {
 }
 
 function renderSectionCards() {
-  let list = [...managedSections];
+  const isArchivedTab = sectionViewTab === 'archived';
+  let list = managedSections.filter(s => isArchivedTab ? Boolean(s.isArchived) : !s.isArchived);
   const q = sectionSearchQuery.toLowerCase().trim();
 
+  // Search strictly works ONLY for the name of the section - no other factors play in!
   if (q) {
-    list = list.filter(s =>
-      (s.name || '').toLowerCase().includes(q) ||
-      (s.adviser || '').toLowerCase().includes(q) ||
-      (s.room || '').toLowerCase().includes(q) ||
-      (s.strand || '').toLowerCase().includes(q)
-    );
+    list = list.filter(s => (s.name || '').toLowerCase().includes(q));
   }
   if (sectionGradeFilter) {
     list = list.filter(s => s.gradeLevel === sectionGradeFilter);
@@ -683,10 +1141,10 @@ function renderSectionCards() {
   if (!list.length) {
     return `
       <div style="grid-column:1/-1;background:#fff;border:1.5px dashed var(--blue-light);border-radius:16px;padding:36px;text-align:center;color:var(--text-muted);">
-        <div style="width:44px;height:44px;margin:0 auto 12px;color:var(--blue-mid);">${iconFolder()}</div>
-        <h4 style="font-size:15px;color:var(--text-primary);margin-bottom:4px;">No Sections Found</h4>
-        <p style="font-size:13px;margin-bottom:16px;">No sections match your search or filter settings.</p>
-        <button class="foot-btn-secondary" onclick="openCreateSectionModal()">${iconPlus()} Create New Section</button>
+        <div style="width:44px;height:44px;margin:0 auto 12px;color:var(--blue-mid);">${isArchivedTab ? iconArchive() : iconFolder()}</div>
+        <h4 style="font-size:15px;color:var(--text-primary);margin-bottom:4px;">${isArchivedTab ? 'No Archived Sections' : 'No Sections Found'}</h4>
+        <p style="font-size:13px;margin-bottom:16px;">${isArchivedTab ? 'There are currently no archived sections.' : (q ? `No section matches "${escHtml(q)}".` : 'No sections match your filter settings.')}</p>
+        ${!isArchivedTab ? `<button class="foot-btn-secondary" onclick="openCreateSectionModal()">${iconPlus()} Create New Section</button>` : ''}
       </div>
     `;
   }
@@ -694,15 +1152,27 @@ function renderSectionCards() {
   return list.map(s => {
     const enrolledStudents = registeredUsers.filter(u =>
       u.role === 'student' &&
+      u.isActive !== false &&
       (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
     );
 
+    const assignedTeachers = registeredUsers.filter(u =>
+      u.role === 'teacher' &&
+      u.isActive !== false &&
+      isTeacherAssignedToSection(u, s.name)
+    );
+
+    const isArchived = Boolean(s.isArchived);
+
     return `
-      <div class="section-card">
+      <div class="section-card" style="${isArchived ? 'opacity:0.92;border-color:#fde68a;background:#fffdfa;' : ''}">
         <div>
           <div class="sec-card-head">
             <div>
-              <div class="sec-card-title">${escHtml(s.name)}</div>
+              <div class="sec-card-title" style="display:flex;align-items:center;gap:8px;">
+                ${escHtml(s.name)}
+                ${isArchived ? `<span class="sec-badge" style="background:#fef3c7;color:#b45309;font-size:11px;padding:2px 8px;font-weight:700;">📦 Archived</span>` : ''}
+              </div>
             </div>
             <span class="sec-badge count">${enrolledStudents.length} Student${enrolledStudents.length !== 1 ? 's' : ''}</span>
           </div>
@@ -715,16 +1185,24 @@ function renderSectionCards() {
           <div class="sec-card-details">
             <div><strong>Adviser:</strong> ${escHtml(s.adviser || 'Not Assigned')}</div>
             <div><strong>Room / Location:</strong> ${escHtml(s.room || 'TBD')}</div>
+            <div><strong>Assigned Teachers:</strong> ${assignedTeachers.length > 0 ? assignedTeachers.map(t => escHtml(t.name)).join(', ') : '<span style="color:#94a3b8;font-style:italic;">None assigned</span>'}</div>
+            ${isArchived && s.archivedAt ? `<div style="color:#b45309;font-size:11.5px;margin-top:4px;">Archived on ${new Date(s.archivedAt).toLocaleDateString()}</div>` : ''}
           </div>
         </div>
 
         <div class="sec-card-actions">
           <button class="sec-btn-roster" onclick="openManageSectionModal('${escHtml(s.name)}')">
-            ${iconUsers()} Manage Section
+            ${iconUsers()} ${isArchived ? 'View Roster' : 'Manage Section'}
           </button>
-          <button class="sec-btn-icon delete" title="Delete Section" onclick="deleteSectionPrompt('${escHtml(s.id)}')">
-            ${iconTrash()}
-          </button>
+          ${isArchived ? `
+            <button class="sec-btn-icon" style="color:#16a34a;" title="Unarchive Section" aria-label="Unarchive Section" onclick="unarchiveSectionPrompt('${escHtml(s.id)}')">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+          ` : `
+            <button class="sec-btn-icon" style="color:#ea580c;" title="Archive Section" aria-label="Archive Section" onclick="archiveSectionPrompt('${escHtml(s.id)}')">
+              ${iconArchive()}
+            </button>
+          `}
         </div>
       </div>
     `;
@@ -763,9 +1241,26 @@ function closeSectionModal() {
   document.getElementById('sectionModal').classList.remove('active');
 }
 
+function getAvailableCampusRooms() {
+  if (typeof managedRooms !== 'undefined' && Array.isArray(managedRooms) && managedRooms.length > 0) {
+    return managedRooms;
+  }
+  try {
+    const raw = localStorage.getItem('scholaria_managed_rooms');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
 function renderSectionModalForm(sec) {
   const body = document.getElementById('sectionModalBody');
   const foot = document.getElementById('sectionModalFoot');
+  const campusRooms = getAvailableCampusRooms();
+  const currentRoomName = (sec.room || '').trim();
+  const isRoomInList = campusRooms.some(r => r.name.toLowerCase() === currentRoomName.toLowerCase());
 
   body.innerHTML = `
     <div class="gen-field">
@@ -792,17 +1287,28 @@ function renderSectionModalForm(sec) {
     <div class="gen-row">
       <div class="gen-field">
         <label>Class Adviser</label>
-        <select id="secFormAdviser" class="user-filter-select" style="width:100%;">
+        <select id="secFormAdviser" class="user-filter-select" style="width:100%;" onchange="if(this.value) { const c = document.getElementById('secFormAdviserCustom'); if(c) c.value = ''; }">
           <option value="">Select a Teacher as Adviser (Optional)</option>
-          ${registeredUsers.filter(u => u.role === 'teacher').map(t => `<option value="${escHtml(t.name)}" ${sec.adviser === t.name ? 'selected' : ''}>${escHtml(t.name)} (${escHtml(t.strand || t.subjects || 'General')})</option>`).join('')}
+          ${registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false).map(t => `<option value="${escHtml(t.name)}" ${sec.adviser === t.name ? 'selected' : ''}>${escHtml(t.name)} (${escHtml(t.strand || t.subjects || 'General')})</option>`).join('')}
         </select>
         <div style="margin-top:5px;">
-          <input type="text" id="secFormAdviserCustom" placeholder="Or type unlisted adviser name…" value="${registeredUsers.some(u => u.role === 'teacher' && u.name === sec.adviser) ? '' : escHtml(sec.adviser || '')}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
+          <input type="text" id="secFormAdviserCustom" placeholder="Or type unlisted adviser name…" value="${registeredUsers.some(u => u.role === 'teacher' && u.isActive !== false && u.name === sec.adviser) ? '' : escHtml(sec.adviser || '')}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
         </div>
       </div>
       <div class="gen-field">
         <label>Room / Location (Optional)</label>
-        <input type="text" id="secFormRoom" placeholder="e.g. Room 304, Science Wing" value="${escHtml(sec.room || '')}">
+        <select id="secFormRoom" class="user-filter-select" style="width:100%;" onchange="if(this.value) { const c = document.getElementById('secFormRoomCustom'); if(c) c.value = ''; }">
+          <option value="">Select a Room (Optional)</option>
+          ${campusRooms.map(r => {
+            const loc = r.building ? ` (${r.building}${r.floor ? ' · ' + r.floor : ''})` : '';
+            const isSelected = isRoomInList && currentRoomName.toLowerCase() === r.name.toLowerCase();
+            return `<option value="${escHtml(r.name)}" ${isSelected ? 'selected' : ''}>${escHtml(r.name + loc)}</option>`;
+          }).join('')}
+          ${(currentRoomName && !isRoomInList) ? `<option value="${escHtml(currentRoomName)}" selected>${escHtml(currentRoomName)} (Current Location)</option>` : ''}
+        </select>
+        <div style="margin-top:5px;">
+          <input type="text" id="secFormRoomCustom" placeholder="Or type unlisted room / location…" value="${(currentRoomName && !isRoomInList) ? escHtml(currentRoomName) : ''}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
+        </div>
       </div>
     </div>
   `;
@@ -820,7 +1326,9 @@ function saveSectionForm() {
   const adviserSelect = document.getElementById('secFormAdviser')?.value || '';
   const adviserCustom = (document.getElementById('secFormAdviserCustom')?.value || '').trim();
   const adviser = adviserCustom || adviserSelect;
-  const room = (document.getElementById('secFormRoom')?.value || '').trim();
+  const roomSelect = document.getElementById('secFormRoom')?.value || '';
+  const roomCustom = (document.getElementById('secFormRoomCustom')?.value || '').trim();
+  const room = roomCustom || roomSelect;
 
   if (!name) {
     showToast('Please enter a Section Name', 'error');
@@ -865,6 +1373,23 @@ function saveSectionForm() {
     });
   }
 
+  // Link teacher to this section if adviser appointed
+  if (adviser) {
+    const teacherObj = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers))
+      ? registeredUsers.find(u => u.role === 'teacher' && u.name && u.name.trim().toLowerCase() === adviser.trim().toLowerCase())
+      : null;
+    if (teacherObj) {
+      const curSecs = (teacherObj.section || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!curSecs.some(s => s.toLowerCase() === name.toLowerCase())) {
+        curSecs.push(name);
+        teacherObj.section = curSecs.join(', ');
+        if (typeof persistUserSectionChange === 'function') {
+          persistUserSectionChange(teacherObj, teacherObj.section);
+        }
+      }
+    }
+  }
+
   saveManagedSections();
   closeSectionModal();
   showToast(`Section "${name}" saved successfully!`, 'success');
@@ -880,33 +1405,405 @@ function refreshSectionAndUserViews() {
   if (userWrap) userWrap.innerHTML = renderUserManagementContent();
 }
 
-function deleteSectionPrompt(secId) {
+function archiveSectionPrompt(secId) {
   const sec = managedSections.find(s => s.id === secId);
   if (!sec) return;
 
   const enrolled = registeredUsers.filter(u =>
     u.role === 'student' &&
+    u.isActive !== false &&
     (u.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()
   );
 
   const confirmMsg = enrolled.length > 0
-    ? `Delete section "${sec.name}"? ${enrolled.length} enrolled student(s) will be unassigned.`
-    : `Delete section "${sec.name}"?`;
+    ? `Archive section "${sec.name}"?\n\nThis section currently has ${enrolled.length} enrolled student(s). Archiving will safely preserve all academic history, student records, and class rosters while moving the section to the archive view. You can unarchive it at any time.`
+    : `Archive section "${sec.name}"?\n\nThe section will be archived. Academic records are preserved and you can unarchive it at any time.`;
 
   if (!confirm(confirmMsg)) return;
 
-  // Unassign students
-  enrolled.forEach(u => {
-    u.section = null;
-    if (u.dbId && typeof db !== 'undefined' && db?.from) {
-      db.from('users').update({ section: null }).eq('id', u.dbId).then(() => {});
-    }
-  });
-
-  managedSections = managedSections.filter(s => s.id !== secId);
+  sec.isArchived = true;
+  sec.archivedAt = new Date().toISOString();
   saveManagedSections();
-  showToast(`Section "${sec.name}" deleted.`, 'info');
+  showToast(`Section "${sec.name}" archived successfully.`, 'info');
 
+  refreshSectionAndUserViews();
+}
+
+function unarchiveSectionPrompt(secId) {
+  const sec = managedSections.find(s => s.id === secId);
+  if (!sec) return;
+
+  sec.isArchived = false;
+  sec.unarchivedAt = new Date().toISOString();
+  saveManagedSections();
+  showToast(`Section "${sec.name}" unarchived and active!`, 'success');
+
+  refreshSectionAndUserViews();
+}
+
+function deleteSectionPrompt(secId) {
+  // Sections are strictly archived to preserve historical records, never permanently destroyed
+  archiveSectionPrompt(secId);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TEACHER SECTION ASSIGNMENT & STRAND COMPATIBILITY ENGINE
+   ═══════════════════════════════════════════════════════════════ */
+
+let currentEditingTeacherKey = null;
+
+function getTeacherHandledStrands(teacher) {
+  if (!teacher) return ['General'];
+  const raw = `${teacher.subjects || ''} ${teacher.strand || ''}`.toUpperCase();
+  const known = ['STEM', 'HUMSS', 'ABM', 'TVL'];
+  const matched = known.filter(k => raw.includes(k));
+  return matched.length === 0 ? ['General'] : matched;
+}
+
+function isTeacherCompatibleWithSection(teacher, section) {
+  if (!teacher || !section) return false;
+  // If this teacher is the appointed class adviser, they are unconditionally compatible!
+  if (section.adviser && teacher.name && section.adviser.trim().toLowerCase() === teacher.name.trim().toLowerCase()) {
+    return true;
+  }
+  const teacherStrands = getTeacherHandledStrands(teacher);
+  if (teacherStrands.includes('General')) return true;
+
+  const secStrand = (section.strand || '').toUpperCase().trim();
+  if (!secStrand || secStrand === 'GENERAL') return true;
+
+  return teacherStrands.includes(secStrand);
+}
+
+function isTeacherAssignedToSection(teacher, secName) {
+  if (!teacher || !secName) return false;
+  const sName = secName.trim().toLowerCase();
+  // 1. If appointed as adviser of this section, unconditionally recognized as assigned faculty
+  const sec = managedSections.find(s => (s.name || '').trim().toLowerCase() === sName);
+  if (sec && sec.adviser && teacher.name && sec.adviser.trim().toLowerCase() === teacher.name.trim().toLowerCase()) {
+    return true;
+  }
+  // 2. Or if teacher.section explicitly contains this section
+  if (!teacher.section) return false;
+  const parts = teacher.section.split(',').map(s => s.trim().toLowerCase());
+  return parts.includes(sName);
+}
+
+/* ── Modal: Assign Sections to a Specific Teacher ── */
+function openAssignTeacherSectionsModal(teacherKey) {
+  currentEditingTeacherKey = teacherKey;
+  const teacher = registeredUsers.find(u => u.dbId === teacherKey || u.id === teacherKey);
+  if (!teacher) {
+    if (typeof showToast === 'function') showToast('Teacher record not found', 'error');
+    return;
+  }
+
+  const modal = document.getElementById('teacherSectionModal');
+  if (!modal) return;
+
+  const teacherStrands = getTeacherHandledStrands(teacher);
+  const activeSections = managedSections.filter(s => !s.isArchived);
+
+  document.getElementById('teacherSectionModalTitle').textContent = `Reassign Sections — ${teacher.name}`;
+  document.getElementById('teacherSectionModalSubtitle').textContent = `Employee ID: ${teacher.id} · Curriculum Specialization: ${teacherStrands.join(', ')}`;
+
+  const body = document.getElementById('teacherSectionModalBody');
+  const foot = document.getElementById('teacherSectionModalFoot');
+
+  const curAssigned = (teacher.section || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  body.innerHTML = `
+    <!-- TEACHER SPECIALIZATION STRIP -->
+    <div style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:12px;padding:12px 16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-size:11px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:0.5px;">Curriculum Specialization</span>
+          <div style="font-size:14px;font-weight:700;color:#0c4a6e;display:flex;align-items:center;gap:8px;margin-top:2px;">
+            ${teacherStrands.map(st => `<span class="role-tag teacher" style="font-size:12px;padding:3px 10px;">${escHtml(st)}</span>`).join('')}
+          </div>
+        </div>
+        <div style="font-size:12px;color:#0369a1;text-align:right;">
+          <strong>Currently Assigned:</strong> ${curAssigned.length > 0 ? curAssigned.map(s => `<span class="sec-badge grade" style="font-size:11px;margin-left:4px;">${escHtml(s)}</span>`).join('') : '<span style="font-style:italic;color:#64748b;">None (All / Unassigned)</span>'}
+        </div>
+      </div>
+      <div style="font-size:12px;color:#075985;margin-top:8px;line-height:1.4;">
+        ℹ️ To uphold academic standards, faculty can only be assigned to class sections matching their handled strand(s) (<strong>${teacherStrands.join(', ')}</strong>). Sections of differing strands are restricted.
+      </div>
+    </div>
+
+    <!-- SECTIONS LIST -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <h5 style="margin:0;font-size:13px;font-weight:700;color:var(--text-primary);">Available Class Sections</h5>
+      <span style="font-size:11.5px;color:var(--text-muted);">${activeSections.length} Active Sections</span>
+    </div>
+
+    <div style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">
+      ${activeSections.length > 0 ? activeSections.map(s => {
+        const isCompatible = isTeacherCompatibleWithSection(teacher, s);
+        const isChecked = isTeacherAssignedToSection(teacher, s.name);
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #f1f5f9;${!isCompatible ? 'background:#f8fafc;opacity:0.65;' : 'cursor:pointer;'}"
+               ${isCompatible ? `onclick="document.getElementById('ts_sec_${escHtml(s.id)}').click()"` : ''}>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <input type="checkbox" id="ts_sec_${escHtml(s.id)}" value="${escHtml(s.name)}"
+                     ${isChecked ? 'checked' : ''}
+                     ${!isCompatible ? 'disabled' : ''}
+                     onclick="event.stopPropagation()">
+              <div>
+                <div style="font-size:13.5px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px;">
+                  ${escHtml(s.name)}
+                  <span class="sec-badge grade" style="font-size:10.5px;">${escHtml(s.gradeLevel || 'Grade 11')}</span>
+                  <span class="sec-badge strand" style="font-size:10.5px;">${escHtml(s.strand || 'General')}</span>
+                </div>
+                <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                  Adviser: ${escHtml(s.adviser || 'None')} · Room: ${escHtml(s.room || 'TBD')}
+                </div>
+              </div>
+            </div>
+            <div>
+              ${isCompatible ? (
+                isChecked
+                  ? `<span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11px;font-weight:600;">✓ Assigned</span>`
+                  : `<span style="font-size:11px;color:#0284c7;font-weight:600;">Eligible</span>`
+              ) : `
+                <span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:10.5px;font-weight:700;" title="Section strand (${s.strand}) differs from teacher specialization (${teacherStrands.join(', ')})">
+                  Strand Mismatch (${escHtml(s.strand || 'General')})
+                </span>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('') : `
+        <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
+          No active sections found. Create a section first.
+        </div>
+      `}
+    </div>
+  `;
+
+  foot.innerHTML = `
+    <button class="foot-btn-secondary" onclick="closeTeacherSectionModal()">Cancel</button>
+    <button type="button" class="foot-btn-secondary" style="color:#dc2626;border-color:#fecaca;" onclick="clearAllTeacherSections('${escHtml(teacherKey)}')">Clear All (Unassign)</button>
+    <button class="gen-btn" onclick="saveTeacherSectionAssignments('${escHtml(teacherKey)}')">
+      Save Section Assignments
+    </button>
+  `;
+
+  modal.classList.add('active');
+}
+
+function closeTeacherSectionModal() {
+  const modal = document.getElementById('teacherSectionModal');
+  if (modal) modal.classList.remove('active');
+  currentEditingTeacherKey = null;
+}
+
+async function clearAllTeacherSections(teacherKey) {
+  const teacher = registeredUsers.find(u => u.dbId === teacherKey || u.id === teacherKey);
+  if (!teacher) return;
+  teacher.section = null;
+  if (teacher.dbId && typeof db !== 'undefined' && db?.from) {
+    try {
+      await db.from('users').update({ section: null }).eq('id', teacher.dbId);
+    } catch (e) {
+      console.warn('DB update failed:', e);
+    }
+  }
+  if (typeof showToast === 'function') showToast(`Unassigned all sections for ${teacher.name}`, 'info');
+  closeTeacherSectionModal();
+  refreshSectionAndUserViews();
+}
+
+async function saveTeacherSectionAssignments(teacherKey) {
+  const teacher = registeredUsers.find(u => u.dbId === teacherKey || u.id === teacherKey);
+  if (!teacher) return;
+
+  const modal = document.getElementById('teacherSectionModal');
+  if (!modal) return;
+
+  const checkedBoxes = modal.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)');
+  const selectedSections = Array.from(checkedBoxes).map(cb => cb.value.trim()).filter(Boolean);
+
+  const newSectionStr = selectedSections.length > 0 ? selectedSections.join(', ') : null;
+  teacher.section = newSectionStr;
+
+  await persistUserSectionChange(teacher, newSectionStr);
+
+  if (typeof showToast === 'function') {
+    showToast(`Updated sections for ${teacher.name}: ${newSectionStr || 'None (Unassigned)'}`, 'success');
+  }
+
+  closeTeacherSectionModal();
+  refreshSectionAndUserViews();
+}
+
+/* ── Modal: Assign Subject Teachers to a Section ── */
+function openAssignTeachersToSectionModal(secName) {
+  const sec = managedSections.find(s => s.name === secName) || { name: secName, gradeLevel: 'Grade 11', strand: 'General' };
+  const modal = document.getElementById('assignTeachersToSectionModal');
+  if (!modal) return;
+
+  document.getElementById('assignTeachersToSectionTitle').textContent = `Assign Faculty — ${sec.name}`;
+  document.getElementById('assignTeachersToSectionSubtitle').textContent = `${sec.gradeLevel || 'Grade 11'} · ${sec.strand || 'General'} Curriculum`;
+
+  const body = document.getElementById('assignTeachersToSectionBody');
+  const foot = document.getElementById('assignTeachersToSectionFoot');
+
+  const activeTeachers = registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false);
+
+  body.innerHTML = `
+    <!-- CURRICULUM GUARD BANNER -->
+    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:12px;padding:12px 16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.5px;">Curriculum Strand Filter</span>
+          <div style="font-size:14px;font-weight:700;color:#166534;display:flex;align-items:center;gap:8px;margin-top:2px;">
+            Required Specialization: <span class="sec-badge strand" style="font-size:12px;padding:3px 10px;">${escHtml(sec.strand || 'General')}</span>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#166534;margin-top:6px;line-height:1.4;">
+        🛡️ Faculty members must handle <strong>${escHtml(sec.strand || 'General')}</strong> subjects to be assigned to this section. Incompatible faculty are restricted to preserve senior high academic specialization.
+      </div>
+    </div>
+
+    <!-- TEACHERS LIST -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <h5 style="margin:0;font-size:13px;font-weight:700;color:var(--text-primary);">Faculty Roster</h5>
+      <span style="font-size:11.5px;color:var(--text-muted);">${activeTeachers.length} Total Faculty</span>
+    </div>
+
+    <div style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">
+      ${activeTeachers.length > 0 ? activeTeachers.map(t => {
+        const isCompatible = isTeacherCompatibleWithSection(t, sec);
+        const isAssigned = isTeacherAssignedToSection(t, sec.name);
+        const tStrands = getTeacherHandledStrands(t);
+        const curSections = (t.section || '').split(',').map(s => s.trim()).filter(Boolean);
+
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #f1f5f9;${!isCompatible ? 'background:#f8fafc;opacity:0.6;' : 'cursor:pointer;'}"
+               ${isCompatible ? `onclick="document.getElementById('att_cb_${escHtml(t.dbId || t.id)}').click()"` : ''}>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <input type="checkbox" id="att_cb_${escHtml(t.dbId || t.id)}"
+                     value="${escHtml(t.dbId || t.id)}"
+                     ${isAssigned ? 'checked' : ''}
+                     ${!isCompatible ? 'disabled' : ''}
+                     onclick="event.stopPropagation()">
+              <div>
+                <div style="font-size:13.5px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px;">
+                  ${escHtml(t.name)}
+                  <code style="font-size:11px;background:#fffbeb;padding:2px 5px;border-radius:3px;color:#d97706;">${escHtml(t.id)}</code>
+                  <span class="role-tag teacher" style="font-size:10.5px;">${escHtml(tStrands.join(', '))}</span>
+                </div>
+                <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+                  Handled Sections: ${curSections.length > 0 ? curSections.join(', ') : 'None'}
+                </div>
+              </div>
+            </div>
+            <div>
+              ${isCompatible ? (
+                isAssigned
+                  ? `<span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11px;font-weight:600;">✓ Assigned</span>`
+                  : `<span style="font-size:11px;color:#16a34a;font-weight:600;">Compatible</span>`
+              ) : `
+                <span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:10.5px;font-weight:700;" title="Teacher handles ${tStrands.join(', ')}, but this section is ${sec.strand || 'General'}">
+                  Strand Mismatch
+                </span>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('') : `
+        <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
+          No active teachers found in the system.
+        </div>
+      `}
+    </div>
+  `;
+
+  foot.innerHTML = `
+    <button class="foot-btn-secondary" onclick="closeAssignTeachersToSectionModal()">Cancel</button>
+    <button class="gen-btn" onclick="saveSectionTeacherAssignments('${escHtml(sec.name)}')">
+      Save Assigned Teachers
+    </button>
+  `;
+
+  modal.classList.add('active');
+}
+
+function closeAssignTeachersToSectionModal() {
+  const modal = document.getElementById('assignTeachersToSectionModal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function saveSectionTeacherAssignments(secName) {
+  const modal = document.getElementById('assignTeachersToSectionModal');
+  if (!modal) return;
+
+  const sec = managedSections.find(s => (s.name || '').trim().toLowerCase() === secName.trim().toLowerCase());
+  if (!sec) return;
+
+  const activeTeachers = registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false);
+
+  for (const t of activeTeachers) {
+    if (!isTeacherCompatibleWithSection(t, sec)) continue;
+    const key = t.dbId || t.id;
+    const cb = modal.querySelector(`input[value="${key}"]`);
+    if (!cb) continue;
+
+    const curSections = (t.section || '').split(',').map(s => s.trim()).filter(Boolean);
+    const hasSec = curSections.some(s => s.toLowerCase() === sec.name.trim().toLowerCase());
+
+    let updated = false;
+    if (cb.checked && !hasSec) {
+      curSections.push(sec.name);
+      updated = true;
+    } else if (!cb.checked && hasSec) {
+      const idx = curSections.findIndex(s => s.toLowerCase() === sec.name.trim().toLowerCase());
+      if (idx !== -1) curSections.splice(idx, 1);
+      updated = true;
+    }
+
+    if (updated) {
+      t.section = curSections.length > 0 ? curSections.join(', ') : null;
+      await persistUserSectionChange(t, t.section);
+    }
+  }
+
+  if (typeof showToast === 'function') {
+    showToast(`Updated assigned faculty for ${sec.name}`, 'success');
+  }
+
+  closeAssignTeachersToSectionModal();
+  openManageSectionModal(sec.name);
+  refreshSectionAndUserViews();
+}
+
+async function removeTeacherFromSection(teacherKey, secName) {
+  const teacher = registeredUsers.find(u => u.dbId === teacherKey || u.id === teacherKey);
+  if (!teacher) return;
+
+  const curSections = (teacher.section || '').split(',').map(s => s.trim()).filter(Boolean);
+  const filtered = curSections.filter(s => s.toLowerCase() !== secName.trim().toLowerCase());
+  teacher.section = filtered.length > 0 ? filtered.join(', ') : null;
+
+  // If this teacher was the appointed class adviser, clear adviser on section
+  const sec = managedSections.find(s => (s.name || '').trim().toLowerCase() === secName.trim().toLowerCase());
+  if (sec && sec.adviser && sec.adviser.trim().toLowerCase() === teacher.name.trim().toLowerCase()) {
+    sec.adviser = '';
+    saveManagedSections();
+  }
+
+  await persistUserSectionChange(teacher, teacher.section);
+
+  if (typeof showToast === 'function') {
+    showToast(`${teacher.name} unassigned from ${secName}`, 'info');
+  }
+
+  openManageSectionModal(secName);
   refreshSectionAndUserViews();
 }
 
@@ -916,7 +1813,14 @@ function openManageSectionModal(secName) {
   const sec = managedSections.find(s => s.name === secName) || { name: secName, gradeLevel: 'Grade 11', strand: 'General', adviser: '', room: '' };
   const enrolled = registeredUsers.filter(u =>
     u.role === 'student' &&
+    u.isActive !== false &&
     (u.section || '').trim().toLowerCase() === secName.trim().toLowerCase()
+  );
+
+  const assignedTeachers = registeredUsers.filter(u =>
+    u.role === 'teacher' &&
+    u.isActive !== false &&
+    isTeacherAssignedToSection(u, secName)
   );
 
   document.getElementById('sectionRosterTitle').textContent = `Manage Section — ${sec.name}`;
@@ -941,6 +1845,55 @@ function openManageSectionModal(secName) {
       <button type="button" class="sec-edit-shortcut-btn" onclick="closeSectionRosterModal(); openEditSectionModal('${escHtml(sec.id)}')">
         ${iconDoc()} Edit Details & Adviser
       </button>
+    </div>
+
+    <!-- ASSIGNED SUBJECT TEACHERS -->
+    <div class="roster-header-bar" style="margin-bottom:8px;">
+      <div class="roster-sec-info">
+        <h4>${assignedTeachers.length} Assigned Subject Teacher${assignedTeachers.length !== 1 ? 's' : ''}</h4>
+        <span>Faculty handling subjects for this section (${sec.strand || 'General'} specialization)</span>
+      </div>
+      <button class="add-btn" style="margin:0;padding:6px 14px;font-size:12px;height:32px;background:#0284c7;" onclick="openAssignTeachersToSectionModal('${escHtml(sec.name)}')">
+        ${iconUsers()} Assign / Reassign Teachers
+      </button>
+    </div>
+
+    <div class="roster-table-wrap" style="margin-bottom:20px;">
+      <table class="roster-table">
+        <thead>
+          <tr>
+            <th>Teacher Name</th>
+            <th>Teacher ID</th>
+            <th>Specialized Strands</th>
+            <th>All Handled Sections</th>
+            <th style="text-align:right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${assignedTeachers.length > 0 ? assignedTeachers.map(t => `
+            <tr>
+              <td><strong>${escHtml(t.name)}</strong></td>
+              <td><code style="font-size:12px;background:#fffbeb;padding:2px 6px;border-radius:4px;color:#d97706;">${escHtml(t.id)}</code></td>
+              <td><span class="role-tag teacher">${escHtml(t.subjects || t.strand || 'General')}</span></td>
+              <td><span class="sec-badge grade" style="font-size:11px;">${escHtml(t.section || secName)}</span></td>
+              <td style="text-align:right;">
+                <button class="action-link" style="color:#dc2626;background:none;border:none;cursor:pointer;font-family:inherit;font-weight:600;" onclick="removeTeacherFromSection('${t.dbId || t.id}', '${escHtml(secName)}')">
+                  Remove
+                </button>
+              </td>
+            </tr>
+          `).join('') : `
+            <tr>
+              <td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted);font-size:13px;">
+                No subject teachers assigned to this section yet.<br>
+                <button class="foot-btn-secondary" style="margin-top:8px;" onclick="openAssignTeachersToSectionModal('${escHtml(sec.name)}')">
+                  ${iconPlus()} Assign Teachers Now
+                </button>
+              </td>
+            </tr>
+          `}
+        </tbody>
+      </table>
     </div>
 
     <!-- ENROLLED STUDENTS LIST -->
@@ -1014,10 +1967,10 @@ async function removeStudentFromSection(studentKey, secName) {
   if (!student) return;
 
   student.section = null;
+  saveUserSectionToStorage(student.id || student.school_id, null);
+  if (student.dbId) saveUserSectionToStorage(student.dbId, null);
 
-  if (student.dbId && typeof db !== 'undefined' && db?.from) {
-    await db.from('users').update({ section: null }).eq('id', student.dbId);
-  }
+  await persistUserSectionChange(student, null);
 
   showToast(`${student.name} removed from ${secName} (now Unassigned)`, 'info');
 
@@ -1065,7 +2018,7 @@ function filterMassAssignList() {
 }
 
 function getFilteredMassStudents() {
-  let list = registeredUsers.filter(u => u.role === 'student');
+  let list = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
 
   if (massAssignFilterMode === 'unassigned') {
     list = list.filter(u => !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—');
@@ -1117,8 +2070,8 @@ function renderMassAssignContent(isPartial = false) {
   if (!body) return;
 
   const currentList = getFilteredMassStudents();
-  const unassignedCount = registeredUsers.filter(u => u.role === 'student' && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—')).length;
-  const allEligibleCount = registeredUsers.filter(u => u.role === 'student' && (u.section || '').trim().toLowerCase() !== massAssignTargetSection.trim().toLowerCase()).length;
+  const unassignedCount = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—')).length;
+  const allEligibleCount = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (u.section || '').trim().toLowerCase() !== massAssignTargetSection.trim().toLowerCase()).length;
 
   const allSelectedInView = currentList.length > 0 && currentList.every(u => massAssignSelectedIds.has(u.dbId || u.id));
 
@@ -1225,15 +2178,39 @@ async function executeMassAssignment() {
     if (selectedKeys.includes(u.dbId) || selectedKeys.includes(u.id)) {
       u.section = targetSection;
       updatedCount++;
-      if (u.dbId) dbIdsToUpdate.push(u.dbId);
+      if (u.id) saveUserSectionToStorage(u.id, targetSection);
+      if (u.dbId) {
+        saveUserSectionToStorage(u.dbId, targetSection);
+        dbIdsToUpdate.push(u.dbId);
+      }
     }
   });
 
-  if (dbIdsToUpdate.length > 0 && typeof db !== 'undefined' && db?.from) {
+  if (dbIdsToUpdate.length > 0) {
     try {
-      await db.from('users').update({ section: targetSection }).in('id', dbIdsToUpdate);
-    } catch (e) {
-      console.warn('Could not sync mass section update to DB:', e);
+      let token = null;
+      if (typeof db !== 'undefined' && db?.auth?.getSession) {
+        const { data } = await db.auth.getSession();
+        token = data?.session?.access_token;
+      }
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+
+      await fetch(`${API_BASE}/api/admin/update-user-sections`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ user_ids: dbIdsToUpdate, section: targetSection })
+      });
+    } catch (err) {
+      console.warn('Backend mass section sync notice:', err);
+    }
+
+    if (typeof db !== 'undefined' && db?.from) {
+      try {
+        await db.from('users').update({ section: targetSection }).in('id', dbIdsToUpdate);
+      } catch (e) {
+        console.warn('Could not sync mass section update to DB:', e);
+      }
     }
   }
 
@@ -1255,34 +2232,83 @@ async function executeMassAssignment() {
 const addUser = {
   step: 'type',
   userType: 'student',
-  name: '', email: '', password: '',
-  grade: 'Grade 11', section: null,
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  suffix: '',
+  contactNumber: '',
+  address: '',
+  name: '',
+  email: '',
+  password: '',
+  grade: 'Grade 11',
+  section: null,
   strands: new Set(['STEM']),
-  bulkFile: null, bulkMapped: [],
+  bulkFile: null,
+  bulkMapped: [],
   pendingUsers: [],
   generatedAdminPassword: ''
 };
 
+function auAssembleFullName() {
+  const fn = (addUser.firstName || '').trim();
+  const mn = (addUser.middleName || '').trim();
+  const ln = (addUser.lastName || '').trim();
+  const sf = (addUser.suffix || '').trim();
+  if (!fn && !ln) return '';
+  const parts = [];
+  if (fn) parts.push(fn);
+  if (mn) parts.push(mn.length === 1 ? `${mn}.` : mn);
+  if (ln) parts.push(ln);
+  if (sf) parts.push(sf);
+  return parts.join(' ');
+}
+
 function openAddUserModal(initialType) {
+  const errContainer = document.getElementById('auErrorContainer');
+  if (errContainer) { errContainer.innerHTML = ''; errContainer.style.display = 'none'; }
   const chosenType = initialType || (adminUserTab === 'admins' ? 'admin' : (adminUserTab === 'teachers' ? 'teacher' : 'student'));
   Object.assign(addUser, {
-    step: 'type', userType: chosenType,
-    name: '', email: '', password: '',
-    grade: 'Grade 11', section: null,
+    step: 'type',
+    userType: chosenType,
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    suffix: '',
+    contactNumber: '',
+    address: '',
+    name: '',
+    email: '',
+    password: '',
+    grade: 'Grade 11',
+    section: null,
     strands: new Set(['STEM']),
-    bulkFile: null, bulkMapped: [], pendingUsers: [],
+    bulkFile: null,
+    bulkMapped: [],
+    pendingUsers: [],
     generatedAdminPassword: generateComplexPasswordClient(14)
   });
   document.getElementById('addUserModal').classList.add('active');
   renderAddUserModal();
 }
 function closeAddUserModal() {
-  document.getElementById('addUserModal').classList.remove('active');
+  const errContainer = document.getElementById('auErrorContainer');
+  if (errContainer) { errContainer.innerHTML = ''; errContainer.style.display = 'none'; }
+  const modal = document.getElementById('addUserModal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.classList.remove('credential-slip-modal');
+  }
 }
 
 function auSelectType(t) {
   addUser.userType = t;
   addUser.section = null;
+  if (t === 'student') {
+    if (addUser.strands.size > 1) {
+      addUser.strands = new Set([Array.from(addUser.strands)[0] || 'STEM']);
+    }
+  }
   if (t === 'admin' && !addUser.generatedAdminPassword) {
     addUser.generatedAdminPassword = generateComplexPasswordClient(14);
   }
@@ -1298,25 +2324,53 @@ function auRegenerateAdminPassword() {
 function auSetGrade(g)   { addUser.grade = g; renderAddUserModal(); }
 function auSetSection(s) { addUser.section = s; renderAddUserModal(); }
 function auToggleStrand(s) {
-  if (addUser.strands.has(s)) { if (addUser.strands.size > 1) addUser.strands.delete(s); }
-  else addUser.strands.add(s);
+  if (addUser.userType === 'student') {
+    // A student is strictly enrolled in ONE strand only
+    addUser.strands = new Set([s]);
+  } else {
+    // Teachers can handle multiple strands
+    if (addUser.strands.has(s)) {
+      if (addUser.strands.size > 1) addUser.strands.delete(s);
+    } else {
+      addUser.strands.add(s);
+    }
+  }
   renderAddUserModal();
 }
 function auRefreshSaveButton() {
   const btn = document.getElementById('auSaveBtn');
   if (!btn) return;
-  const queuedCount = addUser.pendingUsers.length + (addUser.bulkFile ? resolveBulkRows().rows.length : 0);
-  const saveCount = queuedCount || (addUser.name.trim() ? 1 : 0);
-  btn.disabled = saveCount === 0;
-  btn.innerHTML = `${iconUsers()} Save ${saveCount > 0 ? `(${saveCount} user${saveCount !== 1 ? 's' : ''})` : 'Users'}`;
+  const isAdm = addUser.userType === 'admin';
+  if (isAdm) {
+    const hasName = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
+    btn.disabled = !hasName;
+  } else {
+    const queuedCount = addUser.pendingUsers.length + (addUser.bulkFile ? resolveBulkRows().rows.length : 0);
+    const hasSingle = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
+    const saveCount = queuedCount || (hasSingle ? 1 : 0);
+    btn.disabled = saveCount === 0;
+    btn.innerHTML = `${iconUsers()} Save ${saveCount > 0 ? `(${saveCount} user${saveCount !== 1 ? 's' : ''})` : 'Users'}`;
+  }
 }
 
-function auUpdateName(v)     { addUser.name = v; auRefreshSaveButton(); }
-function auUpdateEmail(v)    { addUser.email = v; }
-function auUpdatePassword(v) { addUser.password = v; }
+function auUpdateFirstName(v)     { addUser.firstName = v; addUser.name = auAssembleFullName(); auRefreshSaveButton(); }
+function auUpdateMiddleName(v)    { addUser.middleName = v; addUser.name = auAssembleFullName(); }
+function auUpdateLastName(v)     { addUser.lastName = v; addUser.name = auAssembleFullName(); auRefreshSaveButton(); }
+function auUpdateSuffix(v)       { addUser.suffix = v; addUser.name = auAssembleFullName(); }
+function auUpdateContactNumber(v){ addUser.contactNumber = v; }
+function auUpdateAddress(v)      { addUser.address = v; }
+function auUpdateName(v)         { addUser.name = v; auRefreshSaveButton(); }
+function auUpdateEmail(v)        { addUser.email = v; }
+function auUpdatePassword(v)     { addUser.password = v; }
 
 const BULK_HEADER_ALIASES = {
   name: ['name', 'full name', 'full_name', 'fullname'],
+  first_name: ['first name', 'first_name', 'firstname'],
+  middle_name: ['middle name', 'middle_name', 'middlename'],
+  last_name: ['last name', 'last_name', 'lastname', 'surname'],
+  suffix: ['suffix'],
+  contact_number: ['phone', 'contact', 'contact number', 'contact_number', 'phone number', 'phone_number', 'mobile'],
+  address: ['address', 'residence', 'home address', 'residential address'],
   email: ['email', 'e-mail', 'email address'],
   strand: ['strand'],
   grade_level: ['grade level', 'grade_level', 'grade'],
@@ -1345,28 +2399,50 @@ function mapBulkHeaders(rawRows) {
 
 function resolveBulkRows() {
   const isStudent = addUser.userType === 'student';
-  const fallbackStrand = Array.from(addUser.strands)[0] || null;
+  const fallbackStrand = Array.from(addUser.strands)[0] || 'STEM';
   const rows = [];
   const errors = [];
 
   addUser.bulkMapped.forEach((mapped, i) => {
     const rowNum = i + 2;
-    const name = mapped.name || '';
+    let name = mapped.name || '';
+    if (!name && (mapped.first_name || mapped.last_name)) {
+      const parts = [mapped.first_name, mapped.middle_name, mapped.last_name, mapped.suffix].filter(Boolean);
+      name = parts.join(' ');
+    }
     const email = mapped.email || '';
-    if (!name) { errors.push(`Row ${rowNum}: missing name`); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.push(`Row ${rowNum} (${name || 'unnamed'}): invalid or missing email`); return; }
+    if (!name) { errors.push(`Row ${rowNum}: Missing name (First Name & Last Name are required)`); return; }
+    if (/\d/.test(name)) { errors.push(`Row ${rowNum} (${name}): Name cannot contain numbers`); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.push(`Row ${rowNum} (${name || 'unnamed'}): Invalid or missing email`); return; }
 
-    const targetSection = mapped.section || addUser.section || null;
+    const strand = (mapped.strand || fallbackStrand || '').trim();
+    if (isStudent) {
+      if (!strand) { errors.push(`Row ${rowNum} (${name}): Strand is required`); return; }
+      if (strand.includes(',') || strand.includes('/') || strand.includes(';') || strand.includes('&')) {
+        errors.push(`Row ${rowNum} (${name}): A student can only be enrolled in exactly 1 strand (STEM, HUMSS, or ABM)`);
+        return;
+      }
+    }
+
+    const gradeLevel = isStudent ? (mapped.grade_level || addUser.grade || '').trim() : null;
+    if (isStudent && !gradeLevel) {
+      errors.push(`Row ${rowNum} (${name}): Grade Level is strictly required (not optional)`);
+      return;
+    }
+
+    const targetSection = (mapped.section || addUser.section || '').trim() || null;
 
     rows.push({
       name, email,
+      contact_number: mapped.contact_number || '',
+      address: mapped.address || '',
       role: addUser.userType,
-      strand: mapped.strand || fallbackStrand,
-      grade_level: isStudent ? (mapped.grade_level || addUser.grade) : null,
+      strand: strand || fallbackStrand,
+      grade_level: gradeLevel,
       section: targetSection,
       subjects: !isStudent ? (mapped.subjects || Array.from(addUser.strands).join(', ')) : null,
       detail: isStudent
-        ? `${mapped.strand || fallbackStrand} — ${mapped.grade_level || addUser.grade}${targetSection ? ` (${targetSection})` : ' (Unassigned)'}`
+        ? `${strand || fallbackStrand} — ${gradeLevel}${targetSection ? ` (${targetSection})` : ' (Unassigned)'}`
         : (targetSection 
             ? `${mapped.subjects || Array.from(addUser.strands).join(', ')} (${targetSection})`
             : (mapped.subjects || Array.from(addUser.strands).join(', ')))
@@ -1440,39 +2516,129 @@ function auToggleFormatExample() {
   label.textContent = (isOpen ? 'See' : 'Hide') + ' example spreadsheet format';
 }
 
+function downloadBulkUserTemplate() {
+  const isStudent = addUser.userType === 'student';
+  const roleName = isStudent ? 'Student' : 'Teacher';
+  const fileName = `Scholaria_${roleName}_Bulk_Template.xlsx`;
+
+  const headers = isStudent
+    ? ['First Name', 'Middle Name', 'Last Name', 'Suffix', 'Email', 'Strand', 'Grade Level', 'Section', 'Contact Number', 'Address']
+    : ['First Name', 'Middle Name', 'Last Name', 'Suffix', 'Email', 'Subjects', 'Section', 'Contact Number', 'Address'];
+
+  const sampleRows = isStudent
+    ? [
+        ['Juan', 'Mercado', 'Dela Cruz', 'Jr.', 'juan.delacruz@sample.edu.ph', 'STEM', 'Grade 11', 'Section A', '09171234567', '123 Rizal St., Pasig City'],
+        ['Ana Marie', 'Tan', 'Reyes', '', 'ana.reyes@sample.edu.ph', 'ABM', 'Grade 12', '', '09189876543', '456 Ortigas Ave., Pasig City'],
+        ['Pedro', 'Lim', 'Santos', '', 'pedro.santos@sample.edu.ph', 'HUMSS', 'Grade 11', '', '09205556677', '789 San Antonio, Pasig City']
+      ]
+    : [
+        ['Ramon', 'Cruz', 'Garcia', '', 'ramon.garcia@sample.edu.ph', 'General Mathematics, Pre-Calculus', 'Section A', '09172223344', 'Quezon City'],
+        ['Liza', 'Morales', 'Torres', '', 'liza.torres@sample.edu.ph', 'Practical Research 1, Statistics', 'Section B', '09183334455', 'Mandaluyong City'],
+        ['Paul', 'Bautista', 'Fernandez', '', 'paul.fernandez@sample.edu.ph', 'Empowerment Technologies', '', '', '']
+      ];
+
+  if (typeof XLSX !== 'undefined') {
+    try {
+      const wsData = [headers, ...sampleRows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // Auto-fit column widths
+      ws['!cols'] = headers.map((h, i) => {
+        const maxLen = Math.max(h.length, ...sampleRows.map(r => String(r[i] || '').length));
+        return { wch: Math.max(maxLen + 4, 16) };
+      });
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, isStudent ? 'Students' : 'Teachers');
+      XLSX.writeFile(wb, fileName);
+      if (typeof showToast === 'function') {
+        showToast(`Downloaded editable template: ${fileName}`, 'success');
+      }
+      return;
+    } catch (e) {
+      console.warn('XLSX export failed, using CSV fallback:', e);
+    }
+  }
+
+  // Fallback to downloadable CSV if XLSX isn't loaded
+  const csvLines = [
+    headers.join(','),
+    ...sampleRows.map(r => r.map(c => `"${(c || '').replace(/"/g, '""')}"`).join(','))
+  ];
+  const blob = new Blob([csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName.replace('.xlsx', '.csv');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (typeof showToast === 'function') {
+    showToast(`Downloaded editable template: ${fileName.replace('.xlsx', '.csv')}`, 'success');
+  }
+}
+window.downloadBulkUserTemplate = downloadBulkUserTemplate;
+
 function renderFormatExampleTable() {
   const isStudent = addUser.userType === 'student';
   const columns = isStudent
     ? [
-        { header: 'Name',        required: true },
-        { header: 'Email',       required: true },
-        { header: 'Strand',      required: false },
-        { header: 'Grade Level', required: false },
-        { header: 'Section',     required: false }
+        { header: 'First Name',     required: true },
+        { header: 'Middle Name',    required: false },
+        { header: 'Last Name',      required: true },
+        { header: 'Suffix',         required: false },
+        { header: 'Email',          required: true },
+        { header: 'Strand',         required: true },
+        { header: 'Grade Level',    required: true },
+        { header: 'Section',        required: false },
+        { header: 'Contact Number', required: false },
+        { header: 'Address',        required: false }
       ]
     : [
-        { header: 'Name',     required: true },
-        { header: 'Email',    required: true },
-        { header: 'Subjects', required: false },
-        { header: 'Section',  required: false }
+        { header: 'First Name',     required: true },
+        { header: 'Middle Name',    required: false },
+        { header: 'Last Name',      required: true },
+        { header: 'Suffix',         required: false },
+        { header: 'Email',          required: true },
+        { header: 'Subjects',       required: false },
+        { header: 'Section',        required: false },
+        { header: 'Contact Number', required: false },
+        { header: 'Address',        required: false }
       ];
 
   const sampleRows = isStudent
     ? [
-        ['Dela Cruz, Juan P.',   'juan.delacruz@sample.edu.ph', STRANDS[0], GRADE_LEVELS[1], ''],
-        ['Reyes, Ana Marie T.',  'ana.reyes@sample.edu.ph', STRANDS[2], GRADE_LEVELS[0], ''],
-        ['Santos, Pedro L.',     'pedro.santos@sample.edu.ph', '', '', '']
+        ['Juan', 'Mercado', 'Dela Cruz', 'Jr.', 'juan.delacruz@sample.edu.ph', 'STEM', 'Grade 11', 'Section A', '09171234567', '123 Rizal St., Pasig City'],
+        ['Ana Marie', 'Tan', 'Reyes', '', 'ana.reyes@sample.edu.ph', 'ABM', 'Grade 12', '', '09189876543', '456 Ortigas Ave., Pasig City'],
+        ['Pedro', 'Lim', 'Santos', '', 'pedro.santos@sample.edu.ph', 'HUMSS', 'Grade 11', '', '09205556677', '789 San Antonio, Pasig City']
       ]
     : [
-        ['Garcia, Ramon C.',  'ramon.garcia@sample.edu.ph', 'Web Systems, Programming', 'Section A'],
-        ['Torres, Liza M.',   'liza.torres@sample.edu.ph', 'Research, Statistics', ''],
-        ['Fernandez, Paul B.', 'paul.fernandez@sample.edu.ph', '', '']
+        ['Ramon', 'Cruz', 'Garcia', '', 'ramon.garcia@sample.edu.ph', 'General Mathematics, Pre-Calculus', 'Section A', '09172223344', 'Quezon City'],
+        ['Liza', 'Morales', 'Torres', '', 'liza.torres@sample.edu.ph', 'Practical Research 1, Statistics', 'Section B', '09183334455', 'Mandaluyong City'],
+        ['Paul', 'Bautista', 'Fernandez', '', 'paul.fernandez@sample.edu.ph', 'Empowerment Technologies', '', '', '']
       ];
 
   return `
     <div class="au-format-wrap">
-      <div class="au-format-note">
-        Upload a spreadsheet with these column headers in row 1. Only <b>Name</b> and <b>Email</b> are required; <b>Section is optional</b> and students can be mass-assigned to sections anytime in the <b>Sections & Rosters</b> tab.
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap;background:#f0fdf4;border:1px solid #bbf7d0;padding:10px 14px;border-radius:10px;">
+        <div style="font-size:12px;color:#166534;font-weight:600;display:flex;align-items:center;gap:7px;">
+          <span>📊</span>
+          <span>Download this official spreadsheet template, fill in your roster, and upload it back.</span>
+        </div>
+        <button type="button" class="sw-btn" onclick="downloadBulkUserTemplate()" style="background:#16a34a;color:#ffffff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;box-shadow:0 2px 6px rgba(22,163,74,0.25);white-space:nowrap;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download Editable Excel (.xlsx)
+        </button>
+      </div>
+      <div class="au-format-note" style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:12px 14px;color:#1e40af;line-height:1.6;margin-bottom:12px;">
+        <div style="font-weight:700;font-size:12.5px;margin-bottom:4px;color:#1d4ed8;">Institutional Roster Requirements:</div>
+        <ul style="margin:4px 0 0 18px;padding:0;font-size:12px;">
+          <li>${isStudent ? '<strong>GRADE LEVEL is STRICTLY REQUIRED</strong>. <strong>Section is OPTIONAL</strong> (can be left empty and assigned later in the Sections &amp; Rosters tab).' : 'Faculty assignments require Name and Email. Subjects and Section are optional.'}</li>
+          <li>${isStudent ? 'Students must be enrolled in <strong>EXACTLY ONE STRAND</strong> (e.g. STEM, HUMSS, or ABM) — multiple strands are not permitted.' : 'Teachers can handle multiple strands/subjects separated by comma.'}</li>
+          <li><strong>No digits or numbers are allowed</strong> in First Name, Middle Name, Last Name, or Suffix fields.</li>
+          <li>Section, Contact Number, and Residential Address are optional.</li>
+        </ul>
       </div>
       <div class="au-format-table-scroll">
         <table class="au-format-table">
@@ -1487,21 +2653,60 @@ function renderFormatExampleTable() {
           </tbody>
         </table>
       </div>
-      <div class="au-format-legend">
-        <span><i class="sw-req"></i> Required</span>
-        <span><i class="sw-opt"></i> Optional — falls back to Unassigned or chips above</span>
+      <div class="au-format-legend" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span><i class="sw-req"></i> Required (Grade Level is Mandatory)</span>
+          <span><i class="sw-opt"></i> Optional (Section can be left empty)</span>
+        </div>
+        <a href="javascript:void(0)" onclick="downloadBulkUserTemplate()" style="color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;">Download .xlsx template &rarr;</a>
       </div>
     </div>
   `;
 }
 
 function auBuildSingleFromForm() {
-  if (!addUser.name.trim()) return { error: 'Please enter a name' };
+  const fn = (addUser.firstName || '').trim();
+  const mn = (addUser.middleName || '').trim();
+  const ln = (addUser.lastName || '').trim();
+  const sf = (addUser.suffix || '').trim();
+  const phone = (addUser.contactNumber || '').trim();
+  const addr = (addUser.address || '').trim();
+
+  if (!fn) return { error: 'Please enter a First Name' };
+  if (!ln) return { error: 'Please enter a Last Name' };
+
+  // Explicit check for numbers in all name fields
+  if (/\d/.test(fn)) return { error: 'First Name cannot contain numbers' };
+  if (/\d/.test(mn)) return { error: 'Middle Name cannot contain numbers' };
+  if (/\d/.test(ln)) return { error: 'Last Name cannot contain numbers' };
+  if (/\d/.test(sf)) return { error: 'Suffix cannot contain numbers' };
+
+  const nameRegex = /^[a-zA-Z\s\u00C0-\u024FñÑ\-.]+$/;
+  if (!nameRegex.test(fn)) return { error: 'First Name must contain letters only (no numbers or special characters)' };
+  if (mn && !nameRegex.test(mn)) return { error: 'Middle Name must contain letters only (no numbers or special characters)' };
+  if (!nameRegex.test(ln)) return { error: 'Last Name must contain letters only (no numbers or special characters)' };
+  if (sf && !nameRegex.test(sf)) return { error: 'Suffix must contain letters only (no numbers or special characters)' };
+
+  if (fn.length > 50 || ln.length > 50) return { error: 'Name fields cannot exceed 50 characters' };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addUser.email.trim())) return { error: 'Please enter a valid email' };
+
+  const fullName = auAssembleFullName();
   const isStudent = addUser.userType === 'student';
   const targetSection = addUser.section || null;
+
+  if (isStudent) {
+    if (!addUser.grade) return { error: 'Please select a Grade Level (Required)' };
+    if (!addUser.strands || addUser.strands.size !== 1) return { error: 'Student must be enrolled in exactly one strand' };
+  }
+
   const user = {
-    name: addUser.name.trim(),
+    name: fullName,
+    firstName: fn,
+    middleName: mn,
+    lastName: ln,
+    suffix: sf,
+    contact_number: phone,
+    address: addr,
     email: addUser.email.trim(),
     role: addUser.userType,
     grade_level: isStudent ? addUser.grade : null,
@@ -1519,6 +2724,12 @@ function auAddSingle() {
   const { user, error } = auBuildSingleFromForm();
   if (error) { showToast(error, 'error'); return; }
   addUser.pendingUsers.push(user);
+  addUser.firstName = '';
+  addUser.middleName = '';
+  addUser.lastName = '';
+  addUser.suffix = '';
+  addUser.contactNumber = '';
+  addUser.address = '';
   addUser.name = '';
   addUser.email = '';
   renderAddUserModal();
@@ -1533,14 +2744,15 @@ async function auSaveUsers() {
 
   const toAdd = [...addUser.pendingUsers, ...bulkRows];
 
-  if (toAdd.length === 0 && addUser.name.trim()) {
+  const hasSingle = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
+  if (toAdd.length === 0 && hasSingle) {
     const { user, error } = auBuildSingleFromForm();
     if (error) { showToast(error, 'error'); return; }
     toAdd.push(user);
   }
 
   if (toAdd.length === 0) {
-    showToast(bulkErrors.length ? 'Every row in the file had a problem — see below' : 'Nothing to save — add at least one user', 'error');
+    showToast(bulkErrors.length ? 'Every row in the file had a problem — see below' : 'Nothing to save — enter user details or upload a file', 'error');
     return;
   }
 
@@ -1560,40 +2772,115 @@ async function auSaveUsers() {
         },
         body: JSON.stringify({
           full_name: u.name,
+          first_name: u.firstName || undefined,
+          middle_name: u.middleName || undefined,
+          last_name: u.lastName || undefined,
+          suffix: u.suffix || undefined,
           role: u.role,
           email: u.email,
           strand: u.strand,
           grade_level: u.grade_level,
           section: u.section,
-          subjects: u.subjects
+          subjects: u.subjects,
+          contact_number: u.contact_number || undefined,
+          address: u.address || undefined
         })
       });
       const body = await res.json();
       if (!res.ok) { failures.push(`${u.name}: ${body.error || 'failed'}`); continue; }
-      results.push({ name: u.name, ...body });
+      const itemRecord = {
+        name: u.name,
+        firstName: u.firstName || body.first_name || '',
+        middleName: u.middleName || body.middle_name || '',
+        lastName: u.lastName || body.last_name || '',
+        suffix: u.suffix || body.suffix || '',
+        first_name: u.firstName || body.first_name || '',
+        middle_name: u.middleName || body.middle_name || '',
+        last_name: u.lastName || body.last_name || '',
+        role: u.role,
+        strand: u.strand,
+        grade_level: u.grade_level,
+        section: u.section,
+        subjects: u.subjects,
+        contact_number: u.contact_number || '',
+        address: u.address || '',
+        ...body
+      };
+      saveCredentialSlipRecord(itemRecord);
+      saveLocalOriginRecord({
+        school_id: body.school_id,
+        user_id: body.school_id,
+        name: u.name,
+        role: u.role,
+        created_at: body.created_at,
+        created_by: body.created_by
+      });
+      results.push(itemRecord);
     } catch {
       failures.push(`${u.name}: could not reach the server`);
     }
   }
 
-  if (failures.length) showToast(failures.join(' · '), 'error');
+  if (failures.length) {
+    const errContainer = document.getElementById('auErrorContainer');
+    if (errContainer) {
+      errContainer.style.display = 'block';
+      errContainer.innerHTML = `
+        <div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:12px;padding:14px 16px;margin-bottom:16px;color:#991b1b;box-shadow:0 2px 8px rgba(220,38,38,0.1);">
+          <div style="font-weight:800;font-size:13.5px;display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#dc2626" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Cannot Register ${failures.length} Account${failures.length === 1 ? '' : 's'}:
+          </div>
+          <ul style="margin:0 0 0 20px;padding:0;font-size:12px;line-height:1.6;">
+            ${failures.map(f => `<li>${escHtml(f)}</li>`).join('')}
+          </ul>
+        </div>`;
+      errContainer.scrollIntoView({ behavior: 'smooth' });
+    }
+    showToast(`${failures.length} account registration${failures.length === 1 ? '' : 's'} failed. Check the error list above.`, 'error');
+  }
 
   if (results.length) {
     closeAddUserModal();
-    showCredentialsModal(results);
+    showOfficialCredentialSlipModal(results);
     await loadUsersFromDB();
   }
 }
 
 async function auSaveAdminAccount() {
-  const name = addUser.name.trim();
+  const fn = (addUser.firstName || '').trim();
+  const mn = (addUser.middleName || '').trim();
+  const ln = (addUser.lastName || '').trim();
+  const sf = (addUser.suffix || '').trim();
+  const phone = (addUser.contactNumber || '').trim();
+  const addr = (addUser.address || '').trim();
+
+  if (!fn) {
+    if (typeof showToast === 'function') showToast('Administrator First Name is required', 'error');
+    return;
+  }
+  if (!ln) {
+    if (typeof showToast === 'function') showToast('Administrator Last Name is required', 'error');
+    return;
+  }
+
+  // Explicit check for numbers in all name fields
+  if (/\d/.test(fn)) { if (typeof showToast === 'function') showToast('First Name cannot contain numbers', 'error'); return; }
+  if (/\d/.test(mn)) { if (typeof showToast === 'function') showToast('Middle Name cannot contain numbers', 'error'); return; }
+  if (/\d/.test(ln)) { if (typeof showToast === 'function') showToast('Last Name cannot contain numbers', 'error'); return; }
+  if (/\d/.test(sf)) { if (typeof showToast === 'function') showToast('Suffix cannot contain numbers', 'error'); return; }
+
+  const nameRegex = /^[a-zA-Z\s\u00C0-\u024FñÑ\-.]+$/;
+  if (!nameRegex.test(fn)) { if (typeof showToast === 'function') showToast('First Name must contain letters only', 'error'); return; }
+  if (mn && !nameRegex.test(mn)) { if (typeof showToast === 'function') showToast('Middle Name must contain letters only', 'error'); return; }
+  if (!nameRegex.test(ln)) { if (typeof showToast === 'function') showToast('Last Name must contain letters only', 'error'); return; }
+  if (sf && !nameRegex.test(sf)) { if (typeof showToast === 'function') showToast('Suffix must contain letters only', 'error'); return; }
+
+  const name = auAssembleFullName();
+  addUser.name = name;
   const email = addUser.email.trim();
   const password = addUser.generatedAdminPassword || generateComplexPasswordClient(14);
 
-  if (!name) {
-    if (typeof showToast === 'function') showToast('Administrator full name is required', 'error');
-    return;
-  }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     if (typeof showToast === 'function') showToast('Please enter a valid recovery email format, or leave empty', 'error');
     return;
@@ -1618,9 +2905,15 @@ async function auSaveAdminAccount() {
       },
       body: JSON.stringify({
         full_name: name,
+        first_name: fn,
+        middle_name: mn || undefined,
+        last_name: ln,
+        suffix: sf || undefined,
         role: 'admin',
         email: email || undefined,
-        custom_password: password
+        custom_password: password,
+        contact_number: phone || undefined,
+        address: addr || undefined
       })
     });
 
@@ -1631,16 +2924,42 @@ async function auSaveAdminAccount() {
       return;
     }
 
-    saveAdminHandoutRecord({
+    const adminSlip = {
       school_id: data.school_id,
       name: data.name || name,
+      firstName: fn,
+      middleName: mn,
+      lastName: ln,
+      suffix: sf,
+      first_name: fn,
+      middle_name: mn,
+      last_name: ln,
+      role: 'admin',
       temp_password: data.temp_password || password,
       recovery_email: data.recovery_email || email || null,
-      created_at: new Date().toISOString()
+      email: data.email || email,
+      contact_number: data.contact_number || phone || null,
+      address: data.address || addr || null,
+      created_at: data.created_at || new Date().toISOString(),
+      created_by: data.created_by || {
+        id: CURRENT_PROFILE?.id,
+        name: CURRENT_PROFILE?.full_name || 'Administrator',
+        school_id: CURRENT_PROFILE?.school_id || 'ADMIN',
+        role: 'admin'
+      }
+    };
+
+    saveCredentialSlipRecord(adminSlip);
+    saveLocalOriginRecord({
+      school_id: data.school_id,
+      name: data.name || name,
+      role: 'admin',
+      created_at: adminSlip.created_at,
+      created_by: adminSlip.created_by
     });
 
     closeAddUserModal();
-    showAdminHandoutModal(data);
+    showOfficialCredentialSlipModal([adminSlip]);
     await loadUsersFromDB();
   } catch (err) {
     if (typeof showToast === 'function') showToast('Could not reach the server to create account', 'error');
@@ -1648,114 +2967,446 @@ async function auSaveAdminAccount() {
   }
 }
 
-function showAdminHandoutModal(adminData) {
+function buildCredentialSlipCardHtml(slip, index = 0) {
+  const cardId = `credentialSlipCard_${index}_${(slip.school_id || 'user').replace(/[^a-zA-Z0-9]/g, '_')}`;
+  const roleTitle = slip.role === 'admin'
+    ? 'Department Administrator'
+    : slip.role === 'teacher'
+      ? 'Senior High Faculty'
+      : 'Senior High Student';
+
+  const portalUrl = slip.role === 'admin'
+    ? `${window.location.origin}/admin-login.html`
+    : `${window.location.origin}/login.html`;
+
+  const createdTimeStr = formatExactDateTime(slip.created_at || slip.createdAt || Date.now());
+  const creatorName = slip.created_by?.name || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'Institutional Administration';
+  const creatorId = slip.created_by?.school_id || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.school_id) || 'ADMIN';
+  const refCode = `HWA-SLIP-${slip.school_id || 'GEN'}`;
+
+  const academicInfo = slip.role === 'admin'
+    ? 'Institutional Systems & Department Administration'
+    : [slip.strand || slip.subjects, slip.grade_level || slip.gradeLevel, slip.section].filter(Boolean).join(' · ') || 'Senior High School Academic Department';
+
+  const emailDisplay = slip.recovery_email || slip.email || (slip.role === 'admin' ? `${(slip.school_id || '').toLowerCase()}@admin.hwa.edu.ph` : 'None on file');
+  const pwDisplay = slip.temp_password || slip.tempPassword || '[Security Key Issued / User Established]';
+
+  return `
+    <div class="credential-slip-card" id="${cardId}"
+         data-school-id="${escHtml(slip.school_id || slip.id || '')}"
+         data-name="${escHtml(slip.name || slip.full_name || 'Authorized User')}"
+         data-role="${escHtml(roleTitle)}"
+         data-temp-pw="${escHtml(pwDisplay)}"
+         data-created-at="${escHtml(createdTimeStr)}"
+         data-created-by="${escHtml(creatorName)}"
+         data-origin-id="${escHtml(creatorId)}"
+         data-academic="${escHtml(academicInfo)}"
+         data-email="${escHtml(emailDisplay)}"
+         data-portal="${escHtml(portalUrl)}">
+      <div class="credential-slip-watermark">HAVEN OF WISDOM</div>
+
+      <div class="credential-slip-head">
+        <div class="slip-school-brand">
+          <div class="slip-school-logo" style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;background:#1e3a8a;border-radius:12px;border:2px solid #d97706;box-shadow:0 2px 8px rgba(30,58,138,0.25);flex-shrink:0;">
+            <svg viewBox="0 0 40 40" style="width:34px;height:34px;" fill="none">
+              <circle cx="20" cy="20" r="18" stroke="#f59e0b" stroke-width="1.8" stroke-dasharray="2,2"/>
+              <path d="M20 9 L31 15 L20 21 L9 15 Z" fill="#fbbf24"/>
+              <path d="M14 17.5 V23.5 C14 27.5 20 30.5 20 30.5 C20 30.5 26 27.5 26 23.5 V17.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+              <path d="M31 15 V22.5" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="31" cy="24" r="1.2" fill="#fbbf24"/>
+            </svg>
+          </div>
+          <div class="slip-school-info">
+            <h2>Haven of Wisdom Academy</h2>
+            <p>Senior High School Department · Scholaria Academic Management Portal</p>
+          </div>
+        </div>
+        <div class="slip-doc-badge">
+          <div class="slip-badge-title">Official Credential Slip</div>
+          <div class="slip-badge-ref">REF: ${escHtml(refCode)}</div>
+        </div>
+      </div>
+
+      <div class="slip-provenance-bar">
+        <div class="slip-provenance-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" style="width:13px;height:13px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Created: <strong>${createdTimeStr}</strong></span>
+        </div>
+        <div class="slip-provenance-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" style="width:13px;height:13px;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg>
+          <span>Originator: <strong>${escHtml(creatorName)}</strong> (${escHtml(creatorId)})</span>
+        </div>
+        <div class="slip-provenance-item">
+          <span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:12px;">
+            ${slip.isActive === false ? 'STATUS: DEACTIVATED' : 'STATUS: ACTIVE'}
+          </span>
+        </div>
+      </div>
+
+      <div class="slip-info-grid">
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Account Holder Name</div>
+          <div class="slip-info-value">${escHtml(slip.name || slip.full_name || 'Authorized User')}</div>
+        </div>
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Official Institutional School ID</div>
+          <div class="slip-info-value school-id-val">${escHtml(slip.school_id || slip.id)}</div>
+        </div>
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Account Classification / Role</div>
+          <div class="slip-info-value" style="color:#d97706;">${escHtml(roleTitle)}</div>
+        </div>
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Academic Assignment / Division</div>
+          <div class="slip-info-value" style="font-size:12.5px;">${escHtml(academicInfo)}</div>
+        </div>
+        ${slip.contact_number ? `
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Contact / Phone</div>
+          <div class="slip-info-value" style="font-size:12.5px;">${escHtml(slip.contact_number)}</div>
+        </div>` : ''}
+        ${slip.address ? `
+        <div class="slip-info-cell">
+          <div class="slip-info-label">Residential Address</div>
+          <div class="slip-info-value" style="font-size:12.5px;">${escHtml(slip.address)}</div>
+        </div>` : ''}
+      </div>
+
+      <div class="slip-creds-box">
+        <div class="slip-creds-title">
+          <span>Official Portal Login Credentials</span>
+          <span class="tag">Confidential Security Slip</span>
+        </div>
+        <div class="slip-pw-display">
+          <div>
+            <div style="font-size:10.5px;color:#94a3b8;font-weight:600;margin-bottom:2px;">TEMPORARY SYSTEM PASSWORD</div>
+            <div class="slip-pw-code">${escHtml(pwDisplay)}</div>
+          </div>
+          <button type="button" class="admin-pw-btn" onclick="copyTextToClipboard('${escHtml(pwDisplay)}', 'Temporary password copied!')" title="Copy Password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy Key
+          </button>
+        </div>
+        <div class="slip-portal-url">
+          <span>Official Login Portal URL:</span>
+          <strong>${portalUrl}</strong>
+        </div>
+      </div>
+
+      <div class="slip-instructions">
+        <strong>First-Time Login Security Directives:</strong>
+        <ol>
+          <li>Open your web browser and navigate directly to the official login portal URL specified above.</li>
+          <li>Enter your <strong>Institutional School ID</strong> (or registered email: <em>${escHtml(emailDisplay)}</em>) and this temporary password.</li>
+          <li>For institutional integrity, the system will prompt you to replace this temporary password with your permanent confidential password immediately.</li>
+          <li>Never share this slip or disclose your security credentials to any other individual.</li>
+        </ol>
+      </div>
+
+      <div class="slip-signatures-row">
+        <div class="slip-sig-box">
+          <div class="slip-sig-line"></div>
+          <div class="slip-sig-role">${escHtml(creatorName)}</div>
+          <div class="slip-sig-sub">Issuing Administrator / School Registrar</div>
+        </div>
+        <div class="slip-sig-box">
+          <div class="slip-sig-line"></div>
+          <div class="slip-sig-role">${escHtml(slip.name || 'Account Holder')}</div>
+          <div class="slip-sig-sub">Account Holder Signature & Date Received</div>
+        </div>
+      </div>
+
+      <div class="slip-legal-notice">
+        Haven of Wisdom Academy · Republic Act 10173 (Philippine Data Privacy Act of 2012) Compliance Notice.<br>
+        This official credential document is strictly confidential. Unauthorized duplication, scanning, or distribution is prohibited.
+      </div>
+    </div>
+  `;
+}
+
+function buildDirectSlipPdfString(data) {
+  const sanitize = s => String(s || '').replace(/[\(\)\\\r\n]/g, ' ');
+  const title = 'HAVEN OF WISDOM ACADEMY - CREDENTIAL ISSUANCE SLIP';
+  const ref = 'REF CODE: HWA-SLIP-' + sanitize(data.school_id);
+  const name = 'Account Holder: ' + sanitize(data.name);
+  const id = 'Institutional School ID: ' + sanitize(data.school_id);
+  const role = 'Classification: ' + sanitize(data.role);
+  const academic = 'Assignment: ' + sanitize(data.academic);
+  const created = 'Creation Timestamp: ' + sanitize(data.created_at);
+  const creator = 'Originator / Creator: ' + sanitize(data.creator_name || 'Administrator') + ' (' + sanitize(data.creator_id || 'ADMIN') + ')';
+  const portal = 'Official Portal URL: ' + sanitize(data.portal || '/login.html');
+  const pw = 'TEMPORARY PASSWORD: ' + sanitize(data.temp_password);
+  const note1 = 'SECURITY DIRECTIVE: You must change this temporary password upon first login.';
+  const note2 = 'Republic Act 10173 (Data Privacy Act of 2012) - Confidential Issuance Slip.';
+
+  const streamLines = [
+    'BT',
+    '/F1 16 Tf',
+    '50 740 Td (' + sanitize(title) + ') Tj',
+    '/F1 10 Tf',
+    '0 -18 Td (' + sanitize(ref) + ') Tj',
+    '/F1 12 Tf',
+    '0 -35 Td (' + sanitize(name) + ') Tj',
+    '0 -20 Td (' + sanitize(id) + ') Tj',
+    '0 -20 Td (' + sanitize(role) + ') Tj',
+    '0 -20 Td (' + sanitize(academic) + ') Tj',
+    '0 -20 Td (' + sanitize(created) + ') Tj',
+    '0 -20 Td (' + sanitize(creator) + ') Tj',
+    '0 -20 Td (' + sanitize(portal) + ') Tj',
+    '/F1 14 Tf',
+    '0 -40 Td (' + sanitize(pw) + ') Tj',
+    '/F1 10 Tf',
+    '0 -35 Td (' + sanitize(note1) + ') Tj',
+    '0 -20 Td (' + sanitize(note2) + ') Tj',
+    'ET'
+  ];
+
+  const streamContent = streamLines.join('\n');
+  const streamLen = streamContent.length;
+
+  let body = '%PDF-1.4\n';
+  const offsets = [];
+
+  function addObj(num, content) {
+    offsets[num] = body.length;
+    body += num + ' 0 obj\n' + content + '\nendobj\n';
+  }
+
+  addObj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  addObj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  addObj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>');
+  addObj(4, '<< /Length ' + streamLen + ' >>\nstream\n' + streamContent + '\nendstream');
+  addObj(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+
+  const startxref = body.length;
+  let xref = 'xref\n0 6\n0000000000 65535 f \n';
+  for (let i = 1; i <= 5; i++) {
+    xref += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+  }
+  xref += 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + startxref + '\n%%EOF';
+
+  return body + xref;
+}
+
+function fallbackDownloadDirectSlipPdf(el, filename) {
+  try {
+    const schoolId = el.getAttribute('data-school-id') || 'USER';
+    const name = el.getAttribute('data-name') || el.querySelector('.slip-info-value')?.innerText || 'Authorized User';
+    const role = el.getAttribute('data-role') || 'User';
+    const tempPw = el.getAttribute('data-temp-pw') || el.querySelector('.slip-pw-code')?.innerText || '';
+    const createdAt = el.getAttribute('data-created-at') || '';
+    const creatorName = el.getAttribute('data-created-by') || 'Institutional Administration';
+    const creatorId = el.getAttribute('data-origin-id') || 'ADMIN';
+    const academic = el.getAttribute('data-academic') || 'Senior High School';
+    const portal = el.getAttribute('data-portal') || `${window.location.origin}/login.html`;
+
+    const pdfStr = buildDirectSlipPdfString({
+      school_id: schoolId,
+      name: name,
+      role: role,
+      temp_password: tempPw,
+      created_at: createdAt,
+      creator_name: creatorName,
+      creator_id: creatorId,
+      academic: academic,
+      portal: portal
+    });
+
+    const blob = new Blob([pdfStr], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `HWA_Credential_Slip_${schoolId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    if (typeof showToast === 'function') showToast('Official PDF slip downloaded successfully!', 'success');
+  } catch (err) {
+    console.error('Fallback PDF download failed:', err);
+    if (typeof showToast === 'function') showToast('Could not initiate file download', 'error');
+  }
+}
+
+function downloadCredentialSlipPdf(cardId, filename) {
+  const el = document.getElementById(cardId);
+  if (!el) {
+    if (typeof showToast === 'function') showToast('Slip element not found', 'error');
+    return;
+  }
+
+  const safeFilename = filename || 'HWA_Credential_Slip.pdf';
+  if (typeof showToast === 'function') showToast('Generating official PDF credential slip...', 'info');
+
+  if (typeof html2pdf !== 'undefined') {
+    try {
+      const opt = {
+        margin: [6, 6, 6, 6],
+        filename: safeFilename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(el).save().then(() => {
+        if (typeof showToast === 'function') showToast('Credential slip PDF downloaded successfully!', 'success');
+      }).catch(err => {
+        console.warn('html2pdf render failed, falling back to direct PDF download:', err);
+        fallbackDownloadDirectSlipPdf(el, safeFilename);
+      });
+      return;
+    } catch (err) {
+      console.warn('html2pdf invocation error:', err);
+    }
+  }
+
+  fallbackDownloadDirectSlipPdf(el, safeFilename);
+}
+
+function downloadAllCredentialSlipsPdf(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  const filename = `HWA_Credential_Slips_Batch_${new Date().toISOString().slice(0, 10)}.pdf`;
+  if (typeof showToast === 'function') showToast('Generating comprehensive PDF bundle...', 'info');
+
+  if (typeof html2pdf !== 'undefined') {
+    try {
+      const opt = {
+        margin: [6, 6, 6, 6],
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      html2pdf().set(opt).from(el).save().then(() => {
+        if (typeof showToast === 'function') showToast('Batch PDF credential slips downloaded!', 'success');
+      }).catch(err => {
+        console.warn('Batch html2pdf failed, falling back to direct PDF downloads:', err);
+        const cards = el.querySelectorAll('.credential-slip-card');
+        cards.forEach((card, idx) => {
+          setTimeout(() => {
+            const sid = card.getAttribute('data-school-id') || `slip_${idx+1}`;
+            fallbackDownloadDirectSlipPdf(card, `HWA_Credential_Slip_${sid}.pdf`);
+          }, idx * 250);
+        });
+      });
+      return;
+    } catch (err) {
+      console.warn('Batch html2pdf invocation error:', err);
+    }
+  }
+
+  const cards = el.querySelectorAll('.credential-slip-card');
+  cards.forEach((card, idx) => {
+    setTimeout(() => {
+      const sid = card.getAttribute('data-school-id') || `slip_${idx+1}`;
+      fallbackDownloadDirectSlipPdf(card, `HWA_Credential_Slip_${sid}.pdf`);
+    }, idx * 250);
+  });
+}
+
+function showOfficialCredentialSlipModal(slips) {
+  const list = Array.isArray(slips) ? slips : [slips];
+  if (!list.length) return;
+
   const modal = document.getElementById('addUserModal');
   const body = document.getElementById('addUserModalBody');
   const foot = document.getElementById('addUserModalFoot');
   if (!modal || !body || !foot) return;
 
-  const schoolId = adminData.school_id;
-  const name = adminData.name || adminData.full_name || 'Administrator';
-  const tempPw = adminData.temp_password || '';
-  const email = adminData.recovery_email || adminData.email || 'None provided (Log in with Admin ID)';
+  modal.classList.add('credential-slip-modal');
 
-  const handoutSummary = `HAVEN OF WISDOM ACADEMY - SCHOLARIA PORTAL
-ADMINISTRATOR CREDENTIAL HANDOUT
-========================================
-Employee Name: ${name}
-Admin ID: ${schoolId}
-Temporary Password: ${tempPw}
-Recovery Email: ${email}
-Portal Login URL: ${window.location.origin}/admin-login.html
-Security Requirement: You must change your temporary password immediately upon your first sign-in.
-========================================`;
+  const isMulti = list.length > 1;
+  const containerId = 'credentialSlipsBundleContainer';
 
   body.innerHTML = `
-    <div style="text-align:center;margin-bottom:16px;">
-      <div style="width:48px;height:48px;background:#0f172a;color:#f59e0b;border:2px solid #d97706;border-radius:14px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px;box-shadow:0 4px 14px rgba(15,23,42,0.25);">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    <div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
+      <div>
+        <h4 style="font-family:'Poppins',sans-serif;font-size:16px;font-weight:700;color:#1e3a8a;margin:0 0 2px 0;">Official Credential Issuance ${isMulti ? 'Slips' : 'Slip'}</h4>
+        <span style="font-size:12px;color:#64748b;">${isMulti ? `${list.length} accounts created. Download or print individual slips below.` : 'Confidential credentials ready for safe issuance to account holder.'}</span>
       </div>
-      <h3 style="font-size:17px;font-weight:700;color:var(--text-primary);margin-bottom:4px;">Administrator Account Ready</h3>
-      <p style="font-size:12.5px;color:var(--text-muted);max-width:380px;margin:0 auto;">
-        Hand this temporary credential card to the employee in person or via private channel.
-      </p>
+      <span class="sec-badge" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;font-size:11.5px;font-weight:700;">
+        ${list.length} ${list.length === 1 ? 'Credential Slip' : 'Credential Slips'}
+      </span>
     </div>
 
-    <div class="admin-handout-box">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;border-bottom:1px solid #f1f5f9;padding-bottom:10px;">
+    <div class="credential-slip-wrapper" id="${containerId}">
+      ${list.map((slip, i) => `
         <div>
-          <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Employee</span>
-          <h4 style="font-size:15px;color:#0f172a;margin:2px 0 0 0;">${escHtml(name)}</h4>
+          ${buildCredentialSlipCardHtml(slip, i)}
+          ${isMulti ? `
+            <div style="margin-top:8px;text-align:right;">
+              <button type="button" class="gen-btn" onclick="downloadCredentialSlipPdf('credentialSlipCard_${i}_${(slip.school_id || 'user').replace(/[^a-zA-Z0-9]/g, '_')}', 'HWA_Credential_Slip_${escHtml(slip.school_id || 'user')}.pdf')" style="background:#1e3a8a;color:#fff;font-size:12px;padding:6px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download Slip (${escHtml(slip.school_id || slip.name)}) PDF
+              </button>
+            </div>
+          ` : ''}
         </div>
-        <span class="sec-badge" style="background:#0f172a;color:#f59e0b;border:1px solid #d97706;font-size:11px;font-weight:700;">Administrator</span>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-        <div style="background:#f8fafc;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;">
-          <div style="font-size:11px;color:#64748b;font-weight:600;margin-bottom:3px;">Admin School ID</div>
-          <div style="font-family:monospace;font-size:13.5px;font-weight:700;color:#0f172a;">${escHtml(schoolId)}</div>
-        </div>
-        <div style="background:#f8fafc;padding:10px 12px;border-radius:8px;border:1px solid #e2e8f0;">
-          <div style="font-size:11px;color:#64748b;font-weight:600;margin-bottom:3px;">Recovery Email</div>
-          <div style="font-size:12px;font-weight:600;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(email)}</div>
-        </div>
-      </div>
-
-      <div style="background:#0f172a;border-radius:10px;padding:12px 14px;border:1.5px solid #334155;">
-        <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;">
-          <span>TEMPORARY SECURE PASSWORD</span>
-          <span style="color:#f59e0b;font-size:10.5px;">Auto-Generated</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-          <code style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#f59e0b;letter-spacing:1px;word-break:break-all;">${escHtml(tempPw)}</code>
-          <button type="button" class="admin-pw-btn" onclick="copyTextToClipboard('${escHtml(tempPw)}', 'Password copied!')" style="background:#1e293b;border-color:#475569;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            Copy
-          </button>
-        </div>
-      </div>
-
-      <div style="margin-top:12px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:#b45309;background:#fef3c7;padding:8px 12px;border-radius:8px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span>The employee will be forced to change this password immediately on their first login.</span>
-      </div>
+      `).join('')}
     </div>
   `;
 
+  const singleCardId = `credentialSlipCard_0_${(list[0].school_id || 'user').replace(/[^a-zA-Z0-9]/g, '_')}`;
+  const singleFilename = `HWA_Credential_Slip_${list[0].school_id || 'user'}.pdf`;
+
   foot.innerHTML = `
-    <button class="foot-btn-secondary" onclick="closeAddUserModal()">Done</button>
-    <button class="gen-btn" onclick="copyTextToClipboard(\`${handoutSummary.replace(/`/g, '\\`')}\`, 'Complete handout card copied!')" style="background:#0f172a;color:#f59e0b;border:1.5px solid #d97706;display:inline-flex;align-items:center;gap:6px;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      Copy Complete Handout Card
+    <button class="foot-btn-secondary" onclick="closeAddUserModal()">Done / Close</button>
+    <button class="gen-btn" onclick="window.print()" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;display:inline-flex;align-items:center;gap:6px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Print Slip
     </button>
+    ${isMulti ? `
+      <button class="gen-btn" onclick="downloadAllCredentialSlipsPdf('${containerId}')" style="background:#1e3a8a;color:#fff;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(30,58,138,0.25);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download All Slips (PDF)
+      </button>
+    ` : `
+      <button class="gen-btn" onclick="downloadCredentialSlipPdf('${singleCardId}', '${singleFilename}')" style="background:#1e3a8a;color:#fff;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(30,58,138,0.25);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Official PDF Slip
+      </button>
+    `}
   `;
 
   modal.classList.add('active');
 }
 
-function showCredentialsModal(results) {
-  const rows = results.map(r => `
-    <div class="added-user-row">
-      <div class="au-info">
-        <h5>${escHtml(r.name)}</h5>
-        <span>${escHtml(r.school_id)} · ${escHtml(r.email)}</span>
-        <div style="margin-top:4px;font-family:monospace;font-size:12.5px;background:#f8fbff;border:1px solid var(--blue-light);border-radius:6px;padding:6px 10px;display:inline-block;">
-          ${escHtml(r.temp_password)}
-        </div>
-      </div>
-    </div>`).join('');
+function viewUserCredentialSlip(schoolId) {
+  const savedSlip = getCredentialSlipRecord(schoolId);
+  const user = registeredUsers.find(u => u.id === schoolId || u.dbId === schoolId);
 
-  document.getElementById('addUserModalBody').innerHTML = '';
-  document.getElementById('addUserModal').classList.add('active');
-  document.getElementById('addUserModalBody').innerHTML = `
-    <p style="font-size:12.5px;color:var(--text-muted);margin-bottom:10px;">
-      Account${results.length !== 1 ? 's' : ''} created. Copy each temporary password now —
-      it will not be shown again. Share it out of band (in person, or to the
-      email on file), not over chat or in a screenshot you keep around.
-    </p>
-    ${rows}`;
-  document.getElementById('addUserModalFoot').innerHTML =
-    `<button class="foot-btn-secondary" onclick="closeAddUserModal()">Done</button>`;
+  const slipData = {
+    school_id: schoolId,
+    name: savedSlip?.name || user?.name || 'Account Holder',
+    role: savedSlip?.role || user?.role || 'student',
+    strand: savedSlip?.strand || user?.strand || '',
+    grade_level: savedSlip?.grade_level || user?.gradeLevel || '',
+    section: savedSlip?.section || user?.section || '',
+    email: savedSlip?.email || savedSlip?.recovery_email || user?.email || '',
+    recovery_email: savedSlip?.recovery_email || user?.recoveryEmail || user?.email || '',
+    temp_password: savedSlip?.temp_password || savedSlip?.tempPassword || '',
+    created_at: savedSlip?.created_at || savedSlip?.savedAt || user?.createdAt || new Date().toISOString(),
+    created_by: savedSlip?.created_by || user?.origin || {
+      name: 'School Administration / Registrar',
+      school_id: 'HWA-ADMIN',
+      role: 'admin'
+    },
+    isActive: user?.isActive !== false
+  };
+
+  showOfficialCredentialSlipModal([slipData]);
+}
+
+function showAdminHandoutModal(adminData) {
+  showOfficialCredentialSlipModal([adminData]);
+}
+
+function showCredentialsModal(results) {
+  showOfficialCredentialSlipModal(results);
 }
 
 function renderAddUserModal() {
@@ -1792,17 +3443,42 @@ function renderAddUserModal() {
 
     ${isAdmin ? `
       <div style="margin-top:16px;">
-        <div class="gen-field">
-          <label>Administrator Full Name *</label>
-          <input type="text" placeholder="e.g. Dr. Eleanor Vance or Juan Santos" value="${escHtml(addUser.name)}" oninput="auUpdateName(this.value)">
+        <div class="au-name-grid" style="margin-bottom:12px;">
+          <div class="gen-field">
+            <label>First Name <span style="color:#ef4444;">*</span></label>
+            <input type="text" placeholder="e.g. Eleanor" maxlength="50" value="${escHtml(addUser.firstName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateFirstName(this.value);">
+          </div>
+          <div class="gen-field">
+            <label>Middle Name <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
+            <input type="text" placeholder="e.g. Vance" maxlength="50" value="${escHtml(addUser.middleName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateMiddleName(this.value);">
+          </div>
+          <div class="gen-field">
+            <label>Last Name <span style="color:#ef4444;">*</span></label>
+            <input type="text" placeholder="e.g. Sterling" maxlength="50" value="${escHtml(addUser.lastName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateLastName(this.value);">
+          </div>
+          <div class="gen-field">
+            <label>Suffix <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
+            <input type="text" placeholder="e.g. III" maxlength="15" value="${escHtml(addUser.suffix || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateSuffix(this.value);">
+          </div>
         </div>
 
-        <div class="gen-field" style="margin-top:12px;">
-          <label>Recovery Gmail / Official Email <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
-          <input type="email" placeholder="e.g. eleanor.vance@gmail.com (Optional)" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
-          <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px;">
-            Optional: Used for account recovery & notifications. If omitted, the administrator logs in using their assigned School Admin ID.
+        <div class="gen-row" style="margin-bottom:12px;">
+          <div class="gen-field">
+            <label>Recovery Gmail / Official Email <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+            <input type="email" placeholder="e.g. eleanor.vance@gmail.com" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
           </div>
+          <div class="gen-field">
+            <label>Phone / Emergency Contact <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+            <input type="tel" placeholder="e.g. 09171234567" maxlength="15" value="${escHtml(addUser.contactNumber || '')}" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); auUpdateContactNumber(this.value)">
+          </div>
+        </div>
+
+        <div class="gen-field" style="margin-bottom:12px;">
+          <label>Residential / Home Address <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+          <input type="text" placeholder="e.g. 456 Meralco Ave., Pasig City" maxlength="150" value="${escHtml(addUser.address || '')}" oninput="auUpdateAddress(this.value)">
+        </div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:14px;">
+          Note: If recovery email is omitted, the administrator logs in using their assigned School Admin ID.
         </div>
 
         <div class="gen-field" style="margin-top:14px;">
@@ -1834,7 +3510,7 @@ function renderAddUserModal() {
       </div>
     ` : `
       <div class="gen-field">
-        <label>${isStudent ? 'Strand' : 'Strands Handled'}</label>
+        <label>${isStudent ? 'Strand <span style="color:#ef4444;">*</span> <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;">(Single selection only — select 1 strand)</span>' : 'Strands Handled <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;">(Select all handled strands)</span>'}</label>
         <div class="au-strand-grid">
           ${STRANDS.map(s => `<div class="au-strand-chip ${addUser.strands.has(s) ? 'on' : ''}" onclick="auToggleStrand('${s}')">${s}</div>`).join('')}
         </div>
@@ -1844,7 +3520,7 @@ function renderAddUserModal() {
       <div class="gen-row">
         ${isStudent ? `
         <div class="gen-field">
-          <label>Grade Level</label>
+          <label>Grade Level <span style="color:#ef4444;">*</span> <span style="font-size:11px;font-weight:700;color:#dc2626;text-transform:none;">(Required)</span></label>
           <div class="au-grade-pills">
             ${GRADE_LEVELS.map(g => `<div class="au-grade-pill ${addUser.grade === g ? 'on' : ''}" onclick="auSetGrade('${g}')">${g}</div>`).join('')}
           </div>
@@ -1891,21 +3567,57 @@ function renderAddUserModal() {
       <label class="au-bulk-zone" for="auBulkInput">
         <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/></svg>
         <div class="dz-title">Import from Excel or CSV</div>
-        <div class="dz-sub">Columns: Name, Email (Required) · Strand, Grade Level, Section (Optional) — Max 50MB only</div>
+        <div class="dz-sub">Columns: First Name, Last Name, Email, Strand, Grade Level (Required) · Section, Phone, Address (Optional) — Max 50MB only</div>
       </label>
       <input type="file" id="auBulkInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="auHandleBulkFile(this)">
-      <button type="button" class="au-format-toggle" id="auFormatExampleBtn" onclick="auToggleFormatExample()">
-        <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-        <span id="auFormatExampleLabel">See example spreadsheet format</span>
-      </button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:8px;flex-wrap:wrap;">
+        <button type="button" class="au-format-toggle" id="auFormatExampleBtn" onclick="auToggleFormatExample()" style="margin:0;">
+          <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          <span id="auFormatExampleLabel">See example spreadsheet format</span>
+        </button>
+        <button type="button" onclick="downloadBulkUserTemplate()" style="background:#f0fdf4;color:#15803d;border:1.5px solid #bbf7d0;padding:6px 14px;border-radius:10px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;transition:all 0.15s ease;" onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download Editable Excel (.xlsx)
+        </button>
+      </div>
       <div id="auFormatExampleWrap" style="display:none">${renderFormatExampleTable()}</div>
       `}
 
       <div class="au-divider">Or add individually</div>
 
-      <div class="gen-row">
-        <div class="gen-field"><label>Full Name</label><input type="text" placeholder="e.g. Santos, Maria L." value="${escHtml(addUser.name)}" oninput="auUpdateName(this.value)"></div>
-        <div class="gen-field"><label>Email</label><input type="text" placeholder="e.g. student@hwa.edu.ph" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)"></div>
+      <div class="au-name-grid" style="margin-bottom:12px;">
+        <div class="gen-field">
+          <label>First Name <span style="color:#ef4444;">*</span></label>
+          <input type="text" placeholder="e.g. Maria" maxlength="50" value="${escHtml(addUser.firstName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateFirstName(this.value);">
+        </div>
+        <div class="gen-field">
+          <label>Middle Name <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
+          <input type="text" placeholder="e.g. Lopez" maxlength="50" value="${escHtml(addUser.middleName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateMiddleName(this.value);">
+        </div>
+        <div class="gen-field">
+          <label>Last Name <span style="color:#ef4444;">*</span></label>
+          <input type="text" placeholder="e.g. Santos" maxlength="50" value="${escHtml(addUser.lastName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateLastName(this.value);">
+        </div>
+        <div class="gen-field">
+          <label>Suffix <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
+          <input type="text" placeholder="e.g. Jr." maxlength="15" value="${escHtml(addUser.suffix || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateSuffix(this.value);">
+        </div>
+      </div>
+
+      <div class="gen-row" style="margin-bottom:12px;">
+        <div class="gen-field">
+          <label>${isStudent ? 'Official School Email' : 'Email Address'} <span style="color:#ef4444;">*</span></label>
+          <input type="email" placeholder="${isStudent ? 'e.g. student@hwa.edu.ph' : 'e.g. teacher@hwa.edu.ph'}" maxlength="100" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
+        </div>
+        <div class="gen-field">
+          <label>Phone / Emergency Contact <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+          <input type="tel" placeholder="e.g. 09171234567" maxlength="15" value="${escHtml(addUser.contactNumber || '')}" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); auUpdateContactNumber(this.value)">
+        </div>
+      </div>
+
+      <div class="gen-field" style="margin-bottom:12px;">
+        <label>Residential / Home Address <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
+        <input type="text" placeholder="e.g. 123 Rizal St., Brgy. San Antonio, Pasig City" maxlength="150" value="${escHtml(addUser.address || '')}" oninput="auUpdateAddress(this.value)">
       </div>
 
       ${addUser.pendingUsers.length > 0 ? `
@@ -1921,7 +3633,7 @@ function renderAddUserModal() {
   `;
 
   if (isAdmin) {
-    const hasName = !!addUser.name.trim();
+    const hasName = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
     foot.innerHTML = `
       <button class="foot-btn-secondary" onclick="closeAddUserModal()">Cancel</button>
       <button class="gen-btn" id="auSaveBtn" ${!hasName ? 'disabled' : ''} onclick="auSaveAdminAccount()" style="background:#0f172a;color:#f59e0b;border:1.5px solid #d97706;padding:8px 18px;font-size:13px;font-weight:700;">
@@ -1931,7 +3643,8 @@ function renderAddUserModal() {
   } else {
     const bulkRowCount = addUser.bulkFile ? resolveBulkRows().rows.length : 0;
     const queuedCount = addUser.pendingUsers.length + bulkRowCount;
-    const saveCount = queuedCount || (addUser.name.trim() ? 1 : 0);
+    const hasSingle = !!(addUser.firstName || '').trim() && !!(addUser.lastName || '').trim();
+    const saveCount = queuedCount || (hasSingle ? 1 : 0);
     foot.innerHTML = `
       <button class="foot-btn-secondary" onclick="closeAddUserModal()">Cancel</button>
       <div style="display:flex;gap:8px;align-items:center;">
@@ -1941,4 +3654,17 @@ function renderAddUserModal() {
         </button>
       </div>`;
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.openAssignTeacherSectionsModal = openAssignTeacherSectionsModal;
+  window.closeTeacherSectionModal = closeTeacherSectionModal;
+  window.clearAllTeacherSections = clearAllTeacherSections;
+  window.saveTeacherSectionAssignments = saveTeacherSectionAssignments;
+  window.openAssignTeachersToSectionModal = openAssignTeachersToSectionModal;
+  window.closeAssignTeachersToSectionModal = closeAssignTeachersToSectionModal;
+  window.saveSectionTeacherAssignments = saveSectionTeacherAssignments;
+  window.removeTeacherFromSection = removeTeacherFromSection;
+  window.isTeacherAssignedToSection = isTeacherAssignedToSection;
+  window.isTeacherCompatibleWithSection = isTeacherCompatibleWithSection;
 }

@@ -1,166 +1,2262 @@
-/* ── COURSES MODULE — HAVEN OF WISDOM ACADEMY ENROLLED SUBJECTS & INDIVIDUAL PDF MODULES ── */
+/* ── COURSES MODULE — HAVEN OF WISDOM ACADEMY SENIOR HIGH SCHOOL CURRICULUM ── */
+/* Official Complete DepEd Curriculum: HUMSS, STEM, ABM & TVL-ICT Strands (Grade 11 & Grade 12) */
 
 const COURSES_DATABASE = [
-  // ── STEM STRAND SUBJECTS ──
   {
-    id: 'course-pre-calc',
-    title: 'Pre-Calculus',
-    code: 'STEM-1101',
-    strand: 'STEM',
-    track: 'Specialized',
-    gradeLevel: 'Grade 11',
-    semester: '1st Sem',
-    progress: 45,
-    modules: 0,
-    instructor: 'Dr. Eleanor Llorente',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80',
-    description: 'Covers analytic geometry, conic sections, systems of nonlinear equations, and circular/trigonometric functions.',
-    documents: []
+    "id": "course-oral-communication-grade11-humss",
+    "title": "Oral Communication",
+    "code": "CORE-1101",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Oral Communication (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
   },
   {
-    id: 'course-gen-bio1',
-    title: 'General Biology 1',
-    code: 'STEM-1102',
-    strand: 'STEM',
-    track: 'Specialized',
-    gradeLevel: 'Grade 11',
-    semester: '1st Sem',
-    progress: 35,
-    modules: 0,
-    instructor: 'Prof. Maria Reyes',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?auto=format&fit=crop&w=600&q=80',
-    description: 'Study of cell structure, cellular processes, biological molecules, and energy transformation.',
-    documents: []
+    "id": "course-komunikasyon-at-pananaliksik-sa-wika-at-kulturang-pilipino-grade11-humss",
+    "title": "Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino",
+    "code": "CORE-1102",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
   },
   {
-    id: 'course-gen-phys1',
-    title: 'General Physics 1',
-    code: 'STEM-1201',
-    strand: 'STEM',
-    track: 'Specialized',
-    gradeLevel: 'Grade 12',
-    semester: '1st Sem',
-    progress: 60,
-    modules: 0,
-    instructor: 'Dr. Arthur Cruz',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?auto=format&fit=crop&w=600&q=80',
-    description: 'Mechanics, kinematics, dynamics, work, energy, momentum, and rotational motion.',
-    documents: []
+    "id": "course-general-mathematics-grade11-humss",
+    "title": "General Mathematics",
+    "code": "CORE-1103",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Mathematics (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
   },
   {
-    id: 'course-gen-chem1',
-    title: 'General Chemistry 1',
-    code: 'STEM-1202',
-    strand: 'STEM',
-    track: 'Specialized',
-    gradeLevel: 'Grade 12',
-    semester: '1st Sem',
-    progress: 50,
-    modules: 0,
-    instructor: 'Dr. Patricia Mendoza',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=600&q=80',
-    description: 'Matter, atomic structure, chemical bonding, stoichiometry, and thermochemistry.',
-    documents: []
+    "id": "course-earth-and-life-science-grade11-humss",
+    "title": "Earth and Life Science",
+    "code": "CORE-1104",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Earth and Life Science (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
   },
   {
-    id: 'course-empotech',
-    title: 'Empowerment Technologies (ICT)',
-    code: 'ICT-1101',
-    strand: 'STEM',
-    track: 'Applied',
-    gradeLevel: 'Grade 11',
-    semester: '1st Sem',
-    progress: 75,
-    modules: 0,
-    instructor: 'Engr. Julian Callanta',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80',
-    description: 'Information and communication technology tools, digital safety, and web prototyping.',
-    documents: []
+    "id": "course-understanding-culture-society-and-politics-grade11-humss",
+    "title": "Understanding Culture, Society, and Politics",
+    "code": "CORE-1105",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Understanding Culture, Society, and Politics (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
   },
   {
-    id: 'course-earth-life',
-    title: 'Earth and Life Science',
-    code: 'SCI-1101',
-    strand: 'STEM',
-    track: 'Core',
-    gradeLevel: 'Grade 11',
-    semester: '1st Sem',
-    progress: 100,
-    modules: 0,
-    instructor: 'Prof. Gabriel Santos',
-    status: 'completed',
-    cover: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=600&q=80',
-    description: 'Earth subsystems, geological processes, origin of life, and ecosystems.',
-    documents: []
+    "id": "course-personal-development-pansariling-kaunlaran-grade11-humss",
+    "title": "Personal Development / Pansariling Kaunlaran",
+    "code": "CORE-1106",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Personal Development / Pansariling Kaunlaran (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
   },
   {
-    id: 'course-basic-calc',
-    title: 'Basic Calculus',
-    code: 'STEM-1103',
-    strand: 'STEM',
-    track: 'Specialized',
-    gradeLevel: 'Grade 11',
-    semester: '2nd Sem',
-    progress: 20,
-    modules: 0,
-    instructor: 'Dr. Eleanor Llorente',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80',
-    description: 'Limits, continuity, and differential calculus with mathematical applications.',
-    documents: []
+    "id": "course-physical-education-and-health-1-grade11-humss",
+    "title": "Physical Education and Health 1",
+    "code": "CORE-1107",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 1 (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
   },
   {
-    id: 'course-mil',
-    title: 'Media & Information Literacy',
-    code: 'MIL-1201',
-    strand: 'STEM',
-    track: 'Core',
-    gradeLevel: 'Grade 12',
-    semester: '1st Sem',
-    progress: 85,
-    modules: 0,
-    instructor: 'Ms. Clara Asis',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&q=80',
-    description: 'Media languages, critical consumption, and responsible digital citizenship.',
-    documents: []
+    "id": "course-english-for-academic-and-professional-purposes-grade11-humss",
+    "title": "English for Academic and Professional Purposes",
+    "code": "APP-1108",
+    "strand": "HUMSS",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: English for Academic and Professional Purposes (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
   },
   {
-    id: 'course-oral-comm',
-    title: 'Oral Communication in Context',
-    code: 'ENG-1101',
-    strand: 'STEM',
-    track: 'Core',
-    gradeLevel: 'Grade 11',
-    semester: '1st Sem',
-    progress: 100,
-    modules: 0,
-    instructor: 'Prof. Teresa Santos',
-    status: 'completed',
-    cover: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80',
-    description: 'Speech styles, communication barriers, speech writing, and delivery strategies.',
-    documents: []
+    "id": "course-disciplines-and-ideas-in-the-social-sciences-grade11-humss",
+    "title": "Disciplines and Ideas in the Social Sciences",
+    "code": "HUMSS-1109",
+    "strand": "HUMSS",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Disciplines and Ideas in the Social Sciences (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
   },
   {
-    id: 'course-research1',
-    title: 'Practical Research 1',
-    code: 'RES-1101',
-    strand: 'STEM',
-    track: 'Applied',
-    gradeLevel: 'Grade 11',
-    semester: '1st Sem',
-    progress: 40,
-    modules: 0,
-    instructor: 'Dr. Patricia Mendoza',
-    status: 'enrolled',
-    cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
-    description: 'Qualitative research methodologies, problem statements, and literature review.',
-    documents: []
+    "id": "course-homeroom-guidance-hg1-grade11-humss",
+    "title": "Homeroom Guidance (HG1)",
+    "code": "GEN-1101",
+    "strand": "HUMSS",
+    "track": "Other",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Homeroom Guidance (HG1) (HUMSS Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-reading-and-writing-skills-grade11-humss",
+    "title": "Reading and Writing Skills",
+    "code": "CORE-1102",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Reading and Writing Skills (HUMSS Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-pagbasa-at-pagsusuri-ng-iba-t-ibang-teksto-tungo-sa-pananaliksik-grade11-humss",
+    "title": "Pagbasa at Pagsusuri ng Iba't-ibang Teksto Tungo sa Pananaliksik",
+    "code": "CORE-1103",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Pagbasa at Pagsusuri ng Iba't-ibang Teksto Tungo sa Pananaliksik (HUMSS Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-21st-century-literature-from-the-philippines-and-the-world-grade11-humss",
+    "title": "21st Century Literature from the Philippines and the World",
+    "code": "CORE-1104",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: 21st Century Literature from the Philippines and the World (HUMSS Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-statistics-and-probability-grade11-humss",
+    "title": "Statistics and Probability",
+    "code": "CORE-1105",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Statistics and Probability (HUMSS Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-science-grade11-humss",
+    "title": "Physical Science",
+    "code": "CORE-1106",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Science (HUMSS Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-2-grade11-humss",
+    "title": "Physical Education and Health 2",
+    "code": "CORE-1107",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 2 (HUMSS Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-research-1-grade11-humss",
+    "title": "Research 1",
+    "code": "APP-1108",
+    "strand": "HUMSS",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Research 1 (HUMSS Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-disciplines-and-ideas-in-the-applied-social-sciences-grade11-humss",
+    "title": "Disciplines and Ideas in the Applied Social Sciences",
+    "code": "HUMSS-1109",
+    "strand": "HUMSS",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Disciplines and Ideas in the Applied Social Sciences (HUMSS Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-philippine-politics-and-governance-grade11-humss",
+    "title": "Philippine Politics and Governance",
+    "code": "HUMSS-1101",
+    "strand": "HUMSS",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Philippine Politics and Governance (HUMSS Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-media-and-information-literacy-grade12-humss",
+    "title": "Media and Information Literacy",
+    "code": "CORE-1202",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Media and Information Literacy (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-pagsulat-sa-filipino-sa-piling-larang-grade12-humss",
+    "title": "Pagsulat sa Filipino sa Piling Larang",
+    "code": "CORE-1203",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Pagsulat sa Filipino sa Piling Larang (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-introduction-to-the-philosophy-of-human-person-grade12-humss",
+    "title": "Introduction to the Philosophy of Human Person",
+    "code": "CORE-1204",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Introduction to the Philosophy of Human Person (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-contemporary-philippine-arts-from-the-regions-grade12-humss",
+    "title": "Contemporary Philippine Arts from the Regions",
+    "code": "CORE-1205",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Contemporary Philippine Arts from the Regions (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-3-grade12-humss",
+    "title": "Physical Education and Health 3",
+    "code": "CORE-1206",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 3 (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-empowerment-technologies-e-tech-ict-for-professional-tracks-grade12-humss",
+    "title": "Empowerment Technologies (E-Tech): ICT for Professional Tracks",
+    "code": "APP-1207",
+    "strand": "HUMSS",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Empowerment Technologies (E-Tech): ICT for Professional Tracks (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-research-in-daily-life-2-grade12-humss",
+    "title": "Research in Daily Life 2",
+    "code": "APP-1208",
+    "strand": "HUMSS",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Research in Daily Life 2 (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-creative-writing-malikhaing-pagsulat-grade12-humss",
+    "title": "Creative Writing / Malikhaing Pagsulat",
+    "code": "HUMSS-1209",
+    "strand": "HUMSS",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Creative Writing / Malikhaing Pagsulat (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-introduction-to-world-religions-and-belief-systems-grade12-humss",
+    "title": "Introduction to World Religions and Belief Systems",
+    "code": "HUMSS-1201",
+    "strand": "HUMSS",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Introduction to World Religions and Belief Systems (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-homeroom-guidance-hg-grade12-humss",
+    "title": "Homeroom Guidance (HG)",
+    "code": "GEN-1202",
+    "strand": "HUMSS",
+    "track": "Other",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Homeroom Guidance (HG) (HUMSS Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-4-grade12-humss",
+    "title": "Physical Education and Health 4",
+    "code": "CORE-1203",
+    "strand": "HUMSS",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 4 (HUMSS Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-entrepreneurship-grade12-humss",
+    "title": "Entrepreneurship",
+    "code": "APP-1204",
+    "strand": "HUMSS",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Entrepreneurship (HUMSS Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-research-project-3i-inquiries-investigation-and-immersion-grade12-humss",
+    "title": "Research Project 3I (Inquiries, Investigation, and Immersion)",
+    "code": "APP-1205",
+    "strand": "HUMSS",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Research Project 3I (Inquiries, Investigation, and Immersion) (HUMSS Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-creative-nonfiction-the-literary-essay-grade12-humss",
+    "title": "Creative Nonfiction: The Literary Essay",
+    "code": "HUMSS-1206",
+    "strand": "HUMSS",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Creative Nonfiction: The Literary Essay (HUMSS Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-trends-networks-and-critical-thinking-in-the-21st-century-culture-grade12-humss",
+    "title": "Trends, Networks and Critical Thinking in the 21st Century Culture",
+    "code": "HUMSS-1207",
+    "strand": "HUMSS",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Trends, Networks and Critical Thinking in the 21st Century Culture (HUMSS Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-community-engagement-solidarity-and-citizenship-grade12-humss",
+    "title": "Community Engagement, Solidarity and Citizenship",
+    "code": "HUMSS-1208",
+    "strand": "HUMSS",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Community Engagement, Solidarity and Citizenship (HUMSS Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-culminating-activity-grade12-humss",
+    "title": "Culminating Activity",
+    "code": "HUMSS-1209",
+    "strand": "HUMSS",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Culminating Activity (HUMSS Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-oral-communication-grade11-stem",
+    "title": "Oral Communication",
+    "code": "CORE-1101",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Oral Communication (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-komunikasyon-at-pananaliksik-sa-wika-at-kulturang-pilipino-grade11-stem",
+    "title": "Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino",
+    "code": "CORE-1102",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-general-mathematics-grade11-stem",
+    "title": "General Mathematics",
+    "code": "CORE-1103",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Mathematics (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-earth-science-grade11-stem",
+    "title": "Earth Science",
+    "code": "CORE-1104",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Earth Science (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-21st-century-literature-from-the-philippines-and-the-world-grade11-stem",
+    "title": "21st Century Literature from the Philippines and the World",
+    "code": "CORE-1105",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: 21st Century Literature from the Philippines and the World (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-1-grade11-stem",
+    "title": "Physical Education and Health 1",
+    "code": "CORE-1106",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 1 (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-empowerment-technologies-grade11-stem",
+    "title": "Empowerment Technologies",
+    "code": "APP-1107",
+    "strand": "STEM",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Empowerment Technologies (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-filipino-sa-piling-larang-grade11-stem",
+    "title": "Filipino sa Piling Larang",
+    "code": "APP-1108",
+    "strand": "STEM",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Filipino sa Piling Larang (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-pre-calculus-grade11-stem",
+    "title": "Pre-Calculus",
+    "code": "STEM-1109",
+    "strand": "STEM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Pre-Calculus (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-general-biology-1-grade11-stem",
+    "title": "General Biology 1",
+    "code": "STEM-1101",
+    "strand": "STEM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Biology 1 (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-human-biology-1-grade11-stem",
+    "title": "Human Biology 1",
+    "code": "ELEC-1102",
+    "strand": "STEM",
+    "track": "Elective",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Human Biology 1 (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-complex-numbers-grade11-stem",
+    "title": "Complex Numbers",
+    "code": "ELEC-1103",
+    "strand": "STEM",
+    "track": "Elective",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Complex Numbers (STEM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-reading-and-writing-skills-grade11-stem",
+    "title": "Reading and Writing Skills",
+    "code": "CORE-1104",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Reading and Writing Skills (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-pagbasa-at-pagsusuri-ng-iba-t-ibang-teksto-tungo-sa-pananaliksik-grade11-stem",
+    "title": "Pagbasa at Pagsusuri ng Iba't Ibang Teksto Tungo sa Pananaliksik",
+    "code": "CORE-1105",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Pagbasa at Pagsusuri ng Iba't Ibang Teksto Tungo sa Pananaliksik (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-statistics-and-probability-grade11-stem",
+    "title": "Statistics and Probability",
+    "code": "CORE-1106",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Statistics and Probability (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-disaster-readiness-and-risk-reduction-grade11-stem",
+    "title": "Disaster Readiness and Risk Reduction",
+    "code": "CORE-1107",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Disaster Readiness and Risk Reduction (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-personal-development-grade11-stem",
+    "title": "Personal Development",
+    "code": "CORE-1108",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Personal Development (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-2-grade11-stem",
+    "title": "Physical Education and Health 2",
+    "code": "CORE-1109",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 2 (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-practical-research-1-grade11-stem",
+    "title": "Practical Research 1",
+    "code": "APP-1101",
+    "strand": "STEM",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Practical Research 1 (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-entrepreneurship-grade11-stem",
+    "title": "Entrepreneurship",
+    "code": "APP-1102",
+    "strand": "STEM",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Entrepreneurship (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-basic-calculus-grade11-stem",
+    "title": "Basic Calculus",
+    "code": "STEM-1103",
+    "strand": "STEM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Basic Calculus (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-general-biology-2-grade11-stem",
+    "title": "General Biology 2",
+    "code": "STEM-1104",
+    "strand": "STEM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Biology 2 (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-human-biology-2-grade11-stem",
+    "title": "Human Biology 2",
+    "code": "ELEC-1105",
+    "strand": "STEM",
+    "track": "Elective",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Human Biology 2 (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-vectors-and-the-geometry-of-space-grade11-stem",
+    "title": "Vectors and the Geometry of Space",
+    "code": "ELEC-1106",
+    "strand": "STEM",
+    "track": "Elective",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Vectors and the Geometry of Space (STEM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-introduction-to-the-philosophy-of-the-human-person-grade12-stem",
+    "title": "Introduction to the Philosophy of the Human Person",
+    "code": "CORE-1207",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Introduction to the Philosophy of the Human Person (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-contemporary-philippine-arts-from-the-regions-grade12-stem",
+    "title": "Contemporary Philippine Arts from the Regions",
+    "code": "CORE-1208",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Contemporary Philippine Arts from the Regions (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-understanding-culture-society-and-politics-grade12-stem",
+    "title": "Understanding Culture, Society and Politics",
+    "code": "CORE-1209",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Understanding Culture, Society and Politics (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-3-grade12-stem",
+    "title": "Physical Education and Health 3",
+    "code": "CORE-1201",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 3 (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-practical-research-2-grade12-stem",
+    "title": "Practical Research 2",
+    "code": "APP-1202",
+    "strand": "STEM",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Practical Research 2 (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-english-for-academic-and-special-purposes-grade12-stem",
+    "title": "English for Academic and Special Purposes",
+    "code": "APP-1203",
+    "strand": "STEM",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: English for Academic and Special Purposes (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-general-physics-1-grade12-stem",
+    "title": "General Physics 1",
+    "code": "STEM-1204",
+    "strand": "STEM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Physics 1 (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-general-chemistry-1-grade12-stem",
+    "title": "General Chemistry 1",
+    "code": "STEM-1205",
+    "strand": "STEM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Chemistry 1 (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-human-biology-3-grade12-stem",
+    "title": "Human Biology 3",
+    "code": "ELEC-1206",
+    "strand": "STEM",
+    "track": "Elective",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Human Biology 3 (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-differential-equations-grade12-stem",
+    "title": "Differential Equations",
+    "code": "ELEC-1207",
+    "strand": "STEM",
+    "track": "Elective",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Differential Equations (STEM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-media-and-information-literacy-grade12-stem",
+    "title": "Media and Information Literacy",
+    "code": "CORE-1208",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Media and Information Literacy (STEM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-4-grade12-stem",
+    "title": "Physical Education and Health 4",
+    "code": "CORE-1209",
+    "strand": "STEM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 4 (STEM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-inquiries-investigations-and-immersion-grade12-stem",
+    "title": "Inquiries, Investigations and Immersion",
+    "code": "APP-1201",
+    "strand": "STEM",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Inquiries, Investigations and Immersion (STEM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-general-physics-2-grade12-stem",
+    "title": "General Physics 2",
+    "code": "STEM-1202",
+    "strand": "STEM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Physics 2 (STEM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-general-chemistry-2-grade12-stem",
+    "title": "General Chemistry 2",
+    "code": "STEM-1203",
+    "strand": "STEM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Chemistry 2 (STEM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-work-immersion-research-culminating-activity-grade12-stem",
+    "title": "Work Immersion / Research / Culminating Activity",
+    "code": "STEM-1204",
+    "strand": "STEM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Work Immersion / Research / Culminating Activity (STEM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-biochemistry-grade12-stem",
+    "title": "Biochemistry",
+    "code": "ELEC-1205",
+    "strand": "STEM",
+    "track": "Elective",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Biochemistry (STEM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-oral-communication-grade11-abm",
+    "title": "Oral Communication",
+    "code": "CORE-1106",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Oral Communication (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-komunikasyon-at-pananaliksik-sa-wika-at-kulturang-pilipino-grade11-abm",
+    "title": "Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino",
+    "code": "CORE-1107",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-general-mathematics-grade11-abm",
+    "title": "General Mathematics",
+    "code": "CORE-1108",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Mathematics (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-earth-and-life-science-grade11-abm",
+    "title": "Earth and Life Science",
+    "code": "CORE-1109",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Earth and Life Science (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-21st-century-literature-from-the-philippines-and-the-world-grade11-abm",
+    "title": "21st Century Literature from the Philippines and the World",
+    "code": "CORE-1101",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: 21st Century Literature from the Philippines and the World (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-1-grade11-abm",
+    "title": "Physical Education and Health 1",
+    "code": "CORE-1102",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 1 (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-empowerment-technologies-grade11-abm",
+    "title": "Empowerment Technologies",
+    "code": "APP-1103",
+    "strand": "ABM",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Empowerment Technologies (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-filipino-sa-piling-larang-grade11-abm",
+    "title": "Filipino sa Piling Larang",
+    "code": "APP-1104",
+    "strand": "ABM",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Filipino sa Piling Larang (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-organization-and-management-grade11-abm",
+    "title": "Organization and Management",
+    "code": "ABM-1105",
+    "strand": "ABM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Organization and Management (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-business-math-grade11-abm",
+    "title": "Business Math",
+    "code": "ABM-1106",
+    "strand": "ABM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Business Math (ABM Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-reading-and-writing-skills-grade11-abm",
+    "title": "Reading and Writing Skills",
+    "code": "CORE-1107",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Reading and Writing Skills (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-pagbasa-at-pagsusuri-ng-iba-t-ibang-teksto-tungo-sa-pananaliksik-grade11-abm",
+    "title": "Pagbasa at Pagsusuri ng Iba't Ibang Teksto Tungo sa Pananaliksik",
+    "code": "CORE-1108",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Pagbasa at Pagsusuri ng Iba't Ibang Teksto Tungo sa Pananaliksik (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-statistics-and-probability-grade11-abm",
+    "title": "Statistics and Probability",
+    "code": "CORE-1109",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Statistics and Probability (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-science-grade11-abm",
+    "title": "Physical Science",
+    "code": "CORE-1101",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Science (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-personal-development-grade11-abm",
+    "title": "Personal Development",
+    "code": "CORE-1102",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Personal Development (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-2-grade11-abm",
+    "title": "Physical Education and Health 2",
+    "code": "CORE-1103",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 2 (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-entrepreneurship-grade11-abm",
+    "title": "Entrepreneurship",
+    "code": "APP-1104",
+    "strand": "ABM",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Entrepreneurship (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-practical-research-1-grade11-abm",
+    "title": "Practical Research 1",
+    "code": "APP-1105",
+    "strand": "ABM",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Practical Research 1 (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-fundamentals-of-accountancy-business-and-management-1-grade11-abm",
+    "title": "Fundamentals of Accountancy, Business and Management 1",
+    "code": "ABM-1106",
+    "strand": "ABM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Fundamentals of Accountancy, Business and Management 1 (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-principles-of-marketing-grade11-abm",
+    "title": "Principles of Marketing",
+    "code": "ABM-1107",
+    "strand": "ABM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Principles of Marketing (ABM Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-introduction-to-the-philosophy-of-the-human-person-grade12-abm",
+    "title": "Introduction to the Philosophy of the Human Person",
+    "code": "CORE-1208",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Introduction to the Philosophy of the Human Person (ABM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-contemporary-philippine-arts-from-the-regions-grade12-abm",
+    "title": "Contemporary Philippine Arts from the Regions",
+    "code": "CORE-1209",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Contemporary Philippine Arts from the Regions (ABM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-understanding-culture-society-and-politics-grade12-abm",
+    "title": "Understanding Culture, Society and Politics",
+    "code": "CORE-1201",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Understanding Culture, Society and Politics (ABM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-3-grade12-abm",
+    "title": "Physical Education and Health 3",
+    "code": "CORE-1202",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 3 (ABM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-english-for-academic-and-professional-purposes-grade12-abm",
+    "title": "English for Academic and Professional Purposes",
+    "code": "APP-1203",
+    "strand": "ABM",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: English for Academic and Professional Purposes (ABM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-practical-research-2-grade12-abm",
+    "title": "Practical Research 2",
+    "code": "APP-1204",
+    "strand": "ABM",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Practical Research 2 (ABM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-fundamentals-of-accountancy-business-and-management-2-grade12-abm",
+    "title": "Fundamentals of Accountancy, Business and Management 2",
+    "code": "ABM-1205",
+    "strand": "ABM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Fundamentals of Accountancy, Business and Management 2 (ABM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-applied-economics-grade12-abm",
+    "title": "Applied Economics",
+    "code": "ABM-1206",
+    "strand": "ABM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Applied Economics (ABM Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-media-and-information-literacy-grade12-abm",
+    "title": "Media and Information Literacy",
+    "code": "CORE-1207",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Media and Information Literacy (ABM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-4-grade12-abm",
+    "title": "Physical Education and Health 4",
+    "code": "CORE-1208",
+    "strand": "ABM",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 4 (ABM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-inquiries-investigations-and-immersion-grade12-abm",
+    "title": "Inquiries, Investigations and Immersion",
+    "code": "APP-1209",
+    "strand": "ABM",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Inquiries, Investigations and Immersion (ABM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-business-finance-grade12-abm",
+    "title": "Business Finance",
+    "code": "ABM-1201",
+    "strand": "ABM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Business Finance (ABM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-business-ethics-and-social-responsibility-grade12-abm",
+    "title": "Business Ethics and Social Responsibility",
+    "code": "ABM-1202",
+    "strand": "ABM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Business Ethics and Social Responsibility (ABM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-business-enterprise-simulation-or-work-immersion-grade12-abm",
+    "title": "Business Enterprise Simulation or Work Immersion",
+    "code": "ABM-1203",
+    "strand": "ABM",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Business Enterprise Simulation or Work Immersion (ABM Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-oral-communication-grade11-tvl",
+    "title": "Oral Communication",
+    "code": "CORE-1104",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Oral Communication (TVL Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-komunikasyon-at-pananaliksik-sa-wika-at-kulturang-pilipino-grade11-tvl",
+    "title": "Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino",
+    "code": "CORE-1105",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino (TVL Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-general-mathematics-grade11-tvl",
+    "title": "General Mathematics",
+    "code": "CORE-1106",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: General Mathematics (TVL Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-earth-and-life-science-grade11-tvl",
+    "title": "Earth and Life Science",
+    "code": "CORE-1107",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Earth and Life Science (TVL Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-personal-development-pansariling-kaunlaran-grade11-tvl",
+    "title": "Personal Development / Pansariling Kaunlaran",
+    "code": "CORE-1108",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Personal Development / Pansariling Kaunlaran (TVL Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-21st-century-literature-from-philippines-and-the-world-grade11-tvl",
+    "title": "21st Century Literature from Philippines and the World",
+    "code": "CORE-1109",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: 21st Century Literature from Philippines and the World (TVL Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-1-grade11-tvl",
+    "title": "Physical Education and Health 1",
+    "code": "CORE-1101",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 1 (TVL Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-computer-programming-1-net-technology-nc-iii-or-java-nc-iii-grade11-tvl",
+    "title": "Computer Programming 1 (.Net Technology NC III) or (Java NC III)",
+    "code": "TVL-1102",
+    "strand": "TVL",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Computer Programming 1 (.Net Technology NC III) or (Java NC III) (TVL Strand · Grade 11 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-reading-and-writing-grade11-tvl",
+    "title": "Reading and Writing",
+    "code": "CORE-1103",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Reading and Writing (TVL Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-pagbasa-at-pagsusuri-sa-iba-t-ibang-tekso-tungo-sa-pananaliksik-grade11-tvl",
+    "title": "Pagbasa at Pagsusuri sa Iba't-Ibang Tekso Tungo sa Pananaliksik",
+    "code": "CORE-1104",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Pagbasa at Pagsusuri sa Iba't-Ibang Tekso Tungo sa Pananaliksik (TVL Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-statistics-and-probability-grade11-tvl",
+    "title": "Statistics and Probability",
+    "code": "CORE-1105",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Statistics and Probability (TVL Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-science-grade11-tvl",
+    "title": "Physical Science",
+    "code": "CORE-1106",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Science (TVL Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-2-grade11-tvl",
+    "title": "Physical Education and Health 2",
+    "code": "CORE-1107",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 2 (TVL Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-english-for-academic-and-professional-purposes-grade11-tvl",
+    "title": "English for Academic and Professional Purposes",
+    "code": "APP-1108",
+    "strand": "TVL",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: English for Academic and Professional Purposes (TVL Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-practical-research-1-grade11-tvl",
+    "title": "Practical Research 1",
+    "code": "APP-1109",
+    "strand": "TVL",
+    "track": "Applied",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Practical Research 1 (TVL Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-computer-programming-2-net-technology-nc-iii-or-java-nc-iii-grade11-tvl",
+    "title": "Computer Programming 2 (.Net Technology NC III) or (Java NC III)",
+    "code": "TVL-1101",
+    "strand": "TVL",
+    "track": "Specialized",
+    "gradeLevel": "Grade 11",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Computer Programming 2 (.Net Technology NC III) or (Java NC III) (TVL Strand · Grade 11 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-understanding-culture-society-and-politics-grade12-tvl",
+    "title": "Understanding Culture, Society and Politics",
+    "code": "CORE-1202",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Understanding Culture, Society and Politics (TVL Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-introduction-to-the-philosophy-of-the-human-person-pambungad-sa-pilosopiyang-tao-grade12-tvl",
+    "title": "Introduction to the Philosophy of the Human Person / Pambungad sa Pilosopiyang Tao",
+    "code": "CORE-1203",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Introduction to the Philosophy of the Human Person / Pambungad sa Pilosopiyang Tao (TVL Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-3-grade12-tvl",
+    "title": "Physical Education and Health 3",
+    "code": "CORE-1204",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 3 (TVL Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-practical-research-2-grade12-tvl",
+    "title": "Practical Research 2",
+    "code": "APP-1205",
+    "strand": "TVL",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Practical Research 2 (TVL Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-pagsulat-sa-filipino-sa-piling-larangan-akademik-grade12-tvl",
+    "title": "Pagsulat sa Filipino sa Piling Larangan (Akademik)",
+    "code": "APP-1206",
+    "strand": "TVL",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Pagsulat sa Filipino sa Piling Larangan (Akademik) (TVL Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-empowerment-it-technologies-grade12-tvl",
+    "title": "Empowerment IT Technologies",
+    "code": "APP-1207",
+    "strand": "TVL",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Empowerment IT Technologies (TVL Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-computer-programming-3-net-technology-nc-iii-or-java-nc-iii-grade12-tvl",
+    "title": "Computer Programming 3 (.Net Technology NC III) or (Java NC III)",
+    "code": "TVL-1208",
+    "strand": "TVL",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "1st Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Computer Programming 3 (.Net Technology NC III) or (Java NC III) (TVL Strand · Grade 12 · 1st Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-contemporary-philippine-arts-from-the-regions-grade12-tvl",
+    "title": "Contemporary Philippine Arts from the Regions",
+    "code": "CORE-1209",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Contemporary Philippine Arts from the Regions (TVL Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-media-and-information-literacy-grade12-tvl",
+    "title": "Media and Information Literacy",
+    "code": "CORE-1201",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Media and Information Literacy (TVL Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-physical-education-and-health-4-grade12-tvl",
+    "title": "Physical Education and Health 4",
+    "code": "CORE-1202",
+    "strand": "TVL",
+    "track": "Core",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 40,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Physical Education and Health 4 (TVL Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-entrepreneurship-grade12-tvl",
+    "title": "Entrepreneurship",
+    "code": "APP-1203",
+    "strand": "TVL",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 60,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Entrepreneurship (TVL Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-inquiries-investigation-and-immersion-project-research-grade12-tvl",
+    "title": "Inquiries, Investigation and Immersion (Project Research)",
+    "code": "APP-1204",
+    "strand": "TVL",
+    "track": "Applied",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 80,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Inquiries, Investigation and Immersion (Project Research) (TVL Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-computer-programming-4-net-technology-nc-iii-or-java-nc-iii-grade12-tvl",
+    "title": "Computer Programming 4 (.Net Technology NC III) or (Java NC III)",
+    "code": "TVL-1205",
+    "strand": "TVL",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 100,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Computer Programming 4 (.Net Technology NC III) or (Java NC III) (TVL Strand · Grade 12 · 2nd Sem).",
+    "documents": []
+  },
+  {
+    "id": "course-culminating-activity-career-advocacy-work-immersion-research-grade12-tvl",
+    "title": "Culminating Activity / Career Advocacy / Work Immersion / Research",
+    "code": "TVL-1206",
+    "strand": "TVL",
+    "track": "Specialized",
+    "gradeLevel": "Grade 12",
+    "semester": "2nd Sem",
+    "progress": 20,
+    "modules": 0,
+    "instructor": "Haven Faculty",
+    "status": "enrolled",
+    "cover": "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=600&q=80",
+    "description": "Official DepEd Senior High School curriculum: Culminating Activity / Career Advocacy / Work Immersion / Research (TVL Strand · Grade 12 · 2nd Sem).",
+    "documents": []
   }
 ];
 
@@ -174,18 +2270,27 @@ function scrollCoursesGrid(direction) {
 }
 
 function isCourseOpenForStudent(course) {
-  const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
+  const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
+  const courseStrand = (course.strand || 'STEM').toUpperCase();
 
-  // If course is marked Core or Applied, open for all
-  if (course.track === 'Core' || course.track === 'Applied' || course.strand === 'CORE' || course.strand === 'GENERAL') return true;
+  // Strict strand check: student sees subjects of their enrolled strand or common Core/Applied subjects
+  return courseStrand === studentStrand || courseStrand === 'ALL' || course.track === 'Core' || course.track === 'Applied';
+}
 
-  // IF STUDENT IS ENROLLED IN STEM: ONLY STEM SUBJECTS ARE OPEN
-  if (studentStrand === 'STEM') {
-    return course.strand === 'STEM';
-  }
-
-  // Otherwise check if course strand matches student strand
-  return course.strand === studentStrand;
+function isCourseAssignedToStudent(course, profile = CURRENT_PROFILE) {
+  if (!course) return false;
+  const normalizeStrand = value => {
+    const normalized = String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    return normalized === 'TVL-ICT' || normalized === 'TVL ICT' ? 'TVL' : normalized;
+  };
+  const gradeNumber = value => Number(String(value || '').match(/\d+/)?.[0]) || null;
+  const studentStrand = normalizeStrand(profile?.strand);
+  const courseStrand = normalizeStrand(course.strand);
+  const studentGrade = gradeNumber(profile?.grade_level || profile?.gradeLevel);
+  const courseGrade = gradeNumber(course.gradeLevel || course.grade_level);
+  const strandMatches = !studentStrand || courseStrand === studentStrand || ['ALL', 'ALL STRANDS', 'GENERAL'].includes(courseStrand);
+  const gradeMatches = !studentGrade || !courseGrade || courseGrade === studentGrade;
+  return strandMatches && gradeMatches;
 }
 
 function handleCourseClick(courseId) {
@@ -217,117 +2322,84 @@ function openSubjectMaterials(courseId) {
 }
 
 function renderCoursesWidgetHTML() {
+  const isTeacher = (typeof ROLE !== 'undefined' ? ROLE : (CURRENT_PROFILE?.role || 'student')) === 'teacher';
   const studentStrand = CURRENT_PROFILE?.strand || 'STEM';
+  const teacherStrands = (isTeacher && CURRENT_PROFILE?.strand)
+    ? CURRENT_PROFILE.strand.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+    : [];
 
-  // Get all courses enrolled for the student
-  const enrolledList = COURSES_DATABASE.filter(c => isCourseOpenForStudent(c));
+  let enrolledList = [];
+  if (isTeacher) {
+    if (teacherStrands.length > 0) {
+      enrolledList = COURSES_DATABASE.filter(c => teacherStrands.includes((c.strand || '').toUpperCase()) || (c.track || '').toLowerCase() === 'core');
+    } else {
+      enrolledList = COURSES_DATABASE.slice();
+    }
+  } else {
+    enrolledList = COURSES_DATABASE.filter(c => isCourseOpenForStudent(c));
+  }
 
   return `
-  <div class="courses-widget">
-    <div class="cw-hdr">
-      <div class="cw-title-wrap">
-        <h2 class="cw-title">Enrolled Subjects</h2>
-        <span class="cw-subtitle">S.Y. 2024–2025 · First Semester · Click any subject to view its individual PDF learning modules</span>
-      </div>
-    </div>
-
-    <div class="cw-filters-row">
-      <div class="cw-left-filters">
-        <div class="cw-tab-group">
-          <button class="cw-tab active" title="Subjects Enrolled">
-            Subjects Enrolled <span class="cw-count">${enrolledList.length}</span>
+    <div class="courses-widget" style="background:#ffffff;border-radius:18px;padding:22px;box-shadow:0 1px 8px rgba(15,23,42,0.06), 0 4px 20px rgba(37,99,235,0.05);border:1.5px solid #e8f0fe;margin-bottom:24px;">
+      <div class="cw-hdr" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+        <div class="cw-title-wrap" style="display:flex;flex-direction:column;gap:4px;">
+          <h3 class="cw-title" style="margin:0;font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;">${isTeacher ? 'My Handled Subjects' : 'My Enrolled Subjects'}</h3>
+          <p class="cw-subtitle" style="margin:0;font-size:12.5px;color:#64748b;font-weight:500;">${isTeacher ? `DepEd Senior High School Curriculum (${teacherStrands.length ? teacherStrands.join(', ') : 'STEM, HUMSS'} · S.Y. 2026–2027)` : `DepEd Official Senior High School Curriculum (${studentStrand} Strand · S.Y. 2026–2027)`}</p>
+        </div>
+        <div class="cw-nav-btns" style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="cw-slide-btn prev" onclick="scrollCoursesGrid('left')" title="Scroll left" aria-label="Previous subjects" style="width:36px;height:36px;border-radius:50%;background:#ffffff;border:1.5px solid #e2e8f0;color:#64748b;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <button type="button" class="cw-slide-btn next" onclick="scrollCoursesGrid('right')" title="Scroll right" aria-label="Next subjects" style="width:36px;height:36px;border-radius:50%;background:#ffffff;border:1.5px solid #e2e8f0;color:#64748b;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
         </div>
       </div>
-
-      <div class="cw-nav-btns">
-        <button class="cw-slide-btn" onclick="scrollCoursesGrid('left')" aria-label="Scroll left" title="Scroll left">
-          <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <button class="cw-slide-btn" onclick="scrollCoursesGrid('right')" aria-label="Scroll right" title="Scroll right">
-          <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
+      <div class="cw-cards-grid" id="cwCardsGrid" style="display:flex;gap:18px;overflow-x:auto;scroll-behavior:smooth;padding:6px 2px 14px 2px;scrollbar-width:thin;">
+        ${enrolledList.map(c => `
+          <div class="cw-card cw-subject-card" onclick="handleCourseClick('${c.id}')" title="View ${escHtml(c.title)} Modules" style="width:280px;min-width:280px;max-width:280px;flex-shrink:0;background:#ffffff;border:1.5px solid #e2e8f0;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 10px rgba(15,23,42,0.05);cursor:pointer;transition:all 0.2s ease;">
+            <div class="cw-thumb" style="height:140px;width:100%;position:relative;overflow:hidden;background-image:url('${c.cover || 'assets/slide1.jpg'}');background-size:cover;background-position:center;display:flex;flex-direction:column;justify-content:space-between;padding:10px;">
+              <div class="cw-thumb-gradient" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(15,23,42,0.45) 0%,rgba(15,23,42,0) 45%,rgba(15,23,42,0.7) 100%);pointer-events:none;"></div>
+              <div class="cw-thumb-top" style="display:flex;justify-content:space-between;align-items:center;position:relative;z-index:2;">
+                <span class="cw-track-badge" style="background:rgba(15,23,42,0.75);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;text-transform:uppercase;">${escHtml(c.track || 'Core')}</span>
+                <span class="cw-strand-badge" style="background:rgba(255,255,255,0.95);color:#0284c7;font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:12px;border:1px solid rgba(2,132,199,0.25);">${escHtml(c.strand || 'STEM')}</span>
+              </div>
+              <div class="cw-thumb-bottom" style="position:relative;z-index:2;">
+                <span class="cw-sem-tag" style="color:#ffffff;font-size:11px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.6);">${escHtml(c.semester || '1st Sem')} · ${escHtml(c.gradeLevel || 'Grade 11')}</span>
+              </div>
+            </div>
+            <div class="cw-card-body" style="padding:16px;display:flex;flex-direction:column;gap:10px;flex:1;">
+              <div class="cw-code-row" style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="cw-course-code" style="font-size:11px;font-weight:800;color:#0284c7;letter-spacing:0.5px;">${escHtml(c.code)}</span>
+                <span class="cw-mod-chip" style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#64748b;background:#f8fafc;padding:2px 8px;border-radius:8px;border:1px solid #e2e8f0;">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                  ${c.modules || 4} Modules
+                </span>
+              </div>
+              <h4 class="cw-card-title" style="margin:0;font-size:14.5px;font-weight:700;color:#0f172a;line-height:1.35;height:40px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escHtml(c.title)}</h4>
+              <div class="cw-instructor-row" style="display:flex;align-items:center;gap:8px;">
+                <div class="cw-avatar" style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#0284c7,#38bdf8);color:#fff;font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${c.instructor ? c.instructor.charAt(0) : 'F'}</div>
+                <span class="cw-instructor-name" style="font-size:12px;font-weight:600;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(c.instructor || 'Faculty')}</span>
+              </div>
+              <div class="cw-progress-section" style="display:flex;flex-direction:column;gap:6px;margin-top:2px;">
+                <div class="cw-progress-info" style="display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;">
+                  <span class="cw-progress-text" style="color:#64748b;">${isTeacher ? 'Coverage' : 'Progress'}</span>
+                  <span class="cw-progress-pct" style="color:#0284c7;">${c.progress || 0}%</span>
+                </div>
+                <div class="cw-progress-bar-track" style="width:100%;height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden;">
+                  <div class="cw-progress-bar-fill" style="height:100%;background:linear-gradient(90deg,#0284c7,#38bdf8);border-radius:99px;width:${c.progress || 0}%;"></div>
+                </div>
+              </div>
+              <div class="cw-card-foot" style="padding-top:10px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:flex-end;margin-top:auto;">
+                <span class="cw-view-link" style="font-size:12px;font-weight:700;color:#0284c7;display:flex;align-items:center;gap:4px;">
+                  Open Subject
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                </span>
+              </div>
+            </div>
+          </div>
+        `).join('')}
       </div>
     </div>
-
-    <div class="cw-cards-grid" id="cwCardsGrid">
-      ${enrolledList.length ? enrolledList.map(c => renderCourseCard(c)).join('') : `
-        <div style="padding: 30px; color: var(--text-muted); text-align: center; width: 100%; font-size: 13px;">
-          No enrolled subjects found for ${studentStrand}.
-        </div>
-      `}
-    </div>
-  </div>`;
-}
-
-function renderCourseCard(course) {
-  const isOpen = isCourseOpenForStudent(course);
-  const isCompleted = course.progress === 100;
-  const uploadsForCourse = (typeof materialsData !== 'undefined' && Array.isArray(materialsData))
-    ? materialsData.filter(m => (typeof isMaterialMatchingCourse === 'function' ? isMaterialMatchingCourse(m, course) : false) && (m.status === 'approved' || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && m.uploaded_by === CURRENT_PROFILE.id)))
-    : [];
-  const docCount = uploadsForCourse.length;
-
-  return `
-  <div class="cw-card ${!isOpen ? 'locked' : ''}" onclick="handleCourseClick('${course.id}')" title="Click to view learning materials for ${escHtml(course.title)}">
-    <div class="cw-thumb" style="background-image: url('${course.cover}');">
-      <div class="cw-thumb-gradient"></div>
-      
-      <div class="cw-thumb-top">
-        <span class="cw-track-badge">${course.track || 'Core'}</span>
-        <span class="cw-strand-badge ${!isOpen ? 'locked-badge' : ''}">${isOpen ? course.strand : '🔒 ' + course.strand}</span>
-      </div>
-
-      <div class="cw-thumb-bottom">
-        <span class="cw-sem-tag">${course.semester || '1st Sem'} · ${course.gradeLevel || 'Grade 12'}</span>
-      </div>
-
-      ${!isOpen ? `
-        <div class="cw-lock-overlay">
-          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-          <span>Locked for ${CURRENT_PROFILE?.strand || 'STEM'}</span>
-        </div>` : ''}
-    </div>
-
-    <div class="cw-card-body">
-      <div class="cw-code-row">
-        <span class="cw-course-code">${course.code || 'SUBJ-101'}</span>
-        <span class="cw-mod-chip">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          ${docCount} ${docCount === 1 ? 'Handout' : 'Handouts'}
-        </span>
-      </div>
-
-      <h3 class="cw-card-title">${escHtml(course.title)}</h3>
-
-      <div class="cw-instructor-row">
-        <div class="cw-avatar" title="${escHtml(course.instructor)}">${course.instructor ? course.instructor.charAt(course.instructor.startsWith('Dr.') ? 4 : course.instructor.startsWith('Prof.') ? 6 : course.instructor.startsWith('Engr.') ? 6 : course.instructor.startsWith('Ms.') ? 4 : 0) : 'U'}</div>
-        <span class="cw-instructor-name">${escHtml(course.instructor || 'Faculty')}</span>
-      </div>
-
-      <div class="cw-progress-section">
-        <div class="cw-progress-info">
-          <span class="cw-progress-text">${isCompleted ? 'Completed' : 'Course Progress'}</span>
-          <span class="cw-progress-pct ${isCompleted ? 'done' : ''}">${course.progress}%</span>
-        </div>
-        <div class="cw-progress-bar-track">
-          <div class="cw-progress-bar-fill ${isCompleted ? 'done' : ''}" style="width: ${isOpen ? course.progress : 0}%;"></div>
-        </div>
-      </div>
-
-      <div class="cw-card-foot">
-        <span class="cw-view-link">
-          ${docCount > 0 ? 'View Learning Handouts' : 'Open Subject Portal'}
-          <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-        </span>
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderCoursesWidget() {
-  const container = document.getElementById('coursesWidgetContainer');
-  if (container) {
-    container.innerHTML = renderCoursesWidgetHTML();
-  }
+  `;
 }

@@ -4,68 +4,20 @@ const ANNOUNCEMENTS_STORAGE_KEY = 'scholaria_announcements_v1';
 
 
 
-const DEFAULT_SEED_ANNOUNCEMENTS = [
-  {
-    id: 'anc_seed_1',
-    title: 'Super Typhoon Class Suspension & Asynchronous Shift',
-    category: 'emergency', // 'emergency' | 'academic' | 'event' | 'general'
-    priority: 'critical', // 'critical' (sticky top banner) | 'important' | 'normal'
-    audience: ['All Students', 'All Teachers', 'STEM Strand', 'HUMSS Strand', 'ABM Strand', 'TVL Strand'],
-    message: 'DEAR SCHOLARIA COMMUNITY:\n\nDue to severe weather conditions and local government advisories, all face-to-face classes for Senior High School are SUSPENDED from Aug 26 to Sept 05.\n\nStudents are instructed to shift to ASYNCHRONOUS LEARNING MODE. In case of severe flooding, power outages, or medical emergencies, please use the official City of Imus Emergency Hotlines attached below.',
-    authorName: "Principal's Office",
-    authorRole: 'Admin',
-    timestamp: new Date(Date.now() - 3600000 * 3).toISOString(),
-    expiresAt: new Date(Date.now() + 3600000 * 72).toISOString(),
-    isArchived: false,
-    hotlines: [
-      { name: 'Imus Disaster Risk (CDRRMO)', number: '(046) 515-1358', icon: '🚨' },
-      { name: 'Imus Bureau of Fire (BFP)', number: '(046) 970-5161', icon: '🚒' },
-      { name: 'Imus Police (PNP)', number: '(046) 471-3993', icon: '🚓' },
-      { name: 'Medical Center Imus', number: '(046) 471-9487', icon: '🏥' }
-    ]
-  },
-  {
-    id: 'anc_seed_2',
-    title: 'Q1 Midterm Examination Schedule Shift',
-    category: 'academic',
-    priority: 'important',
-    audience: ['All Students', 'All Teachers'],
-    message: 'Notice to all Grade 11 and Grade 12 students:\n\nIn light of the recent class suspension, the First Quarter Midterm Examination schedule has been adjusted. Exams will officially commence on Sept 12. Updated review pointers and coverage lists are uploaded under your respective Subject Workspaces.',
-    authorName: 'Academic Registrar',
-    authorRole: 'Admin',
-    timestamp: new Date(Date.now() - 3600000 * 24).toISOString(),
-    expiresAt: new Date(Date.now() + 3600000 * 168).toISOString(),
-    isArchived: false,
-    hotlines: []
-  },
-  {
-    id: 'anc_seed_3',
-    title: 'Senior High School Foundation Day Assembly',
-    category: 'event',
-    priority: 'normal',
-    audience: ['All Students', 'All Teachers'],
-    message: 'Imus National High School / Senior High Department will celebrate its Annual Foundation Week next month! Student Council activities, strand exhibits, and performance competitions will be announced soon.',
-    authorName: 'Student Affairs Council',
-    authorRole: 'Admin',
-    timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
-    expiresAt: null,
-    isArchived: false,
-    hotlines: []
-  }
-];
+const DEFAULT_SEED_ANNOUNCEMENTS = [];
 
 function getStoredAnnouncements() {
   try {
     const raw = localStorage.getItem(ANNOUNCEMENTS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify(DEFAULT_SEED_ANNOUNCEMENTS));
-      return DEFAULT_SEED_ANNOUNCEMENTS;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return (parsed && parsed.length) ? parsed : DEFAULT_SEED_ANNOUNCEMENTS;
+    if (Array.isArray(parsed)) {
+      return parsed.filter(a => !['anc_seed_1', 'anc_seed_2', 'anc_seed_3'].includes(a.id));
+    }
   } catch (e) {
-    return DEFAULT_SEED_ANNOUNCEMENTS;
+    return [];
   }
+  return [];
 }
 
 function saveAnnouncements(list) {
@@ -1010,7 +962,7 @@ function showNewsAlertIfNeeded() {
   };
 
   // Update header if there's an emergency
-  const hasEmergency = emergencyUnread.length > 0;
+  const hasEmergency = emergencyUnseen.length > 0;
   const headerGrad = hasEmergency
     ? 'background:linear-gradient(135deg,#991b1b 0%,#dc2626 100%)'
     : 'background:linear-gradient(135deg,#1e40af 0%,#2563eb 100%)';
