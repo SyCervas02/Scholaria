@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -24,7 +24,7 @@
   --shadow-hover: 0 4px 16px rgba(15,23,42,0.08), 0 8px 30px rgba(37,99,235,0.1);
   --radius: 16px;
   --radius-sm: 10px;
-  --sidebar-w: 216px;
+  --sidebar-w: 228px;
   --nav-h: 60px;
   --banner-h: 0px;
 }
@@ -34,7 +34,7 @@ body.has-demo-banner {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   background: var(--bg);
   min-height: 100vh;
   color: var(--text-primary);
@@ -101,11 +101,11 @@ body {
   user-select: none;
 }
 .logo-blue {
-  font-family: 'Poppins', sans-serif;
-  font-weight: 700;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-weight: 800;
   font-size: 17px;
   color: var(--blue);
-  letter-spacing: 0.5px;
+  letter-spacing: -0.3px;
 }
 .logo-gold {
   font-size: 9px;
@@ -312,11 +312,11 @@ body {
 .main {
   flex: 1;
   margin-left: var(--sidebar-w);
-  padding: 16px 20px 24px 20px;
+  padding: 24px 32px 32px 32px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 22px;
   transition: margin-left 0.3s cubic-bezier(.4,0,.2,1);
 }
 
@@ -369,12 +369,12 @@ body {
 .welcome-text-box { flex: 1; }
 
 .welcome-text-box h1 {
-  font-family: 'Poppins', sans-serif;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
   color: #fff;
-  line-height: 1;
+  line-height: 1.1;
   margin-bottom: 6px;
 }
 
@@ -435,8 +435,8 @@ body {
 .stat-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-1px); }
 
 .stat-card .number {
-  font-family: 'Inter', sans-serif;
-  font-size: 34px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 32px;
   font-weight: 800;
   line-height: 1;
 }
@@ -511,7 +511,7 @@ body {
 
 .info-card h3 { font-size: 14.5px; font-weight: 700; color: var(--text-primary); }
 .info-card p  { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
-.info-card .ic-num { font-family: 'Inter', sans-serif; font-size: 30px; font-weight: 800; color: var(--blue); line-height: 1; }
+.info-card .ic-num { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 28px; font-weight: 800; color: var(--blue); line-height: 1; }
 .info-card .ic-num.gold  { color: var(--gold); }
 .info-card .ic-num.green { color: var(--green); }
 .info-card .ic-sub { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted); }
@@ -524,7 +524,7 @@ body {
   margin-bottom: 12px;
 }
 .section-title h2, .section-hdr h2 {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 16px; font-weight: 700;
   color: var(--text-primary);
 }
@@ -630,7 +630,7 @@ body {
 
 .course-header {
   padding: 18px;
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 14.5px;
   font-weight: 700;
   color: #fff;
@@ -828,7 +828,7 @@ body {
   border: 1px solid rgba(37,99,235,0.08); box-shadow: var(--shadow); gap: 14px;
 }
 .page-placeholder i { font-size: 48px; color: var(--blue); opacity: 0.2; }
-.page-placeholder h2 { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 700; color: var(--text-primary); }
+.page-placeholder h2 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 20px; font-weight: 700; color: var(--text-primary); }
 .page-placeholder p { font-size: 14px; color: var(--text-muted); }
 
 /* ════════════════════════════════
@@ -861,7 +861,7 @@ body {
 .bot-msg  { background: #e2e8f0; }
 .user-msg { background: var(--blue); color: #fff; margin-left: auto; }
 .chat-input-area { display: flex; border-top: 1px solid rgba(37,99,235,0.08); }
-.chat-input-area input { flex: 1; border: none; outline: none; padding: 12px; font-size: 13px; font-family: 'Inter', sans-serif; }
+.chat-input-area input { flex: 1; border: none; outline: none; padding: 12px; font-size: 13px; font-family: 'Plus Jakarta Sans', sans-serif; }
 .chat-input-area button { width: 48px; border: none; background: var(--blue); color: #fff; cursor: pointer; }
 
 /* ════════════════════════════════
@@ -897,7 +897,7 @@ body {
   padding: 20px 24px; border-bottom: 1px solid rgba(37,99,235,0.08);
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-shrink: 0;
 }
-.modal-head h3 { font-family: 'Poppins', sans-serif; font-size: 17px; font-weight: 700; color: var(--text-primary); }
+.modal-head h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 17px; font-weight: 700; color: var(--text-primary); }
 .modal-head span { font-size: 12px; color: var(--text-muted); margin-top: 3px; display: block; }
 .modal-x { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 6px; border-radius: 8px; transition: .2s; flex-shrink: 0; }
 .modal-x:hover { background: var(--blue-light); color: var(--blue); }
@@ -1012,10 +1012,10 @@ body {
 .gen-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .gen-field { display: flex; flex-direction: column; gap: 6px; }
 .gen-field label { font-size: 11px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: 0.7px; }
-.gen-field input[type=text], .gen-field input[type=number], .gen-field textarea {
+.gen-field input[type=text], .gen-field textarea {
   border: 1.5px solid rgba(37,99,235,0.12); border-radius: 10px; padding: 10px 13px;
   font-size: 13.5px; font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-primary);
-  outline: none; background: #f8fbff; transition: 0.2s; box-sizing: border-box; width: 100%;
+  outline: none; background: #f8fbff; transition: 0.2s;
 }
 .gen-field input:focus, .gen-field textarea:focus { border-color: var(--blue); background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
 
