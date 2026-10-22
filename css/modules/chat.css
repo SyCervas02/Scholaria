@@ -136,7 +136,38 @@
 .chat-attachment-card .chat-overview-btn,
 .chat-attachment-card a[download] { display: none !important; }
 .chat-attachment-card.image-load-failed img { display: none; }
-.chat-attachment-card.image-load-failed::after { content: 'Image unavailable'; display: block; padding: 28px 36px; border: 1px dashed #cbd5e1; border-radius: 10px; color: #64748b; font-size: 12px; }
+.chat-attachment-card.image-fallback-active img { display: none; }
+
+.msg-seen-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+  margin-top: 3px;
+  margin-bottom: 8px;
+  margin-right: 6px;
+  opacity: 0.9;
+  user-select: none;
+  animation: fadeInReceipt 0.25s ease-out;
+}
+.msg-seen-receipt svg {
+  color: var(--blue, #2563eb);
+  stroke-width: 2.8;
+}
+.msg-seen-receipt.sent svg {
+  color: #94a3b8;
+}
+@keyframes fadeInReceipt {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 0.9; transform: translateY(0); }
+}
+
+.chat-img-fallback-box {
+  margin-bottom: 6px;
+}
 
 
 .cw-back-btn { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid #e4eafb; border-radius: 10px; background: #f5f7fb; color: var(--chat-blue, #195cff); cursor: pointer; flex-shrink: 0; transition: all 0.2s ease; margin-right: 2px; }

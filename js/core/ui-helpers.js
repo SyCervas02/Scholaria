@@ -459,8 +459,22 @@ function iconLightning(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="c
 function iconInfinity() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-2.67 0-4.664-1.9-6.178-4-1.514 2.1-3.508 4-6.178 4-5.096 0-5.096-8 0-8 2.67 0 4.664 1.9 6.178 4 1.514-2.1 3.508-4 6.178-4z"/></svg>`; }
 
 async function logout() {
-  if (typeof resetChatState === 'function') resetChatState();
-  await db.auth.signOut();
+  try {
+    if (typeof resetChatState === 'function') resetChatState();
+  } catch (e) {
+    console.warn('resetChatState error during logout:', e);
+  }
+  try {
+    sessionStorage.clear();
+    localStorage.removeItem('scholaria_chat_attachment_return');
+  } catch (e) {}
+  try {
+    if (window.db && window.db.auth) {
+      await window.db.auth.signOut();
+    }
+  } catch (e) {
+    console.warn('Supabase signOut error during logout:', e);
+  }
   window.location.href = 'login.html';
 }
 

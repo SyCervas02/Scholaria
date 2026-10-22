@@ -973,7 +973,8 @@ function renderMaterialsList(role) {
       }).length;
 
       const pendingQuizzesCount = Math.max(0, subjectQuizzes.length - completedQuizzesCount);
-      const totalSubjectMat = lessons.length + subjectUploads.length;
+      const activeLessonsCount = lessons.filter(l => l.items && l.items.length > 0).length;
+      const totalSubjectMat = activeLessonsCount + subjectUploads.length;
 
       const quizProgressPct = subjectQuizzes.length > 0
         ? Math.round((completedQuizzesCount / subjectQuizzes.length) * 100)
@@ -1017,7 +1018,7 @@ function renderMaterialsList(role) {
 
         <div class="sw-tabs-bar">
           <button class="sw-tab ${activeSubjectSubTab === 'modules' ? 'active' : ''}" onclick="setSubjectSubTab('modules')">
-            Modules &amp; Handouts <span class="sw-tab-badge">${lessons.length}</span>
+            Modules &amp; Handouts <span class="sw-tab-badge">${activeLessonsCount}</span>
           </button>
           <button class="sw-tab ${activeSubjectSubTab === 'quizzes' ? 'active' : ''}" onclick="setSubjectSubTab('quizzes')">
             Quizzes &amp; Assessments <span class="sw-tab-badge">${subjectQuizzes.length}</span>
@@ -2110,6 +2111,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
       
       ${classCards.map(card => {
         const lessons = getSubjectLessons(card);
+        const activeModulesCount = lessons.filter(l => l.items && l.items.length > 0).length;
         const uploadsForClass = materialsData.filter(m => {
           if (!isMaterialMatchingCourse(m, card)) return false;
           if (m.section && m.section !== 'All' && !m.section.toLowerCase().includes(card.assignedSection.toLowerCase())) return false;
@@ -2158,7 +2160,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
                 ${escHtml(card.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
               </p>
               <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:nowrap;overflow:hidden;">
-                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${lessons.length} Modules</span>
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${activeModulesCount} ${activeModulesCount === 1 ? 'Module' : 'Modules'}</span>
                 <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📁 ${uploadsForClass.length} Files</span>
                 <span style="background:#fef3c7;color:#b45309;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📝 ${quizzesForClass.length} Quizzes</span>
               </div>
@@ -2184,6 +2186,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
     <div class="subjects-folder-grid" id="studentSubjectsFolderGrid" style="grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));gap:20px;">
       ${enrolledCourses.map(course => {
         const courseLessons = getSubjectLessons(course);
+        const activeCourseModulesCount = courseLessons.filter(l => l.items && l.items.length > 0).length;
         const courseUploads = materialsData.filter(m => isMaterialMatchingCourse(m, course));
         const courseQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
           if (!q.subject) return false;
@@ -2213,7 +2216,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
               <p class="sfc-instructor" style="margin-bottom:12px;">👤 <span>Instructor: <strong>${escHtml(course.instructor || 'Faculty')}</strong></span></p>
 
               <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:nowrap;overflow:hidden;">
-                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${courseLessons.length} Modules</span>
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${activeCourseModulesCount} ${activeCourseModulesCount === 1 ? 'Module' : 'Modules'}</span>
                 <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📁 ${courseUploads.length} Files</span>
                 <span style="background:#fef3c7;color:#b45309;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📝 ${courseQuizzes.length} Quizzes</span>
               </div>

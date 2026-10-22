@@ -160,23 +160,23 @@ function openSectionReportModal(sectionName) {
       </div>
 
       <!-- SUMMARY KPI STATS -->
-      <div class="report-kpi-row" style="display:flex !important;flex-direction:row !important;flex-wrap:nowrap !important;width:100% !important;gap:12px !important;">
-        <div class="report-kpi-card" style="flex:1 1 0 !important;min-width:0 !important;width:auto !important;">
+      <div class="report-kpi-row">
+        <div class="report-kpi-card">
           <div class="kpi-label">Total Enrolled</div>
           <div class="kpi-value">${sectionStudents.length}</div>
           <div class="kpi-sub">Students in Roster</div>
         </div>
-        <div class="report-kpi-card" style="flex:1 1 0 !important;min-width:0 !important;width:auto !important;">
+        <div class="report-kpi-card">
           <div class="kpi-label">Class Average</div>
           <div class="kpi-value ${classAvg !== null && classAvg >= 80 ? 'text-green' : ''}">${classAvg !== null ? classAvg.toFixed(2) + '%' : '—'}</div>
           <div class="kpi-sub">Combined Performance</div>
         </div>
-        <div class="report-kpi-card" style="flex:1 1 0 !important;min-width:0 !important;width:auto !important;">
+        <div class="report-kpi-card">
           <div class="kpi-label">Passing Rate</div>
           <div class="kpi-value ${passingRate !== null && passingRate >= 75 ? 'text-green' : 'text-amber'}">${passingRate !== null ? passingRate + '%' : '—'}</div>
           <div class="kpi-sub">${passingCount} of ${sectionStudents.length} Passing</div>
         </div>
-        <div class="report-kpi-card" style="flex:1 1 0 !important;min-width:0 !important;width:auto !important;">
+        <div class="report-kpi-card">
           <div class="kpi-label">Grade Range</div>
           <div class="kpi-value" style="font-size:15px;margin-top:4px;">${highestScore}% / ${lowestScore}%</div>
           <div class="kpi-sub">Highest / Lowest</div>

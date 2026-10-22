@@ -16,3 +16,5 @@ Thumbs.db
 
 # User uploads & runtime storage
 uploads/
+database/
+data/chat-seen-receipts.json

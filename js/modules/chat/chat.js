@@ -237,9 +237,15 @@ async function openConversation(id) {
   if (error) { console.error('Failed to load messages:', error.message); return; }
   (data || []).forEach(m => seenMessageIds.add(m.id));
   renderMessages(conv, data || []);
+
+  const lastMsg = (data && data.length) ? data[data.length - 1] : null;
+  markConversationSeen(id, lastMsg?.id, lastMsg?.created_at);
+  fetchChatSeenReceipts(id);
+  startChatReceiptPolling(id);
 }
 
 function closeConversation() {
+  stopChatReceiptPolling();
   activeConversationId = null;
   const chatContainer = document.querySelector('.scholaria-chat');
   if (chatContainer) chatContainer.classList.remove('has-active-chat');
@@ -263,12 +269,116 @@ function closeConversation() {
   renderContactsList();
 }
 
+window._chatSeenReceipts = window._chatSeenReceipts || {};
+let chatReceiptPollTimer = null;
+
+async function fetchChatSeenReceipts(convId) {
+  if (!convId) return;
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    const serverBase = window.API_BASE || 'http://localhost:3001';
+    const res = await fetch(`${serverBase}/api/chat/seen-receipts?conversationId=${encodeURIComponent(convId)}`, {
+      headers: {
+        'Authorization': `Bearer ${session?.access_token || ''}`
+      }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      window._chatSeenReceipts[convId] = data.receipts || {};
+      updateSeenReceiptsUI(convId);
+    }
+  } catch (err) {
+    // Silent catch
+  }
+}
+
+async function markConversationSeen(convId, lastMsgId, lastMsgTime) {
+  if (!convId || !CURRENT_PROFILE) return;
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    const serverBase = window.API_BASE || 'http://localhost:3001';
+    await fetch(`${serverBase}/api/chat/mark-seen`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`
+      },
+      body: JSON.stringify({
+        conversationId: convId,
+        lastMessageId: lastMsgId || null,
+        lastMessageTime: lastMsgTime || new Date().toISOString()
+      })
+    });
+    fetchChatSeenReceipts(convId);
+  } catch (err) {
+    // Silent catch
+  }
+}
+
+function startChatReceiptPolling(convId) {
+  stopChatReceiptPolling();
+  if (!convId) return;
+  chatReceiptPollTimer = setInterval(() => {
+    if (activeConversationId === convId) {
+      fetchChatSeenReceipts(convId);
+    }
+  }, 4000);
+}
+
+function stopChatReceiptPolling() {
+  if (chatReceiptPollTimer) {
+    clearInterval(chatReceiptPollTimer);
+    chatReceiptPollTimer = null;
+  }
+}
+
+function updateSeenReceiptsUI(convId) {
+  if (activeConversationId !== convId) return;
+  const receipts = window._chatSeenReceipts[convId] || {};
+  const myBubbles = document.querySelectorAll('#cwMessages .msg-bubble.me');
+  if (!myBubbles.length) return;
+
+  // Clear existing seen receipts
+  document.querySelectorAll('#cwMessages .msg-seen-receipt').forEach(el => el.remove());
+
+  // Find the last sent bubble
+  const lastBubble = myBubbles[myBubbles.length - 1];
+  const lastMid = lastBubble.getAttribute('data-mid');
+
+  // Check if any other participant has seen this conversation
+  const otherReceipts = Object.values(receipts).filter(r => String(r.userId) !== String(CURRENT_PROFILE?.id));
+  if (!otherReceipts.length) {
+    const sentEl = document.createElement('div');
+    sentEl.className = 'msg-seen-receipt sent';
+    sentEl.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Sent`;
+    lastBubble.insertAdjacentElement('afterend', sentEl);
+    return;
+  }
+
+  // Find most recent seen receipt
+  otherReceipts.sort((a, b) => new Date(b.seenAt) - new Date(a.seenAt));
+  const latestOtherReceipt = otherReceipts[0];
+
+  const seenEl = document.createElement('div');
+  seenEl.className = 'msg-seen-receipt';
+  const timeStr = formatMsgTime(latestOtherReceipt.seenAt);
+  const conv = chatConversations.find(c => c.id === convId);
+  if (conv?.isGroup) {
+    const firstOther = escHtml(latestOtherReceipt.userName?.split(' ')[0] || 'Member');
+    seenEl.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Seen by ${firstOther} · ${timeStr}`;
+  } else {
+    seenEl.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Seen · ${timeStr}`;
+  }
+  lastBubble.insertAdjacentElement('afterend', seenEl);
+}
+
 function renderMessages(conv, msgs) {
   const box = document.getElementById('cwMessages');
   if (!box) return;
   box.innerHTML = msgs.length
     ? msgs.map(m => messageBubbleHtml(conv, m)).join('')
     : '<div class="cw-empty">No messages yet — say hi!</div>';
+  updateSeenReceiptsUI(conv.id);
   box.scrollTop = box.scrollHeight;
 }
 
@@ -276,11 +386,36 @@ window._chatAttachmentMap = window._chatAttachmentMap || {};
 
 function getChatAttachmentUrl(attach) {
   if (!attach) return '';
-  const serverBase = window.API_BASE || (window.location.origin.includes(':5500') ? 'http://localhost:3001' : window.location.origin);
   if (attach.data) return attach.data;
   if (!attach.url) return '';
-  try { return new URL(attach.url, serverBase).href; } catch (_) { return `${serverBase}${attach.url}`; }
+  if (/^(https?:|data:|blob:)/i.test(attach.url)) return attach.url;
+
+  let base = window.API_BASE;
+  if (!base || base === 'null' || base.startsWith('file:')) {
+    base = 'http://localhost:3001';
+  } else if (typeof window !== 'undefined' && window.location) {
+    if (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null') {
+      base = 'http://localhost:3001';
+    }
+  }
+
+  const cleanUrl = attach.url.startsWith('/') ? attach.url : `/${attach.url}`;
+  return `${base.replace(/\/+$/, '')}${cleanUrl}`;
 }
+
+function handleChatBubbleImgError(imgEl, msgId) {
+  if (!imgEl) return;
+  const card = imgEl.closest('.chat-attachment-card');
+  if (card) {
+    card.classList.add('image-fallback-active');
+  }
+  imgEl.style.display = 'none';
+  const parent = imgEl.parentElement;
+  if (parent && parent.classList.contains('chat-img-wrap')) {
+    parent.style.display = 'none';
+  }
+}
+window.handleChatBubbleImgError = handleChatBubbleImgError;
 
 function toggleChatAttachmentMenu(msgId) {
   const menu = document.getElementById(`chatAttachmentMenu-${msgId}`);
@@ -330,25 +465,27 @@ function messageBubbleHtml(conv, m) {
           </div>
         </div>
         ${isImg ? `
-          <img src="${escHtml(fileUrl)}" alt="${escHtml(attach.name)}" onerror="this.closest('.chat-attachment-card')?.classList.add('image-load-failed')" style="max-width:260px;max-height:220px;border-radius:10px;object-fit:cover;border:1px solid rgba(0,0,0,0.08);"/>
+          <div class="chat-img-wrap" style="position:relative;display:inline-block;max-width:280px;border-radius:10px;overflow:hidden;cursor:pointer;" onclick="openChatAttachmentOverview('${m.id}')" title="Click to view full image">
+            <img src="${escHtml(fileUrl)}" alt="${escHtml(attach.name)}" onerror="handleChatBubbleImgError(this, '${m.id}')" style="max-width:280px;max-height:220px;width:auto;height:auto;object-fit:cover;border-radius:10px;display:block;border:1px solid rgba(0,0,0,0.08);cursor:pointer;transition:transform 0.15s ease;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'"/>
+          </div>
         ` : ''}
-        <div style="display:flex;align-items:center;gap:10px;background:rgba(${mine ? '255,255,255,0.18' : '0,0,0,0.06'});padding:8px 12px;border-radius:10px;min-width:210px;">
-          <span style="font-size:22px;cursor:pointer;" onclick="openChatAttachmentOverview('${m.id}')" title="View overview">${isImg ? '🖼️' : '📄'}</span>
-          <div style="min-width:0;flex:1;cursor:pointer;" onclick="openChatAttachmentOverview('${m.id}')">
+        <div style="display:flex;align-items:center;gap:10px;background:rgba(${mine ? '255,255,255,0.18' : '0,0,0,0.06'});padding:8px 12px;border-radius:10px;min-width:210px;cursor:pointer;" onclick="openChatAttachmentOverview('${m.id}')">
+          <span style="font-size:22px;" title="View overview">${isImg ? '🖼️' : '📄'}</span>
+          <div style="min-width:0;flex:1;">
             <div style="font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${mine ? '#ffffff' : '#0f172a'};" title="${escHtml(attach.name)}">${escHtml(attach.name)}</div>
             <div style="font-size:11px;opacity:0.85;color:${mine ? '#e0f2fe' : '#64748b'};">${formatChatFileSize(attach.size)}</div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-            <button type="button" class="chat-overview-btn" onclick="openChatAttachmentOverview('${m.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:8px;background:${mine ? 'rgba(255,255,255,0.22)' : '#e2e8f0'};color:${mine ? '#ffffff' : '#1e293b'};border:none;font-size:11.5px;font-weight:700;cursor:pointer;transition:all 0.15s ease;" title="Overview attachment">
+            <button type="button" class="chat-overview-btn" onclick="event.stopPropagation();openChatAttachmentOverview('${m.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:8px;background:${mine ? 'rgba(255,255,255,0.22)' : '#e2e8f0'};color:${mine ? '#ffffff' : '#1e293b'};border:none;font-size:11.5px;font-weight:700;cursor:pointer;transition:all 0.15s ease;" title="Overview attachment">
               <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               Overview
             </button>
-            <a href="${fileUrl}" download="${escHtml(attach.name)}" style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:8px;background:${mine ? '#ffffff' : 'var(--blue, #2563eb)'};color:${mine ? '#2563eb' : '#ffffff'};font-size:11.5px;font-weight:700;text-decoration:none;" title="Download file">
+            <a href="${fileUrl}" download="${escHtml(attach.name)}" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:8px;background:${mine ? '#ffffff' : 'var(--blue, #2563eb)'};color:${mine ? '#2563eb' : '#ffffff'};font-size:11.5px;font-weight:700;text-decoration:none;" title="Download file">
               <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Download
             </a>
           </div>
-        </div>
+        ${attach.caption ? `<div class="msg-text" style="margin-top:6px;font-size:13px;line-height:1.45;word-break:break-word;">${escHtml(attach.caption)}</div>` : ''}
       </div>
     `;
   } else {
@@ -362,6 +499,20 @@ function messageBubbleHtml(conv, m) {
   </div>`;
 }
 
+function zoomChatLightbox(factor) {
+  const img = document.getElementById('chatLightboxImg');
+  const lbl = document.getElementById('lightboxZoomLevel');
+  if (!img) return;
+  if (factor === 0) {
+    window._chatLightboxScale = 1;
+  } else {
+    window._chatLightboxScale = Math.max(0.4, Math.min(3.5, (window._chatLightboxScale || 1) * factor));
+  }
+  img.style.transform = `scale(${window._chatLightboxScale})`;
+  if (lbl) lbl.textContent = `${Math.round(window._chatLightboxScale * 100)}%`;
+}
+window.zoomChatLightbox = zoomChatLightbox;
+
 function openChatAttachmentOverview(msgId) {
   const modal = document.getElementById('docPreviewModal');
   const titleEl = document.getElementById('docPreviewTitle');
@@ -374,7 +525,19 @@ function openChatAttachmentOverview(msgId) {
   let senderName = 'Chat Attachment';
   let createdAt = new Date().toISOString();
 
-  if (window._chatAttachmentMap && window._chatAttachmentMap[msgId]) {
+  if (msgId === 'pending' || !msgId) {
+    if (pendingChatAttachment) {
+      attach = {
+        name: pendingChatAttachment.name,
+        url: pendingChatAttachment.url,
+        data: pendingChatAttachment.previewUrl || pendingChatAttachment.data,
+        mime: pendingChatAttachment.mime,
+        size: pendingChatAttachment.size
+      };
+      senderName = 'You (Attachment Preview)';
+      createdAt = new Date().toISOString();
+    }
+  } else if (window._chatAttachmentMap && window._chatAttachmentMap[msgId]) {
     attach = window._chatAttachmentMap[msgId].attach;
     senderName = window._chatAttachmentMap[msgId].sender_name;
     createdAt = window._chatAttachmentMap[msgId].created_at;
@@ -404,8 +567,7 @@ function openChatAttachmentOverview(msgId) {
   if (titleEl) titleEl.textContent = attach.name || 'Attachment Overview';
   if (subEl) subEl.textContent = `Shared by ${senderName} · ${formatChatFileSize(attach.size)} · ${formatMsgTime(createdAt)}`;
 
-  const serverBase = window.API_BASE || (window.location.origin.includes(':5500') ? 'http://localhost:3001' : window.location.origin);
-  const fileUrl = attach.url ? (attach.url.startsWith('http') ? attach.url : `${serverBase}${attach.url}`) : attach.data;
+  const fileUrl = getChatAttachmentUrl(attach);
 
   if (dlBtn) {
     dlBtn.innerHTML = `
@@ -428,23 +590,26 @@ function openChatAttachmentOverview(msgId) {
   let previewContent = '';
   if (isImg) {
     previewContent = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:0 4px;">
-        <span style="font-size:12.5px;color:#64748b;font-weight:600;">Image Preview</span>
-        <button type="button" class="sw-btn outline" onclick="window.open('${fileUrl}', '_blank')" style="font-size:11.5px;padding:4px 10px;border-radius:6px;cursor:pointer;background:#fff;border:1px solid #cbd5e1;font-weight:600;">
-          Open full size ↗
-        </button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:0 4px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12.5px;color:#64748b;font-weight:600;">Image Lightbox</span>
+          <span style="font-size:11px;background:#f1f5f9;color:#475569;padding:2px 6px;border-radius:4px;font-weight:600;" id="lightboxZoomLevel">100%</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button type="button" class="sw-btn outline" onclick="zoomChatLightbox(1.2)" style="font-size:11.5px;padding:4px 8px;border-radius:6px;cursor:pointer;background:#fff;border:1px solid #cbd5e1;font-weight:700;" title="Zoom in">🔍 +</button>
+          <button type="button" class="sw-btn outline" onclick="zoomChatLightbox(0.8)" style="font-size:11.5px;padding:4px 8px;border-radius:6px;cursor:pointer;background:#fff;border:1px solid #cbd5e1;font-weight:700;" title="Zoom out">🔍 -</button>
+          <button type="button" class="sw-btn outline" onclick="zoomChatLightbox(0)" style="font-size:11.5px;padding:4px 8px;border-radius:6px;cursor:pointer;background:#fff;border:1px solid #cbd5e1;font-weight:600;" title="Reset zoom">Reset</button>
+        </div>
       </div>
-      <div style="display:flex;justify-content:center;align-items:center;min-height:460px;max-height:72vh;background:#0f172a;border-radius:12px;padding:16px;overflow:auto;">
-        <img src="${fileUrl}" alt="${escHtml(attach.name)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.5);"/>
+      <div id="chatLightboxStage" style="display:flex;justify-content:center;align-items:center;min-height:460px;max-height:72vh;background:#0f172a;border-radius:12px;padding:20px;overflow:auto;position:relative;">
+        <img id="chatLightboxImg" src="${fileUrl}" alt="${escHtml(attach.name)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.5);transition:transform 0.15s ease;" onerror="this.onerror=null;this.src='/uploads/chat/${encodeURIComponent(attach.name)}';"/>
       </div>
     `;
   } else if (isPdf) {
     previewContent = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:0 4px;">
         <span style="font-size:12.5px;color:#64748b;font-weight:600;">Document Viewer</span>
-        <a href="${fileUrl}" target="_blank" download="${escHtml(attach.name)}" class="sw-btn outline" style="font-size:11.5px;padding:4px 10px;border-radius:6px;text-decoration:none;color:#334155;background:#fff;border:1px solid #cbd5e1;font-weight:600;">
-          Open in new tab ↗
-        </a>
+        <span style="font-size:11px;color:#64748b;">${escHtml(attach.name)}</span>
       </div>
       <iframe src="${fileUrl}#toolbar=1" style="width:100%;height:70vh;border:none;border-radius:12px;background:#fff;" title="${escHtml(attach.name)}"></iframe>
     `;
@@ -462,9 +627,11 @@ function openChatAttachmentOverview(msgId) {
   }
 
   bodyEl.innerHTML = previewContent;
+  window._chatLightboxScale = 1;
   modal.classList.add('active');
 }
 window.openChatAttachmentOverview = openChatAttachmentOverview;
+
 
 function renderInputArea() {
   const area = document.getElementById('cwInputArea');
@@ -485,21 +652,44 @@ function renderInputArea() {
     return;
   }
 
+  const isImg = pendingChatAttachment && ((pendingChatAttachment.mime || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|svg)$/i.test(pendingChatAttachment.name));
+  const previewImgSrc = pendingChatAttachment ? (pendingChatAttachment.previewUrl || getChatAttachmentUrl(pendingChatAttachment)) : '';
+
   const pendingAttachmentHtml = pendingChatAttachment ? `
-    <div class="cw-pending-attachment" title="Attachment ready to send">
-      <span class="cw-pending-attachment-icon">${pendingChatAttachment.mime?.startsWith('image/') ? '🖼️' : '📎'}</span>
-      <span class="cw-pending-attachment-name">${escHtml(pendingChatAttachment.name)}</span>
-      <span class="cw-pending-attachment-size">${formatChatFileSize(pendingChatAttachment.size)}</span>
-      <button type="button" class="cw-pending-attachment-remove" onclick="clearPendingChatAttachment()" aria-label="Remove attachment">×</button>
+    <div class="cw-pending-attachment-card" style="display:flex;align-items:center;gap:12px;background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:12px;padding:8px 12px;width:100%;box-shadow:0 2px 6px rgba(0,0,0,0.04);box-sizing:border-box;">
+      ${isImg ? `
+        <div style="position:relative;width:48px;height:48px;border-radius:8px;overflow:hidden;flex-shrink:0;cursor:pointer;border:1px solid #94a3b8;background:#0f172a;" onclick="openChatAttachmentOverview('pending')" title="Click to view full image in lightbox">
+          <img src="${escHtml(previewImgSrc)}" alt="Preview" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+          <span style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,0.7);color:#fff;border-radius:3px;padding:1px 3px;font-size:9px;">🔍</span>
+        </div>
+      ` : `
+        <div style="width:40px;height:40px;border-radius:8px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+          📎
+        </div>
+      `}
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12.5px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(pendingChatAttachment.name)}">
+          ${escHtml(pendingChatAttachment.name)}
+        </div>
+        <div style="font-size:11px;color:#64748b;display:flex;align-items:center;gap:8px;margin-top:2px;">
+          <span>${formatChatFileSize(pendingChatAttachment.size)}</span>
+          ${isImg ? `<button type="button" onclick="openChatAttachmentOverview('pending')" style="background:none;border:none;color:#2563eb;font-weight:700;font-size:11px;cursor:pointer;padding:0;text-decoration:underline;">Click to maximize preview</button>` : ''}
+        </div>
+      </div>
+      <button type="button" class="cw-pending-attachment-remove" onclick="clearPendingChatAttachment()" aria-label="Remove attachment" title="Remove attachment" style="width:26px;height:26px;border:none;border-radius:50%;background:#fee2e2;color:#dc2626;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:800;flex-shrink:0;">×</button>
     </div>` : '';
 
   area.innerHTML = `
-    <button type="button" class="cw-attachment-btn" id="cwAttachmentBtn" title="Attach file (max 5MB)" aria-label="Attach file" onclick="event.preventDefault();event.stopPropagation();triggerChatAttachment()" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l8-8a4 4 0 0 1 5.7 5.7l-8 8a2 2 0 0 1-2.8-2.8L15 6"/></svg></button>
-    <button type="button" class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" aria-label="Choose emoji" onclick="toggleEmojiPicker(event)" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 8h.01M16 8h.01"/></svg></button>
-    <div class="emoji-picker" id="cwEmojiPicker"></div>
-    ${pendingAttachmentHtml}
-    <input type="text" id="cwInput" aria-label="Message" placeholder="${activeConversationId ? 'Type a message…' : 'Select a conversation to start messaging'}" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMsg();}" ${activeConversationId ? '' : 'disabled'}>
-    <button class="cw-send" aria-label="Send message" onclick="sendChatMsg()" ${activeConversationId ? '' : 'disabled'}>${iconSend()}</button>`;
+    <div style="display:flex;flex-direction:column;width:100%;gap:8px;">
+      ${pendingAttachmentHtml}
+      <div style="display:flex;align-items:center;gap:10px;width:100%;">
+        <button type="button" class="cw-attachment-btn" id="cwAttachmentBtn" title="Attach file (max 5MB)" aria-label="Attach file" onclick="event.preventDefault();event.stopPropagation();triggerChatAttachment()" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l8-8a4 4 0 0 1 5.7 5.7l-8 8a2 2 0 0 1-2.8-2.8L15 6"/></svg></button>
+        <button type="button" class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" aria-label="Choose emoji" onclick="toggleEmojiPicker(event)" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 8h.01M16 8h.01"/></svg></button>
+        <div class="emoji-picker" id="cwEmojiPicker"></div>
+        <input type="text" id="cwInput" aria-label="Message" placeholder="${pendingChatAttachment ? 'Add an optional caption…' : (activeConversationId ? 'Type a message…' : 'Select a conversation to start messaging')}" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMsg();}" ${activeConversationId ? '' : 'disabled'}>
+        <button class="cw-send" aria-label="Send message" onclick="sendChatMsg()" ${activeConversationId ? '' : 'disabled'}>${iconSend()}</button>
+      </div>
+    </div>`;
 }
 
 async function refreshOwnMuteStatus() {
@@ -564,8 +754,29 @@ async function handleChatFileUpload(event) {
   const messageDraft = document.getElementById('cwInput')?.value || '';
   showToast(`Uploading ${file.name}…`, 'info');
 
-  const { data: { session } } = await db.auth.getSession();
-  const serverBase = window.API_BASE || (window.location.origin.includes(':5500') ? 'http://localhost:3001' : window.location.origin);
+  let localPreviewUrl = null;
+  if (file.type && file.type.startsWith('image/')) {
+    try {
+      localPreviewUrl = URL.createObjectURL(file);
+    } catch (_) {}
+  }
+
+  let serverBase = window.API_BASE;
+  if (!serverBase || serverBase === 'null' || (typeof serverBase === 'string' && serverBase.startsWith('file:'))) {
+    serverBase = 'http://localhost:3001';
+  } else if (typeof window !== 'undefined' && window.location) {
+    if (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null') {
+      serverBase = 'http://localhost:3001';
+    }
+  }
+
+  let session = null;
+  try {
+    if (window.db && window.db.auth) {
+      const res = await window.db.auth.getSession();
+      session = res?.data?.session;
+    }
+  } catch (_) {}
 
   let attachmentPayload = null;
 
@@ -590,7 +801,8 @@ async function handleChatFileUpload(event) {
           name: upData.name || file.name,
           size: upData.size || file.size,
           mime: upData.mime || file.type || 'application/octet-stream',
-          url: upData.url
+          url: upData.url,
+          previewUrl: localPreviewUrl || getChatAttachmentUrl({ url: upData.url })
         });
       } else {
         const errJson = await upRes.json().catch(() => ({}));
@@ -603,9 +815,8 @@ async function handleChatFileUpload(event) {
   }
 
   if (!attachmentPayload) {
-    // If backend upload failed, fallback to inline base64 ONLY if small enough for messages_body_check (<= 4000 chars)
     if (file.size > 2500) {
-      showToast('Could not upload attachment. The file server is unavailable, so it was not sent.', 'error');
+      showToast('Could not upload attachment. Please ensure file server is running.', 'error');
       clearChatAttachmentReturnState();
       event.target.value = '';
       return;
@@ -618,13 +829,14 @@ async function handleChatFileUpload(event) {
         name: file.name,
         size: file.size,
         mime: file.type || 'application/octet-stream',
-        data: dataUrl
+        data: dataUrl,
+        previewUrl: dataUrl
       });
       pendingChatAttachment = JSON.parse(payload);
       renderInputArea();
       const draftInput = document.getElementById('cwInput');
       if (draftInput) draftInput.value = messageDraft;
-      showToast('Attachment is ready. Press Send to send it.', 'success');
+      showToast('Attachment is ready. Click preview to maximize or Send to send.', 'success');
     };
     reader.onerror = function() {
       showToast('Failed to read file', 'error');
@@ -639,7 +851,7 @@ async function handleChatFileUpload(event) {
   renderInputArea();
   const draftInput = document.getElementById('cwInput');
   if (draftInput) draftInput.value = messageDraft;
-  showToast('Attachment is ready. Press Send to send it.', 'success');
+  showToast('Attachment ready. Click preview to maximize or Send to send.', 'success');
 }
 
 async function sendChatRawMessage(text) {
@@ -732,7 +944,10 @@ async function sendChatRawMessage(text) {
   conv.lastMessage = sentData.body;
   conv.lastMessageAt = sentData.created_at;
   chatConversations.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
-  if (currentPage === 'chats') renderContactsList();
+  if (currentPage === 'chats') {
+    renderContactsList();
+    updateSeenReceiptsUI(conv.id);
+  }
   await refreshOwnMuteStatus();
 }
 
@@ -741,11 +956,15 @@ async function sendChatMsg() {
   if (!input) return;
   const text = input.value.trim();
   if (!text && !pendingChatAttachment) return;
-  input.value = '';
   const attachment = pendingChatAttachment;
   pendingChatAttachment = null;
-  clearChatAttachmentReturnState();
-  await sendChatRawMessage(attachment ? JSON.stringify(attachment) : text);
+  input.value = '';
+  if (attachment) {
+    if (text) attachment.caption = text;
+    await sendChatRawMessage(JSON.stringify(attachment));
+  } else {
+    await sendChatRawMessage(text);
+  }
   if (currentPage === 'chats') renderInputArea();
 }
 
@@ -782,6 +1001,11 @@ function handleIncomingMessage(msg) {
       if (empty) empty.remove();
       box.insertAdjacentHTML('beforeend', messageBubbleHtml(conv, msg));
       box.scrollTop = box.scrollHeight;
+    }
+    if (!isMine) {
+      markConversationSeen(conv.id, msg.id, msg.created_at);
+    } else {
+      updateSeenReceiptsUI(conv.id);
     }
   } else if (!isMine) {
     conv.unread = (conv.unread || 0) + 1;

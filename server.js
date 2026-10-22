@@ -174,8 +174,10 @@ const SENSITIVE_PATTERNS = [
   /^\/flush-presentation-data\.js$/i,
   /^\/seed-demo-account\.js$/i,
   /^\/data(\/|$)/i,
+  /^\/database(\/|$)/i,
   /^\/tests(\/|$)/i,
   /^\/node_modules(\/|$)/i,
+  /Accounts_NamingConventions/i,
   /^\/\.git/i,
   /^\/\.gemini/i
 ];
@@ -209,6 +211,33 @@ if (!fs.existsSync(chatUploadsDir)) {
   fs.mkdirSync(chatUploadsDir, { recursive: true });
 }
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { dotfiles: 'ignore' }));
+
+// Resilient fallback for chat uploads stored across multiple devices
+app.get('/uploads/chat/:filename', (req, res) => {
+  const filename = path.basename(req.params.filename || '');
+  const filePath = path.join(chatUploadsDir, filename);
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(filename);
+  if (isImage) {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    const safeName = filename.replace(/[<>&"']/g, '').slice(0, 36);
+    return res.send(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+        <rect width="100%" height="100%" fill="#f8fafc" rx="14" stroke="#cbd5e1" stroke-width="2"/>
+        <circle cx="200" cy="72" r="32" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
+        <path d="M190 72 l7 -8 l13 14" stroke="#2563eb" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="192" cy="62" r="2.5" fill="#2563eb"/>
+        <text x="200" y="130" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="13" font-weight="700" fill="#1e293b" text-anchor="middle">Image stored on sender's device</text>
+        <text x="200" y="152" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" font-weight="500" fill="#64748b" text-anchor="middle">${safeName}</text>
+        <text x="200" y="176" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="10.5" font-weight="500" fill="#94a3b8" text-anchor="middle">Click Overview to view details</text>
+      </svg>
+    `.trim());
+  }
+  res.status(404).send('File not found on this local instance');
+});
 
 // Allowed public assets and folders
 app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'ignore' }));
@@ -1118,6 +1147,62 @@ app.post('/api/chat/send', async (req, res) => {
   }
 
   res.json({ ...message, warning });
+});
+
+// --- Chat Seen Receipts (Facebook-style Read Receipts) ---
+const chatReceiptsFile = path.join(__dirname, 'data', 'chat-seen-receipts.json');
+function getChatReceipts() {
+  try {
+    if (!fs.existsSync(chatReceiptsFile)) return {};
+    return JSON.parse(fs.readFileSync(chatReceiptsFile, 'utf8'));
+  } catch (err) {
+    return {};
+  }
+}
+function saveChatReceipts(data) {
+  try {
+    fs.writeFileSync(chatReceiptsFile, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to save chat receipts:', err.message);
+  }
+}
+
+app.post('/api/chat/mark-seen', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const { conversationId, lastMessageId, lastMessageTime } = req.body;
+  if (!conversationId) {
+    return res.status(400).json({ error: 'Missing conversationId' });
+  }
+
+  const receipts = getChatReceipts();
+  if (!receipts[conversationId]) {
+    receipts[conversationId] = {};
+  }
+
+  receipts[conversationId][profile.id] = {
+    userId: profile.id,
+    userName: profile.full_name || 'Participant',
+    lastMessageId: lastMessageId || null,
+    lastMessageTime: lastMessageTime || new Date().toISOString(),
+    seenAt: new Date().toISOString()
+  };
+
+  saveChatReceipts(receipts);
+  res.json({ success: true, receipt: receipts[conversationId][profile.id] });
+});
+
+app.get('/api/chat/seen-receipts', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const { conversationId } = req.query;
+  const receipts = getChatReceipts();
+  if (conversationId) {
+    return res.json({ receipts: receipts[conversationId] || {} });
+  }
+  res.json({ receipts });
 });
 
 // --- Learning Materials (centralized storage) ---

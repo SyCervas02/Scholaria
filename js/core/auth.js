@@ -17,19 +17,40 @@
 const SUPABASE_URL  = 'https://qxpsbewbgdwkermxeeso.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cHNiZXdiZ2R3a2VybXhlZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDgzMTgsImV4cCI6MjA5ODI4NDMxOH0.cmG-pVotNZ5KI81_8XsUN5AL5vNVYOPFy8oHegz6cvg';
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { storage: window.sessionStorage } });
+try {
+  Object.defineProperty(window, 'db', {
+    value: db,
+    writable: false,
+    configurable: false
+  });
+} catch (_) {
+  window.db = db;
+}
 
 const API_BASE = (function() {
-      if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-        const host = window.location.hostname;
-        const port = window.location.port;
-        if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '3001') {
-          return 'http://localhost:3001';
-        }
-        return window.location.origin;
-      }
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null') {
       return 'http://localhost:3001';
-    })();
-window.API_BASE = API_BASE;
+    }
+    const host = window.location.hostname;
+    const port = window.location.port;
+    if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '3001') {
+      return 'http://localhost:3001';
+    }
+    return window.location.origin;
+  }
+  return 'http://localhost:3001';
+})();
+try {
+  Object.defineProperty(window, 'API_BASE', {
+    value: API_BASE,
+    writable: false,
+    configurable: false
+  });
+} catch (_) {
+  window.API_BASE = API_BASE;
+}
+
 let ROLE = null;
 let CURRENT_PROFILE = null;
 
@@ -58,7 +79,7 @@ async function guardSessionAndInit() {
   }
 
   ROLE = profile.role;
-  CURRENT_PROFILE = profile;
+  CURRENT_PROFILE = Object.freeze({ ...profile });
   try {
     db.from('users').update({ last_active_at: new Date().toISOString() }).eq('id', profile.id).then();
   } catch (_) {}

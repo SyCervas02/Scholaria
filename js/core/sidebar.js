@@ -3618,13 +3618,26 @@ function adminPage(page) {
       const students = users.filter(u=>u.role==='student');
       const teachers = users.filter(u=>u.role==='teacher');
       const admins = users.filter(u=>u.role==='admin');
-      const activeStudents = students.filter(u=>u.isActive!==false).length;
+      const activeStudents = students.filter(u=>u.isActive!==false && u.is_active!==false).length;
+      const inactiveStudents = students.length - activeStudents;
+      const activeTeachers = teachers.filter(u=>u.isActive!==false && u.is_active!==false).length;
+      const activeAdmins = admins.filter(u=>u.isActive!==false && u.is_active!==false).length;
       const sections = typeof managedSections !== 'undefined' ? managedSections : [];
       const entries = typeof approvalEntries==='function' ? approvalEntries().filter(e=>e.status==='pending') : [];
+      const pendingHandouts = entries.filter(e => !e.isQuiz && e.type !== 'quiz').length;
+      const pendingQuizzes = entries.filter(e => e.isQuiz || e.type === 'quiz').length;
       const announcements = typeof getStoredAnnouncements==='function' ? getStoredAnnouncements() : [];
-      const live = announcements.filter(n=>!n.isArchived && n.status!=='draft' && !n.isDraft);
+      const oneWeekAgo = Date.now() - 7 * 86400000;
+      const live = announcements.filter(n=>!n.isArchived && n.status!=='draft' && !n.isDraft && !(n.expiresAt && new Date(n.expiresAt).getTime() <= Date.now()));
+      const announcementsThisWeek = live.filter(n => new Date(n.timestamp).getTime() >= oneWeekAgo);
       const drafts = announcements.filter(n=>n.status==='draft'||n.isDraft);
       const emergencies = live.filter(n=>n.category==='emergency');
+
+      // Dynamic User Management Stats
+      const adviserCount = sections.filter(s => s.adviser || s.adviser_id).length || teachers.filter(t => sections.some(s => s.adviser === t.name || s.adviser_id === t.id)).length;
+      const newThisWeekCount = users.filter(u => u.created_at && new Date(u.created_at).getTime() >= oneWeekAgo).length;
+      const deactivatedCount = users.filter(u => u.isActive === false || u.is_active === false).length;
+      const pendingIssuesCount = users.filter(u => (u.isActive === false || u.is_active === false) || u.must_reset_password).length;
 
       const count = (sample, value) => (isDemo || typeof value === 'undefined' || value === null) ? sample : value;
 
@@ -3656,51 +3669,124 @@ function adminPage(page) {
       };
 
       const metricsData = [
-        { label: 'Pending Approvals', val: count(4, entries.length), sub: '2 handouts &bull; 2 quizzes<br>awaiting review', icon: adSvg.approvalCheck, color: '#ea580c', bg: '#ffedd5', page: 'approval' },
-        { label: 'Total Students', val: count(125, students.length), sub: '<span style="color:#10b981;font-weight:700;">120 active</span> &bull; <span style="color:#ef4444;font-weight:700;">5 inactive</span>', icon: adSvg.user, color: '#2563eb', bg: '#dbeafe', page: 'users' },
-        { label: 'Number of Teachers', val: count(10, teachers.length), sub: '<span style="color:#10b981;font-weight:700;">9 active</span>', icon: adSvg.users, color: '#059669', bg: '#d1fae5', page: 'users' },
-        { label: 'System Admins', val: count(2, admins.length), sub: '<span style="color:#7c3aed;font-weight:700;">2 active</span> admin accounts', icon: adSvg.shield, color: '#7c3aed', bg: '#ede9fe', page: 'users' },
-        { label: 'Active Sections', val: count(5, sections.length), sub: 'Across Grade 11 &amp; 12', icon: adSvg.doc, color: '#e11d48', bg: '#ffe4e6', page: 'sections' },
-        { label: 'Published Materials', val: count(48, materialsData.filter(m=>m.status==='approved').length), sub: 'All approved resources', icon: adSvg.folder, color: '#0891b2', bg: '#cffafe', page: 'materials' },
-        { label: 'Active Quizzes', val: count(9, customQuizzes.filter(q=>q.status==='active').length), sub: 'Running across all subjects', icon: adSvg.quiz, color: '#d97706', bg: '#fef3c7', page: 'quiz' },
-        { label: 'Announcements<br>This Week', val: count(6, live.length), sub: 'School-wide updates<br>posted', icon: adSvg.megaphone, color: '#9333ea', bg: '#f3e8ff', page: 'announcements' }
+        { label: 'Pending Approvals', val: count(entries.length, entries.length), sub: `${pendingHandouts} handout${pendingHandouts!==1?'s':''} &bull; ${pendingQuizzes} quiz${pendingQuizzes!==1?'zes':''}<br>awaiting review`, icon: adSvg.approvalCheck, color: '#ea580c', bg: '#ffedd5', page: 'approval' },
+        { label: 'Total Students', val: count(students.length, students.length), sub: `<span style="color:#10b981;font-weight:700;">${activeStudents} active</span> &bull; <span style="color:#ef4444;font-weight:700;">${inactiveStudents} inactive</span>`, icon: adSvg.user, color: '#2563eb', bg: '#dbeafe', page: 'users' },
+        { label: 'Number of Teachers', val: count(teachers.length, teachers.length), sub: `<span style="color:#10b981;font-weight:700;">${activeTeachers} active</span>`, icon: adSvg.users, color: '#059669', bg: '#d1fae5', page: 'users' },
+        { label: 'System Admins', val: count(admins.length, admins.length), sub: `<span style="color:#7c3aed;font-weight:700;">${activeAdmins} active</span> admin account${activeAdmins!==1?'s':''}`, icon: adSvg.shield, color: '#7c3aed', bg: '#ede9fe', page: 'users' },
+        { label: 'Active Sections', val: count(sections.length, sections.length), sub: 'Across Grade 11 &amp; 12', icon: adSvg.doc, color: '#e11d48', bg: '#ffe4e6', page: 'sections' },
+        { label: 'Published Materials', val: (typeof materialsData !== 'undefined' ? materialsData.filter(m=>m.status==='approved').length : 0), sub: 'All approved resources', icon: adSvg.folder, color: '#0891b2', bg: '#cffafe', page: 'materials' },
+        { label: 'Active Quizzes', val: (typeof customQuizzes !== 'undefined' ? customQuizzes.filter(q=>q.status==='active').length : 0), sub: 'Running across all subjects', icon: adSvg.quiz, color: '#d97706', bg: '#fef3c7', page: 'approval' },
+        { label: 'Announcements<br>This Week', val: announcementsThisWeek.length, sub: 'School-wide updates<br>posted', icon: adSvg.megaphone, color: '#9333ea', bg: '#f3e8ff', page: 'announcements' }
       ];
 
-      const queueItems = [
-        { title: 'General Mathematics \u2014 Worksheet 3', author: 'Uploaded by Haven Faculty', type: 'Handout', isQuiz: false, time1: 'Submitted today', time2: 'Feb 10, 2025 10:24 AM', iconColor: '#2563eb', iconBg: '#eff6ff', icon: adSvg.doc, id: 'qm1' },
-        { title: 'Komunikasyon sa Wika \u2014 Quiz 2', author: 'Uploaded by Haven Faculty', type: 'Quiz', isQuiz: true, time1: 'Due this week', time2: 'Feb 9, 2025 4:10 PM', iconColor: '#db2777', iconBg: '#fdf2f8', icon: adSvg.quiz, id: 'qm2' },
-        { title: 'Research in Daily Life \u2014 Performance Task', author: 'Uploaded by Haven Faculty', type: 'Handout', isQuiz: false, time1: 'Submitted today', time2: 'Feb 9, 2025 2:35 PM', iconColor: '#059669', iconBg: '#ecfdf5', icon: adSvg.doc, id: 'qm3' },
-        { title: 'Empowerment Technologies \u2014 Quiz 1', author: 'Uploaded by Haven Faculty', type: 'Quiz', isQuiz: true, time1: 'Submitted yesterday', time2: 'Feb 8, 2025 11:20 AM', iconColor: '#d97706', iconBg: '#fffbeb', icon: adSvg.quiz, id: 'qm4' }
+      const queueItems = entries.length ? entries.slice(0, 4).map((item, idx) => {
+        const isQ = item.isQuiz || item.type === 'quiz';
+        return {
+          title: item.title || 'Instructional Material',
+          author: item.author || item.uploaded_by || 'Haven Faculty',
+          type: isQ ? 'Quiz' : 'Handout',
+          isQuiz: isQ,
+          time1: 'Submitted',
+          time2: item.created_at ? formatSentDate(item.created_at) : 'Awaiting Review',
+          iconColor: isQ ? '#db2777' : '#2563eb',
+          iconBg: isQ ? '#fdf2f8' : '#eff6ff',
+          icon: isQ ? adSvg.quiz : adSvg.doc,
+          id: item.id || `qm${idx}`
+        };
+      }) : [
+        { title: 'No pending approvals in queue', author: 'All submissions reviewed', type: 'Complete', isQuiz: false, time1: 'All caught up', time2: 'System up to date', iconColor: '#10b981', iconBg: '#ecfdf5', icon: adSvg.checkCircle, id: 'none' }
       ];
 
-      const bulletins = [
-        { icon: adSvg.megaphone, color: '#ea580c', title: 'Midterm Examination Schedule', desc: 'Please be guided with the midterm exam schedule for AY 2024\u20132025.', date: 'Feb 9, 2025', time: '10:30 AM' },
-        { icon: adSvg.calendar, color: '#d97706', title: 'SHS Intramurals 2025', desc: 'Upcoming program and general guidelines.', date: 'Feb 7, 2025', time: '2:15 PM' },
-        { icon: adSvg.alertTriangle, color: '#dc2626', title: 'Suspension of Classes (Feb 12)', desc: 'Classes in all levels are suspended due to expected weather conditions.', date: 'Feb 6, 2025', time: '9:00 AM' }
+      const bulletins = live.length ? live.slice(0, 3).map(b => {
+        const dt = formatSentDate(b.timestamp);
+        return {
+          icon: b.category === 'emergency' ? adSvg.alertTriangle : adSvg.megaphone,
+          color: b.category === 'emergency' ? '#dc2626' : '#ea580c',
+          title: b.title,
+          desc: b.message ? (b.message.length > 90 ? b.message.slice(0, 90) + '…' : b.message) : 'Official advisory broadcasted.',
+          date: dt.split(',')[0] || 'Recently',
+          time: dt.split(',')[1] || ''
+        };
+      }) : [
+        { icon: adSvg.megaphone, color: '#64748b', title: 'No active broadcasts right now', desc: 'Create a new announcement to notify students and faculty.', date: 'Today', time: '' }
       ];
 
-      const matRows = [
-        { subj: 'General Mathematics', user: 'Haven Faculty', type: 'Handout', isQuiz: false, time: 'Feb 10, 10:24 AM', status: 'Pending', isPending: true },
-        { subj: 'Komunikasyon sa Wika', user: 'Haven Faculty', type: 'Quiz', isQuiz: true, time: 'Feb 9, 4:10 PM', status: 'Pending', isPending: true },
-        { subj: 'Research in Daily Life', user: 'Haven Faculty', type: 'Handout', isQuiz: false, time: 'Feb 9, 2:35 PM', status: 'Approved', isPending: false },
-        { subj: 'Oral Communication', user: 'Mr. D. Cruz', type: 'Handout', isQuiz: false, time: 'Feb 8, 5:20 PM', status: 'Approved', isPending: false }
+      const allMats = typeof materialsData !== 'undefined' ? materialsData : [];
+      const matRows = allMats.length ? allMats.slice(0, 5).map(m => {
+        const isQ = m.type === 'quiz';
+        const isPend = m.status === 'pending';
+        return {
+          subj: m.subject || m.title || 'General Subject',
+          user: m.uploaded_by || m.author || 'Haven Faculty',
+          type: isQ ? 'Quiz' : 'Handout',
+          isQuiz: isQ,
+          time: m.created_at ? formatSentDate(m.created_at) : 'Recently',
+          status: isPend ? 'Pending' : 'Approved',
+          isPending: isPend
+        };
+      }) : [
+        { subj: 'No instructional materials uploaded yet', user: 'System', type: 'Info', isQuiz: false, time: '—', status: 'None', isPending: false }
       ];
 
-      const strandList = [
-        { name: 'STEM', count: 35, pct: 85 },
-        { name: 'ABM', count: 25, pct: 58 },
-        { name: 'HUMSS', count: 30, pct: 72 },
-        { name: 'GAS', count: 20, pct: 47 },
-        { name: 'TVL', count: 15, pct: 35 }
-      ];
+      // Dynamic real strand distribution
+      const strandKeys = ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL'];
+      const strandCounts = { STEM: 0, ABM: 0, HUMSS: 0, GAS: 0, TVL: 0 };
+      students.forEach(st => {
+        let strand = (st.strand || '').toUpperCase();
+        if (!strand && st.section) {
+          const sec = sections.find(s => s.name === st.section || s.id === st.section_id);
+          if (sec && sec.strand) strand = sec.strand.toUpperCase();
+        }
+        if (strand && strandCounts[strand] !== undefined) {
+          strandCounts[strand]++;
+        } else if (strand) {
+          for (const key of strandKeys) {
+            if (strand.includes(key)) { strandCounts[key]++; break; }
+          }
+        }
+      });
+      const maxStrandVal = Math.max(1, ...Object.values(strandCounts));
+      const strandList = strandKeys.map(key => ({
+        name: key,
+        count: strandCounts[key],
+        pct: Math.round((strandCounts[key] / maxStrandVal) * 100)
+      }));
 
-      const activityList = [
-        { icon: adSvg.checkCircle, color: '#10b981', title: 'Admin approved General Mathematics \u2014 Worksheet 3', desc: 'Content has been approved and published.', time: '12 minutes ago' },
-        { icon: adSvg.user, color: '#2563eb', title: 'Teacher account updated: Ma. Lopez', desc: 'Profile information and access rights modified.', time: '28 minutes ago' },
-        { icon: adSvg.megaphone, color: '#f43f5e', title: 'Announcement posted: Midterm Schedule', desc: 'Broadcast sent to all Senior High School users.', time: '1 hour ago' },
-        { icon: adSvg.users, color: '#06b6d4', title: 'Section HUMSS-11 roster updated', desc: '5 students added, 1 removed.', time: '2 hours ago' },
-        { icon: adSvg.quiz, color: '#f59e0b', title: 'Quiz approval requested by Haven Faculty', desc: 'Empowerment Technologies \u2014 Quiz 1', time: '3 hours ago' }
-      ];
+      // Dynamic activity logs
+      const activityList = [];
+      if (live.length) {
+        activityList.push({
+          icon: adSvg.megaphone,
+          color: '#f43f5e',
+          title: `Announcement posted: ${live[0].title}`,
+          desc: `Broadcast sent to ${Array.isArray(live[0].audience) ? live[0].audience.join(', ') : 'all users'}.`,
+          time: typeof formatTimeAgo === 'function' ? formatTimeAgo(live[0].timestamp) : 'Recently'
+        });
+      }
+      if (allMats.length) {
+        const firstApproved = allMats.find(m => m.status === 'approved') || allMats[0];
+        activityList.push({
+          icon: adSvg.checkCircle,
+          color: '#10b981',
+          title: `Material available: ${firstApproved.title || firstApproved.subject}`,
+          desc: 'Instructional content accessible in Materials Hub.',
+          time: typeof formatTimeAgo === 'function' ? formatTimeAgo(firstApproved.created_at) : 'Recently'
+        });
+      }
+      if (entries.length) {
+        activityList.push({
+          icon: adSvg.quiz,
+          color: '#f59e0b',
+          title: `Pending review: ${entries[0].title || 'Submission'}`,
+          desc: `Submitted for administrative approval.`,
+          time: 'Awaiting review'
+        });
+      }
+      if (activityList.length === 0) {
+        activityList.push(
+          { icon: adSvg.checkCircle, color: '#10b981', title: 'System status normal', desc: 'All academic modules running smoothly.', time: 'Just now' }
+        );
+      }
 
       return `<div class="admin-reference-dashboard">
         <!-- ── HERO BANNER ── -->
@@ -3883,7 +3969,7 @@ function adminPage(page) {
               <div class="ad-urole-box" style="background:#fff7ed;" onclick="renderPage('users')">
                 <div class="ad-urole-icon" style="color:#ea580c;">${adSvg.mortarboard}</div>
                 <div>
-                  <div class="ad-urole-num" style="color:#ea580c;">5</div>
+                  <div class="ad-urole-num" style="color:#ea580c;">${adviserCount}</div>
                   <div class="ad-urole-lbl">Advisers</div>
                 </div>
               </div>
@@ -3892,17 +3978,17 @@ function adminPage(page) {
               <div class="ad-ustatus-item">
                 <span style="color:#10b981;display:inline-flex;width:14px;height:14px;">${adSvg.checkCircle}</span>
                 <span>New this week</span>
-                <strong style="color:#10b981;">7</strong>
+                <strong style="color:#10b981;">${newThisWeekCount}</strong>
               </div>
               <div class="ad-ustatus-item">
                 <span style="color:#ef4444;display:inline-flex;width:14px;height:14px;">${adSvg.alertCircle}</span>
                 <span>Pending account issues</span>
-                <strong style="color:#ef4444;">2</strong>
+                <strong style="color:#ef4444;">${pendingIssuesCount}</strong>
               </div>
               <div class="ad-ustatus-item">
                 <span style="color:#64748b;display:inline-flex;width:14px;height:14px;">${adSvg.infoCircle}</span>
                 <span>Deactivated accounts</span>
-                <strong style="color:#64748b;">5</strong>
+                <strong style="color:#64748b;">${deactivatedCount}</strong>
               </div>
             </div>
             <div class="ad-user-actions-row">
@@ -4141,7 +4227,7 @@ function adminPage(page) {
                     <span style="display:inline-flex;width:16px;height:16px;">${adSvg.user}</span>
                   </div>
                   <div>
-                    <div class="ad-acc-num">120</div>
+                    <div class="ad-acc-num">${activeStudents}</div>
                     <div class="ad-acc-lbl">Active</div>
                   </div>
                 </div>
@@ -4150,7 +4236,7 @@ function adminPage(page) {
                     <span style="display:inline-flex;width:16px;height:16px;">${adSvg.user}</span>
                   </div>
                   <div>
-                    <div class="ad-acc-num">5</div>
+                    <div class="ad-acc-num">${inactiveStudents}</div>
                     <div class="ad-acc-lbl">Inactive</div>
                   </div>
                 </div>

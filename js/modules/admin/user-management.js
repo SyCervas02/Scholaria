@@ -3421,7 +3421,7 @@ function renderAddUserModal() {
   }
 
   body.innerHTML = `
-    <div class="au-type-select">
+    <div class="au-type-select" style="margin-bottom:20px;">
       <div class="au-type-card ${isStudent ? 'active' : ''}" onclick="auSelectType('student')">
         <div class="tc-icon">${iconProfile()}</div>
         <h4>Student</h4>
@@ -3442,193 +3442,227 @@ function renderAddUserModal() {
     </div>
 
     ${isAdmin ? `
-      <div style="margin-top:16px;">
-        <div class="au-name-grid" style="margin-bottom:12px;">
-          <div class="gen-field">
-            <label>First Name <span style="color:#ef4444;">*</span></label>
-            <input type="text" placeholder="e.g. Eleanor" maxlength="50" value="${escHtml(addUser.firstName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateFirstName(this.value);">
-          </div>
-          <div class="gen-field">
-            <label>Middle Name <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
-            <input type="text" placeholder="e.g. Vance" maxlength="50" value="${escHtml(addUser.middleName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateMiddleName(this.value);">
-          </div>
-          <div class="gen-field">
-            <label>Last Name <span style="color:#ef4444;">*</span></label>
-            <input type="text" placeholder="e.g. Sterling" maxlength="50" value="${escHtml(addUser.lastName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateLastName(this.value);">
-          </div>
-          <div class="gen-field">
-            <label>Suffix <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
-            <input type="text" placeholder="e.g. III" maxlength="15" value="${escHtml(addUser.suffix || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateSuffix(this.value);">
-          </div>
-        </div>
-
-        <div class="gen-row" style="margin-bottom:12px;">
-          <div class="gen-field">
-            <label>Recovery Gmail / Official Email <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
-            <input type="email" placeholder="e.g. eleanor.vance@gmail.com" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
-          </div>
-          <div class="gen-field">
-            <label>Phone / Emergency Contact <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
-            <input type="tel" placeholder="e.g. 09171234567" maxlength="15" value="${escHtml(addUser.contactNumber || '')}" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); auUpdateContactNumber(this.value)">
-          </div>
-        </div>
-
-        <div class="gen-field" style="margin-bottom:12px;">
-          <label>Residential / Home Address <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
-          <input type="text" placeholder="e.g. 456 Meralco Ave., Pasig City" maxlength="150" value="${escHtml(addUser.address || '')}" oninput="auUpdateAddress(this.value)">
-        </div>
-        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:14px;">
-          Note: If recovery email is omitted, the administrator logs in using their assigned School Admin ID.
-        </div>
-
-        <div class="gen-field" style="margin-top:14px;">
-          <label style="display:flex;align-items:center;justify-content:space-between;">
-            <span>Auto-Generated Strong Password</span>
-            <span style="font-size:11px;font-weight:700;color:#059669;text-transform:none;">High Complexity · 14 Chars</span>
-          </label>
-          <div class="admin-pw-generator-box">
-            <div class="admin-pw-code" id="adminGeneratedPwDisplay">${escHtml(addUser.generatedAdminPassword)}</div>
-            <div class="admin-pw-actions">
-              <button type="button" class="admin-pw-btn" onclick="auRegenerateAdminPassword()" title="Generate another strong password">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                Regenerate
-              </button>
-              <button type="button" class="admin-pw-btn" onclick="copyTextToClipboard('${escHtml(addUser.generatedAdminPassword)}', 'Password copied!')" title="Copy password">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copy
-              </button>
+      <div class="au-screen-grid">
+        <!-- Left: Admin Personal Details -->
+        <div class="au-col-card">
+          <h5 class="au-col-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#2563eb;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>Administrator Identity & Details</span>
+          </h5>
+          <div class="au-name-grid" style="margin-bottom:0;">
+            <div class="gen-field">
+              <label>First Name <span style="color:#ef4444;">*</span></label>
+              <input type="text" placeholder="e.g. Eleanor" maxlength="50" value="${escHtml(addUser.firstName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateFirstName(this.value);">
+            </div>
+            <div class="gen-field">
+              <label>Middle Name <span style="text-transform:none;color:var(--text-muted);">(Opt)</span></label>
+              <input type="text" placeholder="e.g. Vance" maxlength="50" value="${escHtml(addUser.middleName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateMiddleName(this.value);">
+            </div>
+            <div class="gen-field">
+              <label>Last Name <span style="color:#ef4444;">*</span></label>
+              <input type="text" placeholder="e.g. Sterling" maxlength="50" value="${escHtml(addUser.lastName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateLastName(this.value);">
+            </div>
+            <div class="gen-field">
+              <label>Suffix <span style="text-transform:none;color:var(--text-muted);">(Opt)</span></label>
+              <input type="text" placeholder="e.g. III" maxlength="15" value="${escHtml(addUser.suffix || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateSuffix(this.value);">
             </div>
           </div>
+
+          <div class="gen-row" style="margin-bottom:0;">
+            <div class="gen-field">
+              <label>Recovery Gmail / Official Email <span style="text-transform:none;color:var(--text-muted);">(Opt)</span></label>
+              <input type="email" placeholder="e.g. eleanor.vance@gmail.com" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
+            </div>
+            <div class="gen-field">
+              <label>Emergency Phone Contact <span style="text-transform:none;color:var(--text-muted);">(Opt)</span></label>
+              <input type="tel" placeholder="e.g. 09171234567" maxlength="15" value="${escHtml(addUser.contactNumber || '')}" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); auUpdateContactNumber(this.value)">
+            </div>
+          </div>
+
+          <div class="gen-field">
+            <label>Residential / Home Address <span style="text-transform:none;color:var(--text-muted);">(Optional)</span></label>
+            <input type="text" placeholder="e.g. 456 Meralco Ave., Pasig City" maxlength="150" value="${escHtml(addUser.address || '')}" oninput="auUpdateAddress(this.value)">
+          </div>
+          <div style="font-size:11.5px;color:var(--text-muted);">
+            Note: If recovery email is omitted, the administrator logs in using their assigned School Admin ID.
+          </div>
         </div>
 
-        <div style="margin-top:14px;background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" style="width:18px;height:18px;flex-shrink:0;margin-top:2px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <div style="font-size:12px;color:#92400e;line-height:1.5;">
-            <strong>First-Login Password Reset Enforced:</strong> This strong password will be provided in a handout card for you to give to the employee. The employee is required to change it to their own permanent password upon their initial login.
+        <!-- Right: Admin Password Security & Credentials -->
+        <div class="au-col-card" style="background:#fffbeb;border-color:#fde68a;">
+          <h5 class="au-col-title" style="color:#b45309;border-color:#fde68a;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#d97706;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Password Security & Provisioning</span>
+          </h5>
+          <div class="gen-field">
+            <label style="display:flex;align-items:center;justify-content:space-between;">
+              <span style="font-weight:700;">Auto-Generated Strong Password</span>
+              <span style="font-size:11px;font-weight:700;color:#059669;text-transform:none;">High Complexity · 14 Chars</span>
+            </label>
+            <div class="admin-pw-generator-box">
+              <div class="admin-pw-code" id="adminGeneratedPwDisplay">${escHtml(addUser.generatedAdminPassword)}</div>
+              <div class="admin-pw-actions">
+                <button type="button" class="admin-pw-btn" onclick="auRegenerateAdminPassword()" title="Generate another strong password">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  Regenerate
+                </button>
+                <button type="button" class="admin-pw-btn" onclick="copyTextToClipboard('${escHtml(addUser.generatedAdminPassword)}', 'Password copied!')" title="Copy password">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  Copy
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#ffffff;border:1.5px solid #fde68a;border-radius:12px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" style="width:18px;height:18px;flex-shrink:0;margin-top:2px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <div style="font-size:12px;color:#92400e;line-height:1.5;">
+              <strong>First-Login Password Reset Enforced:</strong> This strong password will be provided in a credential slip for you to give to the employee. They will be prompted to set their own permanent password on initial login.
+            </div>
           </div>
         </div>
       </div>
     ` : `
-      <div class="gen-field">
-        <label>${isStudent ? 'Strand <span style="color:#ef4444;">*</span> <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;">(Single selection only — select 1 strand)</span>' : 'Strands Handled <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;">(Select all handled strands)</span>'}</label>
-        <div class="au-strand-grid">
-          ${STRANDS.map(s => `<div class="au-strand-chip ${addUser.strands.has(s) ? 'on' : ''}" onclick="auToggleStrand('${s}')">${s}</div>`).join('')}
-        </div>
-        ${!isStudent ? `<div style="font-size:11px;color:var(--text-muted);margin-top:5px;">Select all strands this teacher is capable of handling</div>` : ''}
-      </div>
+      <div class="au-screen-grid">
+        <!-- Left Column: Academic Placement & Bulk File -->
+        <div class="au-col-card">
+          <h5 class="au-col-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#0284c7;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+            <span>1. Academic Placement & Bulk File</span>
+          </h5>
 
-      <div class="gen-row">
-        ${isStudent ? `
-        <div class="gen-field">
-          <label>Grade Level <span style="color:#ef4444;">*</span> <span style="font-size:11px;font-weight:700;color:#dc2626;text-transform:none;">(Required)</span></label>
-          <div class="au-grade-pills">
-            ${GRADE_LEVELS.map(g => `<div class="au-grade-pill ${addUser.grade === g ? 'on' : ''}" onclick="auSetGrade('${g}')">${g}</div>`).join('')}
-          </div>
-        </div>` : ''}
-        <div class="gen-field">
-          <label>Section <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${isStudent ? '(Optional — can assign later in Sections tab)' : '(Optional)'}</span></label>
-          <div class="au-grade-pills">
-            <div class="au-grade-pill ${!addUser.section ? 'on' : ''}" onclick="auSetSection(null)">
-              ${isStudent ? 'Unassigned (Default)' : 'None (All)'}
+          <div class="gen-field">
+            <label>${isStudent ? 'Strand <span style="color:#ef4444;">*</span> <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;">(Select 1 strand)</span>' : 'Strands Handled <span style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:none;">(Select handled strands)</span>'}</label>
+            <div class="au-strand-grid">
+              ${STRANDS.map(s => `<div class="au-strand-chip ${addUser.strands.has(s) ? 'on' : ''}" onclick="auToggleStrand('${s}')">${s}</div>`).join('')}
             </div>
-            ${SECTIONS.map(s => {
-              const isSelected = addUser.section === s;
-              return `<div class="au-grade-pill ${isSelected ? 'on' : ''}" onclick="auSetSection('${s}')">${s}</div>`;
-            }).join('')}
+            ${!isStudent ? `<div style="font-size:11px;color:var(--text-muted);margin-top:5px;">Select all strands this teacher is capable of handling</div>` : ''}
+          </div>
+
+          <div class="gen-row">
+            ${isStudent ? `
+            <div class="gen-field">
+              <label>Grade Level <span style="color:#ef4444;">*</span></label>
+              <div class="au-grade-pills">
+                ${GRADE_LEVELS.map(g => `<div class="au-grade-pill ${addUser.grade === g ? 'on' : ''}" onclick="auSetGrade('${g}')">${g}</div>`).join('')}
+              </div>
+            </div>` : ''}
+            <div class="gen-field">
+              <label>Section <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${isStudent ? '(Optional)' : '(Optional)'}</span></label>
+              <div class="au-grade-pills" style="max-height:110px;overflow-y:auto;">
+                <div class="au-grade-pill ${!addUser.section ? 'on' : ''}" onclick="auSetSection(null)">
+                  ${isStudent ? 'Unassigned' : 'None (All)'}
+                </div>
+                ${SECTIONS.map(s => {
+                  const isSelected = addUser.section === s;
+                  return `<div class="au-grade-pill ${isSelected ? 'on' : ''}" onclick="auSetSection('${s}')">${s}</div>`;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div style="border-top:1px dashed #cbd5e1;padding-top:12px;margin-top:4px;">
+            <div style="font-size:11.5px;font-weight:700;color:#475569;margin-bottom:8px;text-transform:uppercase;">Bulk Spreadsheet Upload (Recommended)</div>
+            ${addUser.bulkFile ? `
+              <div class="au-bulk-result">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>
+                ${escHtml(addUser.bulkFile.name)} selected — ${addUser.bulkMapped.length} row${addUser.bulkMapped.length !== 1 ? 's' : ''} read
+                <button class="qr-remove" onclick="auRemoveBulk()" style="margin-left:auto">${iconClose()}</button>
+              </div>
+              ${(() => {
+                const { rows, errors } = resolveBulkRows();
+                return `
+                ${rows.length > 0 ? `
+                  <div class="added-user-list" style="max-height:160px;overflow-y:auto;margin-top:8px;">
+                    ${rows.map(u => `
+                      <div class="added-user-row ${u.role === 'teacher' ? 'teacher-row' : ''}">
+                        <div class="au-avatar">${u.name.split(',')[0].trim().slice(0,2).toUpperCase()}</div>
+                        <div class="au-info"><h5>${escHtml(u.name)}</h5><span>${escHtml(u.email)} · ${escHtml(u.detail)}</span></div>
+                      </div>`).join('')}
+                  </div>` : ''}
+                ${errors.length > 0 ? `
+                  <div style="font-size:11.5px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 10px;line-height:1.6;margin-top:8px;">
+                    ${errors.map(e => escHtml(e)).join('<br>')}
+                  </div>` : ''}
+                `;
+              })()}` : `
+              <label class="au-bulk-zone" for="auBulkInput" style="padding:16px 14px;margin:0;">
+                <svg viewBox="0 0 24 24" style="width:24px;height:24px;margin-bottom:4px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/></svg>
+                <div class="dz-title" style="font-size:12.5px;">Import from Excel or CSV</div>
+                <div class="dz-sub" style="font-size:10.5px;">Columns: First Name, Last Name, Email, Strand, Grade Level (Required)</div>
+              </label>
+              <input type="file" id="auBulkInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="auHandleBulkFile(this)">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="au-format-toggle" id="auFormatExampleBtn" onclick="auToggleFormatExample()" style="margin:0;font-size:11px;">
+                  <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                  <span id="auFormatExampleLabel">Spreadsheet format</span>
+                </button>
+                <button type="button" onclick="downloadBulkUserTemplate()" style="background:#f0fdf4;color:#15803d;border:1.5px solid #bbf7d0;padding:5px 11px;border-radius:8px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Template (.xlsx)
+                </button>
+              </div>
+              <div id="auFormatExampleWrap" style="display:none">${renderFormatExampleTable()}</div>
+            `}
           </div>
         </div>
-      </div>
 
-      <div class="au-divider">Import in bulk (recommended)</div>
+        <!-- Right Column: Individual Registration & Queue -->
+        <div class="au-col-card">
+          <h5 class="au-col-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#10b981;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span>2. Individual Details & Queue</span>
+          </h5>
 
-      ${addUser.bulkFile ? `
-        <div class="au-bulk-result">
-          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>
-          ${escHtml(addUser.bulkFile.name)} selected — ${addUser.bulkMapped.length} row${addUser.bulkMapped.length !== 1 ? 's' : ''} read
-          <button class="qr-remove" onclick="auRemoveBulk()" style="margin-left:auto">${iconClose()}</button>
-        </div>
-        ${(() => {
-          const { rows, errors } = resolveBulkRows();
-          return `
-          ${rows.length > 0 ? `
-            <div class="added-user-list" style="max-height:180px;overflow-y:auto;">
-              ${rows.map(u => `
-                <div class="added-user-row ${u.role === 'teacher' ? 'teacher-row' : ''}">
-                  <div class="au-avatar">${u.name.split(',')[0].trim().slice(0,2).toUpperCase()}</div>
-                  <div class="au-info"><h5>${escHtml(u.name)}</h5><span>${escHtml(u.email)} · ${escHtml(u.detail)}</span></div>
-                </div>`).join('')}
+          <div class="au-name-grid" style="margin-bottom:0;">
+            <div class="gen-field">
+              <label>First Name <span style="color:#ef4444;">*</span></label>
+              <input type="text" placeholder="First Name" maxlength="50" value="${escHtml(addUser.firstName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateFirstName(this.value);">
+            </div>
+            <div class="gen-field">
+              <label>Middle <span style="text-transform:none;color:var(--text-muted);">(Opt)</span></label>
+              <input type="text" placeholder="Middle" maxlength="50" value="${escHtml(addUser.middleName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateMiddleName(this.value);">
+            </div>
+            <div class="gen-field">
+              <label>Last Name <span style="color:#ef4444;">*</span></label>
+              <input type="text" placeholder="Last Name" maxlength="50" value="${escHtml(addUser.lastName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateLastName(this.value);">
+            </div>
+            <div class="gen-field">
+              <label>Suffix <span style="text-transform:none;color:var(--text-muted);">(Opt)</span></label>
+              <input type="text" placeholder="e.g. Jr." maxlength="15" value="${escHtml(addUser.suffix || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateSuffix(this.value);">
+            </div>
+          </div>
+
+          <div class="gen-row" style="margin-bottom:0;">
+            <div class="gen-field">
+              <label>${isStudent ? 'Official School Email' : 'Email Address'} <span style="color:#ef4444;">*</span></label>
+              <input type="email" placeholder="${isStudent ? 'e.g. student@hwa.edu.ph' : 'e.g. teacher@hwa.edu.ph'}" maxlength="100" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
+            </div>
+            <div class="gen-field">
+              <label>Phone Contact <span style="text-transform:none;color:var(--text-muted);">(Opt)</span></label>
+              <input type="tel" placeholder="e.g. 09171234567" maxlength="15" value="${escHtml(addUser.contactNumber || '')}" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); auUpdateContactNumber(this.value)">
+            </div>
+          </div>
+
+          <div class="gen-field">
+            <label>Residential / Home Address <span style="text-transform:none;color:var(--text-muted);">(Optional)</span></label>
+            <input type="text" placeholder="e.g. 123 Rizal St., Imus City, Cavite" maxlength="150" value="${escHtml(addUser.address || '')}" oninput="auUpdateAddress(this.value)">
+          </div>
+
+          ${addUser.pendingUsers.length > 0 ? `
+            <div style="border-top:1px dashed #cbd5e1;padding-top:10px;">
+              <div style="font-size:11.5px;font-weight:700;color:#2563eb;margin-bottom:6px;">Queued to Save (${addUser.pendingUsers.length})</div>
+              <div class="added-user-list" style="max-height:140px;overflow-y:auto;">
+                ${addUser.pendingUsers.map((u, i) => `
+                  <div class="added-user-row ${u.role === 'teacher' ? 'teacher-row' : ''}">
+                    <div class="au-avatar">${u.name.split(',')[0].trim().slice(0,2).toUpperCase()}</div>
+                    <div class="au-info"><h5>${escHtml(u.name)}</h5><span>${escHtml(u.email)} · ${escHtml(u.detail)}</span></div>
+                    <button class="qr-remove" onclick="auRemovePending(${i})">${iconTrash()}</button>
+                  </div>`).join('')}
+              </div>
             </div>` : ''}
-          ${errors.length > 0 ? `
-            <div style="font-size:11.5px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;line-height:1.7;margin-top:${rows.length ? '10px' : '0'};">
-              ${errors.map(e => escHtml(e)).join('<br>')}
-            </div>` : ''}
-          `;
-        })()}` : `
-      <label class="au-bulk-zone" for="auBulkInput">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/></svg>
-        <div class="dz-title">Import from Excel or CSV</div>
-        <div class="dz-sub">Columns: First Name, Last Name, Email, Strand, Grade Level (Required) · Section, Phone, Address (Optional) — Max 50MB only</div>
-      </label>
-      <input type="file" id="auBulkInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="auHandleBulkFile(this)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;gap:8px;flex-wrap:wrap;">
-        <button type="button" class="au-format-toggle" id="auFormatExampleBtn" onclick="auToggleFormatExample()" style="margin:0;">
-          <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-          <span id="auFormatExampleLabel">See example spreadsheet format</span>
-        </button>
-        <button type="button" onclick="downloadBulkUserTemplate()" style="background:#f0fdf4;color:#15803d;border:1.5px solid #bbf7d0;padding:6px 14px;border-radius:10px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;transition:all 0.15s ease;" onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download Editable Excel (.xlsx)
-        </button>
-      </div>
-      <div id="auFormatExampleWrap" style="display:none">${renderFormatExampleTable()}</div>
-      `}
-
-      <div class="au-divider">Or add individually</div>
-
-      <div class="au-name-grid" style="margin-bottom:12px;">
-        <div class="gen-field">
-          <label>First Name <span style="color:#ef4444;">*</span></label>
-          <input type="text" placeholder="e.g. Maria" maxlength="50" value="${escHtml(addUser.firstName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateFirstName(this.value);">
-        </div>
-        <div class="gen-field">
-          <label>Middle Name <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
-          <input type="text" placeholder="e.g. Lopez" maxlength="50" value="${escHtml(addUser.middleName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateMiddleName(this.value);">
-        </div>
-        <div class="gen-field">
-          <label>Last Name <span style="color:#ef4444;">*</span></label>
-          <input type="text" placeholder="e.g. Santos" maxlength="50" value="${escHtml(addUser.lastName || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateLastName(this.value);">
-        </div>
-        <div class="gen-field">
-          <label>Suffix <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Opt)</span></label>
-          <input type="text" placeholder="e.g. Jr." maxlength="15" value="${escHtml(addUser.suffix || '')}" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this); auUpdateSuffix(this.value);">
         </div>
       </div>
-
-      <div class="gen-row" style="margin-bottom:12px;">
-        <div class="gen-field">
-          <label>${isStudent ? 'Official School Email' : 'Email Address'} <span style="color:#ef4444;">*</span></label>
-          <input type="email" placeholder="${isStudent ? 'e.g. student@hwa.edu.ph' : 'e.g. teacher@hwa.edu.ph'}" maxlength="100" value="${escHtml(addUser.email)}" oninput="auUpdateEmail(this.value)">
-        </div>
-        <div class="gen-field">
-          <label>Phone / Emergency Contact <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
-          <input type="tel" placeholder="e.g. 09171234567" maxlength="15" value="${escHtml(addUser.contactNumber || '')}" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); auUpdateContactNumber(this.value)">
-        </div>
-      </div>
-
-      <div class="gen-field" style="margin-bottom:12px;">
-        <label>Residential / Home Address <span style="text-transform:none;font-weight:400;color:var(--text-muted);">(Optional)</span></label>
-        <input type="text" placeholder="e.g. 123 Rizal St., Brgy. San Antonio, Pasig City" maxlength="150" value="${escHtml(addUser.address || '')}" oninput="auUpdateAddress(this.value)">
-      </div>
-
-      ${addUser.pendingUsers.length > 0 ? `
-        <div class="added-user-list">
-          ${addUser.pendingUsers.map((u, i) => `
-            <div class="added-user-row ${u.role === 'teacher' ? 'teacher-row' : ''}">
-              <div class="au-avatar">${u.name.split(',')[0].trim().slice(0,2).toUpperCase()}</div>
-              <div class="au-info"><h5>${escHtml(u.name)}</h5><span>${escHtml(u.email)} · ${escHtml(u.detail)}</span></div>
-              <button class="qr-remove" onclick="auRemovePending(${i})">${iconTrash()}</button>
-            </div>`).join('')}
-        </div>` : ''}
     `}
   `;
 
