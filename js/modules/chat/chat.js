@@ -1,4 +1,4 @@
-/* ── REAL-TIME CHAT MODULE ── */
+﻿/* ── REAL-TIME CHAT MODULE ── */
 
 let chatConversations = [];
 let activeConversationId = null;
@@ -384,8 +384,45 @@ function renderMessages(conv, msgs) {
 
 window._chatAttachmentMap = window._chatAttachmentMap || {};
 
+function createChatImageThumbnail(file, maxDim, quality) {
+  maxDim = maxDim || 480;
+  quality = quality || 0.72;
+  return new Promise(function(resolve) {
+    if (!file || !file.type || !file.type.startsWith('image/')) return resolve(null);
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        var w = img.naturalWidth || img.width;
+        var h = img.naturalHeight || img.height;
+        if (w > maxDim || h > maxDim) {
+          var ratio = Math.min(maxDim / w, maxDim / h);
+          w = Math.max(1, Math.round(w * ratio));
+          h = Math.max(1, Math.round(h * ratio));
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        try {
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (_) {
+          resolve(null);
+        }
+      };
+      img.onerror = function() { resolve(null); };
+      img.src = e.target.result;
+    };
+    reader.onerror = function() { resolve(null); };
+    reader.readAsDataURL(file);
+  });
+}
+window.createChatImageThumbnail = createChatImageThumbnail;
+
 function getChatAttachmentUrl(attach) {
   if (!attach) return '';
+  if (attach.dataUrl) return attach.dataUrl;
   if (attach.data) return attach.data;
   if (!attach.url) return '';
   if (/^(https?:|data:|blob:)/i.test(attach.url)) return attach.url;
@@ -396,6 +433,8 @@ function getChatAttachmentUrl(attach) {
   } else if (typeof window !== 'undefined' && window.location) {
     if (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null') {
       base = 'http://localhost:3001';
+    } else {
+      base = window.location.origin;
     }
   }
 
@@ -405,6 +444,24 @@ function getChatAttachmentUrl(attach) {
 
 function handleChatBubbleImgError(imgEl, msgId) {
   if (!imgEl) return;
+  const entry = window._chatAttachmentMap && window._chatAttachmentMap[msgId];
+  if (entry && entry.attach) {
+    if (entry.attach.dataUrl && imgEl.src !== entry.attach.dataUrl) {
+      imgEl.src = entry.attach.dataUrl;
+      return;
+    }
+    if (entry.attach.data && imgEl.src !== entry.attach.data) {
+      imgEl.src = entry.attach.data;
+      return;
+    }
+    if (entry.attach.url && !imgEl.dataset.retried) {
+      imgEl.dataset.retried = 'true';
+      const fallbackBase = 'http://localhost:3001';
+      const cleanUrl = entry.attach.url.startsWith('/') ? entry.attach.url : '/' + entry.attach.url;
+      imgEl.src = fallbackBase + cleanUrl;
+      return;
+    }
+  }
   const card = imgEl.closest('.chat-attachment-card');
   if (card) {
     card.classList.add('image-fallback-active');
@@ -485,6 +542,7 @@ function messageBubbleHtml(conv, m) {
               Download
             </a>
           </div>
+        </div>
         ${attach.caption ? `<div class="msg-text" style="margin-top:6px;font-size:13px;line-height:1.45;word-break:break-word;">${escHtml(attach.caption)}</div>` : ''}
       </div>
     `;
@@ -751,13 +809,27 @@ async function handleChatFileUpload(event) {
     return;
   }
 
+  const ALLOWED_CHAT_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'];
+  const fileName = (file.name || '').toLowerCase();
+  const fileExt = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')) : '';
+  if (fileExt && !ALLOWED_CHAT_EXTS.includes(fileExt)) {
+    showToast(`File format "${fileExt}" is not supported. Please upload an image, PDF, or document.`, 'warning');
+    event.target.value = '';
+    return;
+  }
+
   const messageDraft = document.getElementById('cwInput')?.value || '';
   showToast(`Uploading ${file.name}…`, 'info');
 
   let localPreviewUrl = null;
+  let localThumbDataUrl = null;
   if (file.type && file.type.startsWith('image/')) {
     try {
       localPreviewUrl = URL.createObjectURL(file);
+    } catch (_) {}
+    // Generate a compact base64 thumbnail so ALL recipients can view the image
+    try {
+      localThumbDataUrl = await createChatImageThumbnail(file, 480, 0.72);
     } catch (_) {}
   }
 
@@ -802,12 +874,17 @@ async function handleChatFileUpload(event) {
           size: upData.size || file.size,
           mime: upData.mime || file.type || 'application/octet-stream',
           url: upData.url,
-          previewUrl: localPreviewUrl || getChatAttachmentUrl({ url: upData.url })
+          dataUrl: localThumbDataUrl || null,
+          previewUrl: localThumbDataUrl || localPreviewUrl || getChatAttachmentUrl({ url: upData.url })
         });
       } else {
         const errJson = await upRes.json().catch(() => ({}));
         console.warn('Chat upload failed:', upRes.status, errJson);
-        showToast(errJson.error || 'Attachment upload failed. Please try again.', 'error');
+        const errMsg = errJson.error || `Upload failed (${upRes.status}). Unsupported file format or network issue.`;
+        showToast(errMsg, 'error');
+        clearChatAttachmentReturnState();
+        event.target.value = '';
+        return;
       }
     } catch (upErr) {
       console.warn('Chat upload network error:', upErr);
@@ -951,21 +1028,38 @@ async function sendChatRawMessage(text) {
   await refreshOwnMuteStatus();
 }
 
+let isSendingChatMsg = false;
 async function sendChatMsg() {
+  if (isSendingChatMsg) return;
   const input = document.getElementById('cwInput');
+  const sendBtn = document.querySelector('.cw-send');
   if (!input) return;
   const text = input.value.trim();
   if (!text && !pendingChatAttachment) return;
+
+  isSendingChatMsg = true;
+  if (sendBtn) sendBtn.disabled = true;
+
   const attachment = pendingChatAttachment;
   pendingChatAttachment = null;
   input.value = '';
-  if (attachment) {
-    if (text) attachment.caption = text;
-    await sendChatRawMessage(JSON.stringify(attachment));
-  } else {
-    await sendChatRawMessage(text);
-  }
+  // Dismiss preview immediately so user cannot double-click or spam
   if (currentPage === 'chats') renderInputArea();
+
+  try {
+    if (attachment) {
+      if (text) attachment.caption = text;
+      await sendChatRawMessage(JSON.stringify(attachment));
+    } else {
+      await sendChatRawMessage(text);
+    }
+  } catch (err) {
+    console.error('Failed to send message:', err);
+    showToast('Failed to send message. Please try again.', 'error');
+  } finally {
+    isSendingChatMsg = false;
+    if (currentPage === 'chats') renderInputArea();
+  }
 }
 
 function ensureChatRealtimeSubscription() {

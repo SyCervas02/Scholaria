@@ -826,8 +826,8 @@ body.has-anc-banner {
    ═══════════════════════════════════════════════════════════════ */
 @media print {
   @page {
-    size: auto;
-    margin: 8mm 10mm;
+    size: A4 landscape;
+    margin: 8mm 8mm;
   }
 
   *, *::before, *::after {
@@ -4557,3 +4557,139 @@ button,
   letter-spacing: 0.4px;
 }
 
+
+
+/* ── A4 FIT & ITEM ANALYSIS RESPONSIVENESS OVERRIDES ── */
+#academicReportModal .report-modal-card {
+  width: 96vw !important;
+  max-width: 1260px !important;
+}
+#academicReportModal .report-modal-body {
+  overflow-x: auto !important;
+}
+.report-document-sheet {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.report-table-container {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.report-table {
+  width: 100% !important;
+  table-layout: auto !important;
+}
+.report-status-pill {
+  white-space: nowrap !important;
+  display: inline-block !important;
+}
+
+/* Item analysis table fluid responsiveness */
+.score-table,
+.score-table.analysis-question-table,
+.analysis-question-table {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #cbd5e1 #f8fafc !important;
+}
+.score-table::-webkit-scrollbar,
+.analysis-question-table::-webkit-scrollbar {
+  height: 6px !important;
+}
+.score-table::-webkit-scrollbar-track,
+.analysis-question-table::-webkit-scrollbar-track {
+  background: #f8fafc !important;
+}
+.score-table::-webkit-scrollbar-thumb,
+.analysis-question-table::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+  border-radius: 4px !important;
+}
+.analysis-question-table table {
+  width: 100% !important;
+  min-width: 780px !important;
+  table-layout: auto !important;
+}
+
+/* Discrete Chat Message Bubbles Enforcement */
+.scholaria-chat .cw-messages {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  padding: 18px 22px !important;
+  overflow-y: auto !important;
+}
+.scholaria-chat .msg-bubble {
+  display: block !important;
+  width: fit-content !important;
+  max-width: 72% !important;
+  padding: 10px 16px !important;
+  border-radius: 16px !important;
+  font-size: 13.5px !important;
+  line-height: 1.48 !important;
+  margin-top: 2px !important;
+  margin-bottom: 4px !important;
+  position: relative !important;
+  clear: both !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+}
+.scholaria-chat .msg-bubble.me {
+  background: var(--chat-blue, #2563eb) !important;
+  color: #ffffff !important;
+  align-self: flex-end !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+  border-bottom-right-radius: 4px !important;
+}
+.scholaria-chat .msg-bubble.them {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  align-self: flex-start !important;
+  margin-right: auto !important;
+  margin-left: 0 !important;
+  border: 1px solid #e2e8f0 !important;
+  border-bottom-left-radius: 4px !important;
+}
+
+
+/* ── MATERIAL UPLOAD MODAL — wider, evenly spaced fields ── */
+#materialModal .modal-card {
+  max-width: 700px !important;
+  width: 94vw !important;
+}
+#materialModal .modal-body {
+  padding: 22px 28px !important;
+}
+#materialModal .gen-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+#materialModal .gen-field select,
+#materialModal .gen-field input[type="text"] {
+  height: 44px;
+  padding: 10px 14px !important;
+  box-sizing: border-box;
+  font-size: 13.5px;
+  border: 1.5px solid rgba(37,99,235,0.15);
+  border-radius: 10px;
+  width: 100%;
+}
+#materialModal .gen-field select:focus,
+#materialModal .gen-field input[type="text"]:focus {
+  border-color: var(--blue, #2563eb) !important;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+}
+
+/* ── QUIZ MAKER — lesson dropdown right column only ── */
+#quizGenModalBody .gen-row > .gen-field[style*="grid-column:2"],
+#quizGenModalBody .gen-row > .gen-field[style*="grid-column: 2"] {
+  grid-column: 2;
+}

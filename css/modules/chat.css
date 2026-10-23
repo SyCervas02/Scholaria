@@ -97,7 +97,7 @@
 .cw-placeholder-avatar svg { width: 27px; height: 27px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .scholaria-chat .cw-header .cw-name { color: var(--chat-ink); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .scholaria-chat .cw-header .cw-role { color: #7e8bb3; font-size: 12px; margin-top: 2px; }
-.scholaria-chat .cw-messages { min-height: 0; padding: 24px; background: linear-gradient(120deg, #f7faff, #f5f8fd); }
+.scholaria-chat .cw-messages { min-height: 0; padding: 24px; background: linear-gradient(120deg, #f7faff, #f5f8fd); display: flex !important; flex-direction: column !important; gap: 14px !important; overflow-y: auto !important; }
 .scholaria-chat .chat-welcome { width: 100%; padding: 24px 0; color: var(--chat-muted); }
 .scholaria-chat .chat-welcome h3 { margin: 0 0 12px; color: var(--chat-ink); font-size: 16px; font-weight: 700; letter-spacing: -.2px; line-height: 1.3; }
 .scholaria-chat .chat-welcome p { margin: 0 0 28px; font-size: 13px; line-height: 1.6; }
@@ -119,9 +119,10 @@
 .scholaria-chat .cw-send:disabled { background: #e5e8ef; color: #b6bfd2; }
 .scholaria-chat button:disabled { cursor: default; }
 .scholaria-chat button:focus-visible { outline: 3px solid #91b1ff; outline-offset: 3px; }
-.scholaria-chat .msg-bubble { overflow-wrap: anywhere; }
-.scholaria-chat .msg-bubble.me { background: var(--chat-blue); }
-.scholaria-chat .msg-bubble.them { background: #e9effb; }
+.scholaria-chat .cw-messages { display: flex !important; flex-direction: column !important; gap: 10px !important; padding: 20px 24px !important; overflow-y: auto !important; background: #f8fafc !important; }
+.scholaria-chat .msg-bubble { display: block !important; width: fit-content !important; max-width: 72% !important; padding: 10px 16px 11px !important; border-radius: 16px !important; font-size: 13.5px !important; line-height: 1.5 !important; overflow-wrap: anywhere !important; margin-top: 2px !important; margin-bottom: 4px !important; position: relative !important; box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important; clear: both !important; }
+.scholaria-chat .msg-bubble.me { background: var(--chat-blue, #2563eb) !important; color: #fff !important; align-self: flex-end !important; margin-left: auto !important; margin-right: 0 !important; border-bottom-right-radius: 4px !important; }
+.scholaria-chat .msg-bubble.them { background: #ffffff !important; color: var(--chat-ink, #0f172a) !important; align-self: flex-start !important; margin-right: auto !important; margin-left: 0 !important; border: 1px solid #e2e8f0 !important; border-bottom-left-radius: 4px !important; }
 .chat-overview-btn:hover { background: rgba(255,255,255,0.32) !important; }
 .msg-bubble.them .chat-overview-btn:hover { background: #cbd5e1 !important; }
 

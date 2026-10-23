@@ -1,4 +1,4 @@
-const SUBJECTS_BY_STRAND_AND_GRADE = {
+﻿const SUBJECTS_BY_STRAND_AND_GRADE = {
   HUMSS: {
     'Grade 11': [
       'Oral Communication',
@@ -160,7 +160,7 @@ const SUBJECTS_BY_STRAND_AND_GRADE = {
   }
 };
 
-function getFilteredSubjects(strand, gradeLevel) {
+function getFilteredSubjects(strand, gradeLevel, semester) {
   let targetStrands = [];
   if (strand) {
     const sUpper = String(strand).toUpperCase();
@@ -170,51 +170,50 @@ function getFilteredSubjects(strand, gradeLevel) {
       } else if (sUpper.includes('ALL')) {
         targetStrands = ['STEM', 'HUMSS', 'ABM', 'TVL'];
       } else {
-        targetStrands = String(strand).split(/[,&]+/).map(s => s.trim().toUpperCase()).filter(s => SUBJECTS_BY_STRAND_AND_GRADE[s]);
+        targetStrands = String(strand).split(/[,&]+/).map(s => s.trim().toUpperCase()).filter(s => ['STEM','HUMSS','ABM','TVL'].includes(s));
       }
-    } else if (SUBJECTS_BY_STRAND_AND_GRADE[strand]) {
+    } else {
       targetStrands = [strand];
     }
   }
 
+  const normSem = (s) => {
+    if (!s) return '';
+    const str = String(s).toLowerCase();
+    if (str.includes('2') || str.includes('second')) return '2nd';
+    return '1st';
+  };
+
+  const semFilter = semester ? normSem(semester) : '';
+
+  // If COURSES_DATABASE exists, strictly filter courses
+  if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
+    const matched = new Set();
+    COURSES_DATABASE.forEach(c => {
+      if (semFilter && normSem(c.semester) !== semFilter) return;
+      if (gradeLevel && c.gradeLevel && c.gradeLevel.toLowerCase() !== gradeLevel.toLowerCase()) return;
+      if (targetStrands.length > 0 && !targetStrands.includes(c.strand)) return;
+      if (c.title) matched.add(c.title);
+    });
+    if (matched.size > 0) return Array.from(matched).sort();
+  }
+
+  // Fallback to SUBJECTS_BY_STRAND_AND_GRADE
   if (targetStrands.length > 0) {
     const list = [];
     targetStrands.forEach(st => {
-      const strandObj = SUBJECTS_BY_STRAND_AND_GRADE[st] || {};
+      const strandObj = (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined' ? SUBJECTS_BY_STRAND_AND_GRADE[st] : null) || {};
       if (gradeLevel) {
-        (strandObj[gradeLevel] || []).forEach(sub => {
-          if (!list.includes(sub)) list.push(sub);
-        });
+        (strandObj[gradeLevel] || []).forEach(sub => { if (!list.includes(sub)) list.push(sub); });
       } else {
-        (strandObj['Grade 11'] || []).forEach(sub => {
-          if (!list.includes(sub)) list.push(sub);
-        });
-        (strandObj['Grade 12'] || []).forEach(sub => {
-          if (!list.includes(sub)) list.push(sub);
-        });
+        (strandObj['Grade 11'] || []).forEach(sub => { if (!list.includes(sub)) list.push(sub); });
+        (strandObj['Grade 12'] || []).forEach(sub => { if (!list.includes(sub)) list.push(sub); });
       }
     });
-    return list;
+    return list.sort();
   }
 
-  if (gradeLevel) {
-    const list = [];
-    Object.values(SUBJECTS_BY_STRAND_AND_GRADE).forEach(grades => {
-      (grades[gradeLevel] || []).forEach(sub => {
-        if (!list.includes(sub)) list.push(sub);
-      });
-    });
-    return list;
-  }
-  const all = [];
-  Object.values(SUBJECTS_BY_STRAND_AND_GRADE).forEach(grades => {
-    Object.values(grades).forEach(subList => {
-      subList.forEach(sub => {
-        if (!all.includes(sub)) all.push(sub);
-      });
-    });
-  });
-  return all;
+  return [];
 }
 
 const SUBJECTS_BY_STRAND = {
@@ -1490,6 +1489,15 @@ let teacherSectionFilter = 'all';
 window.teacherSectionFilter = 'all';
 let teacherTrackFilter = 'all';
 window.teacherTrackFilter = 'all';
+let teacherSemesterFilter = 'all';
+window.teacherSemesterFilter = 'all';
+
+function setTeacherSemesterFilter(semVal) {
+  teacherSemesterFilter = semVal || 'all';
+  window.teacherSemesterFilter = teacherSemesterFilter;
+  applyTeacherClassFilter();
+}
+window.setTeacherSemesterFilter = setTeacherSemesterFilter;
 let teacherClassFilter = 'all';
 window.teacherClassFilter = 'all';
 let teacherClassSearchQuery = '';
@@ -1618,6 +1626,7 @@ function applyTeacherClassFilter() {
   const activeStrand = strandSelect ? (window.teacherStrandFilter || 'all').toLowerCase() : 'all';
   const activeSection = (window.teacherSectionFilter || 'all').toLowerCase();
   const activeTrack = (window.teacherTrackFilter || 'all').toLowerCase();
+  const activeSemester = (window.teacherSemesterFilter || 'all').toLowerCase();
   const searchQuery = (window.teacherClassSearchQuery || '').toLowerCase().trim();
 
   let visibleCount = 0;
@@ -1660,7 +1669,18 @@ function applyTeacherClassFilter() {
       matchesSearch = cardSearch.includes(searchQuery);
     }
 
-    if (matchesGrade && matchesStrand && matchesSection && matchesTrack && matchesSearch) {
+    // 3.5. SEMESTER MATCH:
+    let matchesSemester = true;
+    if (activeSemester !== 'all') {
+      const cardSem = (card.dataset.semester || '').toLowerCase();
+      if (activeSemester.includes('1') || activeSemester.includes('first')) {
+        matchesSemester = cardSem.includes('1') || cardSem.includes('first');
+      } else if (activeSemester.includes('2') || activeSemester.includes('second')) {
+        matchesSemester = cardSem.includes('2') || cardSem.includes('second');
+      }
+    }
+
+    if (matchesGrade && matchesStrand && matchesSection && matchesTrack && matchesSemester && matchesSearch) {
       card.style.display = 'flex';
       visibleCount++;
     } else {
@@ -1748,6 +1768,7 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
           sectionStrand: secStrand,
           sectionGradeLevel: secGrade,
           displayStrand: secStrand,
+          semester: foundCourse.semester || '1st Sem',
           cover: cover,
           description: desc
         });
@@ -2064,6 +2085,13 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
         <option value="Grade 12" ${teacherGradeFilter === 'Grade 12' ? 'selected' : ''}>Grade 12</option>
       </select>
 
+      <!-- SEMESTER DROPDOWN -->
+      <select class="user-filter-select" id="teacherSemesterSelect" onchange="setTeacherSemesterFilter(this.value)" aria-label="Filter by Semester">
+        <option value="all" ${(!teacherSemesterFilter || teacherSemesterFilter === 'all') ? 'selected' : ''}>All Semesters</option>
+        <option value="1st Semester" ${teacherSemesterFilter === '1st Semester' ? 'selected' : ''}>1st Semester</option>
+        <option value="2nd Semester" ${teacherSemesterFilter === '2nd Semester' ? 'selected' : ''}>2nd Semester</option>
+      </select>
+
       <!-- STRAND DROPDOWN (Admin only - teachers already filter by handled Section A/B) -->
       ${isAdmin ? `
       <select class="user-filter-select" id="teacherStrandSelect" onchange="setTeacherStrandFilter(this.value)" aria-label="Filter by Strand">
@@ -2142,6 +2170,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
                data-strand="${escHtml((card.strand || '').toLowerCase())}"
                data-section-strand="${escHtml((card.sectionStrand || '').toLowerCase())}"
                data-grade="${escHtml((card.gradeLevel || card.sectionGradeLevel || 'Grade 11').toLowerCase())}"
+               data-semester="${escHtml((card.semester || '1st Sem').toLowerCase())}"
                data-search="${escHtml(searchKeywords)}"
                data-has-admin-materials="${hasAdminMaterials ? 'true' : 'false'}"
                onclick="setActiveSubjectMaterials('${card.baseCourseId}', '${card.assignedSection}')"
@@ -3733,7 +3762,7 @@ function renderApprovalMaterialRows() {
       <td>
         <div class="ca-actions">
           <button class="ca-review" onclick="reviewApprovalEntry(${args})">${approvalIcon('eye')} Review</button>
-          ${e.status === 'pending' ? `<button class="ca-approve" title="Approve" aria-label="Approve ${escHtml(e.title)}" onclick="runApprovalAction(${args},true)">${approvalIcon('check')}</button><button class="ca-reject" title="Deny" aria-label="Deny ${escHtml(e.title)}" onclick="runApprovalAction(${args},false)">${approvalIcon('close')}</button>` : ''}
+          ${e.status === 'pending' ? `<button class="ca-approve" title="Approve" aria-label="Approve ${escHtml(e.title)}" onclick="runApprovalAction(${args},true)">${approvalIcon('check')}</button><button class="ca-reject" title="Deny / Needs Revision" aria-label="Deny or Request Revision for ${escHtml(e.title)}" onclick="openApprovalDecisionModal(${args})">${approvalIcon('close')}</button>` : ''}
           ${(e.status === 'archived' || approvalView.tab === 'archived') ? `<button class="ca-unarchive-btn" title="Unarchive" aria-label="Unarchive ${escHtml(e.title)}" onclick="toggleArchiveApprovalEntry('${e.kind}', '${escHtml(String(e.id))}')">${approvalIcon('archive')} Unarchive</button>` : ''}
           <div class="ca-more-wrap">
             <button class="ca-more-btn" title="More options" aria-label="More options" onclick="toggleApprovalMenu(event)">${approvalIcon('dots')}</button>
@@ -4083,7 +4112,8 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
     title: targetCourse ? (ROLE === 'admin' ? `${targetCourse.title} Curriculum Handout` : `${targetCourse.title} Supplementary Handout`) : '', 
     subject: initialSubject, 
     strand: initialStrand, 
-    grade_level: initialGrade, 
+    grade_level: initialGrade,
+    semester: (targetCourse && targetCourse.semester && /2|second/i.test(targetCourse.semester)) ? '2nd Semester' : '1st Semester', 
     sections: initialSectionsSet,
     files: [], 
     submitting: false 
@@ -4143,16 +4173,27 @@ function muUpdateStrand(value) {
       materialUploadState.sections = new Set(['Section B']);
     }
   }
-  const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level);
+  const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level, materialUploadState.semester);
   if (materialUploadState.subject && available.length > 0 && !available.includes(materialUploadState.subject)) {
     materialUploadState.subject = '';
   }
   renderMaterialModal();
 }
 
+function muUpdateSemester(value) {
+  materialUploadState.semester = value;
+  const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level, materialUploadState.semester);
+  if (materialUploadState.subject && available.length > 0 && !available.includes(materialUploadState.subject)) {
+    materialUploadState.subject = '';
+    materialUploadState.lesson_id = null;
+  }
+  renderMaterialModal();
+}
+window.muUpdateSemester = muUpdateSemester;
+
 function muUpdateGradeLevel(value) {
   materialUploadState.grade_level = value;
-  const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level);
+  const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level, materialUploadState.semester);
   if (materialUploadState.subject && available.length > 0 && !available.includes(materialUploadState.subject)) {
     materialUploadState.subject = '';
   }
@@ -4235,7 +4276,7 @@ function renderMaterialModal() {
   const s = materialUploadState;
   if (!body || !foot) return;
 
-  const subjectOptions = getFilteredSubjects(s.strand, s.grade_level);
+  const subjectOptions = getFilteredSubjects(s.strand, s.grade_level, s.semester);
   const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
     ? CURRENT_PROFILE.strand.split(',').map(str => str.trim().toUpperCase()).filter(Boolean)
     : [];
@@ -4298,17 +4339,13 @@ function renderMaterialModal() {
         `}
       </div>
     </div>
-    <div class="gen-field">
-      <label>Target Sections <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${ROLE === 'teacher' ? '(Limited to your handled sections)' : '(select multiple or leave blank for all sections)'}</span></label>
-      <div class="format-grid">
-        ${availableSections.map(sec => {
-          const isSelected = s.sections.has(sec);
-          return `<div class="format-chip ${isSelected ? 'on' : ''}" onclick="toggleMaterialSection('${sec}')">${sec}</div>`;
-        }).join('')}
-      </div>
-    </div>
     <div class="gen-row">
-      <div class="gen-field"><label>Title / Description</label><input type="text" placeholder="e.g. Q1 Lesson 3 – Lecture Notes & Handouts" value="${escHtml(s.title)}" oninput="muUpdateField('title', this.value)"></div>
+      <div class="gen-field"><label>Semester</label>
+        <select id="muSemesterSelect" onchange="muUpdateSemester(this.value)">
+          <option value="1st Semester" ${(!s.semester || s.semester === '1st Semester') ? 'selected' : ''}>1st Semester</option>
+          <option value="2nd Semester" ${s.semester === '2nd Semester' ? 'selected' : ''}>2nd Semester</option>
+        </select>
+      </div>
       <div class="gen-field"><label>Subject</label>
         <select onchange="muUpdateSubject(this.value)">
           <option value="" disabled ${!s.subject ? 'selected' : ''}>${(s.strand && s.grade_level) ? `Select subject (${s.strand} · ${s.grade_level})` : s.strand ? `Select subject (${s.strand})` : s.grade_level ? `Select subject (${s.grade_level})` : 'Select subject'}</option>
@@ -4337,23 +4374,35 @@ function renderMaterialModal() {
       } : null);
       const availableLessons = courseObj ? getSubjectLessons(courseObj) : [];
       return `
-        <div class="gen-field" style="margin-top:4px;">
-          <label>Target Lesson / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${ROLE === 'admin' ? '(Admin curriculum handouts appear inside the module box under Modules & Handouts)' : '(Select a specific lesson or general supplementary)'}</span></label>
-          <select onchange="muUpdateField('lesson_id', this.value)">
-            ${ROLE === 'admin' ? `
-              <option value="" ${!s.lesson_id ? 'selected' : ''}>📖 Auto-detect from file (e.g. 01_Handout → Lesson 01)</option>
-            ` : `
-              <option value="" ${!s.lesson_id ? 'selected' : ''}>📁 General Supplementary (Appears in Teacher Uploads Tab)</option>
-            `}
-            ${availableLessons.map(l => `
-              <option value="${escHtml(l.id || l.num)}" ${s.lesson_id === (l.id || l.num) ? 'selected' : ''}>
-                📖 ${escHtml(l.title)}
-              </option>
-            `).join('')}
-          </select>
+        <div class="gen-row">
+          <div class="gen-field"><label>Title / Description</label><input type="text" placeholder="e.g. Q1 Lesson 3 – Lecture Notes & Handouts" value="${escHtml(s.title)}" oninput="muUpdateField('title', this.value)"></div>
+          <div class="gen-field">
+            <label>Target Lesson / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);font-size:11px;">${ROLE === 'admin' ? '(Admin Curriculum)' : '(Specific Lesson)'}</span></label>
+            <select onchange="muUpdateField('lesson_id', this.value)">
+              ${ROLE === 'admin' ? `
+                <option value="" ${!s.lesson_id ? 'selected' : ''}>📖 Auto-detect from file (e.g. Lesson 01)</option>
+              ` : `
+                <option value="" ${!s.lesson_id ? 'selected' : ''}>📁 General Supplementary (Teacher Uploads)</option>
+              `}
+              ${availableLessons.map(l => `
+                <option value="${escHtml(l.id || l.num)}" ${s.lesson_id === (l.id || l.num) ? 'selected' : ''}>
+                  ${escHtml(l.num || '')} ${escHtml(l.title || 'Lesson')}
+                </option>
+              `).join('')}
+            </select>
+          </div>
         </div>
       `;
     })()}
+    <div class="gen-field">
+      <label>Target Sections <span style="text-transform:none;font-weight:500;color:var(--text-muted);font-size:11px;">${ROLE === 'teacher' ? '(Limited to handled sections)' : '(Select multiple or blank for all)'}</span></label>
+      <div class="format-grid">
+        ${availableSections.map(sec => {
+          const isSelected = s.sections.has(sec);
+          return `<div class="format-chip ${isSelected ? 'on' : ''}" onclick="toggleMaterialSection('${sec}')">${sec}</div>`;
+        }).join('')}
+      </div>
+    </div>
     <div class="gen-field">
       <label>Files to Upload <span style="text-transform:none;font-weight:500;color:var(--text-muted);">(You can select multiple handouts, modules, or slides)</span></label>
       ${s.files.length > 0 ? `
@@ -4578,3 +4627,161 @@ async function submitMaterialUpload() {
 window.previewSubjectUploadedMaterial = previewSubjectUploadedMaterial;
 window.deleteMaterial = deleteMaterial;
 window.downloadMaterial = downloadMaterial;
+
+
+/* ── ADMIN CONTENT APPROVAL DECISION MODAL (DENY vs NEEDS REVISION) ── */
+function openApprovalDecisionModal(kind, id) {
+  const item = (kind === 'quiz')
+    ? (typeof customQuizzes !== 'undefined' ? customQuizzes.find(q => String(q.id) === String(id)) : null)
+    : (typeof materialsData !== 'undefined' ? materialsData.find(m => String(m.id) === String(id)) : null);
+
+  const title = item ? (item.title || item.name || 'Submission') : 'Submission';
+  const uploader = item ? (item.uploaded_by_name || item.creator_name || item.name || 'Teacher') : 'Teacher';
+
+  const modalHtml = `
+    <div class="modal-overlay active" id="approvalDecisionModal" style="z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);">
+      <div class="modal-card" style="width:520px;max-width:92vw;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+        <div style="padding:18px 24px;border-bottom:1.5px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;background:#ffffff;">
+          <div>
+            <h3 style="margin:0;font-size:16px;font-weight:800;color:#0f172a;">Content Approval Action</h3>
+            <span style="font-size:12px;color:#64748b;">${escHtml(title)} &middot; ${escHtml(uploader)}</span>
+          </div>
+          <button type="button" style="background:none;border:none;font-size:22px;color:#94a3b8;cursor:pointer;line-height:1;" onclick="closeApprovalDecisionModal()">&times;</button>
+        </div>
+        <div style="padding:22px 24px;display:flex;flex-direction:column;gap:16px;background:#ffffff;">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px;">Choose Action:</label>
+            <div style="display:flex;gap:12px;">
+              <label style="flex:1;padding:12px 14px;border:2px solid #f59e0b;border-radius:10px;background:#fffbeb;cursor:pointer;display:flex;align-items:flex-start;gap:10px;">
+                <input type="radio" name="approvalActionChoice" value="revision" checked style="margin-top:3px;" onchange="toggleApprovalDecisionChoice('revision')">
+                <div>
+                  <strong style="color:#b45309;font-size:13px;display:block;">Needs Revision</strong>
+                  <span style="font-size:11.5px;color:#78350f;line-height:1.4;display:block;margin-top:2px;">Return to teacher with feedback. Visible in "Needs revision" tab.</span>
+                </div>
+              </label>
+              <label style="flex:1;padding:12px 14px;border:1.5px solid #cbd5e1;border-radius:10px;background:#f8fafc;cursor:pointer;display:flex;align-items:flex-start;gap:10px;">
+                <input type="radio" name="approvalActionChoice" value="deny" style="margin-top:3px;" onchange="toggleApprovalDecisionChoice('deny')">
+                <div>
+                  <strong style="color:#dc2626;font-size:13px;display:block;">Deny / Reject</strong>
+                  <span style="font-size:11.5px;color:#64748b;line-height:1.4;display:block;margin-top:2px;">Completely reject and delete this submission from portal.</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label for="approvalFeedbackNotes" style="font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">
+              Admin Comment / Feedback Notes <span style="color:#f59e0b;">*</span>:
+            </label>
+            <textarea id="approvalFeedbackNotes" placeholder="Type instructions for the teacher (e.g., 'Please update the answer keys for items 3 & 4 and re-upload the latest syllabus module')..." style="width:100%;min-height:90px;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;"></textarea>
+            <span style="font-size:11px;color:#94a3b8;margin-top:4px;display:block;">This message is sent directly to the teacher via real-time notification.</span>
+          </div>
+        </div>
+        <div style="padding:16px 24px;background:#f8fafc;border-top:1.5px solid #e2e8f0;display:flex;justify-content:flex-end;gap:10px;">
+          <button type="button" class="foot-btn-secondary" onclick="closeApprovalDecisionModal()">Cancel</button>
+          <button type="button" class="gen-btn" id="confirmApprovalDecisionBtn" style="background:#f59e0b;color:#ffffff;" onclick="submitApprovalDecision('${kind}', '${escHtml(String(id))}')">Send Revision Request</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const existing = document.getElementById('approvalDecisionModal');
+  if (existing) existing.remove();
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+window.openApprovalDecisionModal = openApprovalDecisionModal;
+
+function closeApprovalDecisionModal() {
+  const m = document.getElementById('approvalDecisionModal');
+  if (m) m.remove();
+}
+window.closeApprovalDecisionModal = closeApprovalDecisionModal;
+
+function toggleApprovalDecisionChoice(val) {
+  const btn = document.getElementById('confirmApprovalDecisionBtn');
+  if (!btn) return;
+  if (val === 'deny') {
+    btn.style.background = '#dc2626';
+    btn.textContent = 'Confirm Rejection';
+  } else {
+    btn.style.background = '#f59e0b';
+    btn.textContent = 'Send Revision Request';
+  }
+}
+window.toggleApprovalDecisionChoice = toggleApprovalDecisionChoice;
+
+async function submitApprovalDecision(kind, id) {
+  const choice = document.querySelector('input[name="approvalActionChoice"]:checked')?.value || 'revision';
+  const notes = document.getElementById('approvalFeedbackNotes')?.value?.trim() || '';
+
+  if (choice === 'revision' && !notes) {
+    showToast('Please type feedback explaining what the teacher needs to revise.', 'warning');
+    document.getElementById('approvalFeedbackNotes')?.focus();
+    return;
+  }
+
+  const btn = document.getElementById('confirmApprovalDecisionBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+
+  try {
+    const sessionResult = await db.auth.getSession().catch(() => ({ data: {} }));
+    const session = sessionResult?.data?.session || null;
+    const adminName = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'Administrator';
+
+    if (choice === 'revision') {
+      // DB only allows 'rejected' not 'revision'; store locally as revision with notes
+      if (kind === 'material') {
+        const memItem = Array.isArray(materialsData) ? materialsData.find(m => String(m.id) === String(id)) : null;
+        if (memItem) { memItem.status = 'revision'; memItem.feedback = notes; memItem.revision_notes = notes; }
+        try {
+          const localList = getCustomMaterialsFromStorage();
+          const localIdx = localList.findIndex(m => String(m.id) === String(id));
+          if (localIdx >= 0) {
+            localList[localIdx].status = 'revision';
+            localList[localIdx].feedback = notes;
+            localList[localIdx].revision_notes = notes;
+            localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(localList));
+          }
+        } catch (_) {}
+        if (session) { await db.from('materials').update({ status: 'rejected' }).eq('id', id).catch(e => console.warn('Material revision DB err:', e)); }
+        const teacherId = memItem?.uploaded_by || null;
+        if (typeof addNotification === 'function') addNotification({ targetUserId: teacherId, targetRole: 'teacher', title: 'Needs Revision: Handout', message: adminName + ' requested revisions: "' + notes + '"', type: 'revision', senderName: adminName });
+      } else {
+        const quiz = (typeof customQuizzes !== 'undefined') ? customQuizzes.find(q => String(q.id) === String(id)) : null;
+        if (quiz) { quiz.status = 'revision'; quiz.feedback = notes; quiz.revision_notes = notes; if (typeof saveCustomQuizzesToStorage === 'function') saveCustomQuizzesToStorage(); }
+        if (session) { await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(e => console.warn('Quiz revision DB err:', e)); }
+        const teacherId = quiz?.created_by || quiz?.createdBy || null;
+        if (typeof addNotification === 'function') addNotification({ targetUserId: teacherId, targetRole: 'teacher', title: 'Needs Revision: Quiz', message: adminName + ' requested revisions: "' + notes + '"', type: 'revision', senderName: adminName });
+      }
+      showToast('Submission marked for revision. Teacher has been notified.', 'success');
+
+    } else {
+      // Deny — delete the submission
+      let teacherId = null;
+      if (kind === 'material') {
+        const memItem = Array.isArray(materialsData) ? materialsData.find(m => String(m.id) === String(id)) : null;
+        teacherId = memItem?.uploaded_by || null;
+        materialsData = (Array.isArray(materialsData) ? materialsData : []).filter(m => String(m.id) !== String(id));
+        try { const cl = getCustomMaterialsFromStorage().filter(m => String(m.id) !== String(id)); localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(cl)); } catch (_) {}
+        if (session) { await db.from('materials').delete().eq('id', id).catch(e => console.warn('Material delete DB err:', e)); }
+      } else {
+        const quiz = (typeof customQuizzes !== 'undefined') ? customQuizzes.find(q => String(q.id) === String(id)) : null;
+        teacherId = quiz?.created_by || quiz?.createdBy || null;
+        if (typeof customQuizzes !== 'undefined') { customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id)); if (typeof saveCustomQuizzesToStorage === 'function') saveCustomQuizzesToStorage(); }
+        if (session) { await db.from('quizzes').delete().eq('id', id).catch(e => console.warn('Quiz delete DB err:', e)); }
+      }
+      if (typeof addNotification === 'function') addNotification({ targetUserId: teacherId, targetRole: 'teacher', title: 'Submission Denied: ' + (kind === 'quiz' ? 'Quiz' : 'Handout'), message: adminName + ' denied your submission: "' + (notes || 'Did not meet institutional guidelines.') + '"', type: 'info', senderName: adminName });
+      showToast('Submission has been denied and removed.', 'info');
+    }
+  } catch (err) {
+    console.error('submitApprovalDecision error:', err);
+    showToast('An error occurred while processing. Please try again.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
+
+  closeApprovalDecisionModal();
+  await refreshApprovalView();
+  renderMaterialsContainer();
+}
+window.submitApprovalDecision = submitApprovalDecision;

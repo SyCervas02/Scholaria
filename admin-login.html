@@ -972,9 +972,7 @@
 
                 <button class="submit-btn" id="loginSubmitBtn" onclick="handleLogin()">Login to Admin Portal</button>
 
-                <div class="divider">
-                    <a href="#" class="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
-                </div>
+                
 
                 <div class="portal-switch-box">
                     <a href="login.html" class="portal-switch-link">
@@ -1173,33 +1171,8 @@
         }
     }
 
-    async function handleDemoLogin() {
-        const links = document.querySelectorAll('.demoLink');
-        links.forEach(l => { l.textContent = 'Loading demoâ€¦'; l.classList.add('disabled'); });
-        try {
-            const res = await fetch(`${API_BASE}/api/auth/demo-login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ role: 'admin' })
-            });
-            if (res.status === 404) {
-                showToast('Demo mode is currently disabled', 'error');
-                return;
-            }
-            if (res.status === 429) {
-                showToast('Too many requests â€” please wait a few seconds', 'error');
-                return;
-            }
-            if (!res.ok) { showToast('Demo login is temporarily unavailable', 'error'); return; }
-            const { access_token, refresh_token } = await res.json();
-            const { error } = await db.auth.setSession({ access_token, refresh_token });
-            if (error) { showToast('Demo login is temporarily unavailable', 'error'); return; }
-            window.location.href = 'dashboard.html';
-        } catch {
-            showToast('Could not reach the server', 'error');
-        } finally {
-            links.forEach(l => { l.textContent = 'Skip for now (development mode) â†’'; l.classList.remove('disabled'); });
-        }
+    function handleDemoLogin() {
+        showToast('Demo mode has been disabled. Please sign in with institutional credentials.', 'warning');
     }
 
     (async () => {

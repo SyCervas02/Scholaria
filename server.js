@@ -979,7 +979,17 @@ const chatUpload = multer({
   }
 });
 
-app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
+app.post('/api/chat/upload', (req, res, next) => {
+  chatUpload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size exceeds 10MB limit. Please upload a smaller file.' });
+      }
+      return res.status(400).json({ error: err.message || 'File type not allowed. Supported formats: images, PDF, and documents.' });
+    }
+    next();
+  });
+}, async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
 

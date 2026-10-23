@@ -188,13 +188,13 @@ function openSectionReportModal(sectionName) {
         <table class="report-table">
           <thead>
             <tr>
-              <th style="width:36px;text-align:center;">#</th>
-              <th>Student Full Name</th>
-              <th>Strand</th>
-              ${quizzes.map((q, idx) => `<th style="text-align:center;font-size:11px;" title="${escHtml(q.title)}">Q${idx + 1}</th>`).join('')}
-              <th style="text-align:center;">Taken</th>
-              <th style="text-align:center;">Final Grade</th>
-              <th style="text-align:center;">Remarks</th>
+              <th style="width:32px;text-align:center;">#</th>
+              <th style="text-align:left;white-space:nowrap;">Student Full Name</th>
+              <th style="width:65px;text-align:center;">Strand</th>
+              ${quizzes.map((q, idx) => `<th style="width:46px;text-align:center;font-size:11px;" title="${escHtml(q.title)}">Q${idx + 1}</th>`).join('')}
+              <th style="width:52px;text-align:center;">Taken</th>
+              <th style="width:80px;text-align:center;white-space:nowrap;">Final Grade</th>
+              <th style="width:90px;text-align:center;white-space:nowrap;">Remarks</th>
             </tr>
           </thead>
           <tbody>
@@ -214,8 +214,8 @@ function openSectionReportModal(sectionName) {
                   <td style="text-align:center;font-weight:700;font-size:13px;color:${hasAvg ? (isPassing ? '#15803d' : '#b91c1c') : '#64748b'};">
                     ${hasAvg ? st.avg.toFixed(2) + '%' : '—'}
                   </td>
-                  <td style="text-align:center;">
-                    <span class="report-status-pill ${hasAvg ? (isPassing ? 'pass' : 'fail') : 'pending'}">
+                  <td style="text-align:center;white-space:nowrap;">
+                    <span class="report-status-pill ${hasAvg ? (isPassing ? 'pass' : 'fail') : 'pending'}" style="display:inline-block;padding:3px 9px;white-space:nowrap;font-weight:800;letter-spacing:0.5px;">
                       ${hasAvg ? (isPassing ? 'PASSED' : 'FAILED') : 'INCOMPLETE'}
                     </span>
                   </td>

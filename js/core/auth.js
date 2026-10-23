@@ -21,11 +21,23 @@ try {
   Object.defineProperty(window, 'db', {
     value: db,
     writable: false,
-    configurable: false
+    configurable: false,
+    enumerable: false
   });
 } catch (_) {
   window.db = db;
 }
+
+try {
+  if (typeof window !== 'undefined' && window.supabase) {
+    Object.defineProperty(window, 'supabase', {
+      value: undefined,
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  }
+} catch (_) {}
 
 const API_BASE = (function() {
   if (typeof window !== 'undefined' && window.location) {
@@ -79,7 +91,7 @@ async function guardSessionAndInit() {
   }
 
   ROLE = profile.role;
-  CURRENT_PROFILE = Object.freeze({ ...profile });
+  CURRENT_PROFILE = { ...profile };
   try {
     db.from('users').update({ last_active_at: new Date().toISOString() }).eq('id', profile.id).then();
   } catch (_) {}
