@@ -1,4 +1,6 @@
 // server.js
+if (!globalThis.WebSocket) { try { globalThis.WebSocket = class DummyWS {}; } catch(e){} }
+// server.js
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') }); // Explicit absolute path for reliable env loading
 
