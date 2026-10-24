@@ -297,7 +297,8 @@ const supabaseAdmin = createClient(
     global: {
       headers: { Authorization: `Bearer ${activeAdminKey}` }
     },
-    auth: { autoRefreshToken: false, persistSession: false }
+    auth: { autoRefreshToken: false, persistSession: false },
+    realtime: { createClient: false }
   }
 );
 
@@ -305,7 +306,8 @@ const supabaseAnon = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY,
   {
-    auth: { autoRefreshToken: false, persistSession: false }
+    auth: { autoRefreshToken: false, persistSession: false },
+    realtime: { createClient: false }
   }
 );
 
