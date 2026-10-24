@@ -53,55 +53,8 @@ function saveAuditRecord(record) {
 // --- Core Security Middleware ---
 // 1. Helmet Security Headers (CSP, Anti-Clickjacking, Anti-MIME Sniffing, Hide Express Signature)
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'", "https://*.supabase.co"],
-      scriptSrc: [
-        "'self'",
-        "'unsafe-inline'",
-        "'unsafe-eval'",
-        "https://cdn.jsdelivr.net",
-        "https://cdnjs.cloudflare.com",
-        "https://*.supabase.co"
-      ],
-      styleSrc: [
-        "'self'",
-        "'unsafe-inline'",
-        "https://fonts.googleapis.com",
-        "https://cdn.jsdelivr.net",
-        "https://cdnjs.cloudflare.com"
-      ],
-      fontSrc: [
-        "'self'",
-        "https://fonts.gstatic.com",
-        "https://cdn.jsdelivr.net",
-        "data:"
-      ],
-      imgSrc: [
-        "'self'",
-        "data:",
-        "blob:",
-        "https://*.supabase.co",
-        "https://images.unsplash.com",
-        "https://i.pravatar.cc"
-      ],
-      connectSrc: [
-        "'self'",
-        "https://*.supabase.co",
-        "wss://*.supabase.co",
-        "https://generativelanguage.googleapis.com",
-        "https://api.openai.com",
-        "https://cdn.jsdelivr.net"
-      ],
-      frameAncestors: ["'self'"],
-      objectSrc: ["'none'"]
-    }
-  },
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  frameguard: { action: 'sameorigin' },
-  noSniff: true,
-  xssFilter: true,
-  hidePoweredBy: true
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
 // Additional defense-in-depth headers
