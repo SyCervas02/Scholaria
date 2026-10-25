@@ -907,25 +907,14 @@ function getMuteForStrikes(strikes) {
 }
 
 // --- Chat File Uploads ---
-const chatStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, chatUploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname) || '';
-    const safeBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
-    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(4).toString('hex');
-    cb(null, `${uniqueSuffix}_${safeBase}${ext}`);
-  }
-});
-
 const ALLOWED_UPLOAD_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.webp', '.gif',
   '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'
 ]);
 
+// Use memory storage so we can pipe to Supabase Storage (cloud-persistent)
 const chatUpload = multer({
-  storage: chatStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: function (req, file, cb) {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -961,9 +950,35 @@ app.post('/api/chat/upload', (req, res, next) => {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  const relativeUrl = `/uploads/chat/${req.file.filename}`;
+  // Upload to Supabase Storage so the file is accessible from any device
+  const ext = path.extname(req.file.originalname) || '';
+  const safeBase = path.basename(req.file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+  const storagePath = `${profile.id}/${Date.now()}-${crypto.randomBytes(4).toString('hex')}_${safeBase}${ext}`;
+
+  const { error: storageErr } = await supabaseAdmin.storage
+    .from('chat-attachments')
+    .upload(storagePath, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+
+  if (storageErr) {
+    // Fallback to local disk if Supabase bucket unavailable
+    console.warn('Supabase chat storage upload failed, falling back to local:', storageErr.message);
+    const localFilename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}_${safeBase}${ext}`;
+    const localPath = path.join(chatUploadsDir, localFilename);
+    require('fs').writeFileSync(localPath, req.file.buffer);
+    return res.json({
+      url: `/uploads/chat/${localFilename}`,
+      name: req.file.originalname,
+      size: req.file.size,
+      mime: req.file.mimetype
+    });
+  }
+
+  const { data: publicData } = supabaseAdmin.storage
+    .from('chat-attachments')
+    .getPublicUrl(storagePath);
+
   res.json({
-    url: relativeUrl,
+    url: publicData.publicUrl,
     name: req.file.originalname,
     size: req.file.size,
     mime: req.file.mimetype

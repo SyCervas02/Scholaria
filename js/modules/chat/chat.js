@@ -1,4 +1,4 @@
-﻿/* ── REAL-TIME CHAT MODULE ── */
+/* ── REAL-TIME CHAT MODULE ── */
 
 let chatConversations = [];
 let activeConversationId = null;
@@ -427,16 +427,10 @@ function getChatAttachmentUrl(attach) {
   if (!attach.url) return '';
   if (/^(https?:|data:|blob:)/i.test(attach.url)) return attach.url;
 
-  let base = window.API_BASE;
-  if (!base || base === 'null' || base.startsWith('file:')) {
-    base = 'http://localhost:3001';
-  } else if (typeof window !== 'undefined' && window.location) {
-    if (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null') {
-      base = 'http://localhost:3001';
-    } else {
-      base = window.location.origin;
-    }
-  }
+  // Always point /uploads/ to the Node server (3001), not Live Server or other static hosts
+  const base = (window.API_BASE && window.API_BASE !== 'null' && !/^file:/i.test(window.API_BASE))
+    ? window.API_BASE.replace(/\/+$/, '')
+    : 'http://localhost:3001';
 
   const cleanUrl = attach.url.startsWith('/') ? attach.url : `/${attach.url}`;
   return `${base.replace(/\/+$/, '')}${cleanUrl}`;
@@ -645,6 +639,27 @@ function openChatAttachmentOverview(msgId) {
   const isImg = (attach.mime || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|svg)$/i.test(attach.name);
   const isPdf = (attach.mime || '').includes('pdf') || /\.pdf$/i.test(attach.name);
 
+  // Fallback chain: dataUrl/data are embedded base64 so work offline; server url as last resort
+  window._chatLightboxFallbacks = [attach.dataUrl, attach.data, attach.previewUrl, fileUrl,
+    "http://localhost:3001/uploads/chat/" + encodeURIComponent(attach.name || '')
+  ].filter(function(s, i, a) { return s && a.indexOf(s) === i; });
+  if (!window._chatLightboxFallbacks.length) window._chatLightboxFallbacks = [fileUrl];
+  window._chatLightboxFbIdx = 0;
+  window._chatLbTryNext = function(img) {
+    window._chatLightboxFbIdx = (window._chatLightboxFbIdx || 0) + 1;
+    var next = window._chatLightboxFallbacks[window._chatLightboxFbIdx];
+    if (next) { img.onerror = function() { window._chatLbTryNext(img); }; img.src = next; }
+    else {
+      img.onerror = null; img.style.display = 'none';
+      var stage = document.getElementById('chatLightboxStage');
+      if (stage && !stage.querySelector('.lb-no-preview')) {
+        var d = document.createElement('div'); d.className = 'lb-no-preview';
+        d.style.cssText = 'color:#94a3b8;text-align:center;';
+        d.innerHTML = '<div style="font-size:36px;margin-bottom:8px">🖼️</div><div style="font-size:13px">Preview unavailable — file only exists on the sender\'s local server.<br>Use <b>Download</b> to save a copy.</div>';
+        stage.appendChild(d);
+      }
+    }
+  };
   let previewContent = '';
   if (isImg) {
     previewContent = `
@@ -660,7 +675,7 @@ function openChatAttachmentOverview(msgId) {
         </div>
       </div>
       <div id="chatLightboxStage" style="display:flex;justify-content:center;align-items:center;min-height:460px;max-height:72vh;background:#0f172a;border-radius:12px;padding:20px;overflow:auto;position:relative;">
-        <img id="chatLightboxImg" src="${fileUrl}" alt="${escHtml(attach.name)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.5);transition:transform 0.15s ease;" onerror="this.onerror=null;this.src='/uploads/chat/${encodeURIComponent(attach.name)}';"/>
+        <img id="chatLightboxImg" src="${escHtml(window._chatLightboxFallbacks[0])}" alt="${escHtml(attach.name)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.5);transition:transform 0.15s ease;" onerror="window._chatLbTryNext(this)"/>
       </div>
     `;
   } else if (isPdf) {
