@@ -1,4 +1,4 @@
-// server.js
+﻿// server.js
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') }); // Explicit absolute path for reliable env loading
 
@@ -17,40 +17,44 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
-// --- Account audit trail store ---
-const AUDIT_FILE = path.join(__dirname, 'data', 'account-audit.json');
-
-function getAuditRecords() {
+// --- Account audit trail store (Supabase DB) ---
+async function getAuditRecords() {
   try {
-    if (!fs.existsSync(AUDIT_FILE)) return {};
-    return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {};
-  } catch (e) {
-    return {};
-  }
+    const { data, error } = await supabaseAdmin.from('account_audit').select('*').order('updated_at', { ascending: false });
+    if (error || !data) return {};
+    const records = {};
+    data.forEach(r => { records[r.school_id] = r; });
+    return records;
+  } catch (e) { return {}; }
 }
 
-function saveAuditRecord(record) {
+async function saveAuditRecord(record) {
   try {
-    const dir = path.dirname(AUDIT_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const records = getAuditRecords();
     const key = record.school_id || record.user_id;
-    if (key) {
-      records[key] = {
-        ...(records[key] || {}),
-        ...record,
-        updated_at: new Date().toISOString()
-      };
-      fs.writeFileSync(AUDIT_FILE, JSON.stringify(records, null, 2), 'utf8');
-    }
-  } catch (e) {
-    console.error('Failed to save audit record:', e.message);
-  }
+    if (!key) return;
+    await supabaseAdmin.from('account_audit').upsert({
+      school_id: record.school_id || key,
+      user_id: record.user_id || null,
+      name: record.name || null,
+      role: record.role || null,
+      email: record.email || null,
+      strand: record.strand || null,
+      grade_level: record.grade_level || null,
+      section: record.section || null,
+      is_active: record.is_active !== undefined ? record.is_active : true,
+      created_at: record.created_at || new Date().toISOString(),
+      created_by: record.created_by || null,
+      updated_at: new Date().toISOString(),
+      status_history: record.status_history || []
+    }, { onConflict: 'school_id' });
+  } catch (e) { console.error('saveAuditRecord error:', e.message); }
 }
 
 // --- Core Security Middleware ---
 // 1. Helmet Security Headers (CSP, Anti-Clickjacking, Anti-MIME Sniffing, Hide Express Signature)
 app.use(helmet({
+  // HSTS disabled — app runs on HTTP localhost; HSTS would break HTTP access
+  strictTransportSecurity: false,
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'", "https://*.supabase.co"],
@@ -202,42 +206,11 @@ app.get('/', (req, res) => {
 });
 
 // Ensure uploads directory exists
-const chatUploadsDir = path.join(__dirname, 'uploads', 'chat');
 const materialsUploadsDir = path.join(__dirname, 'uploads', 'materials');
 if (!fs.existsSync(materialsUploadsDir)) {
   fs.mkdirSync(materialsUploadsDir, { recursive: true });
 }
-if (!fs.existsSync(chatUploadsDir)) {
-  fs.mkdirSync(chatUploadsDir, { recursive: true });
-}
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { dotfiles: 'ignore' }));
-
-// Resilient fallback for chat uploads stored across multiple devices
-app.get('/uploads/chat/:filename', (req, res) => {
-  const filename = path.basename(req.params.filename || '');
-  const filePath = path.join(chatUploadsDir, filename);
-  if (fs.existsSync(filePath)) {
-    return res.sendFile(filePath);
-  }
-  const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(filename);
-  if (isImage) {
-    res.setHeader('Content-Type', 'image/svg+xml');
-    res.setHeader('Cache-Control', 'public, max-age=120');
-    const safeName = filename.replace(/[<>&"']/g, '').slice(0, 36);
-    return res.send(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
-        <rect width="100%" height="100%" fill="#f8fafc" rx="14" stroke="#cbd5e1" stroke-width="2"/>
-        <circle cx="200" cy="72" r="32" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
-        <path d="M190 72 l7 -8 l13 14" stroke="#2563eb" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="192" cy="62" r="2.5" fill="#2563eb"/>
-        <text x="200" y="130" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="13" font-weight="700" fill="#1e293b" text-anchor="middle">Image stored on sender's device</text>
-        <text x="200" y="152" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" font-weight="500" fill="#64748b" text-anchor="middle">${safeName}</text>
-        <text x="200" y="176" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="10.5" font-weight="500" fill="#94a3b8" text-anchor="middle">Click Overview to view details</text>
-      </svg>
-    `.trim());
-  }
-  res.status(404).send('File not found on this local instance');
-});
 
 // Allowed public assets and folders
 app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'ignore' }));
@@ -717,7 +690,7 @@ app.post('/api/admin/create-account', async (req, res) => {
   }
 
   // Persistent provenance audit record
-  saveAuditRecord({
+  await saveAuditRecord({
     user_id: authData.user.id,
     school_id,
     name: full_name.trim(),
@@ -751,7 +724,7 @@ app.get('/api/admin/account-audit', async (req, res) => {
   if (!profile) return;
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can view audit records' });
 
-  const records = getAuditRecords();
+  const records = await getAuditRecords();
   res.json({ success: true, records });
 });
 
@@ -787,7 +760,7 @@ app.post('/api/admin/toggle-user-status', async (req, res) => {
     }
   }
 
-  const currentRecords = getAuditRecords();
+  const currentRecords = await getAuditRecords();
   const key = updatedUser.school_id || user_id;
   const existingAudit = currentRecords[key] || {};
   const statusHistory = existingAudit.status_history || [];
@@ -803,7 +776,7 @@ app.post('/api/admin/toggle-user-status', async (req, res) => {
     reason: reason || (is_active ? 'Account reactivated by administrator' : 'Account deactivated by administrator')
   });
 
-  saveAuditRecord({
+  await saveAuditRecord({
     ...existingAudit,
     user_id,
     school_id: updatedUser.school_id,
@@ -949,26 +922,14 @@ function getMuteForStrikes(strikes) {
   return { action: 'muted_permanent', permanently_muted: true, muted_until: null };
 }
 
-// --- Chat File Uploads ---
-const chatStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, chatUploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname) || '';
-    const safeBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
-    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(4).toString('hex');
-    cb(null, `${uniqueSuffix}_${safeBase}${ext}`);
-  }
-});
-
+// --- Chat File Uploads (Supabase Storage) ---
 const ALLOWED_UPLOAD_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.webp', '.gif',
   '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'
 ]);
 
 const chatUpload = multer({
-  storage: chatStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: function (req, file, cb) {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -1004,13 +965,43 @@ app.post('/api/chat/upload', (req, res, next) => {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  const relativeUrl = `/uploads/chat/${req.file.filename}`;
-  res.json({
-    url: relativeUrl,
-    name: req.file.originalname,
-    size: req.file.size,
-    mime: req.file.mimetype
-  });
+  try {
+    const ext = path.extname(req.file.originalname) || '';
+    const safeBase = path.basename(req.file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+    const timestamp = Date.now();
+    const storagePath = `${profile.id}/${timestamp}-${safeBase}${ext}`;
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('chat-attachments')
+      .upload(storagePath, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Chat upload to Supabase Storage failed:', uploadError.message);
+      return res.status(500).json({ error: 'File upload failed. Please try again.' });
+    }
+
+    const { data: signedData, error: signedError } = await supabaseAdmin.storage
+      .from('chat-attachments')
+      .createSignedUrl(storagePath, 60 * 60 * 24); // 24 hours
+
+    if (signedError) {
+      console.error('Could not create signed URL:', signedError.message);
+      return res.status(500).json({ error: 'File upload succeeded but URL generation failed.' });
+    }
+
+    res.json({
+      url: signedData.signedUrl,
+      name: req.file.originalname,
+      size: req.file.size,
+      mime: req.file.mimetype
+    });
+  } catch (e) {
+    console.error('Chat upload error:', e.message);
+    return res.status(500).json({ error: 'File upload failed.' });
+  }
 });
 
 app.post('/api/chat/send', async (req, res) => {
@@ -1018,8 +1009,12 @@ app.post('/api/chat/send', async (req, res) => {
   if (!profile) return;
 
   const { conversationId, text } = req.body;
-  if (!text || !text.trim() || !conversationId) {
-    return res.status(400).json({ error: 'Missing conversationId or text' });
+
+  if (!conversationId) {
+    return res.status(400).json({ error: 'Missing conversationId' });
+  }
+  if (!text || !text.trim()) {
+    return res.status(400).json({ error: 'Missing message text or attachment' });
   }
 
   if (profile.permanently_muted) {
@@ -1073,6 +1068,24 @@ app.post('/api/chat/send', async (req, res) => {
   const isProfanity = !isAttachment && !isSevere && (localCheck.profanityFlagged || modResult.flagged);
 
   let finalBody = text;
+  // Strip base64 dataUrl/previewUrl from attachment JSON before DB storage (max body = 4000 chars)
+  if (isAttachment && parsedAttachment) {
+    try {
+      const cleanAtt = {
+        type: parsedAttachment.type || 'attachment',
+        name: parsedAttachment.name || 'file',
+        size: parsedAttachment.size || 0,
+        mime: parsedAttachment.mime || 'application/octet-stream',
+        url: parsedAttachment.url || '',
+      };
+      if (parsedAttachment.previewUrl && !String(parsedAttachment.previewUrl).startsWith('data:')) {
+        cleanAtt.previewUrl = parsedAttachment.previewUrl;
+      }
+      finalBody = JSON.stringify(cleanAtt);
+    } catch (_) {
+      finalBody = '[attachment]';
+    }
+  }
   let warning = null;
   let violationToLog = null;
   let muteUpdate = null;
@@ -1113,7 +1126,7 @@ app.post('/api/chat/send', async (req, res) => {
         conversation_id: conversationId,
         sender_id: profile.id,
         sender_name: profile.full_name,
-        body: finalBody
+        body: (finalBody && finalBody.trim()) ? finalBody : '[attachment]'
       })
       .select().single();
     message = resInsert.data;
@@ -1130,7 +1143,7 @@ app.post('/api/chat/send', async (req, res) => {
           conversation_id: conversationId,
           sender_id: profile.id,
           sender_name: profile.full_name,
-          body: finalBody
+          body: (finalBody && finalBody.trim()) ? finalBody : '[attachment]'
         })
         .select().single();
       if (fallbackInsert.data) {
@@ -1159,23 +1172,7 @@ app.post('/api/chat/send', async (req, res) => {
   res.json({ ...message, warning });
 });
 
-// --- Chat Seen Receipts (Facebook-style Read Receipts) ---
-const chatReceiptsFile = path.join(__dirname, 'data', 'chat-seen-receipts.json');
-function getChatReceipts() {
-  try {
-    if (!fs.existsSync(chatReceiptsFile)) return {};
-    return JSON.parse(fs.readFileSync(chatReceiptsFile, 'utf8'));
-  } catch (err) {
-    return {};
-  }
-}
-function saveChatReceipts(data) {
-  try {
-    fs.writeFileSync(chatReceiptsFile, JSON.stringify(data, null, 2), 'utf8');
-  } catch (err) {
-    console.error('Failed to save chat receipts:', err.message);
-  }
-}
+// --- Chat Seen Receipts (Facebook-style Read Receipts) — Supabase DB ---
 
 app.post('/api/chat/mark-seen', async (req, res) => {
   const profile = await requireUser(req, res);
@@ -1186,21 +1183,31 @@ app.post('/api/chat/mark-seen', async (req, res) => {
     return res.status(400).json({ error: 'Missing conversationId' });
   }
 
-  const receipts = getChatReceipts();
-  if (!receipts[conversationId]) {
-    receipts[conversationId] = {};
-  }
-
-  receipts[conversationId][profile.id] = {
-    userId: profile.id,
-    userName: profile.full_name || 'Participant',
-    lastMessageId: lastMessageId || null,
-    lastMessageTime: lastMessageTime || new Date().toISOString(),
-    seenAt: new Date().toISOString()
+  const receipt = {
+    conversation_id:   conversationId,
+    user_id:           profile.id,
+    user_name:         profile.full_name || 'Participant',
+    last_message_id:   lastMessageId   || null,
+    last_message_time: lastMessageTime || new Date().toISOString(),
+    seen_at:           new Date().toISOString()
   };
 
-  saveChatReceipts(receipts);
-  res.json({ success: true, receipt: receipts[conversationId][profile.id] });
+  const { error } = await supabaseAdmin
+    .from('chat_read_receipts')
+    .upsert(receipt, { onConflict: 'conversation_id,user_id' });
+
+  if (error) {
+    console.error('mark-seen DB error:', error.message);
+    return res.status(500).json({ error: 'Failed to mark conversation as seen' });
+  }
+
+  res.json({ success: true, receipt: {
+    userId:           profile.id,
+    userName:         receipt.user_name,
+    lastMessageId:    receipt.last_message_id,
+    lastMessageTime:  receipt.last_message_time,
+    seenAt:           receipt.seen_at
+  }});
 });
 
 app.get('/api/chat/seen-receipts', async (req, res) => {
@@ -1208,7 +1215,30 @@ app.get('/api/chat/seen-receipts', async (req, res) => {
   if (!profile) return;
 
   const { conversationId } = req.query;
-  const receipts = getChatReceipts();
+
+  let query = supabaseAdmin.from('chat_read_receipts').select('*');
+  if (conversationId) query = query.eq('conversation_id', conversationId);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('seen-receipts DB error:', error.message);
+    return res.status(500).json({ error: 'Failed to fetch receipts' });
+  }
+
+  // Reshape into the same { [conversationId]: { [userId]: receipt } } format
+  // so the frontend doesn't need any changes
+  const receipts = {};
+  for (const row of (data || [])) {
+    if (!receipts[row.conversation_id]) receipts[row.conversation_id] = {};
+    receipts[row.conversation_id][row.user_id] = {
+      userId:          row.user_id,
+      userName:        row.user_name,
+      lastMessageId:   row.last_message_id,
+      lastMessageTime: row.last_message_time,
+      seenAt:          row.seen_at
+    };
+  }
+
   if (conversationId) {
     return res.json({ receipts: receipts[conversationId] || {} });
   }
@@ -2498,6 +2528,81 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
   }
 
   return res.status(500).json({ error: 'Could not generate questions from material.' });
+});
+
+
+// ════════════════════════════════════════════════════════════════════
+// SINGLE ACTIVE SESSION ENFORCEMENT
+// ════════════════════════════════════════════════════════════════════
+
+// POST /api/auth/register-session
+// Called after login — stores a unique session fingerprint on the user row.
+app.post('/api/auth/register-session', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/, '');
+    if (!token) return res.status(401).json({ error: 'No token provided' });
+
+    const { data: { user }, error: verifyErr } = await supabaseAdmin.auth.getUser(token);
+    if (verifyErr || !user) return res.status(401).json({ error: 'Invalid token' });
+
+    const crypto = require('crypto');
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+
+    const { error: updateErr } = await supabaseAdmin
+      .from('users')
+      .update({ active_session_token: sessionToken })
+      .eq('id', user.id);
+
+    if (updateErr) {
+      console.warn('Session token update skipped (column may not exist yet):', updateErr.message);
+      return res.json({ session_token: sessionToken, enforced: false });
+    }
+
+    return res.json({ session_token: sessionToken, enforced: true });
+  } catch (err) {
+    console.error('register-session error:', err.message);
+    return res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// POST /api/auth/validate-session
+// Called by the client heartbeat every 60s — checks stored fingerprint matches.
+app.post('/api/auth/validate-session', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/, '');
+    if (!token) return res.status(401).json({ valid: false, reason: 'no_token' });
+
+    const { session_token } = req.body || {};
+
+    const { data: { user }, error: verifyErr } = await supabaseAdmin.auth.getUser(token);
+    if (verifyErr || !user) return res.status(401).json({ valid: false, reason: 'token_expired' });
+
+    if (!session_token) return res.json({ valid: true, enforced: false });
+
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from('users')
+      .select('active_session_token')
+      .eq('id', user.id)
+      .single();
+
+    if (profileErr || !profile) return res.json({ valid: true, enforced: false });
+
+    // Column not yet added or null — skip enforcement gracefully
+    if (profile.active_session_token === undefined || profile.active_session_token === null) {
+      return res.json({ valid: true, enforced: false });
+    }
+
+    if (profile.active_session_token !== session_token) {
+      return res.json({ valid: false, reason: 'session_superseded' });
+    }
+
+    return res.json({ valid: true, enforced: true });
+  } catch (err) {
+    console.error('validate-session error:', err.message);
+    return res.status(500).json({ valid: true, enforced: false }); // fail-open to avoid lockout
+  }
 });
 
 module.exports = app;

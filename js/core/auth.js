@@ -97,6 +97,7 @@ async function guardSessionAndInit() {
   } catch (_) {}
   initDashboardShell();
   startAfkSessionTracker();
+  _registerAndHeartbeatSession(session.access_token);
 }
 
 /* ── UNIVERSAL 10-MINUTE AFK SESSION EXPIRATION ── */
@@ -116,9 +117,7 @@ async function triggerAfkSessionTimeout() {
     }
   } catch (_) {}
 
-  const isAdm = (typeof ROLE !== 'undefined' && ROLE === 'admin') || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role === 'admin');
-  const targetLogin = isAdm ? 'admin-login.html?afk=1' : 'login.html?afk=1';
-  window.location.href = targetLogin;
+  window.location.href = 'login.html?afk=1';
 }
 
 function startAfkSessionTracker() {
@@ -130,3 +129,64 @@ function startAfkSessionTracker() {
 }
 
 guardSessionAndInit();
+
+// ══════════════════════════════════════════════════════════
+// SINGLE ACTIVE SESSION — register on login, heartbeat every 60s
+// ══════════════════════════════════════════════════════════
+let _sessionHeartbeatTimer = null;
+const SESSION_TOKEN_KEY = '_sch_stk';
+
+async function _registerAndHeartbeatSession(accessToken) {
+  if (!accessToken) return;
+
+  const backendBase = (typeof BACKEND_URL !== 'undefined' && BACKEND_URL)
+    ? BACKEND_URL : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? `http://${window.location.hostname}:3001` : '');
+
+  if (!backendBase) return; // file:// mode — skip enforcement
+
+  try {
+    const res = await fetch(`${backendBase}/api/auth/register-session`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) return;
+    const { session_token, enforced } = await res.json();
+    if (enforced && session_token) {
+      try { sessionStorage.setItem(SESSION_TOKEN_KEY, session_token); } catch (_) {}
+      _startSessionHeartbeat(accessToken, session_token, backendBase);
+    }
+  } catch (_) {
+    // Network error — don't break the app
+  }
+}
+
+function _startSessionHeartbeat(accessToken, sessionToken, backendBase) {
+  if (_sessionHeartbeatTimer) clearInterval(_sessionHeartbeatTimer);
+  _sessionHeartbeatTimer = setInterval(async () => {
+    try {
+      // Refresh access token in case it expired
+      const { data: { session: s } } = await db.auth.getSession();
+      const tok = s ? s.access_token : accessToken;
+
+      const res = await fetch(`${backendBase}/api/auth/validate-session`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_token: sessionToken })
+      });
+      if (!res.ok) return; // network hiccup — keep running
+
+      const { valid, reason } = await res.json();
+      if (!valid && reason === 'session_superseded') {
+        clearInterval(_sessionHeartbeatTimer);
+        try { await db.auth.signOut(); } catch (_) {}
+        try { sessionStorage.removeItem(SESSION_TOKEN_KEY); } catch (_) {}
+        alert('Your account has been signed in from another device. You have been logged out for security.');
+        window.location.href = 'login.html?kicked=1';
+      }
+    } catch (_) {
+      // Network error — keep heartbeat running
+    }
+  }, 60000); // every 60 seconds
+}
+

@@ -1,0 +1,49 @@
+================================================================================
+SCHOLARIA LMS - SESSION ACCOMPLISHMENTS & FUTURE AI NOTES
+================================================================================
+Project: Haven of Wisdom Academy - Philippine SHS LMS
+Stack: Vanilla JS frontend | Express.js (server.js) | Supabase DB + Storage
+Working Directory: C:\Users\Admin\Documents\Scholaria\Scholaria\
+Date: October 26, 2026
+
+--------------------------------------------------------------------------------
+1. ACCOMPLISHMENTS THIS SESSION
+--------------------------------------------------------------------------------
+- Applied dark navy sidebar (#112540) globally in dashboard.css for all user roles per class decision.
+- Implemented unified 3-role login in login.html with a dedicated Admin card supporting login via email or school ID.
+- Added profile picture confirmation modal with preview and Code of Conduct warning in sidebar.js before updating avatar.
+- Implemented single active session enforcement with server endpoints in server.js and a 60-second heartbeat in auth.js.
+- Added active_session_token TEXT column to the public.users Supabase database table.
+- Created private Supabase Storage bucket 'chat-attachments' and migrated existing local chat images to cloud storage.
+- Created public.account_audit database table and migrated 19 historical records from data/account-audit.json to Supabase.
+- Created public.chat_read_receipts database table and replaced local chat-seen-receipts.json with direct Supabase calls.
+- Enabled Row-Level Security (RLS) on core tables with service_role bypass policies and authenticated user policies.
+- Installed the pg npm package with SSL enabled for direct PostgreSQL script interactions.
+- Disabled HSTS in Helmet configuration to prevent HTTP to HTTPS redirect issues on local testing environments.
+- Fixed chat image sending failure caused by base64 dataUrl bloating attachment bodies beyond the 4000-character DB limit.
+- Updated fallback message insertion in server.js and chat.js to safely strip base64 data and enforce 4000-char limits.
+- Resolved Content Approval 'Needs Revision' failure by replacing unsupported .catch() on Supabase query builders with try/catch.
+
+--------------------------------------------------------------------------------
+2. KNOWN GAPS (NOT YET IMPLEMENTED)
+--------------------------------------------------------------------------------
+- Teacher edit-and-resubmit flow: When marked as 'Needs Revision', items show as rejected with feedback notifications, but teachers must currently upload a new file rather than clicking a dedicated in-place resubmit button.
+- Localhost port 3001 login button response: The user primarily tests using VS Code Live Server (http://127.0.0.1:5500), which connects to port 3001 via API_BASE.
+
+--------------------------------------------------------------------------------
+3. CRITICAL RULES FOR FUTURE AI (DO NOT BREAK THESE)
+--------------------------------------------------------------------------------
+- NEVER delete or drop any database table or existing user records (only ALTER, CREATE, INSERT, UPDATE, UPSERT).
+- Supabase messages_body_check constraint strictly enforces char_length(body) >= 1 AND <= 4000 on public.messages.
+- Attachment payloads must NEVER store raw base64 dataUrl strings inside the database body column.
+- Supabase JS v2 query builders (.from().select()/.insert()/.update()/.delete()) are not native Promises; never chain .catch() directly on them, always use try { await ... } catch (err) {}.
+- Always include { ssl: { rejectUnauthorized: false } } when connecting directly using the pg package and DATABASE_URL.
+- Use 'npm.cmd' rather than 'npm' in PowerShell on this Windows environment.
+- Python is not installed on this machine; all scripts and utilities must be written in Node.js.
+- The back button in login.html must strictly remain an inline SVG, never an emoji or text icon.
+- Sidebar background color must strictly remain #112540 (dark navy) across all dashboards and roles.
+- Always increment the cache-busting version parameter (?v=...) in dashboard.html and quiz-maker.html after editing CSS or JS files.
+- Current script cache versions: chat.js?v=20010, materials.js?v=20046, auth.js?v=20006.
+- The server runs on port 3001 with ALLOWED_ORIGIN configured for http://127.0.0.1:5500.
+- Existing storage buckets: 'chat-attachments' (private) and 'learning-materials' (private) - do not attempt to recreate them.
+================================================================================

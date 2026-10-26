@@ -772,35 +772,112 @@ function handleAvatarFileSelect(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
 
-  if (!file.type.startsWith('image/')) {
-    showToast('Please select a valid image file (PNG, JPG, WebP)', 'error');
+  // ── Format check ──────────────────────────────────────────────────────────
+  const allowedTypes = ['image/jpeg','image/png','image/webp','image/gif'];
+  if (!file.type.startsWith('image/') || !allowedTypes.includes(file.type)) {
+    showToast('Invalid file format. Please use PNG, JPG, WebP, or GIF.', 'error');
+    event.target.value = '';
     return;
   }
 
   if (file.size > 50 * 1024 * 1024) {
-    showToast('File is too large — maximum file size is 50MB only', 'error');
+    showToast('File is too large — maximum file size is 50MB', 'error');
+    event.target.value = '';
     return;
   }
 
   const reader = new FileReader();
   reader.onload = function(e) {
     const dataUrl = e.target.result;
-    
-    const heroImg = document.getElementById('pfHeroAvatarImg');
-    const heroInitials = document.getElementById('pfHeroAvatarInitials');
-    const dataUrlInput = document.getElementById('pfAvatarDataUrl');
-
-    if (heroImg) {
-      heroImg.src = dataUrl;
-      heroImg.style.display = 'block';
-      if (heroInitials) heroInitials.style.display = 'none';
-    }
-    if (dataUrlInput) {
-      dataUrlInput.value = dataUrl;
-    }
-    showToast('Profile picture preview updated! Click "Save Changes" to apply.', 'info');
+    _showAvatarConfirmModal(dataUrl, file);
   };
   reader.readAsDataURL(file);
+}
+
+function _showAvatarConfirmModal(dataUrl, file) {
+  // Remove any existing modal
+  const existing = document.getElementById('avatarConfirmModal');
+  if (existing) existing.remove();
+
+  const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+  const ext = file.name.split('.').pop().toUpperCase();
+
+  const modal = document.createElement('div');
+  modal.id = 'avatarConfirmModal';
+  modal.style.cssText = [
+    'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;',
+    'background:rgba(15,23,42,0.65);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);',
+    'animation:fadeIn 0.2s ease;'
+  ].join('');
+
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:32px 28px;max-width:420px;width:90%;box-shadow:0 24px 60px rgba(15,23,42,0.25);font-family:'Plus Jakarta Sans',sans-serif;position:relative;">
+      <button onclick="document.getElementById('avatarConfirmModal').remove();document.getElementById('pfAvatarInput') && (document.getElementById('pfAvatarInput').value='');"
+        style="position:absolute;top:16px;right:16px;background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px;border-radius:6px;display:flex;align-items:center;justify-content:center;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+
+      <h3 style="font-size:17px;font-weight:700;color:#0f172a;margin-bottom:4px;">Use this photo?</h3>
+      <p style="font-size:13px;color:#64748b;margin-bottom:20px;">Review your new profile picture before applying.</p>
+
+      <!-- Preview -->
+      <div style="display:flex;justify-content:center;margin-bottom:18px;">
+        <img src="${dataUrl}" alt="Preview"
+          style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0;box-shadow:0 4px 16px rgba(15,23,42,0.1);">
+      </div>
+
+      <!-- File info -->
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12.5px;color:#475569;display:flex;gap:16px;">
+        <span><strong style="color:#0f172a;">Format:</strong> ${ext}</span>
+        <span><strong style="color:#0f172a;">Size:</strong> ${sizeMB} MB</span>
+      </div>
+
+      <!-- Warning -->
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-bottom:22px;display:flex;gap:10px;align-items:flex-start;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <p style="font-size:12px;color:#92400e;line-height:1.5;margin:0;"><strong>Code of Conduct Notice:</strong> Profile pictures must be appropriate and professional. Use of indecent, offensive, or misleading images may result in account deactivation in accordance with Haven of Wisdom Academy's policies.</p>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;gap:10px;">
+        <button onclick="document.getElementById('avatarConfirmModal').remove();document.getElementById('pfAvatarInput') && (document.getElementById('pfAvatarInput').value='');"
+          style="flex:1;padding:10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#64748b;font-size:13.5px;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;transition:background 0.2s;">
+          Cancel
+        </button>
+        <button onclick="_applyAvatarFromConfirm('${dataUrl.replace(/'/g, '\\'+'\'')}');"
+          style="flex:1;padding:10px;border-radius:10px;border:none;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;box-shadow:0 4px 12px rgba(37,99,235,0.3);transition:opacity 0.2s;">
+          ✓ Use this photo
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(ev) {
+    if (ev.target === modal) {
+      modal.remove();
+      const inp = document.getElementById('pfAvatarInput');
+      if (inp) inp.value = '';
+    }
+  });
+}
+
+function _applyAvatarFromConfirm(dataUrl) {
+  document.getElementById('avatarConfirmModal')?.remove();
+
+  const heroImg = document.getElementById('pfHeroAvatarImg');
+  const heroInitials = document.getElementById('pfHeroAvatarInitials');
+  const dataUrlInput = document.getElementById('pfAvatarDataUrl');
+
+  if (heroImg) {
+    heroImg.src = dataUrl;
+    heroImg.style.display = 'block';
+    if (heroInitials) heroInitials.style.display = 'none';
+  }
+  if (dataUrlInput) {
+    dataUrlInput.value = dataUrl;
+  }
+  showToast('Profile picture updated! Click "Save Changes" to apply.', 'info');
 }
 
 function updateProfileNamePreview() {

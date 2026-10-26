@@ -680,6 +680,11 @@
             background: #fff;
         }
 
+        /* Admin role card - gold accent */
+        .role-card--admin { border-color: rgba(217,119,6,0.25); }
+        .role-card--admin .role-icon { background: linear-gradient(135deg, #92400e 0%, #d97706 100%); box-shadow: 0 4px 14px rgba(217,119,6,0.35); }
+        .role-card--admin:hover { border-color: rgba(217,119,6,0.55) !important; background: linear-gradient(135deg, rgba(254,243,199,0.8) 0%, rgba(255,255,255,0.9) 100%) !important; }
+
         .role-icon {
             width: 46px; height: 46px;
             border-radius: 12px;
@@ -855,12 +860,6 @@
         </div>
       </a>
       <div class="portal-nav-right">
-        <a href="admin-login.html" class="portal-admin-btn" title="Access School Administrator Portal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-          </svg>
-          Admin Login
-        </a>
         <button class="portal-login-btn" onclick="openLoginModal()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
           Log in
@@ -1030,12 +1029,22 @@
                         </div>
                     </button>
 
-                </div>
-                <div style="margin-top:14px;padding:12px;text-align:center;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;">
-                    <a href="admin-login.html" style="color:#0f172a;font-weight:700;font-size:12.5px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" style="width:14px;height:14px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                        School Administrator? Go to Admin Portal &rarr;
-                    </a>
+                    <button class="role-card role-card--admin" onclick="selectRole('admin')">
+                        <div class="role-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                <circle cx="12" cy="11" r="2"/>
+                            </svg>
+                        </div>
+                        <div class="role-text">
+                            <h3>School Admin</h3>
+                            <p>Manage accounts, records &amp; system settings</p>
+                        </div>
+                        <div class="role-arrow">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                        </div>
+                    </button>
+
                 </div>
             </div>
 
@@ -1119,12 +1128,22 @@
             idPattern: /^HWA-T-(DEMO|\d{4}-\d{3,})$/,
             idError: 'Format: HWA-T-YYYY-NNN or HWA-T-DEMO',
             badgeLabel: 'Teacher Portal'
+        },
+        admin: {
+            title: 'Admin Portal',
+            sub: 'Sign in with your administrator credentials',
+            idLabel: 'Admin ID or Email',
+            idPlaceholder: 'e.g. HWA-ADM-001 or admin@hwa.edu.ph',
+            idPattern: null,
+            idError: 'Admin ID or Email is required',
+            badgeLabel: 'Admin Portal'
         }
     };
 
     const ROLE_ICONS = {
         student: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 1.5 9 1.5 12 0v-5"/></svg>`,
-        teacher: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>`
+        teacher: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>`,
+        admin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><circle cx="12" cy="11" r="2"/></svg>`
     };
 
     const ICONS = {
@@ -1264,13 +1283,23 @@
 
         setLoginBusy(true);
         try {
-            const { data, error } = await db.rpc('email_for_school_id', { p_school_id: inputVal.toUpperCase() });
-            if (error || !data) {
-                showError('l-id-err', 'Invalid ID or account not found');
-                showToast('Invalid ID or password', 'error');
-                return;
+            let email;
+            if (currentRole === 'admin') {
+                if (inputVal.includes('@')) {
+                    email = inputVal.toLowerCase();
+                } else {
+                    const { data: aData, error: aErr } = await db.rpc('email_for_school_id', { p_school_id: inputVal.toUpperCase() });
+                    email = (!aErr && aData) ? aData : inputVal;
+                }
+            } else {
+                const { data, error } = await db.rpc('email_for_school_id', { p_school_id: inputVal.toUpperCase() });
+                if (error || !data) {
+                    showError('l-id-err', 'Invalid ID or account not found');
+                    showToast('Invalid ID or password', 'error');
+                    return;
+                }
+                email = data;
             }
-            const email = data;
 
             const { data: authData, error: authErr } = await db.auth.signInWithPassword({ email, password: pw });
             if (authErr || !authData.session) {
@@ -1282,9 +1311,11 @@
             const { data: profile, error: profileErr } = await db
                 .from('users').select('role, is_active, is_demo').eq('id', authData.user.id).single();
 
-            if (profileErr || !profile || profile.role !== currentRole || profile.is_active === false) {
+            const expectedRole = currentRole;
+            if (profileErr || !profile || profile.role !== expectedRole || profile.is_active === false) {
                 await db.auth.signOut();
-                showToast(`This account isn't registered as a ${cfg.badgeLabel.replace(' Portal','')}`, 'error');
+                const roleLabel = currentRole === 'admin' ? 'School Administrator' : cfg.badgeLabel.replace(' Portal','');
+                showToast(`This account isn't registered as a ${roleLabel}`, 'error');
                 return;
             }
 
@@ -1294,6 +1325,17 @@
             }
 
             showToast('Logging in...', 'success');
+            // Register single-session fingerprint
+            try {
+                const _bb = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                    ? `http://${window.location.hostname}:3001` : '';
+                if (_bb && authData.session) {
+                    await fetch(_bb + '/api/auth/register-session', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + authData.session.access_token, 'Content-Type': 'application/json' }
+                    }).catch(() => {});
+                }
+            } catch (_) {}
             window.location.href = 'dashboard.html';
         } catch (err) {
             console.error('Login error:', err);

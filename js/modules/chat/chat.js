@@ -893,7 +893,7 @@ async function handleChatFileUpload(event) {
 
   if (!attachmentPayload) {
     if (file.size > 2500) {
-      showToast('Could not upload attachment. Please ensure file server is running.', 'error');
+      showToast('Could not upload attachment. File may be too large — try a smaller file.', 'error');
       clearChatAttachmentReturnState();
       event.target.value = '';
       return;
@@ -932,6 +932,7 @@ async function handleChatFileUpload(event) {
 }
 
 async function sendChatRawMessage(text) {
+
   if (!text || !activeConversationId) return;
   if (CURRENT_PROFILE.permanently_muted || (CURRENT_PROFILE.muted_until && new Date(CURRENT_PROFILE.muted_until) > new Date())) {
     renderInputArea();
@@ -971,6 +972,7 @@ async function sendChatRawMessage(text) {
         sentData = await res.json();
       } else {
         const errData = await res.json().catch(() => ({}));
+
         if (errData.error === 'CHAT_MUTED_PERMANENT' || errData.error === 'CHAT_MUTED_UNTIL') {
           if (box) {
             const failedBubble = box.querySelector(`[data-mid="${tempId}"]`);
@@ -988,15 +990,31 @@ async function sendChatRawMessage(text) {
 
   // 2. Direct database insert fallback
   if (!sentData) {
+    // Strip base64 dataUrl from attachment JSON before DB insert (4000 char limit)
+    let bodyToStore = text;
+    try {
+      const p = JSON.parse(text);
+      if (p && p.type === 'attachment') {
+        const ca = { type: p.type, name: p.name, size: p.size, mime: p.mime, url: p.url || '' };
+        if (p.previewUrl && !String(p.previewUrl).startsWith('data:')) ca.previewUrl = p.previewUrl;
+        bodyToStore = JSON.stringify(ca);
+      }
+    } catch (_) {}
+    // Final safety: must be 1-4000 chars
+    if (!bodyToStore || !bodyToStore.trim()) bodyToStore = '[attachment]';
+    if (bodyToStore.length > 4000) bodyToStore = '[attachment]';
+
     const { data: directMsg, error: directErr } = await db
       .from('messages')
       .insert({
         conversation_id: activeConversationId,
         sender_id: CURRENT_PROFILE.id,
         sender_name: CURRENT_PROFILE.full_name,
-        body: text
+        body: bodyToStore
       })
       .select().single();
+
+
 
     if (directErr || !directMsg) {
       if (box) {
@@ -1055,7 +1073,7 @@ async function sendChatMsg() {
     }
   } catch (err) {
     console.error('Failed to send message:', err);
-    showToast('Failed to send message. Please try again.', 'error');
+    showToast('Failed to send message. If this persists, try refreshing the page.', 'error');
   } finally {
     isSendingChatMsg = false;
     if (currentPage === 'chats') renderInputArea();

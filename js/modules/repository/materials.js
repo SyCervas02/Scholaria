@@ -4743,13 +4743,13 @@ async function submitApprovalDecision(kind, id) {
             localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(localList));
           }
         } catch (_) {}
-        if (session) { await db.from('materials').update({ status: 'rejected' }).eq('id', id).catch(e => console.warn('Material revision DB err:', e)); }
+        if (session) { try { await db.from('materials').update({ status: 'rejected' }).eq('id', id); } catch (e) { console.warn('Material revision DB err:', e); } }
         const teacherId = memItem?.uploaded_by || null;
         if (typeof addNotification === 'function') addNotification({ targetUserId: teacherId, targetRole: 'teacher', title: 'Needs Revision: Handout', message: adminName + ' requested revisions: "' + notes + '"', type: 'revision', senderName: adminName });
       } else {
         const quiz = (typeof customQuizzes !== 'undefined') ? customQuizzes.find(q => String(q.id) === String(id)) : null;
         if (quiz) { quiz.status = 'revision'; quiz.feedback = notes; quiz.revision_notes = notes; if (typeof saveCustomQuizzesToStorage === 'function') saveCustomQuizzesToStorage(); }
-        if (session) { await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(e => console.warn('Quiz revision DB err:', e)); }
+        if (session) { try { await db.from('quizzes').update({ status: 'rejected' }).eq('id', id); } catch (e) { console.warn('Quiz revision DB err:', e); } }
         const teacherId = quiz?.created_by || quiz?.createdBy || null;
         if (typeof addNotification === 'function') addNotification({ targetUserId: teacherId, targetRole: 'teacher', title: 'Needs Revision: Quiz', message: adminName + ' requested revisions: "' + notes + '"', type: 'revision', senderName: adminName });
       }
@@ -4763,12 +4763,12 @@ async function submitApprovalDecision(kind, id) {
         teacherId = memItem?.uploaded_by || null;
         materialsData = (Array.isArray(materialsData) ? materialsData : []).filter(m => String(m.id) !== String(id));
         try { const cl = getCustomMaterialsFromStorage().filter(m => String(m.id) !== String(id)); localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(cl)); } catch (_) {}
-        if (session) { await db.from('materials').delete().eq('id', id).catch(e => console.warn('Material delete DB err:', e)); }
+        if (session) { try { await db.from('materials').delete().eq('id', id); } catch (e) { console.warn('Material delete DB err:', e); } }
       } else {
         const quiz = (typeof customQuizzes !== 'undefined') ? customQuizzes.find(q => String(q.id) === String(id)) : null;
         teacherId = quiz?.created_by || quiz?.createdBy || null;
         if (typeof customQuizzes !== 'undefined') { customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id)); if (typeof saveCustomQuizzesToStorage === 'function') saveCustomQuizzesToStorage(); }
-        if (session) { await db.from('quizzes').delete().eq('id', id).catch(e => console.warn('Quiz delete DB err:', e)); }
+        if (session) { try { await db.from('quizzes').delete().eq('id', id); } catch (e) { console.warn('Quiz delete DB err:', e); } }
       }
       if (typeof addNotification === 'function') addNotification({ targetUserId: teacherId, targetRole: 'teacher', title: 'Submission Denied: ' + (kind === 'quiz' ? 'Quiz' : 'Handout'), message: adminName + ' denied your submission: "' + (notes || 'Did not meet institutional guidelines.') + '"', type: 'info', senderName: adminName });
       showToast('Submission has been denied and removed.', 'info');
