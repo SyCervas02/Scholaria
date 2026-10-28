@@ -1,5 +1,58 @@
 const HOTLINES_STORAGE_KEY = 'scholaria_hotlines';
 
+const HOTLINE_ICON_META = {
+  emergency: { label: 'Emergency response', color: '#dc2626', bg: '#fee2e2', path: '<path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="5"/><path d="m10 12 1.3 1.3L14.5 10"/>' },
+  fire: { label: 'Fire department', color: '#ea580c', bg: '#ffedd5', path: '<path d="M8.5 14.5A4.5 4.5 0 0 0 17 17c2-4-1-7-4-10 0 3-2 4-2 4 0-4-3-7-3-7s1 4-2 8a7 7 0 1 0 13 4"/>' },
+  police: { label: 'Police', color: '#1d4ed8', bg: '#dbeafe', path: '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m12 7 1.4 2.8 3.1.5-2.2 2.1.5 3.1-2.8-1.5-2.8 1.5.5-3.1-2.2-2.1 3.1-.5L12 7Z"/>' },
+  medical: { label: 'Medical assistance', color: '#dc2626', bg: '#fee2e2', path: '<path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7"/><path d="M12 3v12m-6-6h12"/><path d="M4 7h4m8 0h4"/>' },
+  health: { label: 'Health services', color: '#059669', bg: '#d1fae5', path: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/><path d="M7 12h3l1.5-3 2 6 1.5-3H18"/>' },
+  city: { label: 'City government', color: '#7c3aed', bg: '#ede9fe', path: '<path d="M3 21h18M3 10h18M5 10v11m4-11v11m6-11v11m4-11v11M12 2 2 7h20L12 2Z"/>' },
+  phone: { label: 'Telephone hotline', color: '#2563eb', bg: '#dbeafe', path: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.4 19.4 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.7L7.2 10a16 16 0 0 0 6 6l1.6-1.8a2 2 0 0 1 1.7-.6l3 .5a2 2 0 0 1 1.5 2.8Z"/>' }
+};
+
+function hotlineIconKey(hotline) {
+  const stored = String(hotline?.icon || '').toLowerCase();
+  if (HOTLINE_ICON_META[stored]) return stored;
+  const key = `${hotline?.id || ''} ${hotline?.name || ''} ${hotline?.shortName || ''}`.toLowerCase();
+  if (/fire|bfp/.test(key)) return 'fire';
+  if (/police|pnp/.test(key)) return 'police';
+  if (/red cross|medical|hospital/.test(key)) return 'medical';
+  if (/health|clinic/.test(key)) return 'health';
+  if (/city hall|mayor|government/.test(key)) return 'city';
+  if (/cdrrmo|disaster|emergency|911|rescue/.test(key)) return 'emergency';
+  return 'phone';
+}
+
+function hotlineIconSvg(hotline, size = 30) {
+  const key = hotlineIconKey(hotline);
+  const meta = HOTLINE_ICON_META[key];
+  const label = typeof escHtml === 'function' ? escHtml(meta.label) : meta.label;
+  return `<span class="hotline-service-icon hotline-service-icon-${key}" role="img" aria-label="${label}" title="${label}" style="display:inline-flex;align-items:center;justify-content:center;width:${size}px;height:${size}px;border-radius:9px;background:${meta.bg};color:${meta.color};flex:0 0 ${size}px;vertical-align:middle;"><svg viewBox="0 0 24 24" width="${Math.round(size * .58)}" height="${Math.round(size * .58)}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${meta.path}</svg></span>`;
+}
+
+function updateHotlineIconPreview() {
+  const select = document.getElementById('newHlIcon');
+  const preview = document.getElementById('newHlIconPreview');
+  if (select && preview) preview.innerHTML = hotlineIconSvg({ icon: select.value }, 36);
+}
+
+function validateHotlineField(field) {
+  if (!field) return true;
+  const value = field.value.trim();
+  let message = '';
+  if ((field.id === 'newHlName' || field.id === 'newHlShort') && /\d/.test(value)) {
+    message = 'Numbers are not allowed in hotline names.';
+  } else if ((field.id === 'newHlNum' || field.id === 'newHlTel') && value && !/^\+?[0-9\s().-]+$/.test(value)) {
+    message = 'Use digits and phone formatting only; letters are not allowed.';
+  } else if ((field.id === 'newHlNum' || field.id === 'newHlTel') && value && !/\d/.test(value)) {
+    message = 'Enter at least one digit in the hotline number.';
+  }
+  field.setCustomValidity(message);
+  field.setAttribute('aria-invalid', message ? 'true' : 'false');
+  field.classList.toggle('input-err-active', Boolean(message));
+  return !message;
+}
+
 const DEFAULT_HOTLINES = [
   { id: 'hl_imus_cdrrmo', name: 'City Disaster Risk Reduction (CDRRMO Imus)', shortName: 'CDRRMO', number: '(046) 515-1358', tel: '0465151358', icon: '🚨' },
   { id: 'hl_imus_bfp', name: 'Bureau of Fire Department (BFP Imus)', shortName: 'BFP', number: '(046) 970-5161', tel: '0469705161', icon: '🚒' },
@@ -36,8 +89,8 @@ function renderHotlinesUI() {
   const attachContainer = document.getElementById('createAncHotlinesContainer');
   if (attachContainer) {
     attachContainer.innerHTML = hotlines.map(hl => `
-      <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:4px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;">
-        <input type="checkbox" name="ancHotline" value="${hl.id}"/> ${hl.icon} ${hl.shortName} ${hl.number}
+      <label class="anc-checkbox-label" style="background:#fff;border:1px solid #fca5a5;padding:6px 10px;border-radius:16px;font-size:11.5px;font-weight:700;color:#b91c1c;gap:7px;">
+        <input type="checkbox" name="ancHotline" value="${hl.id}"/> ${hotlineIconSvg(hl, 24)} <span>${hl.shortName} ${hl.number}</span>
       </label>
     `).join('');
   }
@@ -47,7 +100,7 @@ function renderHotlinesUI() {
   if (directoryContainer) {
     directoryContainer.innerHTML = hotlines.map(hl => `
       <a href="tel:${hl.tel}" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;display:flex;align-items:center;background:#fff;border:1px solid #e2e8f0;text-decoration:none;color:#0f172a;margin-bottom:8px;">
-        <span>${hl.icon} <strong>${hl.name}</strong></span>
+        <span style="display:flex;align-items:center;gap:10px;">${hotlineIconSvg(hl, 34)} <strong>${hl.name}</strong></span>
         <span class="anc-hotline-num" style="color:#b91c1c;font-weight:700;">${hl.number}</span>
       </a>
     `).join('');
@@ -65,7 +118,7 @@ function renderHotlinesUI() {
           <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:${isEditing ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isEditing ? '#0284c7' : '#e2e8f0'};border-radius:12px;margin-bottom:8px;transition:all 0.15s ease;">
             <div style="flex:1;min-width:0;padding-right:10px;">
               <div style="font-weight:700;font-size:13.5px;color:#0f172a;display:flex;align-items:center;gap:6px;">
-                <span>${hl.icon || '📞'}</span>
+                ${hotlineIconSvg(hl, 34)}
                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${hl.name}</span>
                 ${isEditing ? '<span style="font-size:10px;background:#0284c7;color:#fff;padding:1px 6px;border-radius:4px;font-weight:800;letter-spacing:0.5px;">EDITING</span>' : ''}
               </div>
@@ -107,7 +160,8 @@ function editHotline(id) {
   if (shortInput) shortInput.value = hl.shortName || '';
   if (numInput) numInput.value = hl.number || '';
   if (telInput) telInput.value = hl.tel || '';
-  if (iconInput) iconInput.value = hl.icon || '📞';
+  if (iconInput) iconInput.value = hotlineIconKey(hl);
+  updateHotlineIconPreview();
 
   const formTitle = document.getElementById('manageHlFormTitle');
   if (formTitle) {
@@ -144,7 +198,8 @@ function cancelEditHotline() {
   if (shortInput) shortInput.value = '';
   if (numInput) numInput.value = '';
   if (telInput) telInput.value = '';
-  if (iconInput) iconInput.value = '';
+  if (iconInput) iconInput.value = 'emergency';
+  updateHotlineIconPreview();
 
   const formTitle = document.getElementById('manageHlFormTitle');
   if (formTitle) formTitle.textContent = 'Add New Hotline';
@@ -177,12 +232,28 @@ function addNewHotline() {
   const name = (document.getElementById('newHlName')?.value || '').trim();
   const shortName = (document.getElementById('newHlShort')?.value || '').trim();
   const number = (document.getElementById('newHlNum')?.value || '').trim();
-  const tel = (document.getElementById('newHlTel')?.value || '').trim();
-  const icon = (document.getElementById('newHlIcon')?.value || '').trim() || '📞';
+  const telInput = document.getElementById('newHlTel');
+  const telRaw = (telInput?.value || '').trim();
+  const icon = (document.getElementById('newHlIcon')?.value || '').trim() || 'emergency';
 
-  if (!name || !shortName || !number || !tel) {
+  const fields = ['newHlName', 'newHlShort', 'newHlNum', 'newHlTel'].map(id => document.getElementById(id)).filter(Boolean);
+  const invalidField = fields.find(field => !validateHotlineField(field));
+  if (invalidField) {
+    if (typeof showToast === 'function') showToast(invalidField.validationMessage, 'error');
+    invalidField.reportValidity();
+    invalidField.focus();
+    return;
+  }
+
+  if (!name || !shortName || !number || !telRaw) {
     if (typeof showToast === 'function') showToast('Please fill out all required fields', 'error');
     else alert('Please fill out all required fields');
+    return;
+  }
+
+  const tel = telRaw.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+  if (!tel) {
+    if (telInput) { telInput.setCustomValidity('Enter a valid callable number.'); telInput.reportValidity(); telInput.focus(); }
     return;
   }
 
@@ -253,5 +324,11 @@ function deleteHotline(id) {
 
 // Initial render hook
 document.addEventListener('DOMContentLoaded', () => {
+  ['newHlName', 'newHlShort', 'newHlNum', 'newHlTel'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', event => validateHotlineField(event.currentTarget));
+  });
+  const iconSelect = document.getElementById('newHlIcon');
+  if (iconSelect && !iconSelect.value) iconSelect.value = 'emergency';
+  updateHotlineIconPreview();
   renderHotlinesUI();
 });

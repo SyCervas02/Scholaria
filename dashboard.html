@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="css/dashboard-overrides.css?v=20033"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css"/>
-  <link rel="stylesheet" href="css/modules/chat.css?v=20007"/>
+  <link rel="stylesheet" href="css/modules/chat.css?v=20008"/>
   <link rel="stylesheet" href="css/modules/admin.css"/>
   <link rel="stylesheet" href="css/modules/courses.css"/>
   <link rel="stylesheet" href="css/modules/announcements.css"/>
@@ -26,7 +26,7 @@
   <script src="js/vendor_html2pdf.bundle.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <link rel="stylesheet" href="css/responsive.css?v=4">
-  <link rel="stylesheet" href="css/dashboard-refresh.css?v=13">
+  <link rel="stylesheet" href="css/dashboard-refresh.css?v=24">
 </head>
 
 <body>
@@ -207,7 +207,7 @@
   </div>
 
   <div class="modal-overlay" id="sectionRosterModal">
-    <div class="modal-card" style="max-width:720px;">
+    <div class="modal-card" style="max-width:940px;">
       <div class="modal-head">
         <div>
           <h3 id="sectionRosterTitle">Manage Section</h3>
@@ -372,13 +372,19 @@
           <label>Select Priority</label>
           <div class="anc-radio-group" style="margin-top:4px;">
             <label class="anc-radio-label">
-              <input type="radio" name="ancPriority" value="critical" checked/> 🔴 Critical Emergency (Sticky Top Banner)
+              <input type="radio" name="ancPriority" value="critical" checked/>
+              <span class="priority-choice-icon critical" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.8 19a1.5 1.5 0 0 0 1.3 2.2h15.8a1.5 1.5 0 0 0 1.3-2.2L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg></span>
+              <span>Critical Emergency (Sticky Top Banner)</span>
             </label>
             <label class="anc-radio-label">
-              <input type="radio" name="ancPriority" value="important"/> ⚪ Important
+              <input type="radio" name="ancPriority" value="important"/>
+              <span class="priority-choice-icon important" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v5c0 5 3.4 8.3 8 10 4.6-1.7 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
+              <span>Important</span>
             </label>
             <label class="anc-radio-label">
-              <input type="radio" name="ancPriority" value="normal"/> ⚪ Normal
+              <input type="radio" name="ancPriority" value="normal"/>
+              <span class="priority-choice-icon normal" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg></span>
+              <span>Normal</span>
             </label>
           </div>
         </div>
@@ -510,11 +516,22 @@
         <div style="margin-bottom:16px;">
           <h4 id="manageHlFormTitle" style="font-size:13px;color:#0f172a;margin-bottom:12px;">Add New Hotline</h4>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
-            <input type="text" id="newHlName" class="anc-form-input" placeholder="Full Name (e.g. Med Center)" style="font-size:12px;"/>
-            <input type="text" id="newHlShort" class="anc-form-input" placeholder="Short Name (e.g. Med)" style="font-size:12px;"/>
-            <input type="text" id="newHlNum" class="anc-form-input" placeholder="Display Number (e.g. (046) 123-4567)" style="font-size:12px;"/>
-            <input type="text" id="newHlTel" class="anc-form-input" placeholder="Callable Number (e.g. 0461234567)" style="font-size:12px;"/>
-            <input type="text" id="newHlIcon" class="anc-form-input" placeholder="Icon (e.g. 🚨)" style="font-size:12px;grid-column: span 2;"/>
+            <input type="text" id="newHlName" class="anc-form-input" aria-label="Hotline full name" maxlength="80" placeholder="Full Name (e.g. Med Center)" style="font-size:12px;"/>
+            <input type="text" id="newHlShort" class="anc-form-input" aria-label="Hotline short name" maxlength="30" placeholder="Short Name (e.g. Med)" style="font-size:12px;"/>
+            <input type="text" id="newHlNum" class="anc-form-input" aria-label="Hotline display number" inputmode="tel" maxlength="30" placeholder="Display Number (e.g. (046) 123-4567)" style="font-size:12px;"/>
+            <input type="text" id="newHlTel" class="anc-form-input" aria-label="Hotline callable number" inputmode="tel" maxlength="20" placeholder="Callable Number (e.g. 0461234567)" style="font-size:12px;"/>
+            <div class="hotline-icon-picker" style="grid-column:span 2;display:flex;align-items:center;gap:10px;">
+              <span id="newHlIconPreview" aria-hidden="true"></span>
+              <select id="newHlIcon" class="anc-form-input" aria-label="Hotline service icon" onchange="updateHotlineIconPreview()" style="font-size:12px;flex:1;">
+                <option value="emergency">Emergency response</option>
+                <option value="fire">Fire department</option>
+                <option value="police">Police</option>
+                <option value="medical">Medical center / Red Cross</option>
+                <option value="health">Health center</option>
+                <option value="city">City government</option>
+                <option value="phone">General hotline</option>
+              </select>
+            </div>
           </div>
           <div style="display:flex;gap:8px;">
             <button type="button" id="saveHlBtn" onclick="addNewHotline()" style="background:#0284c7;color:#fff;border:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;flex:1;">Add Hotline</button>
@@ -738,22 +755,22 @@
   </div>
 
   <!-- Modular Scripts -->
-  <script src="js/core/ui-helpers.js?v=20045"></script>
+  <script src="js/core/ui-helpers.js?v=20050"></script>
   <script src="js/core/dashboard-calendar.js?v=1"></script>
   <script src="js/core/notifications.js?v=20011"></script>
-  <script src="js/core/hotlines.js?v=20011"></script>
-  <script src="js/core/announcements.js?v=20010"></script>
-  <script src="js/modules/repository/materials.js?v=20045"></script>
+  <script src="js/core/hotlines.js?v=20012"></script>
+  <script src="js/core/announcements.js?v=20011"></script>
+  <script src="js/modules/repository/materials.js?v=20046"></script>
   <script src="js/modules/quizzes/take-quiz.js?v=20010"></script>
   <script src="js/modules/quizzes/interactive-player.js?v=20012"></script>
   <script src="js/modules/quizzes/item-analysis.js?v=20005"></script>
   <script src="js/modules/quizzes/quiz-generator.js?v=20016"></script>
-  <script src="js/modules/chat/chat.js?v=20005"></script>
+  <script src="js/modules/chat/chat.js?v=20010"></script>
   <script src="js/modules/admin/user-management.js?v=20045"></script>
   <script src="js/modules/admin/report-generator.js?v=20005"></script>
   <script src="js/modules/admin/rooms-management.js?v=20001"></script>
   <script src="js/modules/courses.js?v=20005"></script>
-  <script src="js/core/sidebar.js?v=20049"></script>
+  <script src="js/core/sidebar.js?v=20053"></script>
   <script src="js/core/search.js?v=20015"></script>
   <script src="js/core/auth.js?v=20005"></script>
 </body>

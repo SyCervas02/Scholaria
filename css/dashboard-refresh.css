@@ -160,6 +160,41 @@ body { background: #f1f7ff; }
 .main[data-page="dashboard"] .ic-num { font-size: 30px !important; line-height: 1.2 !important; font-weight: 700 !important; }
 .main[data-page="dashboard"] .ic-num.gold { color: #ee8a22 !important; }
 .main[data-page="dashboard"] .ic-num.green { color: #00a17e !important; }
+
+/* The sidebar is fixed, so reserve its width from the admin main column. */
+.main[data-role="admin"] { width: calc(100% - var(--sidebar-w)); flex: 0 0 calc(100% - var(--sidebar-w)); }
+.sidebar.closed ~ #mainContent[data-role="admin"] { width: 100%; flex-basis: 100%; margin-left: 0 !important; }
+.main[data-role="admin"][data-page="dashboard"] > .admin-reference-dashboard { width: 100%; max-width: none; }
+@media (max-width: 900px) {
+  .main[data-role="admin"] { width: 100%; flex-basis: 100%; }
+}
+
+/* Admin report KPIs use the same clear, tabular numerals as the rest of the dashboard. */
+.main[data-page="reports"] .info-card .ic-num,
+.main[data-page="reports"] .report-kpi-card .kpi-value {
+  font-family: 'Inter', sans-serif !important;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Keep the approved repository and section roster expanded instead of nesting scroll areas. */
+.admin-approved-materials-panel #adminApprovedTableWrap { max-height: none !important; overflow: visible !important; }
+.admin-approved-materials-panel #adminApprovedTableWrap table { width: 100% !important; min-width: 0 !important; table-layout: fixed !important; }
+.admin-approved-materials-panel #adminApprovedTableWrap th,
+.admin-approved-materials-panel #adminApprovedTableWrap td { white-space: normal !important; overflow-wrap: anywhere; }
+.roster-table-wrap { max-height: none !important; overflow-y: visible !important; overflow-x: visible !important; }
+.roster-table { min-width: 0 !important; table-layout: fixed; }
+.roster-table th, .roster-table td { white-space: normal !important; overflow-wrap: anywhere; }
+.roster-table th:nth-child(1), .roster-table td:nth-child(1) { width: 30%; }
+.roster-table th:nth-child(2), .roster-table td:nth-child(2) { width: 22%; }
+.roster-table th:nth-child(3), .roster-table td:nth-child(3) { width: 17%; }
+.roster-table th:nth-child(4), .roster-table td:nth-child(4) { width: 15%; }
+.roster-table th:nth-child(5), .roster-table td:nth-child(5) { width: 16%; }
+.priority-choice-icon { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 20px; }
+.priority-choice-icon svg { width: 18px; height: 18px; display: block; }
+.priority-choice-icon.critical { color: #dc2626; }
+.priority-choice-icon.important { color: #d97706; }
+.priority-choice-icon.normal { color: #2563eb; }
 .main[data-page="dashboard"] .ic-sub { font-size: 12px !important; font-weight: 500 !important; text-transform: none !important; letter-spacing: 0 !important; color: #386899 !important; }
 .main[data-page="dashboard"] .ic-icon { width: 56px !important; height: 56px !important; border-radius: 17px !important; }
 .main[data-page="dashboard"] .stat-filter-card p { white-space: normal !important; overflow: visible !important; }
@@ -891,11 +926,143 @@ body { background: #f1f7ff; }
 @container dashboard (max-width: 1180px) {
   .admin-reference-dashboard .ad-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .admin-reference-dashboard .ad-middle-grid,
-  .admin-reference-dashboard .ad-bottom-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .admin-reference-dashboard .ad-bottom-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-reference-dashboard .ad-panel-shortcuts,
+  .admin-reference-dashboard .ad-side-stack { grid-column: 1 / -1; }
+  .admin-reference-dashboard .ad-side-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Keep the materials card wide enough for its five activity columns even
+   when the sidebar is collapsed and the dashboard container grows. */
+@container dashboard (max-width: 1450px) {
+  .admin-reference-dashboard .ad-middle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-reference-dashboard .ad-panel-shortcuts { grid-column: 1 / -1; }
 }
 @container dashboard (max-width: 900px) {
   .admin-reference-dashboard .ad-primary-grid,
   .admin-reference-dashboard .ad-middle-grid,
   .admin-reference-dashboard .ad-bottom-grid { grid-template-columns: minmax(0, 1fr); }
   .admin-reference-dashboard .ad-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container dashboard (max-width: 800px) {
+  .admin-reference-dashboard .ad-side-stack { display: flex; grid-column: auto; }
+}
+
+/* Fit materials activity into its card instead of forcing a horizontal table scroller. */
+.admin-reference-dashboard .ad-mat-table-wrap { min-width: 0; overflow: visible; }
+.admin-reference-dashboard .ad-mat-table { width: 100%; min-width: 0; table-layout: fixed; }
+.admin-reference-dashboard .ad-mat-table th,
+.admin-reference-dashboard .ad-mat-table td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+.admin-reference-dashboard .ad-mat-table th:nth-child(1),
+.admin-reference-dashboard .ad-mat-table td:nth-child(1) { width: 26%; }
+.admin-reference-dashboard .ad-mat-table th:nth-child(2),
+.admin-reference-dashboard .ad-mat-table td:nth-child(2) { width: 20%; }
+.admin-reference-dashboard .ad-mat-table th:nth-child(3),
+.admin-reference-dashboard .ad-mat-table td:nth-child(3) { width: 17%; }
+.admin-reference-dashboard .ad-mat-table th:nth-child(4),
+.admin-reference-dashboard .ad-mat-table td:nth-child(4) { width: 19%; }
+.admin-reference-dashboard .ad-mat-table th:nth-child(5),
+.admin-reference-dashboard .ad-mat-table td:nth-child(5) { width: 18%; }
+.admin-reference-dashboard .ad-mat-table th,
+.admin-reference-dashboard .ad-mat-table td { padding-left: 4px; padding-right: 4px; }
+.admin-reference-dashboard .ad-mat-table .ad-tbl-pill { white-space: nowrap; font-size: 10px; }
+.admin-reference-dashboard .ad-activity-item { min-width: 0; }
+.admin-reference-dashboard .ad-activity-content { min-width: 0; overflow-wrap: anywhere; }
+.admin-reference-dashboard .ad-activity-time { max-width: 105px; text-align: right; }
+@container dashboard (max-width: 1180px) {
+  .admin-reference-dashboard .ad-activity-item { grid-template-columns: 28px minmax(0, 1fr) minmax(64px, auto); }
+}
+
+/* Keep teacher Class Record section details visible without an inner scroller. */
+.main[data-role="teacher"][data-page="classrec"] .score-table,
+.main[data-role="teacher"][data-page="classrec"] .score-table-responsive {
+  overflow: visible !important;
+  max-width: 100%;
+}
+.main[data-role="teacher"][data-page="classrec"] .score-table table,
+.main[data-role="teacher"][data-page="classrec"] .score-table-responsive table {
+  width: 100%;
+  min-width: 0 !important;
+  table-layout: fixed;
+}
+.main[data-role="teacher"][data-page="classrec"] .score-table th,
+.main[data-role="teacher"][data-page="classrec"] .score-table td,
+.main[data-role="teacher"][data-page="classrec"] .score-table-responsive th,
+.main[data-role="teacher"][data-page="classrec"] .score-table-responsive td {
+  padding: 9px 8px;
+  font-size: 11px;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+.main[data-role="teacher"][data-page="classrec"] .score-table td > div,
+.main[data-role="teacher"][data-page="classrec"] .score-table-responsive td > div { min-width: 0; flex-wrap: wrap; }
+
+/* Fit teacher Item Analysis question statistics in the page width. */
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table {
+  overflow: visible !important;
+  max-width: 100%;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table table {
+  width: 100%;
+  min-width: 0 !important;
+  table-layout: fixed;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th,
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table td {
+  padding: 8px 6px;
+  font-size: 11px;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th {
+  text-transform: none;
+  letter-spacing: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+  line-height: 1.25;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-heading h2 { margin: 0 0 4px; color: #0f172a; font-size: 20px; font-weight: 700; line-height: 1.3; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-header { gap: 16px; }
+.main[data-role="teacher"][data-page="analysis"] .announcement-card h3 { font-size: 20px; line-height: 1.35; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th { padding: 10px 8px; font-size: 13px; font-weight: 750; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table td { font-size: 13px; line-height: 1.4; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table td:nth-child(2) > div { font-size: 14px !important; line-height: 1.4; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table td:nth-child(2) > span { font-size: 12px !important; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table td:nth-child(3),
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table td:nth-child(4) { font-size: 14px; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table td:nth-child(7) { font-size: 13px; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th:nth-child(1) { width: 4% !important; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th:nth-child(2) { width: 30% !important; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th:nth-child(3) { width: 8% !important; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th:nth-child(4) { width: 9% !important; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th:nth-child(5) { width: 12% !important; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th:nth-child(6) { width: 11% !important; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table th:nth-child(7) { width: 26% !important; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-question-table .analysis-bar-wrap { width: auto; min-width: 0; }
+
+/* Let the student Tasks & Quizzes card use the full row height and fit its table. */
+.main[data-role="student"][data-page="dashboard"] .student-dashboard-split { align-items: stretch; }
+.main[data-role="student"][data-page="dashboard"] .student-main-left { align-self: stretch; }
+.main[data-role="student"][data-page="dashboard"] #studentDeadlinesWidgetContainer { display: flex; flex: 1 1 auto; min-height: 0; }
+.main[data-role="student"][data-page="dashboard"] .student-deadlines-container { flex: 1 1 auto; height: auto; min-height: 0; }
+.main[data-role="student"][data-page="dashboard"] .student-deadlines-table-wrap { min-width: 0; overflow: visible !important; }
+.main[data-role="student"][data-page="dashboard"] .student-deadlines-table { width: 100%; min-width: 0 !important; table-layout: fixed; }
+.main[data-role="student"][data-page="dashboard"] .student-deadlines-table th,
+.main[data-role="student"][data-page="dashboard"] .student-deadlines-table td { white-space: normal !important; overflow-wrap: anywhere; vertical-align: middle; }
+.main[data-role="student"][data-page="dashboard"] .student-deadlines-table th:last-child { min-width: 0 !important; }
+.main[data-role="student"][data-page="dashboard"] .student-deadlines-table .subject-badge-cell > span { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .main[data-role="teacher"][data-page="classrec"] .score-table th,
+  .main[data-role="teacher"][data-page="classrec"] .score-table td,
+  .main[data-role="teacher"][data-page="classrec"] .score-table-responsive th,
+  .main[data-role="teacher"][data-page="classrec"] .score-table-responsive td { padding: 7px 5px; font-size: 10px; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-report-heading h2 { font-size: 20px; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-question-table th { padding: 8px 4px; font-size: 12px; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-question-table td { padding: 6px 3px; font-size: 11px; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-question-table td:nth-child(2) > div { font-size: 12px !important; }
+}
+@container dashboard (max-width: 720px) {
+  .main[data-role="student"][data-page="dashboard"] .student-dashboard-split { align-items: start; }
+  .main[data-role="student"][data-page="dashboard"] #studentDeadlinesWidgetContainer { flex: initial; }
 }

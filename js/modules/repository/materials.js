@@ -1897,16 +1897,16 @@ function renderAdminApprovedHandoutsTableHTML() {
         '<option value="az">Title (A-Z)</option>' +
       '</select>' +
     '</div>' +
-    '<div class="user-table" id="adminApprovedTableWrap" style="max-height:480px;overflow-y:auto;">' +
+    '<div class="user-table" id="adminApprovedTableWrap">' +
       '<table style="width:100%;border-collapse:collapse;min-width:980px;">' +
         '<thead>' +
           '<tr>' +
-            '<th style="position:sticky;top:0;z-index:2;">Handout &amp; Document</th>' +
-            '<th style="position:sticky;top:0;z-index:2;">Subject &amp; Strand</th>' +
-            '<th style="position:sticky;top:0;z-index:2;">Target Section</th>' +
-            '<th style="position:sticky;top:0;z-index:2;">Uploaded By (Origin)</th>' +
-            '<th style="position:sticky;top:0;z-index:2;">Approved By</th>' +
-            '<th style="position:sticky;top:0;z-index:2;">Actions</th>' +
+            '<th>Handout &amp; Document</th>' +
+            '<th>Subject &amp; Strand</th>' +
+            '<th>Target Section</th>' +
+            '<th>Uploaded By (Origin)</th>' +
+            '<th>Approved By</th>' +
+            '<th>Actions</th>' +
           '</tr>' +
         '</thead>' +
         '<tbody id="adminApprovedTableBody">' +

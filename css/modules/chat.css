@@ -41,10 +41,13 @@
 .cw-mute-banner.permanent { color: #991b1b; background: #fef2f2; }
 .cw-mute-banner svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
 
-.emoji-picker { position: absolute; bottom: calc(100% + 8px); left: 8px; width: 260px; max-height: 220px; overflow-y: auto; background: #fff; border: 1.5px solid var(--blue-light); border-radius: 12px; box-shadow: 0 8px 24px rgba(15,23,42,.14); padding: 10px; display: none; grid-template-columns: repeat(8, 1fr); gap: 2px; z-index: 20; }
+.emoji-picker { position: absolute; bottom: calc(100% + 8px); left: 8px; width: 288px; max-height: 248px; overflow-y: auto; overscroll-behavior: contain; background: #fff; border: 1px solid #dbe6fb; border-radius: 14px; box-shadow: 0 12px 32px rgba(15,23,42,.18); padding: 10px; display: none; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; z-index: 20; scrollbar-width: thin; scrollbar-color: #c5d5f3 transparent; }
 .emoji-picker.open { display: grid; }
-.emoji-picker button { background: none; border: none; font-size: 18px; line-height: 1; padding: 5px 0; border-radius: 6px; cursor: pointer; transition: .15s; }
-.emoji-picker button:hover { background: var(--blue-light); }
+.emoji-picker button { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; min-width: 30px; background: transparent; border: 1px solid transparent; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-size: 22px; line-height: 1.2; padding: 2px; border-radius: 9px; cursor: pointer; transition: background .15s ease, transform .15s ease, border-color .15s ease; }
+.emoji-picker button:hover { background: #edf4ff; border-color: #dbeafe; transform: scale(1.08); }
+.emoji-picker button:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+.emoji-picker::-webkit-scrollbar { width: 7px; }
+.emoji-picker::-webkit-scrollbar-thumb { background: #c5d5f3; border-radius: 8px; }
 
 .nc-search { width: 100%; border: 1.5px solid var(--blue-light); border-radius: 10px; padding: 11px 14px; font-size: 13.5px; font-family: 'Plus Jakarta Sans', sans-serif; outline: none; }
 .nc-search:focus { border-color: var(--blue); }

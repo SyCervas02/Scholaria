@@ -7,6 +7,39 @@ let chatRealtimeChannel = null;
 const newChatState = { selected: new Set(), search: '', loaded: false, directory: [] };
 const chatListState = { search: '', role: 'all' };
 
+function chatReadMarkerKey(conversationId) {
+  return `scholaria_chat_read_${CURRENT_PROFILE?.id || 'guest'}_${conversationId}`;
+}
+
+function getChatReadMarker(conversationId) {
+  try { return localStorage.getItem(chatReadMarkerKey(conversationId)) || ''; } catch (e) { return ''; }
+}
+
+function setChatReadMarker(conversationId, timestamp) {
+  if (!conversationId || !timestamp) return;
+  try { localStorage.setItem(chatReadMarkerKey(conversationId), timestamp); } catch (e) {}
+}
+
+async function refreshTeacherUnreadMessageCount() {
+  const badge = document.getElementById('teacherUnreadMessageCount');
+  if (!badge || !CURRENT_PROFILE || !db) return;
+  if (CURRENT_PROFILE.is_demo) return;
+  const { data: rows, error } = await db.from('conversation_participants')
+    .select('conversation_id').eq('user_id', CURRENT_PROFILE.id);
+  if (error) { console.error('Could not load unread chat count:', error.message); return; }
+  const conversationIds = [...new Set((rows || []).map(row => row.conversation_id).filter(Boolean))];
+  if (!conversationIds.length) { badge.textContent = '0'; return; }
+  const { data: messages, error: messageError } = await db.from('messages')
+    .select('conversation_id,sender_id,created_at').in('conversation_id', conversationIds);
+  if (messageError) { console.error('Could not load unread chat messages:', messageError.message); return; }
+  const unreadCount = (messages || []).filter(message => {
+    if (String(message.sender_id) === String(CURRENT_PROFILE.id)) return false;
+    const marker = getChatReadMarker(message.conversation_id);
+    return !marker || new Date(message.created_at).getTime() > new Date(marker).getTime();
+  }).length;
+  if (badge.isConnected) badge.textContent = String(unreadCount);
+}
+
 function resetChatState() {
   chatConversations = [];
   activeConversationId = null;
@@ -206,6 +239,10 @@ async function openConversation(id) {
     .select('*').eq('conversation_id', id).order('created_at', { ascending: true });
   if (error) { console.error('Failed to load messages:', error.message); return; }
   (data || []).forEach(m => seenMessageIds.add(m.id));
+  const latestIncoming = (data || []).filter(m => String(m.sender_id) !== String(CURRENT_PROFILE?.id)).at(-1);
+  if (latestIncoming) setChatReadMarker(id, latestIncoming.created_at);
+  conv.unread = 0;
+  if (currentPage === 'dashboard' && ROLE === 'teacher') refreshTeacherUnreadMessageCount();
   renderMessages(conv, data || []);
 }
 
@@ -381,7 +418,10 @@ function handleIncomingMessage(msg) {
 
   const conv = chatConversations.find(c => c.id === msg.conversation_id);
   if (!conv) {
-    loadConversationsFromDB().then(renderContactsList);
+    loadConversationsFromDB().then(() => {
+      renderContactsList();
+      if (ROLE === 'teacher' && currentPage === 'dashboard') refreshTeacherUnreadMessageCount();
+    });
     return;
   }
 
@@ -402,6 +442,9 @@ function handleIncomingMessage(msg) {
   } else if (!isMine) {
     conv.unread = (conv.unread || 0) + 1;
   }
+
+  if (!isMine && isOpen) setChatReadMarker(conv.id, msg.created_at);
+  if (ROLE === 'teacher' && currentPage === 'dashboard') refreshTeacherUnreadMessageCount();
 
   chatConversations.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
   if (currentPage === 'chats') renderContactsList();

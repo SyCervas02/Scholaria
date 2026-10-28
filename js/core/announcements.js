@@ -253,7 +253,7 @@ function openAnnouncementDetailModal(id) {
       hotlinesWrap.style.display = 'block';
       hotlinesList.innerHTML = anc.hotlines.map(h => `
         <a href="tel:${h.number.replace(/[^0-9+]/g, '')}" class="anc-hotline-chip" title="Click to call ${h.name}" onclick="event.stopPropagation()">
-          <span>${h.icon || '📞'} <strong>${escHtml(h.name)}:</strong></span>
+          <span style="display:inline-flex;align-items:center;gap:8px;">${typeof hotlineIconSvg === 'function' ? hotlineIconSvg(h, 24) : ''} <strong>${escHtml(h.name)}:</strong></span>
           <span class="anc-hotline-num">${escHtml(h.number)}</span>
         </a>
       `).join('');
@@ -464,7 +464,7 @@ function buildAnnouncementsPage() {
                     <div class="anc-hotline-chips">
                       ${anc.hotlines.map(h => `
                         <a href="tel:${h.number.replace(/[^0-9+]/g, '')}" class="anc-hotline-chip" title="Click to call ${h.name}" onclick="event.stopPropagation()">
-                          <span>${h.icon || '📞'} <strong>${escHtml(h.name)}:</strong></span>
+                          <span style="display:inline-flex;align-items:center;gap:8px;">${typeof hotlineIconSvg === 'function' ? hotlineIconSvg(h, 24) : ''} <strong>${escHtml(h.name)}:</strong></span>
                           <span class="anc-hotline-num">${escHtml(h.number)}</span>
                         </a>
                       `).join('')}

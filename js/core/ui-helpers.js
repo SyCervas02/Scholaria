@@ -353,6 +353,114 @@ function iconCheck()   { return `<svg viewBox="0 0 24 24" fill="none" stroke="cu
 function iconAlert()   { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`; }
 function iconInfo()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`; }
 
+// Render decorative emoji used by the interface as monochrome inline SVG icons.
+// User-authored text (chat, announcements, quiz content, and editable fields) is left intact.
+(() => {
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const paths = {
+    book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>',
+    folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h8"/>',
+    person: '<circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+    chart: '<path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/>',
+    clipboard: '<rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h3"/>',
+    trash: '<path d="M3 6h18M8 6V4h8v2m3 0-1 14H6L5 6m4 4v6m6-6v6"/>',
+    school: '<path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-7h6v7"/>',
+    alert: '<path d="m10.3 3.9-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3.1l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/>',
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.6a8 8 0 0 1-1.7 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.7-1l-1.7.6-1.4-2.4L7.3 15a8 8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.6a8 8 0 0 1 1.7-1L11 7.3h2.8l.3 1.8a8 8 0 0 1 1.7 1l1.7-.6 1.4 2.4-1.4 1.1a8 8 0 0 1-.1 2Z"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+    pin: '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/>',
+    star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>',
+    spark: '<path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3Zm7 12 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/>',
+    shield: '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/>',
+    message: '<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/>',
+    check: '<path d="m5 12 4 4L19 6"/>',
+    close: '<path d="m18 6-12 12M6 6l12 12"/>',
+    bolt: '<path d="m13 2-3 9h7L9 22l3-9H5l8-11Z"/>',
+    phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.4 19.4 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.7L7.2 10a16 16 0 0 0 6 6l1.6-1.8a2 2 0 0 1 1.7-.6l3 .5a2 2 0 0 1 1.5 2.8Z"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5m5-5v12"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.1 0l3-3A5 5 0 0 0 13 2.9l-1.7 1.7m2.7 6.4a5 5 0 0 0-7.1 0l-3 3A5 5 0 0 0 11 21.1l1.7-1.7"/>',
+    trophy: '<path d="M8 21h8m-4-4v4M7 4h10v5a5 5 0 0 1-10 0V4Zm0 2H4v2a4 4 0 0 0 4 4m9-6h3v2a4 4 0 0 1-4 4"/>',
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+    help: '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3m.1 4h.01"/>',
+    smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+    thumbs: '<path d="M7 10v12H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h3Zm0 0 5-8c2 0 3 2 2 4l-1 4h6a2 2 0 0 1 2 2l-2 8a2 2 0 0 1-2 2H7"/>',
+    hands: '<path d="M7 11V5a2 2 0 0 1 4 0v5-7a2 2 0 0 1 4 0v7-5a2 2 0 0 1 4 0v7l1-2a2 2 0 0 1 3 2l-3 7a5 5 0 0 1-5 3h-3a5 5 0 0 1-4-2l-5-6a2 2 0 0 1 3-3l3 3"/>',
+    flame: '<path d="M8.5 14.5A4.5 4.5 0 0 0 17 17c2-4-1-7-4-10 0 3-2 4-2 4 0-4-3-7-3-7s1 4-2 8a7 7 0 1 0 13 4"/>',
+    hospital: '<path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M9 21v-4h6v4"/><path d="M10 7h4m-2-2v4m-4 4h1m4 0h1"/>'
+  };
+  const byEmoji = {
+    '📚':'book','📖':'book','📕':'book','📗':'book','📘':'book','📙':'book', '📁':'folder','📂':'folder','📦':'folder',
+    '📄':'file','📝':'file','📋':'clipboard','📑':'file','👤':'person','👥':'person','👨‍🏫':'person','👩‍🏫':'person','📅':'calendar','🗓️':'calendar',
+    '🔍':'search','🔎':'search','📊':'chart','📈':'chart','📉':'chart','🗑':'trash','🗑️':'trash','🏫':'school','🏛️':'school',
+    '⚠️':'alert','🚨':'alert','❗':'alert','❓':'help','🔔':'bell','⚙️':'settings','📷':'image','🖼️':'image','📌':'pin',
+    '⏰':'clock','🕒':'clock','❤️':'heart','💙':'heart','💛':'heart','💚':'heart','⭐':'star','🌟':'star','✨':'spark','🎉':'spark',
+    '🛡️':'shield','🔒':'shield','💬':'message','📢':'message','📣':'message','✅':'check','✔️':'check','✔':'check','✓':'check',
+    '❌':'close','✖':'close','✖️':'close','✕':'close','⚡':'bolt','📞':'phone','📎':'link','🔗':'link','🚀':'upload',
+    '🏆':'trophy','🎮':'grid','📚':'book','💡':'spark','➕':'check','✏️':'file','✍️':'file','🎯':'pin',
+    '😀':'smile','😃':'smile','😄':'smile','😁':'smile','😆':'smile','😅':'smile','😂':'smile','🤣':'smile','😊':'smile','😇':'smile','🙂':'smile','🙃':'smile','😉':'smile','😌':'smile','😍':'heart','🥰':'heart','😘':'heart','😋':'smile','😎':'smile','🤔':'help','😐':'smile','😬':'smile','🙄':'smile','😢':'smile','😭':'smile','😤':'alert','😡':'alert','🥳':'spark','🤗':'hands','🙌':'hands','🙏':'hands','👏':'hands','👍':'thumbs','👎':'thumbs','💪':'thumbs','👋':'hands','🤝':'hands','✌️':'check','🔥':'flame','🚒':'hospital','🚓':'shield','🏥':'hospital','⚕️':'hospital','🧑‍🏫':'person','👨‍🏫':'person','👩‍🏫':'person'
+  };
+  const ignored = 'script,style,textarea,input,select,option,[contenteditable="true"],#cwEmojiPicker,.chat-message,.message-body,.anc-body,.announcement-content,.quiz-question,.quiz-option,.user-content';
+  const emojiPattern = /\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?)*(?:\u{1F3FB}-\u{1F3FF})?/gu;
+  const symbolPattern = /[✓✔✕✖❌✅⚠☑🔴⚪]/gu;
+  function makeIcon(emoji) {
+    const kind = byEmoji[emoji] || (emoji.includes('⚠') || emoji.includes('🚒') || emoji.includes('🚓') || emoji.includes('🏥') ? 'alert' : 'spark');
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '1em'); svg.setAttribute('height', '1em');
+    svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.8'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false');
+    svg.style.verticalAlign = '-0.15em'; svg.style.flexShrink = '0';
+    svg.classList.add('emoji-svg-icon');
+    svg.innerHTML = paths[kind];
+    return svg;
+  }
+  function convertTextNode(node) {
+    const parent = node.parentElement;
+    if (!parent || parent.closest(ignored) || !node.nodeValue || !emojiPattern.test(node.nodeValue) && !symbolPattern.test(node.nodeValue)) {
+      emojiPattern.lastIndex = 0; symbolPattern.lastIndex = 0; return;
+    }
+    emojiPattern.lastIndex = 0; symbolPattern.lastIndex = 0;
+    const pattern = new RegExp(`${emojiPattern.source}|${symbolPattern.source}`, 'gu');
+    const raw = node.nodeValue;
+    let last = 0, match;
+    const fragment = document.createDocumentFragment();
+    while ((match = pattern.exec(raw))) {
+      if (match.index > last) fragment.append(document.createTextNode(raw.slice(last, match.index)));
+      fragment.append(makeIcon(match[0]));
+      last = match.index + match[0].length;
+    }
+    if (last === 0) return;
+    if (last < raw.length) fragment.append(document.createTextNode(raw.slice(last)));
+    node.parentNode.replaceChild(fragment, node);
+  }
+  function scan(root) {
+    if (!root) return;
+    if (root.nodeType === Node.TEXT_NODE) { convertTextNode(root); return; }
+    if (root.nodeType !== Node.ELEMENT_NODE && root !== document) return;
+    if (root.nodeType === Node.ELEMENT_NODE && root.closest && root.closest(ignored)) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(convertTextNode);
+  }
+  function start() {
+    scan(document.body);
+    new MutationObserver(records => records.forEach(record => {
+      record.addedNodes.forEach(node => scan(node));
+      if (record.type === 'characterData') scan(record.target);
+    })).observe(document.body, { childList: true, characterData: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+  else start();
+})();
+
 function iconHome()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`; }
 function iconFolder()  { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`; }
 function iconQuiz()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>`; }

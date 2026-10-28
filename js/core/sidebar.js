@@ -2859,7 +2859,7 @@ function teacherPage(page) {
         ['Active Quizzes',demo?3:active.length,'Currently ongoing','quiz',iconQuiz(),'purple'],
         ['Upcoming Deadlines',demo?5:active.filter(q=>{const t=new Date(q.dueDate||q.due_date).getTime()-Date.now();return t>=0&&t<=604800000;}).length,'Within 7 days','quiz',iconRecord(),'pink'],
         ['Unread News',demo?2:news.filter(a=>!read.has(String(a.id))).length,'School announcements','announcements',iconAnnouncement(),'pink'],
-        ['Unread Messages',demo?7:'--','Students & parents','chats',iconChat(),'blue']
+        ['Unread Messages',demo?7:'0','Students & parents','chats',iconChat(),'blue']
       ];
       const pending = demo ? [
         ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
@@ -2880,7 +2880,7 @@ function teacherPage(page) {
       const events = eventItems.map(e=>{const d=new Date(/^\d{4}-\d{2}-\d{2}$/.test(e.date)?e.date+'T00:00:00':e.date);const valid=!Number.isNaN(d.getTime());return `<button type="button" class="td-event" onclick="${go('announcements')}"><span class="td-event-date"><small>${valid?d.toLocaleDateString('en-US',{month:'short'}):''}</small><strong>${valid?d.getDate():''}</strong></span><span><strong>${escHtml(e.title)}</strong><small>${escHtml(e.detail)}</small><small>${escHtml(e.when)}</small></span></button>`;}).join('') || empty('No upcoming school events scheduled.');
       return `<div class="teacher-reference-dashboard">
         <section class="td-hero"><div><h1>WELCOME BACK</h1><h2>Haven of Wisdom Academy - Teacher Portal</h2><p>Here's what needs your attention today.</p></div><img src="assets/dashboard-books.svg" alt=""/><blockquote>&ldquo; Teaching is a work of heart.<br>Thank you for making a difference<br>in every student's journey. &rdquo;</blockquote></section>
-        <div class="td-metrics">${metrics.map(m=>`<button type="button" class="td-metric td-${m[5]}" onclick="${go(m[3])}">${icon(m[4],m[5])}<span><span class="td-label">${m[0]}</span><strong>${m[1]}</strong><small>${m[2]}</small></span></button>`).join('')}</div>
+        <div class="td-metrics">${metrics.map(m=>`<button type="button" class="td-metric td-${m[5]}" onclick="${go(m[3])}">${icon(m[4],m[5])}<span><span class="td-label">${m[0]}</span><strong${m[0] === 'Unread Messages' ? ' id="teacherUnreadMessageCount"' : ''}>${m[1]}</strong><small>${m[2]}</small></span></button>`).join('')}</div>
         <div class="td-grid">
           <section class="td-panel td-subjects"><div id="coursesWidgetContainer">${typeof renderCoursesWidgetHTML==='function'?renderCoursesWidgetHTML():empty('No subjects assigned.')}</div></section>
           ${panel('Pending Submissions / To Review',iconRecord(),pending,'classrec','td-pending')}
@@ -3169,6 +3169,8 @@ function teacherPage(page) {
       const passingCount = validScores.filter(s => s >= 75).length;
       const passRate = validScores.length ? Math.round((passingCount / validScores.length) * 100) : null;
       const showingStudentSubmissions = analysisActiveTab === 'students';
+      const quizStatus = String(selectedQuiz.status || 'Active').trim();
+      const quizStatusClass = /reject/i.test(quizStatus) ? 'not-taken' : /pending/i.test(quizStatus) ? 'pending' : /complete|done|closed/i.test(quizStatus) ? 'done' : 'ongoing';
 
       return `
       <div class="section-hdr analysis-report-header">
@@ -3243,7 +3245,7 @@ function teacherPage(page) {
               Subject: <strong>${escHtml(selectedQuiz.subject || 'General')}</strong> · Strand: <strong>${escHtml(selectedQuiz.strand || 'All')}</strong> · Target Grade: <strong>${escHtml(selectedQuiz.gradeLevel || 'Grade 11')}</strong>
             </p>
           </div>
-          <span class="status-pill ongoing">${escHtml(selectedQuiz.status || 'Active')}</span>
+          <span class="status-pill ${quizStatusClass}" title="Quiz status">${escHtml(quizStatus)}</span>
         </div>
         <div class="ann-meta" style="margin-top:8px;">Live psychometric breakdown recomputed from submitted student attempts.</div>
       </div>
@@ -3274,17 +3276,17 @@ function teacherPage(page) {
         </table>
       </div>` : `
       <!-- QUESTION ACCURACY TABLE -->
-      <div class="score-table">
+      <div class="score-table analysis-question-table">
         <table>
           <thead>
             <tr>
-              <th style="width:40px;">#</th>
+              <th style="width:5%;">#</th>
               <th>Question & Type</th>
-              <th style="width:100px;text-align:center;">Correct</th>
-              <th style="width:100px;text-align:center;">Incorrect</th>
-              <th style="width:180px;">Accuracy Rate</th>
-              <th style="width:120px;text-align:center;">Difficulty</th>
-              <th>Key / Correct Answer</th>
+              <th style="text-align:center;">Correct</th>
+              <th style="text-align:center;">Incorrect</th>
+              <th>Accuracy Rate</th>
+              <th style="text-align:center;">Difficulty</th>
+              <th>Correct Answer</th>
             </tr>
           </thead>
           <tbody>
@@ -4955,6 +4957,7 @@ function renderPage(page) {
   const mainContent = document.getElementById('mainContent');
   if (!mainContent) return;
   mainContent.dataset.page = page;
+  mainContent.dataset.role = ROLE || '';
   mainContent.innerHTML = getPageContent(ROLE, page);
   if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
@@ -4971,6 +4974,8 @@ function renderPage(page) {
       loadMaterialsFromDB();
       loadQuizzesFromDB();
       if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
+      if (ROLE === 'teacher' && typeof refreshTeacherUnreadMessageCount === 'function') refreshTeacherUnreadMessageCount();
+      if (ROLE === 'teacher' && typeof ensureChatRealtimeSubscription === 'function') ensureChatRealtimeSubscription();
     }
     if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
     if (ROLE === 'student') { loadMaterialsFromDB(); loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
