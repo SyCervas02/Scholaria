@@ -122,19 +122,90 @@ function refreshNotificationsUI() {
 }
 
 function handleNotifItemClick(id) {
+  closeNotif();
+  openNotificationDetailModal(id);
+}
+
+function openNotificationDetailModal(id) {
   const all = getStoredNotifications();
   const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
   const item = all.find(n => n.id === id);
-  if (item) {
-    if (!item.readBy) item.readBy = [];
-    if (!item.readBy.includes(myId)) {
-      item.readBy.push(myId);
-      saveNotifications(all);
-      refreshNotificationsUI();
+  if (!item) return;
+
+  // Mark as read
+  if (!item.readBy) item.readBy = [];
+  if (!item.readBy.includes(myId)) {
+    item.readBy.push(myId);
+    saveNotifications(all);
+    refreshNotificationsUI();
+    if (isNotificationsPageActive() && typeof renderPage === 'function') {
+      renderPage('notifications');
     }
   }
-  closeNotif();
-  if (typeof renderPage === 'function') renderPage('notifications');
+
+  const modal = document.getElementById('notificationDetailModal');
+  if (!modal) return;
+
+  const typeEl = document.getElementById('notifDetailTypeBadge');
+  const statusEl = document.getElementById('notifDetailStatusBadge');
+  const titleEl = document.getElementById('notifDetailTitle');
+  const senderEl = document.getElementById('notifDetailSender');
+  const dateEl = document.getElementById('notifDetailDate');
+  const msgEl = document.getElementById('notifDetailMsg');
+  const actionWrap = document.getElementById('notifDetailActionBtnWrap');
+
+  const typeConfig = {
+    approval: { label: '📌 Approval Queue', bg: '#ffedd5', color: '#c2410c', page: 'approval', btnLabel: 'Open Approvals' },
+    material: { label: '📄 Learning Material', bg: '#e0f2fe', color: '#0369a1', page: 'materials', btnLabel: 'View in Materials' },
+    quiz: { label: '🎉 Quiz & Assessment', bg: '#fef3c7', color: '#b45309', page: 'quiz', btnLabel: 'Open Quizzes' },
+    announcement: { label: '📢 School Announcement', bg: '#f3e8ff', color: '#7e22ce', page: 'announcements', btnLabel: 'Go to Announcements' },
+    info: { label: 'ℹ️ System Notice', bg: '#f1f5f9', color: '#475569' }
+  };
+  const cfg = typeConfig[item.type] || typeConfig.info;
+
+  if (typeEl) {
+    typeEl.textContent = cfg.label;
+    typeEl.style.background = cfg.bg;
+    typeEl.style.color = cfg.color;
+  }
+  if (statusEl) {
+    statusEl.innerHTML = `<span style="font-size:11px;font-weight:700;color:#059669;background:#dcfce7;padding:3px 9px;border-radius:12px;">✔ Read</span>`;
+  }
+  if (titleEl) titleEl.textContent = item.title || 'Notification';
+  if (senderEl) {
+    const sName = item.senderName || 'Academic Instructor';
+    senderEl.textContent = `👤 From: ${sName}`;
+  }
+  if (dateEl) {
+    dateEl.textContent = `📅 ${formatSentDate(item.timestamp)} (${formatTimeAgo(item.timestamp)})`;
+  }
+  if (msgEl) {
+    msgEl.textContent = item.message || '';
+  }
+
+  if (actionWrap) {
+    let actionBtnHtml = '';
+    if (cfg.page && typeof renderPage === 'function') {
+      actionBtnHtml += `
+        <button type="button" class="gen-btn" style="background:#2563eb;color:#fff;padding:7px 14px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;" onclick="closeNotificationDetailModal(); renderPage('${cfg.page}');">
+          ${cfg.btnLabel || 'View Details'} &rarr;
+        </button>
+      `;
+    }
+    actionBtnHtml += `
+      <button type="button" class="notif-act-btn danger" style="padding:7px 12px;font-size:12px;cursor:pointer;" onclick="deleteSingleNotif('${item.id}'); closeNotificationDetailModal();">
+        Delete
+      </button>
+    `;
+    actionWrap.innerHTML = actionBtnHtml;
+  }
+
+  modal.classList.add('active');
+}
+
+function closeNotificationDetailModal() {
+  const modal = document.getElementById('notificationDetailModal');
+  if (modal) modal.classList.remove('active');
 }
 
 function isNotificationsPageActive() {
@@ -355,8 +426,8 @@ function buildNotificationsPage() {
                 const senderName = n.senderName || 'Academic Instructor';
 
                 return `
-                  <tr class="${isUnread ? 'unread-row' : ''}">
-                    <td class="notif-cell-select" style="text-align:center;">
+                  <tr class="${isUnread ? 'unread-row' : ''}" onclick="openNotificationDetailModal('${n.id}')" style="cursor:pointer;">
+                    <td class="notif-cell-select" style="text-align:center;" onclick="event.stopPropagation();">
                       <input type="checkbox" aria-label="Select notification ${idx + 1}" ${isSelected ? 'checked' : ''} onchange="toggleNotifSelection('${n.id}')"/>
                     </td>
                     <td class="notif-cell-number"><strong>${idx + 1}</strong></td>
@@ -380,7 +451,7 @@ function buildNotificationsPage() {
                         ? '<span class="notif-status-badge unread">❌ Unread</span>' 
                         : '<span class="notif-status-badge read">✔ Read</span>'}
                     </td>
-                    <td class="notif-cell-action" style="text-align:center;">
+                    <td class="notif-cell-action" style="text-align:center;" onclick="event.stopPropagation();">
                       <button class="notif-del-row-btn" onclick="deleteSingleNotif('${n.id}')" title="Delete notification">
                         <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                       </button>
@@ -400,3 +471,16 @@ function buildNotificationsPage() {
   </div>
   `;
 }
+
+// Ensure global accessibility
+window.openNotificationDetailModal = openNotificationDetailModal;
+window.closeNotificationDetailModal = closeNotificationDetailModal;
+window.deleteSingleNotif = deleteSingleNotif;
+window.toggleNotifSelection = toggleNotifSelection;
+window.toggleSelectAllNotifs = toggleSelectAllNotifs;
+window.setNotifTabFilter = setNotifTabFilter;
+window.markSelectedNotifsRead = markSelectedNotifsRead;
+window.deleteSelectedNotifs = deleteSelectedNotifs;
+window.clearAllNotifs = clearAllNotifs;
+window.markAllRead = markAllRead;
+window.handleNotifItemClick = handleNotifItemClick;

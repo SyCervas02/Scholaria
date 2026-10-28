@@ -1,4 +1,4 @@
-/* ── SYSTEM QUIZ GENERATOR & MANAGEMENT MODULE ── */
+﻿/* ── SYSTEM QUIZ GENERATOR & MANAGEMENT MODULE ── */
 
 const QUIZ_API_ENDPOINT = typeof API_BASE !== 'undefined' ? `${API_BASE}/api/quiz/generate` : 'http://localhost:3001/api/quiz/generate';
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -80,6 +80,7 @@ const quizGen = {
   strands: new Set(), 
   sections: new Set(),
   gradeLevel: 'Grade 11',
+  semester: '1st Semester',
   lesson: '',
   dueDate: '',
   timerPerQuestion: 30, // 0 = untimed, or 15, 30, 45, 60
@@ -398,6 +399,7 @@ function openQuizModal() {
     strands: defaultStrands, 
     sections: defaultSections,
     gradeLevel: defaultGrade,
+    semester: '1st Semester',
     lesson: '',
     dueDate: '',
     timerPerQuestion: 30,
@@ -431,6 +433,17 @@ function closeQuizModal(redirect = true) {
     window.location.href = 'dashboard.html';
   }
 }
+
+// The standalone Quiz Maker page must always return to the Quiz Manager,
+// not the dashboard landing page, when the user cancels creation.
+function cancelQuizMaker() {
+  if (document.getElementById('quizMakerContainer')) {
+    window.location.assign('dashboard.html?page=quiz');
+    return;
+  }
+  closeQuizModal(false);
+}
+window.cancelQuizMaker = cancelQuizMaker;
 
 if (typeof SUBJECTS_BY_STRAND === 'undefined') {
   window.SUBJECTS_BY_STRAND = {
@@ -599,34 +612,85 @@ function distributeCountToFormats(total) {
   });
 }
 
+function normQuizSem(s) {
+  if (!s) return '1st Sem';
+  const str = String(s).toLowerCase();
+  if (str.includes('2') || str.includes('second')) return '2nd Sem';
+  return '1st Sem';
+}
+
 function getAvailableSubjectsForQuizGen() {
   const selectedStrands = Array.from(quizGen.strands);
   const subjectsSet = new Set();
+  const currentGrade = quizGen.gradeLevel || 'Grade 11';
+  const currentSemNorm = normQuizSem(quizGen.semester || '1st Semester');
 
-  // If teacher has assigned subjects in their profile, include them
-  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && CURRENT_PROFILE.subjects) {
-    CURRENT_PROFILE.subjects.split(',').map(s => s.trim()).filter(Boolean).forEach(sub => subjectsSet.add(sub));
-  }
-
-  // If COURSES_DATABASE exists, pull from courses database
+  // If COURSES_DATABASE exists, pull strictly matching strand, gradeLevel, and semester
   if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
     COURSES_DATABASE.forEach(c => {
-      if (selectedStrands.length === 0 || selectedStrands.includes(c.strand) || c.track === 'Core' || c.track === 'Applied') {
+      if (normQuizSem(c.semester) !== currentSemNorm) return;
+      if (c.gradeLevel && c.gradeLevel.toLowerCase() !== currentGrade.toLowerCase()) return;
+      if (selectedStrands.length > 0) {
+        if (selectedStrands.includes(c.strand)) {
+          if (c.title) subjectsSet.add(c.title);
+        }
+      } else {
         if (c.title) subjectsSet.add(c.title);
       }
     });
   }
 
-  // Include mapped subjects by strand
-  if (selectedStrands.length === 0) {
-    Object.values(SUBJECTS_BY_STRAND).forEach(list => list.forEach(s => subjectsSet.add(s)));
-  } else {
-    selectedStrands.forEach(st => {
-      (SUBJECTS_BY_STRAND[st] || []).forEach(s => subjectsSet.add(s));
-    });
+  // If teacher has assigned subjects in their profile, include fallback if empty
+  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && CURRENT_PROFILE.subjects) {
+    const assigned = CURRENT_PROFILE.subjects.split(',').map(s => s.trim()).filter(Boolean);
+    if (subjectsSet.size === 0) {
+      assigned.forEach(sub => subjectsSet.add(sub));
+    }
+  }
+
+  // Fallback to SUBJECTS_BY_STRAND if empty
+  if (subjectsSet.size === 0 && typeof SUBJECTS_BY_STRAND !== 'undefined') {
+    if (selectedStrands.length === 0) {
+      Object.values(SUBJECTS_BY_STRAND).forEach(list => list.forEach(s => subjectsSet.add(s)));
+    } else {
+      selectedStrands.forEach(st => {
+        (SUBJECTS_BY_STRAND[st] || []).forEach(s => subjectsSet.add(s));
+      });
+    }
   }
 
   return Array.from(subjectsSet).sort();
+}
+
+function updateQuizGrade(val) {
+  quizGen.gradeLevel = val;
+  const avail = getAvailableSubjectsForQuizGen();
+  if (quizGen.subject && !avail.includes(quizGen.subject)) {
+    quizGen.subject = '';
+    quizGen.lesson = '';
+  }
+  renderQuizModal();
+}
+
+function updateQuizSemester(val) {
+  quizGen.semester = val;
+  const avail = getAvailableSubjectsForQuizGen();
+  if (quizGen.subject && !avail.includes(quizGen.subject)) {
+    quizGen.subject = '';
+    quizGen.lesson = '';
+  }
+  renderQuizModal();
+}
+
+function updateQuizLesson(val) {
+  if (val === '__custom__') {
+    quizGen.isCustomLesson = true;
+    quizGen.lesson = '';
+  } else {
+    quizGen.isCustomLesson = false;
+    quizGen.lesson = val;
+  }
+  renderQuizModal();
 }
 
 function toggleQuizStrand(s) {
@@ -646,6 +710,7 @@ function toggleQuizStrand(s) {
   const availableSubjects = getAvailableSubjectsForQuizGen();
   if (quizGen.subject && availableSubjects.length > 0 && !availableSubjects.includes(quizGen.subject)) {
     quizGen.subject = '';
+    quizGen.lesson = '';
   }
   renderQuizModal();
 }
@@ -667,7 +732,54 @@ function toggleQuizSection(s) {
 }
 
 function updateTitle(v)  { quizGen.title = v; }
-function updateSubject(v){ quizGen.subject = v; }
+function updateSubject(v) {
+  quizGen.subject = v;
+  quizGen.lesson = '';
+  quizGen.lessonSearch = '';
+  renderQuizModal();
+}
+window.updateSubject = updateSubject;
+
+function getQuizSyllabusLessons(subject) {
+  if (!subject) return [];
+  if (typeof getRawSubjectLessons === 'function') {
+    try {
+      const res = getRawSubjectLessons({ title: subject, id: 'course-' + subject.toLowerCase().replace(/[^a-z0-9]+/g, '-') });
+      if (Array.isArray(res) && res.length > 0) return res;
+    } catch (_) {}
+  }
+  if (typeof window.getLessonsForSubject === 'function') {
+    try {
+      const res = window.getLessonsForSubject(subject);
+      if (Array.isArray(res) && res.length > 0) {
+        return res.map((l, i) => ({ title: typeof l === 'string' ? l : (l.title || ('Lesson ' + (i+1))) }));
+      }
+    } catch (_) {}
+  }
+  return [
+    { title: '01 Introduction to ' + subject },
+    { title: '02 Core Principles & Fundamentals' },
+    { title: '03 Practical Applications & Analysis' },
+    { title: '04 Synthesis & Mastery Assessment' }
+  ];
+}
+window.getQuizSyllabusLessons = getQuizSyllabusLessons;
+
+function updateQuizLessonSearch(v) {
+  quizGen.lessonSearch = v;
+  if (!quizGen.subject) return;
+  const avail = getQuizSyllabusLessons(quizGen.subject);
+  const matched = avail.find(l => l.title.toLowerCase() === v.trim().toLowerCase());
+  if (matched) {
+    quizGen.lesson = matched.title;
+    quizGen.isCustomLesson = false;
+  } else if (v.trim()) {
+    quizGen.lesson = v.trim();
+    quizGen.isCustomLesson = true;
+  }
+  renderQuizModal();
+}
+window.updateQuizLessonSearch = updateQuizLessonSearch;
 
 function handleFileInput(input) {
   const selectedFiles = Array.from(input.files || []);
@@ -2536,7 +2648,7 @@ function renderQuizModal() {
     `;
 
     foot.innerHTML = `
-      <button class="foot-btn-secondary" onclick="closeQuizModal()">Cancel</button>
+      <button class="foot-btn-secondary" onclick="cancelQuizMaker()">Cancel</button>
       <button class="gen-btn" onclick="nextQuizStep()">Next: Quiz Description &rarr;</button>
     `;
     return;
@@ -2547,6 +2659,18 @@ function renderQuizModal() {
     const allowedStrands = getTeacherAllowedStrands();
     const allowedGrades = getTeacherAllowedGradeLevels();
     const allowedSections = getTeacherAllowedSections();
+
+    // Check if user has selected strand, grade, semester, and subject
+    const hasFilters = (quizGen.strands.size > 0 || !isTeacher) && quizGen.gradeLevel && quizGen.semester;
+    const canSelectLesson = Boolean(hasFilters && quizGen.subject);
+    let syllabusLessons = [];
+    if (canSelectLesson) {
+      syllabusLessons = getQuizSyllabusLessons(quizGen.subject);
+    }
+    const filterQuery = (quizGen.lessonSearch || '').trim().toLowerCase();
+    const filteredLessons = (filterQuery && !quizGen.isCustomLesson)
+      ? syllabusLessons.filter(l => l.title.toLowerCase().includes(filterQuery))
+      : syllabusLessons;
 
     body.innerHTML = `
       ${stepperHtml}
@@ -2587,11 +2711,43 @@ function renderQuizModal() {
         <div class="gen-row">
           <div class="gen-field">
             <label>Grade Level ${isTeacher && allowedGrades.length < GRADE_LEVELS.length ? '<span style="color:#0284c7;font-size:11px;font-weight:600;">(Assigned)</span>' : ''}</label>
-            <select onchange="quizGen.gradeLevel = this.value; renderQuizModal();" ${isTeacher && allowedGrades.length === 1 ? 'disabled style="background:#f8fafc;cursor:not-allowed;"' : ''}>
+            <select id="quizGenGradeSelect" onchange="updateQuizGrade(this.value)" ${isTeacher && allowedGrades.length === 1 ? 'disabled style="background:#f8fafc;cursor:not-allowed;"' : ''}>
               ${allowedGrades.map(g => `<option value="${g}" ${quizGen.gradeLevel === g ? 'selected' : ''}>${g}</option>`).join('')}
             </select>
           </div>
-          <div class="gen-field"><label>Lesson</label><input type="text" placeholder="e.g. Lesson 3" value="${escHtml(quizGen.lesson)}" oninput="quizGen.lesson = this.value;"></div>
+          <div class="gen-field">
+            <label>Semester</label>
+            <select id="quizGenSemesterSelect" onchange="updateQuizSemester(this.value)">
+              <option value="1st Semester" ${(!quizGen.semester || quizGen.semester === '1st Semester') ? 'selected' : ''}>1st Semester</option>
+              <option value="2nd Semester" ${quizGen.semester === '2nd Semester' ? 'selected' : ''}>2nd Semester</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="gen-row">
+          <div class="gen-field" style="grid-column:2;">
+            <label style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+              <span>Lesson / Topic <span style="color:#ef4444;">*</span></span>
+              ${canSelectLesson ? `<span style="font-size:11px;color:#0284c7;font-weight:600;">${filteredLessons.length} syllabus topic${filteredLessons.length === 1 ? '' : 's'}</span>` : ''}
+            </label>
+            ${!canSelectLesson ? `
+              <select disabled style="background:#f8fafc;cursor:not-allowed;color:#94a3b8;width:100%;">
+                <option value="" disabled selected>Please choose Strand, Grade, Semester &amp; Subject first</option>
+              </select>
+            ` : `
+              <div style="display:flex;gap:8px;align-items:center;width:100%;">
+                <select id="quizGenLessonSelect" style="flex:1;min-width:0;" onchange="updateQuizLesson(this.value)">
+                  <option value="" disabled ${!quizGen.lesson ? 'selected' : ''}>Select Lesson / Topic from syllabus...</option>
+                  ${filteredLessons.map(l => `<option value="${escHtml(l.title)}" ${quizGen.lesson === l.title ? 'selected' : ''}>💻 ${escHtml(l.title)}</option>`).join('')}
+                  <option value="__custom__" ${quizGen.isCustomLesson ? 'selected' : ''}>+ Enter Custom Lesson / Topic...</option>
+                </select>
+                ${quizGen.isCustomLesson ? `
+                  <input type="text" id="quizGenCustomLessonInput" placeholder="Enter custom lesson name..." value="${escHtml(quizGen.lesson && !syllabusLessons.some(l => l.title === quizGen.lesson) ? quizGen.lesson : '')}" oninput="quizGen.lesson = this.value;" style="flex:1;min-width:0;padding:8px 12px;border:1.5px solid #0284c7;border-radius:10px;">
+                  <button type="button" class="foot-btn-secondary" style="padding:7px 12px;font-size:12px;" onclick="quizGen.isCustomLesson = false; quizGen.lesson = ''; renderQuizModal();" title="Return to syllabus dropdown">&times; Reset</button>
+                ` : ''}
+              </div>
+            `}
+          </div>
         </div>
 
         <div class="gen-field">

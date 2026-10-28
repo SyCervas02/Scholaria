@@ -12,7 +12,9 @@ function closeAcademicReportModal() {
 function triggerPrintReport() {
   const prevTitle = document.title;
   if (activeReportType === 'section') {
-    document.title = `Master_Grade_Sheet_${(activeReportSection || 'Section').replace(/\s+/g, '_')}`;
+    document.title = activeReportSection
+      ? `Master_Grade_Sheet_${activeReportSection.replace(/\s+/g, '_')}`
+      : 'Master_Grade_Sheets_All_Sections';
   } else if (activeReportType === 'student') {
     const studentObj = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).find(u => u.dbId === activeReportStudent || u.id === activeReportStudent || u.name === activeReportStudent);
     const sName = studentObj?.name || activeReportStudent || 'Student';
@@ -23,11 +25,56 @@ function triggerPrintReport() {
   if (body) body.scrollTop = 0;
   window.scrollTo(0, 0);
 
-  window.print();
+  // Wait for the report DOM and print styles to settle before Chromium captures it.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => window.print());
+  });
 
   setTimeout(() => {
     document.title = prevTitle;
   }, 1000);
+}
+
+/**
+ * Opens every section handled by the teacher as one print-ready report,
+ * with a page break between sections.
+ */
+function openAllSectionReportsModal() {
+  const summaries = typeof buildSectionSummaryEntries === 'function' ? buildSectionSummaryEntries() : [];
+  const sectionNames = summaries.map(s => s.section).filter(Boolean);
+  const fallbackSections = typeof managedSections !== 'undefined'
+    ? managedSections.map(s => s.name).filter(Boolean)
+    : [];
+  const sections = [...new Set(sectionNames.length ? sectionNames : fallbackSections)];
+  const body = document.getElementById('academicReportModalBody');
+  const head = document.getElementById('academicReportModalHead');
+  const modal = document.getElementById('academicReportModal');
+  if (!body || !head || !modal || !sections.length) return;
+
+  const reports = [];
+  sections.forEach((sectionName, index) => {
+    openSectionReportModal(sectionName);
+    reports.push(`${index ? '<div style="page-break-before:always;break-before:page;"></div>' : ''}${body.innerHTML}`);
+  });
+
+  activeReportType = 'section';
+  activeReportSection = null;
+  head.innerHTML = `
+    <div>
+      <h3 style="font-size:17px;font-weight:800;color:#0f172a;margin-bottom:2px;">Print & Export Preview — All Sections</h3>
+      <span style="font-size:12px;color:var(--text-muted);">${sections.length} handled sections · each section starts on a separate page</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="gen-btn" style="background:#1e293b;color:#fff;display:inline-flex;align-items:center;gap:6px;padding:7px 16px;" onclick="triggerPrintReport()">
+        Print / Save PDF
+      </button>
+      <button class="modal-x" onclick="closeAcademicReportModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  `;
+  body.innerHTML = reports.join('');
+  modal.classList.add('active');
 }
 
 /**
@@ -141,14 +188,13 @@ function openSectionReportModal(sectionName) {
         <table class="report-table">
           <thead>
             <tr>
-              <th style="width:36px;text-align:center;">#</th>
-              <th>Student Full Name</th>
-              <th>Student ID</th>
-              <th>Strand</th>
-              ${quizzes.map((q, idx) => `<th style="text-align:center;font-size:11px;" title="${escHtml(q.title)}">Q${idx + 1}</th>`).join('')}
-              <th style="text-align:center;">Taken</th>
-              <th style="text-align:center;">Final Grade</th>
-              <th style="text-align:center;">Remarks</th>
+              <th style="width:32px;text-align:center;">#</th>
+              <th style="text-align:left;white-space:nowrap;">Student Full Name</th>
+              <th style="width:65px;text-align:center;">Strand</th>
+              ${quizzes.map((q, idx) => `<th style="width:46px;text-align:center;font-size:11px;" title="${escHtml(q.title)}">Q${idx + 1}</th>`).join('')}
+              <th style="width:52px;text-align:center;">Taken</th>
+              <th style="width:80px;text-align:center;white-space:nowrap;">Final Grade</th>
+              <th style="width:90px;text-align:center;white-space:nowrap;">Remarks</th>
             </tr>
           </thead>
           <tbody>
@@ -159,7 +205,6 @@ function openSectionReportModal(sectionName) {
                 <tr>
                   <td style="text-align:center;color:#64748b;font-weight:600;">${index + 1}</td>
                   <td><strong>${escHtml(st.name)}</strong></td>
-                  <td><code class="report-code">${escHtml(st.key)}</code></td>
                   <td>${escHtml(st.strand)}</td>
                   ${quizzes.map(q => {
                     const sc = st.quizScores?.[q.id]?.scorePct;
@@ -169,8 +214,8 @@ function openSectionReportModal(sectionName) {
                   <td style="text-align:center;font-weight:700;font-size:13px;color:${hasAvg ? (isPassing ? '#15803d' : '#b91c1c') : '#64748b'};">
                     ${hasAvg ? st.avg.toFixed(2) + '%' : '—'}
                   </td>
-                  <td style="text-align:center;">
-                    <span class="report-status-pill ${hasAvg ? (isPassing ? 'pass' : 'fail') : 'pending'}">
+                  <td style="text-align:center;white-space:nowrap;">
+                    <span class="report-status-pill ${hasAvg ? (isPassing ? 'pass' : 'fail') : 'pending'}" style="display:inline-block;padding:3px 9px;white-space:nowrap;font-weight:800;letter-spacing:0.5px;">
                       ${hasAvg ? (isPassing ? 'PASSED' : 'FAILED') : 'INCOMPLETE'}
                     </span>
                   </td>
@@ -178,7 +223,7 @@ function openSectionReportModal(sectionName) {
               `;
             }).join('') : `
               <tr>
-                <td colspan="${7 + quizzes.length}" style="text-align:center;padding:30px;color:#94a3b8;">
+                <td colspan="${6 + quizzes.length}" style="text-align:center;padding:30px;color:#94a3b8;">
                   No student records available for this section.
                 </td>
               </tr>

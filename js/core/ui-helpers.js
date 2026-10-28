@@ -168,6 +168,7 @@ function getSafeMaxInputLimit(el) {
 function handleUniversalKeydown(e) {
   const el = e.target;
   if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return;
+  if (el.id === 'cwInput' || (typeof el.closest === 'function' && el.closest('.cw-input-area'))) return;
   if (el.readOnly || el.disabled || el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button' || el.type === 'submit') return;
 
   const isNav = e.ctrlKey || e.altKey || e.metaKey || ['Backspace', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'Delete', 'Home', 'End', 'Escape'].includes(e.key);
@@ -204,6 +205,7 @@ function handleUniversalKeydown(e) {
 function handleUniversalSanitize(e) {
   const el = e.target;
   if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return;
+  if (el.id === 'cwInput' || (typeof el.closest === 'function' && el.closest('.cw-input-area'))) return;
   if (el.readOnly || el.disabled || el.type === 'checkbox' || el.type === 'radio' || el.type === 'file') return;
 
   const max = getSafeMaxInputLimit(el);
@@ -295,55 +297,128 @@ function validatePhoneField(el, errId) {
 }
 
 /**
- * Splits a full name string into First Name, Middle Initial, and Last Name parts.
+ * Splits a full name string into First Name, Middle Name, Last Name, and Suffix parts.
+ * Matching the User Management schema: First Name, Middle Name, Last Name, Suffix.
  */
 function parseFullNameParts(fullName) {
-  if (!fullName) return { firstName: '', lastName: '', middleInitial: '' };
+  if (!fullName) return { firstName: '', middleName: '', lastName: '', suffix: '', middleInitial: '' };
   const str = String(fullName).trim();
+
+  // Common suffixes in the Philippines & internationally
+  const KNOWN_SUFFIXES = new Set(['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']);
+
+  let suffix = '';
+
+  // Case 1: Comma-separated format: "Aquino, Amara Abigail" or "Dela Cruz, Juan Mercado Jr."
   if (str.includes(',')) {
-    const [last, rest] = str.split(',').map(s => s.trim());
-    const restParts = (rest || '').split(/\s+/).filter(Boolean);
-    let mi = '';
-    let first = rest || '';
-    if (restParts.length > 1) {
-      const candidateMi = restParts[restParts.length - 1].replace('.', '');
-      if (candidateMi.length <= 2) {
-        mi = candidateMi.toUpperCase();
-        first = restParts.slice(0, -1).join(' ');
-      }
+    const parts = str.split(',').map(s => s.trim()).filter(Boolean);
+    const lastNamePart = parts[0] || '';
+    let firstMiddlePart = parts.slice(1).join(' ').trim();
+
+    const tokens = firstMiddlePart.split(/\s+/).filter(Boolean);
+    if (tokens.length > 1 && KNOWN_SUFFIXES.has(tokens[tokens.length - 1].toUpperCase().replace(',', ''))) {
+      suffix = tokens.pop();
     }
-    return { firstName: first, lastName: last || '', middleInitial: mi };
+    let firstName = '';
+    let middleName = '';
+    if (tokens.length === 1) {
+      firstName = tokens[0];
+    } else if (tokens.length === 2) {
+      firstName = tokens[0];
+      middleName = tokens[1];
+    } else if (tokens.length >= 3) {
+      firstName = tokens.slice(0, -1).join(' ');
+      middleName = tokens[tokens.length - 1];
+    }
+    const middleInitial = middleName ? middleName.replace('.', '')[0]?.toUpperCase() || '' : '';
+    return { firstName, middleName, lastName: lastNamePart, suffix, middleInitial };
   }
-  const parts = str.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return { firstName: '', lastName: '', middleInitial: '' };
-  if (parts.length === 1) return { firstName: parts[0], lastName: '', middleInitial: '' };
-  if (parts.length === 2) return { firstName: parts[0], lastName: parts[1], middleInitial: '' };
 
-  const secondPart = parts[1].replace('.', '');
-  if (secondPart.length <= 2 && parts.length >= 3) {
-    return {
-      firstName: parts[0],
-      middleInitial: secondPart.toUpperCase(),
-      lastName: parts.slice(2).join(' ')
-    };
+  // Case 2: Space-separated format: "Amara Abigail Aquino" or "Juan Mercado Dela Cruz Jr."
+  const words = str.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { firstName: '', middleName: '', lastName: '', suffix: '', middleInitial: '' };
+  if (words.length === 1) return { firstName: words[0], middleName: '', lastName: '', suffix: '', middleInitial: '' };
+
+  // 1. Extract suffix if last word is a known suffix
+  if (words.length > 2 && KNOWN_SUFFIXES.has(words[words.length - 1].toUpperCase().replace('.', ''))) {
+    suffix = words.pop();
   }
 
-  return {
-    firstName: parts.slice(0, -1).join(' '),
-    middleInitial: '',
-    lastName: parts[parts.length - 1]
-  };
+  if (words.length === 2) {
+    // "Maria Santos" -> firstName: Maria, middleName: "", lastName: Santos
+    return { firstName: words[0], middleName: '', lastName: words[1], suffix, middleInitial: '' };
+  }
+
+  // 2. Check for compound Philippine surnames (e.g. "Dela Cruz", "De Los Santos", "San Juan", "Santa Maria")
+  let lastName = '';
+  let middleName = '';
+  let firstName = '';
+
+  const upperStr = words.map(w => w.toUpperCase());
+  let matchedCompound = false;
+
+  if (words.length >= 5 && upperStr[words.length - 3] === 'DE' && upperStr[words.length - 2] === 'LOS') {
+    lastName = words.slice(words.length - 3).join(' ');
+    words.splice(words.length - 3, 3);
+    matchedCompound = true;
+  } else if (words.length >= 4 && ['DELA', 'DE', 'SAN', 'SANTA', 'SANTO', 'STA.', 'STO.'].includes(upperStr[words.length - 2])) {
+    lastName = words.slice(words.length - 2).join(' ');
+    words.splice(words.length - 2, 2);
+    matchedCompound = true;
+  }
+
+  if (matchedCompound) {
+    if (words.length === 1) {
+      firstName = words[0];
+    } else if (words.length === 2) {
+      firstName = words[0];
+      middleName = words[1];
+    } else {
+      firstName = words.slice(0, -1).join(' ');
+      middleName = words[words.length - 1];
+    }
+    const middleInitial = middleName ? middleName.replace('.', '')[0]?.toUpperCase() || '' : '';
+    return { firstName, middleName, lastName, suffix, middleInitial };
+  }
+
+  // 3. Exactly 3 words: e.g. "Amara Abigail Aquino" -> firstName: "Amara", middleName: "Abigail", lastName: "Aquino"
+  if (words.length === 3) {
+    firstName = words[0];
+    middleName = words[1];
+    lastName = words[2];
+    const middleInitial = middleName ? middleName.replace('.', '')[0]?.toUpperCase() || '' : '';
+    return { firstName, middleName, lastName, suffix, middleInitial };
+  }
+
+  // 4. 4 or more words: e.g. "Maria Clara Lopez Santos"
+  // Surnames is last word, middle name is second to last word, first name is all preceding words
+  firstName = words.slice(0, words.length - 2).join(' ');
+  middleName = words[words.length - 2];
+  lastName = words[words.length - 1];
+  const middleInitial = middleName ? middleName.replace('.', '')[0]?.toUpperCase() || '' : '';
+  return { firstName, middleName, lastName, suffix, middleInitial };
 }
 
 /**
- * Assembles First Name, Middle Initial, and Last Name into a standardized Full Name.
+ * Assembles First Name, Middle Name, Last Name, and Suffix into a standardized Full Name.
  */
-function assembleFullName(firstName, lastName, middleInitial) {
+function assembleFullName(firstName, middleName, lastName, suffix) {
+  // Support legacy 3-parameter call: assembleFullName(first, last, mi)
+  if (arguments.length === 3 && typeof lastName === 'string' && typeof middleName === 'string') {
+    const isLegacyMi = (middleName.length > 2 && lastName.length <= 2) || (lastName.endsWith('.') && lastName.length <= 3);
+    if (isLegacyMi) {
+      const f = (firstName || '').trim();
+      const l = (middleName || '').trim();
+      let mi = (lastName || '').trim().toUpperCase().replace('.', '');
+      if (mi) mi = mi + '.';
+      return [f, mi, l].filter(Boolean).join(' ');
+    }
+  }
   const f = (firstName || '').trim();
+  const m = (middleName || '').trim();
   const l = (lastName || '').trim();
-  let mi = (middleInitial || '').trim().toUpperCase().replace('.', '');
-  if (mi) mi = mi + '.';
-  return [f, mi, l].filter(Boolean).join(' ');
+  const s = (suffix || '').trim();
+  return [f, m, l, s].filter(Boolean).join(' ');
 }
 
 
@@ -384,8 +459,22 @@ function iconLightning(){ return `<svg viewBox="0 0 24 24" fill="none" stroke="c
 function iconInfinity() { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.178 8c5.096 0 5.096 8 0 8-2.67 0-4.664-1.9-6.178-4-1.514 2.1-3.508 4-6.178 4-5.096 0-5.096-8 0-8 2.67 0 4.664 1.9 6.178 4 1.514-2.1 3.508-4 6.178-4z"/></svg>`; }
 
 async function logout() {
-  if (typeof resetChatState === 'function') resetChatState();
-  await db.auth.signOut();
+  try {
+    if (typeof resetChatState === 'function') resetChatState();
+  } catch (e) {
+    console.warn('resetChatState error during logout:', e);
+  }
+  try {
+    sessionStorage.clear();
+    localStorage.removeItem('scholaria_chat_attachment_return');
+  } catch (e) {}
+  try {
+    if (window.db && window.db.auth) {
+      await window.db.auth.signOut();
+    }
+  } catch (e) {
+    console.warn('Supabase signOut error during logout:', e);
+  }
   window.location.href = 'login.html';
 }
 
@@ -638,4 +727,259 @@ document.addEventListener('click', function(e) {
     closeGlobalSearchDropdown();
   }
 });
+
+/* ── SEARCHABLE SUBJECT PICKER WITH TEXT HIGHLIGHTING ── */
+
+if (typeof window.SUBJECTS_BY_STRAND === 'undefined') {
+  window.SUBJECTS_BY_STRAND = {
+    STEM: [
+      'Pre-Calculus', 'Basic Calculus', 'General Biology 1', 'General Biology 2',
+      'General Physics 1', 'General Physics 2', 'General Chemistry 1', 'General Chemistry 2',
+      'Empowerment Technologies (ICT)', 'Earth and Life Science', 'Oral Communication in Context',
+      'Media & Information Literacy', 'Practical Research 1', 'Practical Research 2',
+      'Reading and Writing', 'Statistics and Probability', 'Physical Science'
+    ],
+    HUMSS: [
+      'Creative Writing', 'Creative Nonfiction', 'Philippine Politics and Governance',
+      'Disciplines and Ideas in the Social Sciences', 'Disciplines and Ideas in the Applied Social Sciences',
+      'Community Engagement, Solidarity and Citizenship', 'Trends, Networks, and Critical Thinking in the 21st Century',
+      'Introduction to World Religions and Belief Systems', 'Understanding Culture, Society and Politics',
+      'Oral Communication in Context', 'Reading and Writing Skills', 'Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino',
+      '21st Century Literature from the Philippines and the World'
+    ],
+    ABM: [
+      'Applied Economics', 'Business Ethics and Social Responsibility', 'Fundamentals of Accountancy, Business and Management 1',
+      'Fundamentals of Accountancy, Business and Management 2', 'Business Math', 'Business Finance',
+      'Organization and Management', 'Principles of Marketing', 'Business Enterprise Simulation'
+    ],
+    TVL: [
+      'Computer Systems Servicing', 'Technical Drafting', 'Food and Beverage Services',
+      'Bread and Pastry Production', 'Cookery', 'Shielded Metal Arc Welding',
+      'Electrical Installation and Maintenance', 'Tourism Promotion Services'
+    ]
+  };
+}
+
+function getCurriculumSubjectsList() {
+  const subjectsSet = new Set();
+  if (typeof window.COURSES_DATABASE !== 'undefined' && Array.isArray(window.COURSES_DATABASE)) {
+    window.COURSES_DATABASE.forEach(c => {
+      if (c && c.title) subjectsSet.add(c.title);
+    });
+  }
+  if (typeof window.SUBJECTS_BY_STRAND !== 'undefined') {
+    Object.values(window.SUBJECTS_BY_STRAND).forEach(list => {
+      if (Array.isArray(list)) list.forEach(s => subjectsSet.add(s));
+    });
+  }
+  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && CURRENT_PROFILE.subjects) {
+    CURRENT_PROFILE.subjects.split(',').map(s => s.trim()).filter(Boolean).forEach(s => subjectsSet.add(s));
+  }
+  return Array.from(subjectsSet).sort((a, b) => a.localeCompare(b));
+}
+window.getCurriculumSubjectsList = getCurriculumSubjectsList;
+
+function highlightTextMatch(text, query) {
+  if (!text) return '';
+  if (!query || !query.trim()) return (typeof escHtml === 'function') ? escHtml(text) : text;
+  const q = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${q})`, 'gi');
+  const parts = String(text).split(regex);
+  const escapeFn = typeof escHtml === 'function' ? escHtml : (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return parts.map(part => {
+    if (part.toLowerCase() === query.trim().toLowerCase()) {
+      return `<mark class="subj-match-highlight">${escapeFn(part)}</mark>`;
+    }
+    return escapeFn(part);
+  }).join('');
+}
+window.highlightTextMatch = highlightTextMatch;
+
+window._sspRegistries = window._sspRegistries || {};
+
+function renderSearchableSubjectPicker({
+  id,
+  inputId,
+  value = '',
+  options = [],
+  placeholder = 'Select from dropdown or search subject...',
+  onSelect = ''
+}) {
+  const pickerId = id || 'ssp_' + Math.random().toString(36).substr(2, 7);
+  const targetInputId = inputId || `${pickerId}_input`;
+  const escapeFn = typeof escHtml === 'function' ? escHtml : (s) => String(s);
+
+  // Register in global registry
+  window._sspRegistries[pickerId] = {
+    options: Array.isArray(options) ? options : [],
+    onSelect,
+    inputId: targetInputId
+  };
+
+  return `
+  <div class="searchable-subject-picker" id="${pickerId}_wrap" data-picker-id="${pickerId}">
+    <div class="ssp-input-group">
+      <input type="text"
+        id="${targetInputId}"
+        class="ssp-input"
+        placeholder="${escapeFn(placeholder)}"
+        value="${escapeFn(value)}"
+        autocomplete="off"
+        spellcheck="false"
+        onfocus="sspOpenDropdown('${pickerId}')"
+        oninput="sspOnInput('${pickerId}', this.value)"
+        onkeydown="sspOnKeyDown(event, '${pickerId}')"
+      />
+      <div class="ssp-actions">
+        <button type="button" class="ssp-btn ssp-search-btn" title="Search subjects with highlight" onclick="sspSearchClick('${pickerId}')">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        </button>
+        <button type="button" class="ssp-btn ssp-toggle-btn" title="Browse subject options dropdown" onclick="sspToggleDropdown('${pickerId}')">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="ssp-dropdown scholaria-custom-scroll" id="${pickerId}_dropdown" role="listbox"></div>
+  </div>`;
+}
+window.renderSearchableSubjectPicker = renderSearchableSubjectPicker;
+
+function sspGetRegistry(pickerId) {
+  return window._sspRegistries[pickerId] || { options: [], onSelect: '', inputId: `${pickerId}_input` };
+}
+
+function sspPopulateDropdown(pickerId, query = '') {
+  const reg = sspGetRegistry(pickerId);
+  const dropdown = document.getElementById(`${pickerId}_dropdown`);
+  if (!dropdown) return;
+
+  const currentVal = (document.getElementById(reg.inputId)?.value || '').trim().toLowerCase();
+  const qClean = (query || '').trim().toLowerCase();
+
+  let filtered = reg.options;
+  if (qClean) {
+    filtered = reg.options.filter(opt => (opt || '').toLowerCase().includes(qClean));
+  }
+
+  if (!filtered.length) {
+    dropdown.innerHTML = `<div class="ssp-empty">No matching subjects found for "<strong>${typeof escHtml === 'function' ? escHtml(query) : query}</strong>"</div>`;
+    return;
+  }
+
+  const escapeFn = typeof escHtml === 'function' ? escHtml : (s) => String(s);
+  dropdown.innerHTML = filtered.map(opt => {
+    const isSelected = opt.toLowerCase() === currentVal;
+    const highlightedLabel = highlightTextMatch(opt, query);
+    return `
+      <div class="ssp-option ${isSelected ? 'selected' : ''}" role="option" onclick="sspSelectOption('${pickerId}', '${escapeFn(opt.replace(/'/g, "\\'"))}')">
+        <span>${highlightedLabel}</span>
+        ${isSelected ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#2563eb" stroke-width="3" style="pointer-events:none;"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function sspOpenDropdown(pickerId) {
+  const dropdown = document.getElementById(`${pickerId}_dropdown`);
+  if (!dropdown) return;
+  const input = document.getElementById(sspGetRegistry(pickerId).inputId);
+  const val = input ? input.value : '';
+  sspPopulateDropdown(pickerId, val);
+  dropdown.classList.add('open');
+}
+window.sspOpenDropdown = sspOpenDropdown;
+
+function sspCloseDropdown(pickerId) {
+  const dropdown = document.getElementById(`${pickerId}_dropdown`);
+  if (dropdown) dropdown.classList.remove('open');
+}
+window.sspCloseDropdown = sspCloseDropdown;
+
+function sspToggleDropdown(pickerId) {
+  const dropdown = document.getElementById(`${pickerId}_dropdown`);
+  if (!dropdown) return;
+  if (dropdown.classList.contains('open')) {
+    sspCloseDropdown(pickerId);
+  } else {
+    // When clicking dropdown toggle, show all options
+    sspPopulateDropdown(pickerId, '');
+    dropdown.classList.add('open');
+    const input = document.getElementById(sspGetRegistry(pickerId).inputId);
+    if (input) input.focus();
+  }
+}
+window.sspToggleDropdown = sspToggleDropdown;
+
+function sspSearchClick(pickerId) {
+  const reg = sspGetRegistry(pickerId);
+  const input = document.getElementById(reg.inputId);
+  if (input) input.focus();
+  const val = input ? input.value : '';
+  sspPopulateDropdown(pickerId, val);
+  const dropdown = document.getElementById(`${pickerId}_dropdown`);
+  if (dropdown) dropdown.classList.add('open');
+}
+window.sspSearchClick = sspSearchClick;
+
+function sspOnInput(pickerId, val) {
+  sspPopulateDropdown(pickerId, val);
+  const dropdown = document.getElementById(`${pickerId}_dropdown`);
+  if (dropdown) dropdown.classList.add('open');
+
+  const reg = sspGetRegistry(pickerId);
+  if (reg.onSelect) {
+    if (typeof reg.onSelect === 'function') {
+      reg.onSelect(val);
+    } else if (typeof window[reg.onSelect] === 'function') {
+      window[reg.onSelect](val);
+    }
+  }
+}
+window.sspOnInput = sspOnInput;
+
+function sspSelectOption(pickerId, value) {
+  const reg = sspGetRegistry(pickerId);
+  const input = document.getElementById(reg.inputId);
+  if (input) {
+    input.value = value;
+  }
+  sspCloseDropdown(pickerId);
+
+  if (reg.onSelect) {
+    if (typeof reg.onSelect === 'function') {
+      reg.onSelect(value);
+    } else if (typeof window[reg.onSelect] === 'function') {
+      window[reg.onSelect](value);
+    }
+  }
+}
+window.sspSelectOption = sspSelectOption;
+
+function sspOnKeyDown(e, pickerId) {
+  if (e.key === 'Escape') {
+    sspCloseDropdown(pickerId);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const dropdown = document.getElementById(`${pickerId}_dropdown`);
+    if (dropdown && dropdown.classList.contains('open')) {
+      const firstOpt = dropdown.querySelector('.ssp-option');
+      if (firstOpt) {
+        firstOpt.click();
+      } else {
+        sspCloseDropdown(pickerId);
+      }
+    }
+  }
+}
+window.sspOnKeyDown = sspOnKeyDown;
+
+document.addEventListener('click', function(e) {
+  document.querySelectorAll('.searchable-subject-picker').forEach(wrap => {
+    if (!wrap.contains(e.target)) {
+      const dropdown = wrap.querySelector('.ssp-dropdown');
+      if (dropdown) dropdown.classList.remove('open');
+    }
+  });
+});
+
 

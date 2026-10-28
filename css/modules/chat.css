@@ -97,15 +97,21 @@
 .cw-placeholder-avatar svg { width: 27px; height: 27px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .scholaria-chat .cw-header .cw-name { color: var(--chat-ink); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .scholaria-chat .cw-header .cw-role { color: #7e8bb3; font-size: 12px; margin-top: 2px; }
-.scholaria-chat .cw-messages { min-height: 0; padding: 24px; background: linear-gradient(120deg, #f7faff, #f5f8fd); }
+.scholaria-chat .cw-messages { min-height: 0; padding: 24px; background: linear-gradient(120deg, #f7faff, #f5f8fd); display: flex !important; flex-direction: column !important; gap: 14px !important; overflow-y: auto !important; }
 .scholaria-chat .chat-welcome { width: 100%; padding: 24px 0; color: var(--chat-muted); }
 .scholaria-chat .chat-welcome h3 { margin: 0 0 12px; color: var(--chat-ink); font-size: 16px; font-weight: 700; letter-spacing: -.2px; line-height: 1.3; }
 .scholaria-chat .chat-welcome p { margin: 0 0 28px; font-size: 13px; line-height: 1.6; }
 .scholaria-chat .chat-welcome .chat-primary-btn { min-width: 224px; }
 .scholaria-chat .cw-input-area { padding: 18px; gap: 10px; background: #fff; border-top: 1px solid #e7edfa; flex-shrink: 0; }
-.scholaria-chat .cw-input-area input { min-width: 0; width: 0; padding: 15px 14px; border: 1px solid #e5ebf8; border-radius: 12px; background: #f8f9fc; font-size: 13px; color: var(--chat-ink); }
+.scholaria-chat .cw-input-area input { flex: 1 1 auto; width: 100%; min-width: 0; padding: 15px 14px; border: 1px solid #e5ebf8; border-radius: 12px; background: #f8f9fc; font-size: 13px; color: var(--chat-ink); outline: none; box-sizing: border-box; }
 .scholaria-chat .cw-input-area input::placeholder { color: #a9b5d2; }
 .scholaria-chat .cw-input-area input:focus { border-color: #8caeff; }
+.scholaria-chat .cw-pending-attachment { display:flex; align-items:center; gap:6px; max-width:240px; min-width:0; padding:8px 9px; border:1px solid #cbdcff; border-radius:10px; background:#eef4ff; color:#1e3a8a; flex:0 1 240px; }
+.scholaria-chat .cw-pending-attachment-icon { flex:0 0 auto; font-size:17px; }
+.scholaria-chat .cw-pending-attachment-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; font-weight:700; }
+.scholaria-chat .cw-pending-attachment-size { flex:0 0 auto; color:#64748b; font-size:10px; }
+.scholaria-chat .cw-pending-attachment-remove { flex:0 0 auto; width:20px; height:20px; border:0; border-radius:50%; background:#dbe7ff; color:#1e40af; font-size:16px; line-height:18px; cursor:pointer; }
+.scholaria-chat .cw-pending-attachment-remove:hover { background:#c7d8ff; }
 .scholaria-chat .cw-emoji-btn, .scholaria-chat .cw-attachment-btn, .scholaria-chat .cw-send { display: flex; align-items: center; justify-content: center; width: 48px; height: 50px; flex-shrink: 0; border: 1px solid #e5ebf8; border-radius: 12px; background: #f8f9fc; color: #64749e; cursor: pointer; }
 .scholaria-chat .cw-input-area button svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .scholaria-chat .cw-send { background: var(--chat-blue); color: #fff; border-color: transparent; }
@@ -113,9 +119,57 @@
 .scholaria-chat .cw-send:disabled { background: #e5e8ef; color: #b6bfd2; }
 .scholaria-chat button:disabled { cursor: default; }
 .scholaria-chat button:focus-visible { outline: 3px solid #91b1ff; outline-offset: 3px; }
-.scholaria-chat .msg-bubble { overflow-wrap: anywhere; }
-.scholaria-chat .msg-bubble.me { background: var(--chat-blue); }
-.scholaria-chat .msg-bubble.them { background: #e9effb; }
+.scholaria-chat .cw-messages { display: flex !important; flex-direction: column !important; gap: 10px !important; padding: 20px 24px !important; overflow-y: auto !important; background: #f8fafc !important; }
+.scholaria-chat .msg-bubble { display: block !important; width: fit-content !important; max-width: 72% !important; padding: 10px 16px 11px !important; border-radius: 16px !important; font-size: 13.5px !important; line-height: 1.5 !important; overflow-wrap: anywhere !important; margin-top: 2px !important; margin-bottom: 4px !important; position: relative !important; box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important; clear: both !important; }
+.scholaria-chat .msg-bubble.me { background: var(--chat-blue, #2563eb) !important; color: #fff !important; align-self: flex-end !important; margin-left: auto !important; margin-right: 0 !important; border-bottom-right-radius: 4px !important; }
+.scholaria-chat .msg-bubble.them { background: #ffffff !important; color: var(--chat-ink, #0f172a) !important; align-self: flex-start !important; margin-right: auto !important; margin-left: 0 !important; border: 1px solid #e2e8f0 !important; border-bottom-left-radius: 4px !important; }
+.chat-overview-btn:hover { background: rgba(255,255,255,0.32) !important; }
+.msg-bubble.them .chat-overview-btn:hover { background: #cbd5e1 !important; }
+
+.chat-attachment-actions { position: absolute; top: 8px; right: 8px; z-index: 3; opacity: 0; transition: opacity .15s ease; }
+.chat-attachment-card:hover .chat-attachment-actions,
+.chat-attachment-actions:focus-within { opacity: 1; }
+.chat-attachment-more { width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgba(15,23,42,.78); color: #fff; font-size: 21px; line-height: 18px; cursor: pointer; box-shadow: 0 3px 10px rgba(15,23,42,.2); }
+.chat-attachment-menu { display: none; position: absolute; top: 34px; right: 0; min-width: 112px; padding: 4px; border: 1px solid #dbe4f3; border-radius: 9px; background: #fff; box-shadow: 0 8px 24px rgba(15,23,42,.18); }
+.chat-attachment-menu.open { display: flex; flex-direction: column; }
+.chat-attachment-menu button { border: 0; border-radius: 6px; padding: 7px 9px; background: transparent; color: #1e293b; text-align: left; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.chat-attachment-menu button:hover { background: #eef4ff; color: #2563eb; }
+.chat-attachment-card .chat-overview-btn,
+.chat-attachment-card a[download] { display: none !important; }
+.chat-attachment-card.image-load-failed img { display: none; }
+.chat-attachment-card.image-fallback-active img { display: none; }
+
+.msg-seen-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+  margin-top: 3px;
+  margin-bottom: 8px;
+  margin-right: 6px;
+  opacity: 0.9;
+  user-select: none;
+  animation: fadeInReceipt 0.25s ease-out;
+}
+.msg-seen-receipt svg {
+  color: var(--blue, #2563eb);
+  stroke-width: 2.8;
+}
+.msg-seen-receipt.sent svg {
+  color: #94a3b8;
+}
+@keyframes fadeInReceipt {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 0.9; transform: translateY(0); }
+}
+
+.chat-img-fallback-box {
+  margin-bottom: 6px;
+}
+
 
 .cw-back-btn { display: none; align-items: center; justify-content: center; width: 38px; height: 38px; border: 1px solid #e4eafb; border-radius: 10px; background: #f5f7fb; color: var(--chat-blue, #195cff); cursor: pointer; flex-shrink: 0; transition: all 0.2s ease; margin-right: 2px; }
 .cw-back-btn:hover { background: #e3ecff; }

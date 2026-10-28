@@ -318,7 +318,7 @@ function renderRoomsTabContent() {
           <div style="font-size:12px;color:var(--text-muted);padding:8px 12px;">No active sections available. Please create a section first.</div>
         ` : activeSections.map(s => {
           const enrolled = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).filter(u =>
-            u.role === 'student' && (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
+            u.role === 'student' && u.isActive !== false && (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
           ).length;
           return `
             <div class="sec-drag-pill" draggable="true" ondragstart="handleSectionDragStart(event, '${escHtml(s.name)}')" title="Click or drag to assign to a room">
@@ -574,7 +574,7 @@ function renderRoomModalForm(r) {
       </div>
       <div class="gen-field">
         <label>Seating Capacity *</label>
-        <input type="number" id="rfCapacity" placeholder="e.g. 45" value="${r.capacity || 45}" min="1" max="500" data-type="number" maxlength="4" required>
+        <input type="number" id="rfCapacity" placeholder="e.g. 45" value="${r.capacity || 45}" min="1" max="500" data-type="number" maxlength="4" style="width:100%;box-sizing:border-box;" required>
         <span style="font-size:11px;color:var(--text-muted);">Maximum students (Digits only, max 4 digits)</span>
       </div>
     </div>
@@ -720,8 +720,16 @@ function renderAssignSectionModalForm() {
 
     <div class="gen-field">
       <label>Subject / Class Course (Optional)</label>
-      <input type="text" id="asfSubject" placeholder="e.g. General Biology 1, Pre-Calculus, Practical Research" maxlength="80">
-      <span style="font-size:11px;color:var(--text-muted);">Specific academic subject taking place in this room</span>
+      ${typeof renderSearchableSubjectPicker === 'function' ? renderSearchableSubjectPicker({
+        id: 'asfSubjectPicker',
+        inputId: 'asfSubject',
+        value: '',
+        options: (typeof getCurriculumSubjectsList === 'function') ? getCurriculumSubjectsList() : ['Pre-Calculus', 'Basic Calculus', 'General Biology 1', 'General Biology 2', 'General Physics 1', 'General Physics 2', 'Empowerment Technologies (ICT)'],
+        placeholder: 'Select from dropdown or search subject...'
+      }) : `
+        <input type="text" id="asfSubject" placeholder="e.g. General Biology 1, Pre-Calculus, Practical Research" maxlength="80">
+      `}
+      <span style="font-size:11px;color:var(--text-muted);">Select from curriculum dropdown or type to search with matching text highlight</span>
     </div>
 
     <div class="gen-field" style="margin-bottom:18px;">

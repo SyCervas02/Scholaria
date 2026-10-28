@@ -2249,7 +2249,7 @@ async function finishInteractiveQuiz() {
         await db.from('class_records').insert({
           student_id: String(CURRENT_PROFILE.id || CURRENT_PROFILE.school_id || 'seed_stud_1'),
           student_name: CURRENT_PROFILE.full_name || 'Student',
-          section: CURRENT_PROFILE.section || 'Section A',
+          section: CURRENT_PROFILE.section || 'Unassigned',
           subject: quiz.subject || CURRENT_PROFILE.strand || 'General',
           strand: CURRENT_PROFILE.strand || 'STEM',
           quiz_id: String(quiz.id),
