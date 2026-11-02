@@ -773,6 +773,16 @@ body {
   color: var(--text-primary); outline: none; background: #f8fbff; transition: 0.2s;
 }
 .pf-field input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); background: #fff; }
+.pf-password-wrap { position: relative; width: 100%; }
+.pf-field .pf-password-wrap input { padding-right: 44px; }
+.pf-password-toggle {
+  position: absolute; top: 50%; right: 10px; transform: translateY(-50%);
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; border: 0; border-radius: 7px; background: transparent; color: #94a3b8; cursor: pointer;
+}
+.pf-password-toggle:hover { color: var(--blue); background: rgba(37,99,235,0.07); }
+.pf-password-toggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.pf-password-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .pf-save {
   background: var(--blue); color: #fff; border: none; border-radius: 10px;
   padding: 11px 26px; font-size: 13.5px; font-weight: 600; cursor: pointer;
