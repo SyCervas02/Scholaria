@@ -302,6 +302,7 @@ body { background: #f1f7ff; }
 .main[data-page="dashboard"] .student-deadlines-table { min-width:640px; }
 .main[data-page="dashboard"] .student-deadlines-table :is(th,td,td span) { font-size:var(--dash-meta) !important; }
 .main[data-page="dashboard"] .student-deadlines-table :is(.type-pill,.status-pill-amber,.type-pill.performance) { font-size:var(--dash-small) !important; }
+.main[data-page="dashboard"] .student-deadlines-table .status-pill-overdue { font-size:8.5px !important; padding-inline:4px; white-space:nowrap !important; overflow-wrap:normal !important; }
 .main[data-page="dashboard"] .dashboard-date small { font-size:var(--dash-small); }
 .main[data-page="dashboard"] .deadline-filter-select { font-size:var(--dash-meta); }
 .main[data-page="dashboard"] .student-main-left { gap:16px; }

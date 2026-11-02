@@ -1647,9 +1647,11 @@ function renderStudentDeadlinesWidgetHTML() {
     const status = String(q.status || '').toLowerCase();
     const isAvailable = ['active', 'approved', 'ongoing'].includes(status);
     const isCompletedClosedQuiz = status === 'closed' && attemptsByQuiz.has(String(q.id));
-    if (!isAvailable && !isCompletedClosedQuiz) return false;
+    const due = new Date(q.dueDate || q.due_date || '').getTime();
+    const isOverdueClosedQuiz = status === 'closed' && Number.isFinite(due) && due < Date.now();
+    if (!isAvailable && !isCompletedClosedQuiz && !isOverdueClosedQuiz) return false;
     return typeof isQuizTargetedForStudent !== 'function' ||
-      isQuizTargetedForStudent(isCompletedClosedQuiz ? { ...q, status: 'active' } : q, CURRENT_PROFILE);
+      isQuizTargetedForStudent(isCompletedClosedQuiz || isOverdueClosedQuiz ? { ...q, status: 'active' } : q, CURRENT_PROFILE);
   });
 
   const now = Date.now();
@@ -1715,6 +1717,7 @@ function renderStudentDeadlinesWidgetHTML() {
       status,
       isAttempted,
       isOverdue,
+      isFailed: Boolean(isAttempted && pct !== null && pct < 75),
       isDueSoon,
       pct,
       attempt
@@ -1743,9 +1746,11 @@ function renderStudentDeadlinesWidgetHTML() {
       typeClass: i.isInter ? 'interactive' : 'quiz',
       isInter: i.isInter,
       deadline: i.dateObj ? `${i.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${i.time12}` : 'No due date',
-      status: i.isAttempted ? 'Completed' : 'Pending',
+      status: i.isAttempted ? (i.isFailed ? 'Failed' : 'Completed') : (i.isOverdue ? 'Not Submitted' : 'Pending'),
       quizId: i.id,
       isCompleted: i.isAttempted,
+      isOverdue: i.isOverdue,
+      isFailed: i.isFailed,
       pct: i.pct,
       dateObj: i.dateObj,
       monthNum: i.monthNum,
@@ -1780,7 +1785,11 @@ function renderStudentDeadlinesWidgetHTML() {
     if (studentDeadlineStatusFilter.toLowerCase() === 'pending') {
       displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'pending');
     } else if (studentDeadlineStatusFilter.toLowerCase() === 'completed') {
-      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'completed' || t.isCompleted === true);
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'completed');
+    } else if (studentDeadlineStatusFilter.toLowerCase() === 'not_submitted') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'not submitted');
+    } else if (studentDeadlineStatusFilter.toLowerCase() === 'failed') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'failed');
     }
   } else if (studentDeadlineTab === 'pending') {
     displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'pending');
@@ -1872,6 +1881,8 @@ function renderStudentDeadlinesWidgetHTML() {
         <option value="all" ${studentDeadlineStatusFilter === 'all' ? 'selected' : ''}>⚡ All Status</option>
         <option value="pending" ${studentDeadlineStatusFilter === 'pending' ? 'selected' : ''}>⏳ Pending</option>
         <option value="completed" ${studentDeadlineStatusFilter === 'completed' ? 'selected' : ''}>✅ Completed</option>
+        <option value="not_submitted" ${studentDeadlineStatusFilter === 'not_submitted' ? 'selected' : ''}>Not Submitted</option>
+        <option value="failed" ${studentDeadlineStatusFilter === 'failed' ? 'selected' : ''}>Failed</option>
       </select>
 
       <!-- 4. Month Filter -->
@@ -1938,7 +1949,7 @@ function renderStudentDeadlinesWidgetHTML() {
 
               <!-- Status -->
               <td style="text-align:right;">
-                <span class="${t.status === 'Completed' ? 'type-pill performance' : 'status-pill-amber'}">
+                <span class="${t.status === 'Completed' ? 'type-pill performance' : t.status === 'Pending' ? 'status-pill-amber' : 'status-pill-overdue'}">
                   ${escHtml(t.status)}
                 </span>
               </td>
