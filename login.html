@@ -590,22 +590,27 @@
 
         .back-pill {
             display: none;
+            position: absolute;
+            top: 18px;
+            right: 62px;
+            width: 36px;
+            height: 36px;
             align-items: center;
-            gap: 6px;
+            justify-content: center;
             background: rgba(255,255,255,0.15);
             border: 1px solid rgba(255,255,255,0.25);
             color: #fff;
-            border-radius: 50px;
-            padding: 7px 14px;
-            font-size: 12.5px;
+            border-radius: 50%;
+            padding: 0;
+            box-sizing: border-box;
             font-weight: 500;
             cursor: pointer;
             transition: background 0.2s;
             font-family: 'DM Sans', sans-serif;
-            margin-right: 36px;
+            margin-right: 0;
         }
         .back-pill:hover { background: rgba(255,255,255,0.25); }
-        .back-pill svg { width: 14px; height: 14px; }
+        .back-pill svg { width: 18px; height: 18px; }
 
         .role-badge {
             display: inline-flex;
@@ -977,7 +982,6 @@
                         <path d="M19 12H5"/>
                         <path d="M12 19l-7-7 7-7"/>
                     </svg>
-                    Change Role
                 </button>
             </div>
             <div class="header-title">
