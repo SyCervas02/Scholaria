@@ -759,6 +759,39 @@ function requireTeacherOrAdmin(profile, res) {
   return true;
 }
 
+// --- Shared curriculum subjects ---
+app.get('/api/curriculum-subjects', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  const { data, error } = await supabaseAdmin.from('curriculum_subjects').select('*').order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: 'Unable to load curriculum subjects', details: error.message });
+  res.json(data || []);
+});
+
+app.post('/api/curriculum-subjects', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only administrators can add curriculum subjects' });
+
+  const title = String(req.body.title || '').trim();
+  const code = String(req.body.code || '').trim().toUpperCase();
+  const gradeLevel = String(req.body.gradeLevel || '').trim();
+  const strand = String(req.body.strand || '').trim().toUpperCase();
+  const track = String(req.body.track || '').trim();
+  const section = String(req.body.section || '').trim();
+  if (!title || !code || !['Grade 11', 'Grade 12'].includes(gradeLevel) || !['STEM', 'HUMSS', 'ABM', 'TVL'].includes(strand) || !['Core', 'Applied', 'Specialized', 'Elective'].includes(track) || !section) {
+    return res.status(400).json({ error: 'Please provide a valid title, code, grade, strand, track, and section' });
+  }
+
+  const { data, error } = await supabaseAdmin.from('curriculum_subjects').insert({
+    title, code, grade_level: gradeLevel, strand, track, section,
+    description: `${gradeLevel} ${strand} ${track} subject.`,
+    created_by: profile.id
+  }).select('*').single();
+  if (error) return res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'A subject with this code already exists in that section.' : 'Unable to save subject', details: error.message });
+  res.status(201).json(data);
+});
+
 app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;

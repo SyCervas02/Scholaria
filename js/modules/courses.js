@@ -2336,7 +2336,7 @@ function renderCoursesWidgetHTML() {
       enrolledList = COURSES_DATABASE.slice();
     }
   } else {
-    enrolledList = COURSES_DATABASE.filter(c => isCourseOpenForStudent(c));
+    enrolledList = COURSES_DATABASE.filter(c => isCourseAssignedToStudent(c, CURRENT_PROFILE));
   }
 
   return `

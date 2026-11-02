@@ -45,6 +45,9 @@ async function guardSessionAndInit() {
 
   ROLE = profile.role;
   CURRENT_PROFILE = profile;
+  if (typeof loadSharedCurriculumSubjects === 'function') {
+    await loadSharedCurriculumSubjects().catch(err => console.warn('Shared curriculum subjects could not be loaded:', err.message));
+  }
   try {
     db.from('users').update({ last_active_at: new Date().toISOString() }).eq('id', profile.id).then();
   } catch (_) {}
