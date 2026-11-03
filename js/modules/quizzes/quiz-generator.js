@@ -1,6 +1,13 @@
 ﻿/* ── SYSTEM QUIZ GENERATOR & MANAGEMENT MODULE ── */
 
-const QUIZ_API_ENDPOINT = typeof API_BASE !== 'undefined' ? `${API_BASE}/api/quiz/generate` : 'http://localhost:3001/api/quiz/generate';
+// Resolved at call time: auth.js (which defines API_BASE) loads after this file,
+// so reading it at parse time would fall back to localhost on the deployed site.
+function getQuizApiEndpoint() {
+  const base = (typeof API_BASE !== 'undefined' && API_BASE)
+    ? API_BASE
+    : (window.location.protocol === 'file:' ? 'http://localhost:3001' : window.location.origin);
+  return `${base}/api/quiz/generate`;
+}
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 let customQuizzes = [];
@@ -1331,7 +1338,7 @@ async function generateQuiz() {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 75000); // 75 seconds leeway for AI models
-    const response = await fetch(QUIZ_API_ENDPOINT, {
+    const response = await fetch(getQuizApiEndpoint(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
