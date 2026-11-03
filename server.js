@@ -251,7 +251,7 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 // Health check endpoint for uptime monitoring and hosting platforms
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', serviceKey: hasServiceKey, timestamp: new Date().toISOString() });
+  res.status(200).json({ status: 'ok', serviceKey: hasServiceKey, legacyKey: adminKeyIsLegacyJwt, timestamp: new Date().toISOString() });
 });
 
 // Client-safe dynamic Supabase config endpoint
@@ -1366,7 +1366,7 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
 
     // If the deployment has no usable service-role key, the anon key hits RLS.
     // Retry with the uploader's own session; the policy allows them to insert their own rows.
-    if (inserted.error && req.userClient && (inserted.error.code === '42501' || inserted.error.code === 'PGRST301' || /row-level security|invalid compact jws|invalid jwt/i.test(inserted.error.message || ''))) {
+    if (inserted.error && req.userClient && (inserted.error.code === '42501' || inserted.error.code === 'PGRST301' || /row-level security|invalid compact jws|invalid jwt|unregistered api key|invalid api key/i.test(inserted.error.message || ''))) {
       console.warn('Admin insert blocked by RLS; retrying with uploader session:', inserted.error.message);
       inserted = await req.userClient.from('materials').insert(insertRow).select().single();
     }
