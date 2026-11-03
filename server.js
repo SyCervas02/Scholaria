@@ -19,32 +19,53 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
-// --- Account audit trail store ---
+// --- Account audit trail store (Supabase DB with local fallback) ---
 const AUDIT_FILE = path.join(__dirname, 'data', 'account-audit.json');
 
-function getAuditRecords() {
+async function getAuditRecords() {
   try {
-    if (!fs.existsSync(AUDIT_FILE)) return {};
-    return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {};
+    if (typeof supabaseAdmin !== 'undefined') {
+      const { data, error } = await supabaseAdmin.from('account_audit').select('*').order('updated_at', { ascending: false });
+      if (!error && data && data.length > 0) {
+        const records = {};
+        data.forEach(r => { records[r.school_id] = r; });
+        return records;
+      }
+    }
+    if (fs.existsSync(AUDIT_FILE)) return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {};
+    return {};
   } catch (e) {
+    try { if (fs.existsSync(AUDIT_FILE)) return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {}; } catch (_) {}
     return {};
   }
 }
 
-function saveAuditRecord(record) {
+async function saveAuditRecord(record) {
   try {
+    const key = record.school_id || record.user_id;
+    if (!key) return;
+    let savedToDb = false;
+    if (typeof supabaseAdmin !== 'undefined') {
+      try {
+        const { error } = await supabaseAdmin.from('account_audit').upsert({
+          school_id: record.school_id || key,
+          user_id: record.user_id || null,
+          full_name: record.full_name || null,
+          role: record.role || null,
+          email: record.email || null,
+          status: record.status || 'Active',
+          action: record.action || 'updated',
+          details: record.details || null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'school_id' });
+        if (!error) savedToDb = true;
+      } catch (_) {}
+    }
     const dir = path.dirname(AUDIT_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const records = getAuditRecords();
-    const key = record.school_id || record.user_id;
-    if (key) {
-      records[key] = {
-        ...(records[key] || {}),
-        ...record,
-        updated_at: new Date().toISOString()
-      };
-      fs.writeFileSync(AUDIT_FILE, JSON.stringify(records, null, 2), 'utf8');
-    }
+    const localRecords = fs.existsSync(AUDIT_FILE) ? JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {} : {};
+    localRecords[key] = { ...(localRecords[key] || {}), ...record, updated_at: new Date().toISOString() };
+    fs.writeFileSync(AUDIT_FILE, JSON.stringify(localRecords, null, 2), 'utf8');
   } catch (e) {
     console.error('Failed to save audit record:', e.message);
   }
@@ -973,12 +994,23 @@ app.post('/api/chat/upload', (req, res, next) => {
     });
   }
 
-  const { data: publicData } = supabaseAdmin.storage
-    .from('chat-attachments')
-    .getPublicUrl(storagePath);
+  let fileUrl = '';
+  try {
+    const { data: signedData } = await supabaseAdmin.storage
+      .from('chat-attachments')
+      .createSignedUrl(storagePath, 60 * 60 * 24 * 7); // 7 days
+    if (signedData && signedData.signedUrl) fileUrl = signedData.signedUrl;
+  } catch (_) {}
+
+  if (!fileUrl) {
+    const { data: publicData } = supabaseAdmin.storage
+      .from('chat-attachments')
+      .getPublicUrl(storagePath);
+    fileUrl = publicData ? publicData.publicUrl : '';
+  }
 
   res.json({
-    url: publicData.publicUrl,
+    url: fileUrl,
     name: req.file.originalname,
     size: req.file.size,
     mime: req.file.mimetype
@@ -1200,6 +1232,40 @@ function requireTeacherOrAdmin(profile, res) {
   }
   return true;
 }
+
+
+// --- Shared curriculum subjects ---
+app.get('/api/curriculum-subjects', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  const { data, error } = await supabaseAdmin.from('curriculum_subjects').select('*').order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: 'Unable to load curriculum subjects', details: error.message });
+  res.json(data || []);
+});
+
+app.post('/api/curriculum-subjects', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only administrators can add curriculum subjects' });
+
+  const title = String(req.body.title || '').trim();
+  const code = String(req.body.code || '').trim().toUpperCase();
+  const gradeLevel = String(req.body.gradeLevel || '').trim();
+  const strand = String(req.body.strand || '').trim().toUpperCase();
+  const track = String(req.body.track || '').trim();
+  const section = String(req.body.section || '').trim();
+  if (!title || !code || !['Grade 11', 'Grade 12'].includes(gradeLevel) || !['STEM', 'HUMSS', 'ABM', 'TVL'].includes(strand) || !['Core', 'Applied', 'Specialized', 'Elective'].includes(track) || !section) {
+    return res.status(400).json({ error: 'Please provide a valid title, code, grade, strand, track, and section' });
+  }
+
+  const { data, error } = await supabaseAdmin.from('curriculum_subjects').insert({
+    title, code, grade_level: gradeLevel, strand, track, section,
+    description: `${gradeLevel} ${strand} ${track} subject.`,
+    created_by: profile.id
+  }).select('*').single();
+  if (error) return res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'A subject with this code already exists in that section.' : 'Unable to save subject', details: error.message });
+  res.status(201).json(data);
+});
 
 app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
   const profile = await requireUser(req, res);
@@ -2470,6 +2536,80 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
   }
 
   return res.status(500).json({ error: 'Could not generate questions from material.' });
+});
+
+
+// ══════════════════════════════════════════════════════════
+// SINGLE ACTIVE SESSION ENFORCEMENT
+// ══════════════════════════════════════════════════════════
+
+// POST /api/auth/register-session
+// Called after login — stores a unique session fingerprint on the user row.
+app.post('/api/auth/register-session', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/, '');
+    if (!token) return res.status(401).json({ error: 'No token provided' });
+
+    const { data: { user }, error: verifyErr } = await supabaseAdmin.auth.getUser(token);
+    if (verifyErr || !user) return res.status(401).json({ error: 'Invalid token' });
+
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+
+    const { error: updateErr } = await supabaseAdmin
+      .from('users')
+      .update({ active_session_token: sessionToken })
+      .eq('id', user.id);
+
+    if (updateErr) {
+      console.warn('Session token update skipped (column may not exist yet):', updateErr.message);
+      return res.json({ session_token: sessionToken, enforced: false });
+    }
+
+    return res.json({ session_token: sessionToken, enforced: true });
+  } catch (err) {
+    console.error('register-session error:', err.message);
+    return res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// POST /api/auth/validate-session
+// Called by the client heartbeat every 60s — checks stored fingerprint matches.
+app.post('/api/auth/validate-session', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace(/^Bearer\s+/, '');
+    if (!token) return res.status(401).json({ valid: false, reason: 'no_token' });
+
+    const { session_token } = req.body || {};
+
+    const { data: { user }, error: verifyErr } = await supabaseAdmin.auth.getUser(token);
+    if (verifyErr || !user) return res.status(401).json({ valid: false, reason: 'token_expired' });
+
+    if (!session_token) return res.json({ valid: true, enforced: false });
+
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from('users')
+      .select('active_session_token')
+      .eq('id', user.id)
+      .single();
+
+    if (profileErr || !profile) return res.json({ valid: true, enforced: false });
+
+    // Column not yet added or null — skip enforcement gracefully
+    if (profile.active_session_token === undefined || profile.active_session_token === null) {
+      return res.json({ valid: true, enforced: false });
+    }
+
+    if (profile.active_session_token !== session_token) {
+      return res.json({ valid: false, reason: 'session_superseded' });
+    }
+
+    return res.json({ valid: true, enforced: true });
+  } catch (err) {
+    console.error('validate-session error:', err.message);
+    return res.status(500).json({ valid: true, enforced: false }); // fail-open to avoid lockout
+  }
 });
 
 module.exports = app;
