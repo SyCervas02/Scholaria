@@ -422,18 +422,17 @@ window.createChatImageThumbnail = createChatImageThumbnail;
 
 function getChatAttachmentUrl(attach) {
   if (!attach) return '';
+  if (attach.url && /^(https?:|data:|blob:)/i.test(attach.url)) return attach.url;
+  if (attach.url) {
+    const base = (window.API_BASE && window.API_BASE !== 'null' && !/^file:/i.test(window.API_BASE))
+      ? window.API_BASE.replace(/\/+$/, '')
+      : (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:') ? window.location.origin : 'http://localhost:3001');
+    const cleanUrl = attach.url.startsWith('/') ? attach.url : `/${attach.url}`;
+    return `${base}${cleanUrl}`;
+  }
   if (attach.dataUrl) return attach.dataUrl;
   if (attach.data) return attach.data;
-  if (!attach.url) return '';
-  if (/^(https?:|data:|blob:)/i.test(attach.url)) return attach.url;
-
-  // Always point /uploads/ to the Node server (3001), not Live Server or other static hosts
-  const base = (window.API_BASE && window.API_BASE !== 'null' && !/^file:/i.test(window.API_BASE))
-    ? window.API_BASE.replace(/\/+$/, '')
-    : 'http://localhost:3001';
-
-  const cleanUrl = attach.url.startsWith('/') ? attach.url : `/${attach.url}`;
-  return `${base.replace(/\/+$/, '')}${cleanUrl}`;
+  return '';
 }
 
 function handleChatBubbleImgError(imgEl, msgId) {
@@ -639,10 +638,14 @@ function openChatAttachmentOverview(msgId) {
   const isImg = (attach.mime || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|svg)$/i.test(attach.name);
   const isPdf = (attach.mime || '').includes('pdf') || /\.pdf$/i.test(attach.name);
 
-  // Fallback chain: dataUrl/data are embedded base64 so work offline; server url as last resort
-  window._chatLightboxFallbacks = [attach.dataUrl, attach.data, attach.previewUrl, fileUrl,
-    "http://localhost:3001/uploads/chat/" + encodeURIComponent(attach.name || '')
-  ].filter(function(s, i, a) { return s && a.indexOf(s) === i; });
+  // Real fileUrl first so full resolution displays, fallbacks to thumbnails/data
+  window._chatLightboxFallbacks = [
+    fileUrl,
+    attach.previewUrl,
+    attach.dataUrl,
+    attach.data,
+    ((window.API_BASE && window.API_BASE !== 'null' && !window.API_BASE.startsWith('file:')) ? window.API_BASE.replace(/\/+$/, '') : '') + "/uploads/chat/" + encodeURIComponent(attach.name || '')
+  ].filter(function(s, i, a) { return s && typeof s === 'string' && a.indexOf(s) === i; });
   if (!window._chatLightboxFallbacks.length) window._chatLightboxFallbacks = [fileUrl];
   window._chatLightboxFbIdx = 0;
   window._chatLbTryNext = function(img) {
@@ -759,8 +762,8 @@ function renderInputArea() {
         <button type="button" class="cw-attachment-btn" id="cwAttachmentBtn" title="Attach file (max 5MB)" aria-label="Attach file" onclick="event.preventDefault();event.stopPropagation();triggerChatAttachment()" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l8-8a4 4 0 0 1 5.7 5.7l-8 8a2 2 0 0 1-2.8-2.8L15 6"/></svg></button>
         <button type="button" class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" aria-label="Choose emoji" onclick="toggleEmojiPicker(event)" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 8h.01M16 8h.01"/></svg></button>
         <div class="emoji-picker" id="cwEmojiPicker"></div>
-        <input type="text" id="cwInput" aria-label="Message" placeholder="${pendingChatAttachment ? 'Add an optional caption…' : (activeConversationId ? 'Type a message…' : 'Select a conversation to start messaging')}" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMsg();}" ${activeConversationId ? '' : 'disabled'}>
-        <button class="cw-send" aria-label="Send message" onclick="sendChatMsg()" ${activeConversationId ? '' : 'disabled'}>${iconSend()}</button>
+        <input type="text" id="cwInput" aria-label="Message" placeholder="${pendingChatAttachment ? 'Add an optional caption…' : (activeConversationId ? 'Type a message…' : 'Select a conversation to start messaging')}" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMsg();}" ${(activeConversationId && !isSendingChatMsg) ? '' : 'disabled'}>
+        <button class="cw-send" aria-label="Send message" onclick="sendChatMsg()" ${(activeConversationId && !isSendingChatMsg) ? '' : 'disabled'} style="${isSendingChatMsg ? 'opacity:0.5;pointer-events:none;' : ''}">${iconSend()}</button>
       </div>
     </div>`;
 }
@@ -814,8 +817,11 @@ function clearPendingChatAttachment() {
 window.clearPendingChatAttachment = clearPendingChatAttachment;
 
 async function handleChatFileUpload(event) {
-  const file = event.target.files && event.target.files[0];
-  if (!file || !activeConversationId) return;
+  if (isUploadingChatFile) return;
+  isUploadingChatFile = true;
+  try {
+    const file = event.target.files && event.target.files[0];
+    if (!file || !activeConversationId) return;
 
   const MAX_SIZE = 5 * 1024 * 1024; // 5 MB limit
   if (file.size > MAX_SIZE) {
@@ -944,6 +950,9 @@ async function handleChatFileUpload(event) {
   const draftInput = document.getElementById('cwInput');
   if (draftInput) draftInput.value = messageDraft;
   showToast('Attachment ready. Click preview to maximize or Send to send.', 'success');
+  } finally {
+    isUploadingChatFile = false;
+  }
 }
 
 async function sendChatRawMessage(text) {
@@ -1044,16 +1053,27 @@ async function sendChatRawMessage(text) {
 }
 
 let isSendingChatMsg = false;
+let lastSendChatTimestamp = 0;
+let isUploadingChatFile = false;
+
 async function sendChatMsg() {
-  if (isSendingChatMsg) return;
+  const now = Date.now();
+  if (isSendingChatMsg || (now - lastSendChatTimestamp < 1000)) return;
+
   const input = document.getElementById('cwInput');
-  const sendBtn = document.querySelector('.cw-send');
   if (!input) return;
   const text = input.value.trim();
   if (!text && !pendingChatAttachment) return;
 
+  lastSendChatTimestamp = now;
   isSendingChatMsg = true;
-  if (sendBtn) sendBtn.disabled = true;
+
+  const sendBtn = document.querySelector('.cw-send');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.style.opacity = '0.5';
+    sendBtn.style.pointerEvents = 'none';
+  }
 
   const attachment = pendingChatAttachment;
   pendingChatAttachment = null;

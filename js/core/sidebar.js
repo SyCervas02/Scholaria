@@ -5074,6 +5074,9 @@ function renderPage(page) {
   mainContent.dataset.page = page;
   mainContent.dataset.role = ROLE || '';
   mainContent.innerHTML = getPageContent(ROLE, page);
+  const mainScrollContainer = document.querySelector('.main') || mainContent;
+  if (mainScrollContainer) mainScrollContainer.scrollTop = 0;
+  window.scrollTo(0, 0);
   if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';

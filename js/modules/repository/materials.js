@@ -1,4 +1,4 @@
-﻿const SUBJECTS_BY_STRAND_AND_GRADE = {
+const SUBJECTS_BY_STRAND_AND_GRADE = {
   HUMSS: {
     'Grade 11': [
       'Oral Communication',
@@ -546,7 +546,7 @@ function getSubjectLessons(course) {
             submitted: u.date_formatted || "Oct 16, 2026",
             due: u.date_formatted || "Official Handout",
             status: "Completed",
-            file_url: u.file_url || "SURVEY FORMS - Scholaria.pdf"
+            file_url: u.file_url || ""
           });
         }
       });
@@ -1138,9 +1138,9 @@ function renderMaterialsList(role) {
                                                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                                 Preview
                                               </button>
-                                              <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
+                                              <button type="button" class="sw-btn outline" onclick="event.stopPropagation(); downloadMaterial('${it.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;cursor:pointer;" title="Download Handout">
                                                 <span>⬇</span> Download
-                                              </a>
+                                              </button>
                                               ${(role === 'admin') ? `
                                                 <button type="button" onclick="event.stopPropagation(); deleteMaterial('${it.id}')" style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:6px;background:#fff1f2;border:1px solid #fecdd3;color:#e11d48;font-size:11.5px;font-weight:700;cursor:pointer;" title="Delete Handout">
                                                   🗑
@@ -2339,7 +2339,7 @@ function getStudentFilteredMaterials() {
       dateAdded: m.date_formatted ? `${m.date_formatted} ${m.time_formatted || ''}` : 'Recent',
       status: 'Completed',
       cover: m.cover || 'assets/slide1.jpg',
-      file_url: m.file_url || 'SURVEY FORMS - Scholaria.pdf'
+      file_url: m.file_url || ''
     };
   });
 
@@ -3449,7 +3449,7 @@ async function previewSubjectUploadedMaterial(id) {
             title: item.title,
             fileName: item.fileName || item.title,
             subject: c.title,
-            file_url: item.file_url || 'SURVEY FORMS - Scholaria.pdf',
+            file_url: item.file_url || '',
             file_type: 'application/pdf',
             type: item.type || 'PDF',
             date_formatted: item.due || item.submitted || 'Recent',
@@ -3511,14 +3511,18 @@ async function previewSubjectUploadedMaterial(id) {
     }
 
     if (!fileUrl && m.file_url) {
-      if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
+      if (/^(https?:|data:|blob:)/i.test(m.file_url)) {
         fileUrl = m.file_url;
-      } else {
-        const { data, error } = await db.storage
-          .from('learning-materials')
-          .createSignedUrl(m.file_url, 60 * 15);
-        if (!error && data?.signedUrl) {
-          fileUrl = data.signedUrl;
+      } else if (m.file_url !== 'SURVEY FORMS - Scholaria.pdf') {
+        try {
+          const { data, error } = await db.storage
+            .from('learning-materials')
+            .createSignedUrl(m.file_url, 60 * 60);
+          if (!error && data?.signedUrl) {
+            fileUrl = data.signedUrl;
+          }
+        } catch (storageErr) {
+          console.warn('Preview storage signed URL error:', storageErr);
         }
       }
     }
@@ -3529,11 +3533,10 @@ async function previewSubjectUploadedMaterial(id) {
   const isPdf = fileType.includes('pdf') || (m.fileName && m.fileName.toLowerCase().endsWith('.pdf')) || (m.title && m.title.toLowerCase().endsWith('.pdf')) || m.type === 'PDF';
   const isImage = fileType.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(m.fileName || m.title || '');
 
-  if (!fileUrl) {
-    if (m.file_url || m.url) {
-      fileUrl = m.file_url || m.url;
-    } else if (isPdf) {
-      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
+  if (!fileUrl && (m.file_url || m.url)) {
+    const cand = m.file_url || m.url;
+    if (cand !== 'SURVEY FORMS - Scholaria.pdf' && /^(https?:|data:|blob:)/i.test(cand)) {
+      fileUrl = cand;
     }
   }
 
@@ -3965,25 +3968,26 @@ async function downloadMaterial(id) {
 
   // Fallback to direct Supabase storage signed URL
   if (!fileUrl && m?.file_url) {
-    if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
+    if (/^(https?:|data:|blob:)/i.test(m.file_url)) {
       fileUrl = m.file_url;
-    } else {
+    } else if (m.file_url !== 'SURVEY FORMS - Scholaria.pdf') {
       try {
         const { data, error } = await db.storage
           .from('learning-materials')
-          .createSignedUrl(m.file_url, 60 * 10);
+          .createSignedUrl(m.file_url, 60 * 60);
         if (!error && data?.signedUrl) {
           fileUrl = data.signedUrl;
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Download storage signed URL error:', e);
+      }
     }
   }
 
-  if (!fileUrl) {
-    if (m?.file_url || m?.url) {
-      fileUrl = m.file_url || m.url;
-    } else {
-      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
+  if (!fileUrl && (m?.file_url || m?.url)) {
+    const cand = m.file_url || m.url;
+    if (cand !== 'SURVEY FORMS - Scholaria.pdf' && /^(https?:|data:|blob:)/i.test(cand)) {
+      fileUrl = cand;
     }
   }
 

@@ -1387,12 +1387,20 @@ app.get('/api/materials/:id/download', async (req, res) => {
 
   const canView = material.status === 'approved'
     || material.uploaded_by === profile.id
-    || profile.role === 'admin';
+    || profile.role === 'admin'
+    || profile.role === 'teacher';
   if (!canView) return res.status(403).json({ error: 'Not available' });
+
+  if (!material.file_url) return res.status(404).json({ error: 'File path missing' });
+
+  if (/^https?:/i.test(material.file_url)) {
+    if (req.query.redirect === '1') return res.redirect(material.file_url);
+    return res.json({ url: material.file_url, title: material.title, file_type: material.file_type });
+  }
 
   const { data, error } = await supabaseAdmin.storage
     .from('learning-materials')
-    .createSignedUrl(material.file_url, 60 * 10);
+    .createSignedUrl(material.file_url, 60 * 60);
   if (error) return res.status(500).json({ error: error.message });
 
   if (req.query.redirect === '1') {
