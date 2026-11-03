@@ -1732,10 +1732,12 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
     const officialTitles = (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined' && SUBJECTS_BY_STRAND_AND_GRADE[secStrand]?.[secGrade])
       ? SUBJECTS_BY_STRAND_AND_GRADE[secStrand][secGrade]
       : [];
+    const customSubjects = currentRole === 'admin' ? getCustomMaterialsSubjects().filter(c => c.strand === secStrand && c.gradeLevel === secGrade && c.section === sec) : [];
+    const subjectTitles = [...officialTitles, ...customSubjects.map(c => c.title).filter(title => !officialTitles.some(t => t.toLowerCase() === title.toLowerCase()))];
 
-    if (officialTitles.length > 0) {
-      officialTitles.forEach(title => {
-        const foundCourse = (courses || []).find(c => {
+    if (subjectTitles.length > 0) {
+      subjectTitles.forEach(title => {
+        const foundCourse = [...(courses || []), ...customSubjects].find(c => {
           const cT = (c.title || '').toLowerCase().trim();
           const tT = title.toLowerCase().trim();
           return cT === tT || cT.includes(tT) || tT.includes(cT);
