@@ -830,13 +830,14 @@ async function loadMaterialsFromDB() {
     } catch (e) {}
   }
 
-  // Merge with locally stored custom uploads so uploads are never lost
+  // Merge with locally stored custom uploads so uploads are never lost.
+  // Server rows win for the same id so approval status changes reach the uploader.
   const localList = getCustomMaterialsFromStorage();
   const merged = [...localList];
   fetchedData.forEach(d => {
-    if (!merged.some(m => String(m.id) === String(d.id))) {
-      merged.push(d);
-    }
+    const idx = merged.findIndex(m => String(m.id) === String(d.id));
+    if (idx > -1) merged[idx] = { ...merged[idx], ...d };
+    else merged.push(d);
   });
 
   // Only use real fetched materials and valid custom uploads (exclude broken dummy files)
@@ -4449,7 +4450,7 @@ function renderMaterialModal() {
         <input type="file" id="materialFileInput" accept=".pdf,.doc,.docx,.ppt,.pptx" multiple style="display:none" onchange="muHandleFileInput(this)">
       `}
     </div>
-    ${ROLE === 'teacher' ? `<div style="font-size:11.5px;color:#0369a1;display:flex;align-items:center;gap:6px;"><span style="color:#0284c7;font-weight:700;">✓</span> Handouts will be immediately published and available to your students.</div>` : ''}
+    ${ROLE === 'teacher' ? `<div style="font-size:11.5px;color:#0369a1;display:flex;align-items:center;gap:6px;"><span style="color:#0284c7;font-weight:700;">✓</span> Handouts are submitted to the admin for approval before students can see them.</div>` : ''}
   `;
 
   const hasFiles = s.files.length > 0;
@@ -4490,6 +4491,7 @@ async function submitMaterialUpload() {
   formData.append('section', targetSection);
 
   let serverRecords = [];
+  let serverUploadFailed = false;
 
   if (session && session.access_token) {
     try {
@@ -4498,21 +4500,26 @@ async function submitMaterialUpload() {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
         body: formData
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         serverRecords = data.materials || (data.id ? [data] : []);
       } else {
-        console.warn('Backend upload notice:', data.error);
+        serverUploadFailed = true;
+        console.warn('Backend upload failed:', data.error || res.status);
       }
     } catch (err) {
+      serverUploadFailed = true;
       console.warn('Could not contact upload endpoint, persisting locally:', err);
     }
+  } else {
+    serverUploadFailed = true;
   }
+  if (serverRecords.length < s.files.length) serverUploadFailed = true;
 
   // Persist each file in scholaria_custom_materials_v1 in localStorage so materials are NEVER lost
   const uploaderName = CURRENT_PROFILE?.full_name || (ROLE === 'admin' ? 'Administrator' : 'Teacher');
   const uploaderRole = ROLE === 'admin' ? 'Admin' : 'Teacher';
-  const targetStatus = 'approved'; // Instantly approved so uploads reflect immediately for students
+  const targetStatus = ROLE === 'admin' ? 'approved' : 'pending'; // teachers need admin approval before students see it
 
   // Determine course lessons for auto-assignment if needed
   let courseForLessons = null;
@@ -4605,12 +4612,18 @@ async function submitMaterialUpload() {
   });
 
   const uploadCount = s.files.length;
-  showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
+  if (serverUploadFailed) {
+    showToast('Handout saved only in this browser and was NOT sent for admin approval. Please retry the upload.', 'error');
+  } else if (ROLE === 'admin') {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
+  } else {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts submitted for admin approval.` : 'Handout submitted for admin approval.', 'success');
+  }
   if (ROLE !== 'admin' && typeof addNotification === 'function') {
     addNotification({
       targetRole: 'admin',
-      title: 'New Material Published',
-      message: `Teacher ${uploaderName} uploaded ${uploadCount > 1 ? `${uploadCount} handouts for "${s.subject}"` : `"${s.title.trim()}"`}.`,
+      title: 'New Material Submitted',
+      message: `Teacher ${uploaderName} submitted ${uploadCount > 1 ? `${uploadCount} handouts for "${s.subject}"` : `"${s.title.trim()}"`} for approval.`,
       type: 'info'
     });
   }

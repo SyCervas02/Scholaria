@@ -1239,8 +1239,18 @@ app.get('/api/chat/seen-receipts', async (req, res) => {
 // --- Learning Materials (centralized storage) ---
 const materialUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB per file
+  limits: { fileSize: 50 * 1024 * 1024 }, // matches the 50MB-per-file limit shown in the upload UI
 });
+
+function materialUploadMiddleware(req, res, next) {
+  materialUpload.any()(req, res, err => {
+    if (!err) return next();
+    const message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'Each handout must be 50MB or smaller.'
+      : 'Unable to process the uploaded files.';
+    return res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: message });
+  });
+}
 
 function requireTeacherOrAdmin(profile, res) {
   if (!['teacher', 'admin'].includes(profile.role)) {
@@ -1284,7 +1294,7 @@ app.post('/api/curriculum-subjects', async (req, res) => {
   res.status(201).json(data);
 });
 
-app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
+app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
   if (!requireTeacherOrAdmin(profile, res)) return;
@@ -1368,13 +1378,23 @@ app.get('/api/materials', async (req, res) => {
 
   const uploaderIds = [...new Set((data || []).map(m => m.uploaded_by).filter(Boolean))];
   let namesById = {};
+  let rolesById = {};
   if (uploaderIds.length) {
     const { data: uploaders } = await supabaseAdmin
-      .from('users').select('id, full_name').in('id', uploaderIds);
+      .from('users').select('id, full_name, role').in('id', uploaderIds);
     namesById = Object.fromEntries((uploaders || []).map(u => [u.id, u.full_name]));
+    rolesById = Object.fromEntries((uploaders || []).map(u => [u.id, u.role]));
   }
 
-  res.json((data || []).map(m => ({ ...m, uploaded_by_name: namesById[m.uploaded_by] || null })));
+  res.json((data || []).map(m => {
+    const role = rolesById[m.uploaded_by];
+    return {
+      ...m,
+      uploaded_by_name: namesById[m.uploaded_by] || null,
+      uploaded_by_role: role || null,
+      uploader_role: role ? role.charAt(0).toUpperCase() + role.slice(1) : null
+    };
+  }));
 });
 
 app.get('/api/materials/:id/download', async (req, res) => {
