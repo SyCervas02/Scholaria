@@ -1305,21 +1305,36 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
     return res.status(400).json({ error: 'Missing file(s) or title' });
   }
 
+  // The materials table only allows STEM/HUMSS/ABM/TVL. Composite selections such as
+  // "STEM, HUMSS" or "All Strands" mean general/core and must be stored as NULL.
+  const requestedStrand = String(strand || '').trim().toUpperCase();
+  const normalizedStrand = ['STEM', 'HUMSS', 'ABM', 'TVL'].includes(requestedStrand) ? requestedStrand : null;
+
   // Force section to teacher's connected section if assigned
   const targetSection = (profile.role === 'teacher' && profile.section) ? profile.section : (section || null);
   const status = profile.role === 'admin' ? 'approved' : 'pending';
 
   const insertedMaterials = [];
+  const failures = [];
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     const safeName = f.originalname.replace(/[^\w.\-]+/g, '_');
     const storagePath = `${profile.id}/${Date.now()}_${i}-${safeName}`;
 
-    const { error: uploadErr } = await supabaseAdmin.storage
-      .from('learning-materials')
-      .upload(storagePath, f.buffer, { contentType: f.mimetype });
+    let uploadErr = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const { error } = await supabaseAdmin.storage
+        .from('learning-materials')
+        .upload(storagePath, f.buffer, { contentType: f.mimetype });
+      uploadErr = error;
+      // A retry can see the object from the first attempt if only the response was lost.
+      if (uploadErr && (uploadErr.statusCode === 409 || /already exists/i.test(uploadErr.message || ''))) uploadErr = null;
+      if (!uploadErr) break;
+      console.warn(`Storage upload attempt ${attempt} failed for ${safeName}:`, uploadErr.message);
+      if (attempt === 1) await new Promise(r => setTimeout(r, 400));
+    }
     if (uploadErr) {
-      console.warn('Storage upload error for file:', safeName, uploadErr.message);
+      failures.push(`${safeName}: ${uploadErr.message}`);
       continue;
     }
 
@@ -1330,7 +1345,7 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
       .insert({
         title: itemTitle,
         subject: subject || null,
-        strand: strand || null,
+        strand: normalizedStrand,
         grade_level: grade_level || null,
         section: targetSection,
         file_url: storagePath,
@@ -1340,13 +1355,17 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
       })
       .select().single();
 
-    if (!insertErr && material) {
+    if (insertErr) {
+      console.warn('Material insert error for file:', safeName, insertErr.message);
+      failures.push(`${safeName}: ${insertErr.message}`);
+    } else if (material) {
       insertedMaterials.push(material);
     }
   }
 
   if (insertedMaterials.length === 0) {
-    return res.status(500).json({ error: 'Failed to upload materials' });
+    console.warn('Material upload failed:', failures.join(' | '));
+    return res.status(500).json({ error: 'Failed to upload materials', details: failures.join(' | ') });
   }
 
   if (files.length === 1) {

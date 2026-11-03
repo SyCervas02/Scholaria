@@ -4486,7 +4486,12 @@ async function submitMaterialUpload() {
   });
   formData.append('title', s.title.trim());
   formData.append('subject', s.subject.trim());
-  formData.append('strand', s.strand.trim());
+  // The materials table only accepts STEM/HUMSS/ABM/TVL; composite choices like
+  // "STEM, HUMSS" or "All Strands" mean general/core, so send an empty strand.
+  const normalizedStrand = ['STEM', 'HUMSS', 'ABM', 'TVL'].includes(s.strand.trim().toUpperCase())
+    ? s.strand.trim().toUpperCase()
+    : '';
+  formData.append('strand', normalizedStrand);
   formData.append('grade_level', s.grade_level.trim());
   formData.append('section', targetSection);
 
@@ -4530,7 +4535,7 @@ async function submitMaterialUpload() {
         serverUploadFailed = true;
         serverError = res.status === 401
           ? 'Your session expired. Please log out and sign in again.'
-          : (data.error || `Upload failed (HTTP ${res.status}).`);
+          : (data.details ? `${data.error || 'Upload failed'}: ${data.details}`.slice(0, 220) : (data.error || `Upload failed (HTTP ${res.status}).`));
         console.warn('Backend upload failed:', serverError);
       }
     } catch (err) {
