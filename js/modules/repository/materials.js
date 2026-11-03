@@ -4471,7 +4471,7 @@ async function submitMaterialUpload() {
   const s = materialUploadState;
   if (!s.files.length || !s.title.trim() || !s.strand || !s.subject || s.submitting) return;
 
-  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  const { data: { session } = {} } = await db.auth.getSession().catch(() => ({ data: {} }));
   s.submitting = true;
   renderMaterialModal();
 
@@ -4494,19 +4494,43 @@ async function submitMaterialUpload() {
   let serverUploadFailed = false;
   let serverError = '';
 
+  const postUpload = async token => {
+    const res = await fetch(`${API_BASE}/api/materials/upload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  };
+
   if (session && session.access_token) {
     try {
-      const res = await fetch(`${API_BASE}/api/materials/upload`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
-        body: formData
-      });
-      const data = await res.json().catch(() => ({}));
+      let { res, data } = await postUpload(session.access_token);
+
+      if (res.status === 401) {
+        // The stored access token can go stale while a tab stays open; refresh once and retry.
+        let fresh = null;
+        try {
+          const refreshed = await db.auth.refreshSession();
+          fresh = refreshed?.data?.session || null;
+        } catch (e) {}
+        if (!fresh) {
+          const current = await db.auth.getSession().catch(() => ({ data: {} }));
+          fresh = current?.data?.session || null;
+        }
+        if (fresh?.access_token) {
+          ({ res, data } = await postUpload(fresh.access_token));
+        }
+      }
+
       if (res.ok) {
         serverRecords = data.materials || (data.id ? [data] : []);
       } else {
         serverUploadFailed = true;
-        serverError = data.error || `Upload failed (HTTP ${res.status}).`;
+        serverError = res.status === 401
+          ? 'Your session expired. Please log out and sign in again.'
+          : (data.error || `Upload failed (HTTP ${res.status}).`);
         console.warn('Backend upload failed:', serverError);
       }
     } catch (err) {
@@ -4516,7 +4540,7 @@ async function submitMaterialUpload() {
     }
   } else {
     serverUploadFailed = true;
-    serverError = 'Your session has expired. Please sign in again.';
+    serverError = 'Your session expired. Please log out and sign in again.';
   }
   if (serverRecords.length < s.files.length) serverUploadFailed = true;
 
