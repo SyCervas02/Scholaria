@@ -806,24 +806,6 @@ function handleAvatarFileSelect(event) {
   reader.readAsDataURL(file);
 }
 
-function _oldAvatarHandlerDisabled() {
-    const heroImg = document.getElementById('pfHeroAvatarImg');
-    const heroInitials = document.getElementById('pfHeroAvatarInitials');
-    const dataUrlInput = document.getElementById('pfAvatarDataUrl');
-
-    if (heroImg) {
-      heroImg.src = dataUrl;
-      heroImg.style.display = 'block';
-      if (heroInitials) heroInitials.style.display = 'none';
-    }
-    if (dataUrlInput) {
-      dataUrlInput.value = dataUrl;
-    }
-    showToast('Profile picture preview updated! Click "Save Changes" to apply.', 'info');
-  };
-  reader.readAsDataURL(file);
-}
-
 function updateProfileNamePreview() {
   const f = document.getElementById('pfFirstName')?.value || '';
   const mi = document.getElementById('pfMiddleInitial')?.value || '';
