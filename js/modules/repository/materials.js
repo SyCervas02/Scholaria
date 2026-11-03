@@ -903,6 +903,11 @@ function updateApprovalBadge() {
 
 function renderMaterialsList(role) {
   const studentStrand = (CURRENT_PROFILE?.strand || 'STEM').toUpperCase();
+  if (role === 'admin' && typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
+    getCustomMaterialsSubjects().forEach(subject => {
+      if (!COURSES_DATABASE.some(course => course.id === subject.id)) COURSES_DATABASE.push(subject);
+    });
+  }
   let enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
     ? (role === 'teacher'
         ? (materialsStrandFilter ? COURSES_DATABASE.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase()) : COURSES_DATABASE.slice())
@@ -1727,10 +1732,12 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
     const officialTitles = (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined' && SUBJECTS_BY_STRAND_AND_GRADE[secStrand]?.[secGrade])
       ? SUBJECTS_BY_STRAND_AND_GRADE[secStrand][secGrade]
       : [];
+    const customSubjects = currentRole === 'admin' ? getCustomMaterialsSubjects().filter(c => c.strand === secStrand && c.gradeLevel === secGrade && c.section === sec) : [];
+    const subjectTitles = [...officialTitles, ...customSubjects.map(c => c.title).filter(title => !officialTitles.some(t => t.toLowerCase() === title.toLowerCase()))];
 
-    if (officialTitles.length > 0) {
-      officialTitles.forEach(title => {
-        const foundCourse = (courses || []).find(c => {
+    if (subjectTitles.length > 0) {
+      subjectTitles.forEach(title => {
+        const foundCourse = [...(courses || []), ...customSubjects].find(c => {
           const cT = (c.title || '').toLowerCase().trim();
           const tT = title.toLowerCase().trim();
           return cT === tT || cT.includes(tT) || tT.includes(cT);
@@ -1794,6 +1801,90 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
 
   return classCards;
 }
+
+const CUSTOM_MATERIALS_SUBJECTS_KEY = 'scholaria_custom_materials_subjects';
+function getCustomMaterialsSubjects() {
+  let localSubjects = [];
+  try { localSubjects = JSON.parse(localStorage.getItem(CUSTOM_MATERIALS_SUBJECTS_KEY) || '[]'); }
+  catch (_) {}
+  const sharedSubjects = (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE))
+    ? COURSES_DATABASE.filter(course => course.isCustomSubject)
+    : [];
+  return [...localSubjects, ...sharedSubjects.filter(shared => !localSubjects.some(local => local.id === shared.id))];
+}
+
+async function loadSharedCurriculumSubjects() {
+  if (typeof COURSES_DATABASE === 'undefined' || !Array.isArray(COURSES_DATABASE)) return;
+  const { data: { session } } = await db.auth.getSession();
+  if (!session?.access_token) return;
+  const response = await fetch(`${API_BASE}/api/curriculum-subjects`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }, cache: 'no-store'
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Unable to load subjects');
+  payload.forEach(row => {
+    const subject = {
+      ...row,
+      id: row.id,
+      gradeLevel: row.grade_level,
+      isCustomSubject: true,
+      cover: row.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80'
+    };
+    const index = COURSES_DATABASE.findIndex(course => course.id === subject.id);
+    if (index === -1) COURSES_DATABASE.push(subject);
+    else COURSES_DATABASE[index] = { ...COURSES_DATABASE[index], ...subject };
+  });
+}
+window.loadSharedCurriculumSubjects = loadSharedCurriculumSubjects;
+
+function openAddSubjectModal() {
+  if (ROLE !== 'admin') return;
+  const sections = (typeof managedSections !== 'undefined' && Array.isArray(managedSections))
+    ? managedSections.filter(s => !s.isArchived).map(s => s.name)
+    : (typeof SECTIONS !== 'undefined' && Array.isArray(SECTIONS) ? SECTIONS : []);
+  const sectionOptions = (sections.length ? sections : ['Section A', 'Section B']).map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+  closeAddSubjectModal();
+  const html = `<div class="modal-overlay active" id="addSubjectModal" onclick="if(event.target===this)closeAddSubjectModal()"><form class="modal-card" onsubmit="saveCustomMaterialsSubject(event)" style="max-width:560px" onclick="event.stopPropagation()"><div class="modal-head"><div><h3 style="margin:0">Add Subject</h3><span>Add a subject to the master curriculum repository.</span></div><button type="button" class="modal-x" aria-label="Close" onclick="closeAddSubjectModal()">&times;</button></div><div class="modal-body"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject name<input name="title" required maxlength="100" placeholder="e.g. Practical Research 1" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject code<input name="code" required maxlength="30" placeholder="e.g. PR1-1101" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Grade level<select name="gradeLevel" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option value="Grade 11">Grade 11</option><option value="Grade 12">Grade 12</option></select></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Strand<select name="strand" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option>STEM</option><option>HUMSS</option><option>ABM</option><option>TVL</option></select></label></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Track<select name="track" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option>Core</option><option>Applied</option><option>Specialized</option><option>Elective</option></select></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Section<select name="section" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px">${sectionOptions}</select></label></div></div><div class="modal-foot" style="justify-content:flex-end"><button type="button" class="foot-btn-secondary" onclick="closeAddSubjectModal()">Cancel</button><button type="submit" class="add-btn" style="background:#4338ca;color:white">Add Subject</button></div></form></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+function closeAddSubjectModal() { document.getElementById('addSubjectModal')?.remove(); }
+async function saveCustomMaterialsSubject(event) {
+  event.preventDefault();
+  const submitButton = event.currentTarget.querySelector('[type="submit"]');
+  if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Saving…'; }
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form).entries());
+  const subjects = getCustomMaterialsSubjects();
+  if (subjects.some(s => s.code.toLowerCase() === values.code.trim().toLowerCase() && s.section === values.section)) {
+    if (typeof showToast === 'function') showToast('A subject with this code already exists in that section.', 'error');
+    else alert('A subject with this code already exists in that section.');
+    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Add Subject'; }
+    return;
+  }
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session?.access_token) throw new Error('Your session has expired. Please sign in again.');
+    const response = await fetch(`${API_BASE}/api/curriculum-subjects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ title: values.title.trim(), code: values.code.trim(), gradeLevel: values.gradeLevel, strand: values.strand, track: values.track, section: values.section })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'Unable to add subject.');
+    const subject = { ...payload, gradeLevel: payload.grade_level, isCustomSubject: true, cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80' };
+    if (typeof COURSES_DATABASE !== 'undefined' && !COURSES_DATABASE.some(course => course.id === subject.id)) COURSES_DATABASE.push(subject);
+    closeAddSubjectModal();
+    renderPage('materials');
+    if (typeof showToast === 'function') showToast('Subject added and shared with matching students.', 'success');
+  } catch (error) {
+    if (typeof showToast === 'function') showToast(error.message || 'Unable to add subject.', 'error');
+    else alert(error.message || 'Unable to add subject.');
+    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Add Subject'; }
+  }
+}
+window.openAddSubjectModal = openAddSubjectModal;
+window.closeAddSubjectModal = closeAddSubjectModal;
+window.saveCustomMaterialsSubject = saveCustomMaterialsSubject;
 
 
 function getMaterialFormatBadge(type, fileName) {
@@ -2055,9 +2146,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-left:auto;justify-content:flex-end;">
-          <button class="add-btn" onclick="openMaterialModal()" style="background:#ffffff;color:${isAdmin ? '#4338ca' : '#0284c7'};border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
-            ${typeof iconPlus === 'function' ? iconPlus() : '+'} Upload Handout
-          </button>
+          ${isAdmin ? `<button class="add-btn" onclick="openAddSubjectModal()" style="background:#ffffff;color:#4338ca;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap;"><span aria-hidden="true" style="font-size:19px;line-height:12px;font-weight:500">+</span> Add Subject</button>` : `<button class="add-btn" onclick="openMaterialModal()" style="background:#ffffff;color:#0284c7;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">${typeof iconPlus === 'function' ? iconPlus() : '+'} Upload Handout</button>`}
           ${!isAdmin ? `
             <button class="add-btn" onclick="typeof openQuizModal === 'function' ? openQuizModal() : window.location.href='quiz-maker.html'" style="background:#38bdf8;color:#082f49;border:none;box-shadow:0 4px 12px rgba(56,189,248,0.25);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
               ${typeof iconPlus === 'function' ? iconPlus() : '+'} AI Quiz Maker

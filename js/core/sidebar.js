@@ -891,6 +891,21 @@ function updateProfileNamePreview() {
   if (heroName) heroName.textContent = assembled || 'Your Full Name';
 }
 
+function toggleProfileCurrentPassword() {
+  const input = document.getElementById('pfCurrentPassword');
+  const toggle = document.getElementById('pfCurrentPasswordToggle');
+  if (!input || !toggle) return;
+  const isVisible = input.type === 'text';
+  input.type = isVisible ? 'password' : 'text';
+  toggle.setAttribute('aria-label', isVisible ? 'Show current password' : 'Hide current password');
+  toggle.setAttribute('aria-pressed', String(!isVisible));
+  toggle.title = isVisible ? 'Show password' : 'Hide password';
+  toggle.innerHTML = isVisible
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a15 15 0 0 1-3.1 3.8M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7a10 10 0 0 0 4-.8"/></svg>';
+}
+window.toggleProfileCurrentPassword = toggleProfileCurrentPassword;
+
 async function confirmPasswordChange() {
   const button = document.getElementById('pfConfirmPasswordBtn');
   const currentPassword = document.getElementById('pfCurrentPassword')?.value || '';
@@ -1412,7 +1427,10 @@ function buildProfilePage(role) {
 
           <div class="pf-field">
             <label for="pfCurrentPassword">Current Password</label>
-            <input type="password" id="pfCurrentPassword" placeholder="Enter current password" autocomplete="current-password" />
+            <div class="pf-password-wrap">
+              <input type="password" id="pfCurrentPassword" placeholder="Enter current password" autocomplete="current-password" />
+              <button type="button" class="pf-password-toggle" id="pfCurrentPasswordToggle" onclick="toggleProfileCurrentPassword()" aria-label="Show current password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
           </div>
           <div class="pf-field">
             <label for="pfNewPassword">New Password</label>
@@ -1731,9 +1749,11 @@ function renderStudentDeadlinesWidgetHTML() {
     const status = String(q.status || '').toLowerCase();
     const isAvailable = ['active', 'approved', 'ongoing'].includes(status);
     const isCompletedClosedQuiz = status === 'closed' && attemptsByQuiz.has(String(q.id));
-    if (!isAvailable && !isCompletedClosedQuiz) return false;
+    const due = new Date(q.dueDate || q.due_date || '').getTime();
+    const isOverdueClosedQuiz = status === 'closed' && Number.isFinite(due) && due < Date.now();
+    if (!isAvailable && !isCompletedClosedQuiz && !isOverdueClosedQuiz) return false;
     return typeof isQuizTargetedForStudent !== 'function' ||
-      isQuizTargetedForStudent(isCompletedClosedQuiz ? { ...q, status: 'active' } : q, CURRENT_PROFILE);
+      isQuizTargetedForStudent(isCompletedClosedQuiz || isOverdueClosedQuiz ? { ...q, status: 'active' } : q, CURRENT_PROFILE);
   });
 
   const now = Date.now();
@@ -1799,6 +1819,7 @@ function renderStudentDeadlinesWidgetHTML() {
       status,
       isAttempted,
       isOverdue,
+      isFailed: Boolean(isAttempted && pct !== null && pct < 75),
       isDueSoon,
       pct,
       attempt
@@ -1827,9 +1848,11 @@ function renderStudentDeadlinesWidgetHTML() {
       typeClass: i.isInter ? 'interactive' : 'quiz',
       isInter: i.isInter,
       deadline: i.dateObj ? `${i.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${i.time12}` : 'No due date',
-      status: i.isAttempted ? 'Completed' : 'Pending',
+      status: i.isAttempted ? (i.isFailed ? 'Failed' : 'Completed') : (i.isOverdue ? 'Not Submitted' : 'Pending'),
       quizId: i.id,
       isCompleted: i.isAttempted,
+      isOverdue: i.isOverdue,
+      isFailed: i.isFailed,
       pct: i.pct,
       dateObj: i.dateObj,
       monthNum: i.monthNum,
@@ -1864,7 +1887,11 @@ function renderStudentDeadlinesWidgetHTML() {
     if (studentDeadlineStatusFilter.toLowerCase() === 'pending') {
       displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'pending');
     } else if (studentDeadlineStatusFilter.toLowerCase() === 'completed') {
-      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'completed' || t.isCompleted === true);
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'completed');
+    } else if (studentDeadlineStatusFilter.toLowerCase() === 'not_submitted') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'not submitted');
+    } else if (studentDeadlineStatusFilter.toLowerCase() === 'failed') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'failed');
     }
   } else if (studentDeadlineTab === 'pending') {
     displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'pending');
@@ -1956,6 +1983,8 @@ function renderStudentDeadlinesWidgetHTML() {
         <option value="all" ${studentDeadlineStatusFilter === 'all' ? 'selected' : ''}>⚡ All Status</option>
         <option value="pending" ${studentDeadlineStatusFilter === 'pending' ? 'selected' : ''}>⏳ Pending</option>
         <option value="completed" ${studentDeadlineStatusFilter === 'completed' ? 'selected' : ''}>✅ Completed</option>
+        <option value="not_submitted" ${studentDeadlineStatusFilter === 'not_submitted' ? 'selected' : ''}>Not Submitted</option>
+        <option value="failed" ${studentDeadlineStatusFilter === 'failed' ? 'selected' : ''}>Failed</option>
       </select>
 
       <!-- 4. Month Filter -->
@@ -2022,7 +2051,7 @@ function renderStudentDeadlinesWidgetHTML() {
 
               <!-- Status -->
               <td style="text-align:right;">
-                <span class="${t.status === 'Completed' ? 'type-pill performance' : 'status-pill-amber'}">
+                <span class="${t.status === 'Completed' ? 'type-pill performance' : t.status === 'Pending' ? 'status-pill-amber' : 'status-pill-overdue'}">
                   ${escHtml(t.status)}
                 </span>
               </td>
