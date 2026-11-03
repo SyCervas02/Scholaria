@@ -271,7 +271,8 @@ app.use('/api/', (req, res, next) => {
 
 // --- Supabase client for token validation & admin operations ---
 const rawAdminKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim().replace(/^["']|["']$/g, '');
-const hasServiceKey = rawAdminKey.startsWith('eyJ') || rawAdminKey.startsWith('sb_secret_');
+const adminKeyIsLegacyJwt = rawAdminKey.startsWith('eyJ');
+const hasServiceKey = adminKeyIsLegacyJwt || rawAdminKey.startsWith('sb_secret_');
 const activeAdminKey = hasServiceKey ? rawAdminKey : process.env.SUPABASE_ANON_KEY;
 if (!hasServiceKey) {
   console.warn('SUPABASE_SERVICE_ROLE_KEY is missing or not a recognized service key; admin operations fall back to the anon key and may hit RLS.');
@@ -1325,7 +1326,8 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
     const storagePath = `${profile.id}/${Date.now()}_${i}-${safeName}`;
 
     let uploadErr = null;
-    let storageClient = supabaseAdmin;
+    // Storage only accepts legacy JWT keys; with an sb_secret_ key use the uploader's session.
+    let storageClient = (adminKeyIsLegacyJwt || !req.userClient) ? supabaseAdmin : req.userClient;
     for (let attempt = 1; attempt <= 2; attempt++) {
       const { error } = await storageClient.storage
         .from('learning-materials')
@@ -1335,8 +1337,8 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
       if (uploadErr && (uploadErr.statusCode === 409 || /already exists/i.test(uploadErr.message || ''))) uploadErr = null;
       if (!uploadErr) break;
       console.warn(`Storage upload attempt ${attempt} failed for ${safeName}:`, uploadErr.message);
-      // Without a usable service-role key the anon client hits RLS; retry as the uploader.
-      if (/row-level security/i.test(uploadErr.message || '') && req.userClient) {
+      // Retry as the uploader when the admin client is blocked (RLS or non-JWT key).
+      if (req.userClient && storageClient !== req.userClient) {
         storageClient = req.userClient;
       }
       if (attempt === 1) await new Promise(r => setTimeout(r, 400));
@@ -1364,7 +1366,7 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
 
     // If the deployment has no usable service-role key, the anon key hits RLS.
     // Retry with the uploader's own session; the policy allows them to insert their own rows.
-    if (inserted.error && (inserted.error.code === '42501' || /row-level security/i.test(inserted.error.message || '')) && req.userClient) {
+    if (inserted.error && req.userClient && (inserted.error.code === '42501' || inserted.error.code === 'PGRST301' || /row-level security|invalid compact jws|invalid jwt/i.test(inserted.error.message || ''))) {
       console.warn('Admin insert blocked by RLS; retrying with uploader session:', inserted.error.message);
       inserted = await req.userClient.from('materials').insert(insertRow).select().single();
     }
