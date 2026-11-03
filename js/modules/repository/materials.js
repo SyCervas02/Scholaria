@@ -4492,6 +4492,7 @@ async function submitMaterialUpload() {
 
   let serverRecords = [];
   let serverUploadFailed = false;
+  let serverError = '';
 
   if (session && session.access_token) {
     try {
@@ -4505,14 +4506,17 @@ async function submitMaterialUpload() {
         serverRecords = data.materials || (data.id ? [data] : []);
       } else {
         serverUploadFailed = true;
-        console.warn('Backend upload failed:', data.error || res.status);
+        serverError = data.error || `Upload failed (HTTP ${res.status}).`;
+        console.warn('Backend upload failed:', serverError);
       }
     } catch (err) {
       serverUploadFailed = true;
+      serverError = 'Could not reach the server.';
       console.warn('Could not contact upload endpoint, persisting locally:', err);
     }
   } else {
     serverUploadFailed = true;
+    serverError = 'Your session has expired. Please sign in again.';
   }
   if (serverRecords.length < s.files.length) serverUploadFailed = true;
 
@@ -4612,8 +4616,11 @@ async function submitMaterialUpload() {
   });
 
   const uploadCount = s.files.length;
-  if (serverUploadFailed) {
-    showToast('Handout saved only in this browser and was NOT sent for admin approval. Please retry the upload.', 'error');
+  const missingCount = uploadCount - serverRecords.length;
+  if (serverUploadFailed && serverRecords.length > 0) {
+    showToast(`${serverRecords.length} of ${uploadCount} handouts submitted; ${missingCount} failed. ${serverError}`.trim(), 'error');
+  } else if (serverUploadFailed) {
+    showToast(`Handout was NOT sent for admin approval. ${serverError || 'Please retry the upload.'}`.trim(), 'error');
   } else if (ROLE === 'admin') {
     showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
   } else {
