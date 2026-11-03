@@ -1732,7 +1732,11 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
     const officialTitles = (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined' && SUBJECTS_BY_STRAND_AND_GRADE[secStrand]?.[secGrade])
       ? SUBJECTS_BY_STRAND_AND_GRADE[secStrand][secGrade]
       : [];
-    const customSubjects = currentRole === 'admin' ? getCustomMaterialsSubjects().filter(c => c.strand === secStrand && c.gradeLevel === secGrade && c.section === sec) : [];
+    // A custom subject belongs to the section it was added under; that section's
+    // configured strand/grade are authoritative, so a stale strand/grade on the
+    // saved row must not hide it from its own section.
+    const secKey = (sec || '').toLowerCase().trim();
+    const customSubjects = currentRole === 'admin' ? getCustomMaterialsSubjects().filter(c => (c.section || '').toLowerCase().trim() === secKey) : [];
     const subjectTitles = [...officialTitles, ...customSubjects.map(c => c.title).filter(title => !officialTitles.some(t => t.toLowerCase() === title.toLowerCase()))];
 
     if (subjectTitles.length > 0) {
@@ -4841,9 +4845,27 @@ function openAddSubjectModal() {
     : (typeof SECTIONS !== 'undefined' && Array.isArray(SECTIONS) ? SECTIONS : []);
   const sectionOptions = (sections.length ? sections : ['Section A', 'Section B']).map(s => `<option value="${typeof escHtml === 'function' ? escHtml(s) : s}">${typeof escHtml === 'function' ? escHtml(s) : s}</option>`).join('');
   closeAddSubjectModal();
-  const html = `<div class="modal-overlay active" id="addSubjectModal" onclick="if(event.target===this)closeAddSubjectModal()"><form class="modal-card" onsubmit="saveCustomMaterialsSubject(event)" style="max-width:560px" onclick="event.stopPropagation()"><div class="modal-head"><div><h3 style="margin:0">Add Subject</h3><span>Add a subject to the master curriculum repository.</span></div><button type="button" class="modal-x" onclick="closeAddSubjectModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body" style="display:flex;flex-direction:column;gap:14px;padding:20px 24px"><div class="pf-field"><label>Subject Name</label><input type="text" name="title" required placeholder="e.g. Inquiries, Investigations and Immersion" style="width:100%"/></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="pf-field"><label>Subject Code</label><input type="text" name="code" required placeholder="e.g. III-12" style="width:100%"/></div><div class="pf-field"><label>Grade Level</label><select name="gradeLevel" required style="width:100%"><option value="Grade 11">Grade 11</option><option value="Grade 12" selected>Grade 12</option></select></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="pf-field"><label>Strand</label><select name="strand" required style="width:100%"><option value="STEM">STEM</option><option value="HUMSS">HUMSS</option><option value="ABM">ABM</option><option value="TVL">TVL</option></select></div><div class="pf-field"><label>Track Classification</label><select name="track" required style="width:100%"><option value="Core">Core</option><option value="Applied" selected>Applied</option><option value="Specialized">Specialized</option><option value="Elective">Elective</option></select></div></div><div class="pf-field"><label>Target Section</label><select name="section" required style="width:100%">${sectionOptions}</select></div></div><div class="modal-foot" style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px"><button type="button" class="foot-btn-secondary" onclick="closeAddSubjectModal()">Cancel</button><button type="submit" class="add-btn" style="background:#4338ca;color:white">Add Subject</button></div></form></div>`;
+  const html = `<div class="modal-overlay active" id="addSubjectModal" onclick="if(event.target===this)closeAddSubjectModal()"><form class="modal-card" onsubmit="saveCustomMaterialsSubject(event)" style="max-width:560px" onclick="event.stopPropagation()"><div class="modal-head"><div><h3 style="margin:0">Add Subject</h3><span>Add a subject to the master curriculum repository.</span></div><button type="button" class="modal-x" onclick="closeAddSubjectModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body" style="display:flex;flex-direction:column;gap:14px;padding:20px 24px"><div class="pf-field"><label>Subject Name</label><input type="text" name="title" required placeholder="e.g. Inquiries, Investigations and Immersion" style="width:100%"/></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="pf-field"><label>Subject Code</label><input type="text" name="code" required placeholder="e.g. III-12" style="width:100%"/></div><div class="pf-field"><label>Grade Level</label><select name="gradeLevel" id="addSubjectGrade" required style="width:100%"><option value="Grade 11">Grade 11</option><option value="Grade 12" selected>Grade 12</option></select></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div class="pf-field"><label>Strand</label><select name="strand" id="addSubjectStrand" required style="width:100%"><option value="STEM">STEM</option><option value="HUMSS">HUMSS</option><option value="ABM">ABM</option><option value="TVL">TVL</option></select></div><div class="pf-field"><label>Track Classification</label><select name="track" required style="width:100%"><option value="Core">Core</option><option value="Applied" selected>Applied</option><option value="Specialized">Specialized</option><option value="Elective">Elective</option></select></div></div><div class="pf-field"><label>Target Section</label><select name="section" id="addSubjectSection" required style="width:100%" onchange="syncAddSubjectSectionMeta(this.value)">${sectionOptions}</select></div></div><div class="modal-foot" style="display:flex;justify-content:flex-end;gap:10px;padding:16px 24px"><button type="button" class="foot-btn-secondary" onclick="closeAddSubjectModal()">Cancel</button><button type="submit" class="add-btn" style="background:#4338ca;color:white">Add Subject</button></div></form></div>`;
   document.body.insertAdjacentHTML('beforeend', html);
+  const sectionSelect = document.getElementById('addSubjectSection');
+  if (sectionSelect) syncAddSubjectSectionMeta(sectionSelect.value);
 }
+
+// The target section already defines the strand and grade, so keep those fields
+// in sync instead of letting an impossible combination be saved.
+function syncAddSubjectSectionMeta(sectionName) {
+  const strandSelect = document.getElementById('addSubjectStrand');
+  const gradeSelect = document.getElementById('addSubjectGrade');
+  if (!strandSelect || !gradeSelect) return;
+  const strand = typeof getSectionStrand === 'function' ? getSectionStrand(sectionName) : '';
+  const grade = typeof getSectionGradeLevel === 'function' ? getSectionGradeLevel(sectionName) : '';
+  if (strand) {
+    if (![...strandSelect.options].some(option => option.value === strand)) strandSelect.add(new Option(strand, strand));
+    strandSelect.value = strand;
+  }
+  if (grade) gradeSelect.value = grade;
+}
+window.syncAddSubjectSectionMeta = syncAddSubjectSectionMeta;
 function closeAddSubjectModal() { document.getElementById('addSubjectModal')?.remove(); }
 
 async function saveCustomMaterialsSubject(event) {
