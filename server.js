@@ -251,7 +251,7 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 // Health check endpoint for uptime monitoring and hosting platforms
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.status(200).json({ status: 'ok', serviceKey: hasServiceKey, timestamp: new Date().toISOString() });
 });
 
 // Client-safe dynamic Supabase config endpoint
@@ -270,9 +270,12 @@ app.use('/api/', (req, res, next) => {
 });
 
 // --- Supabase client for token validation & admin operations ---
-const activeAdminKey = (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('eyJ')) 
-  ? process.env.SUPABASE_SERVICE_ROLE_KEY 
-  : process.env.SUPABASE_ANON_KEY;
+const rawAdminKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim().replace(/^["']|["']$/g, '');
+const hasServiceKey = rawAdminKey.startsWith('eyJ') || rawAdminKey.startsWith('sb_secret_');
+const activeAdminKey = hasServiceKey ? rawAdminKey : process.env.SUPABASE_ANON_KEY;
+if (!hasServiceKey) {
+  console.warn('SUPABASE_SERVICE_ROLE_KEY is missing or not a recognized service key; admin operations fall back to the anon key and may hit RLS.');
+}
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -1322,8 +1325,9 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
     const storagePath = `${profile.id}/${Date.now()}_${i}-${safeName}`;
 
     let uploadErr = null;
+    let storageClient = supabaseAdmin;
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const { error } = await supabaseAdmin.storage
+      const { error } = await storageClient.storage
         .from('learning-materials')
         .upload(storagePath, f.buffer, { contentType: f.mimetype });
       uploadErr = error;
@@ -1331,6 +1335,10 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
       if (uploadErr && (uploadErr.statusCode === 409 || /already exists/i.test(uploadErr.message || ''))) uploadErr = null;
       if (!uploadErr) break;
       console.warn(`Storage upload attempt ${attempt} failed for ${safeName}:`, uploadErr.message);
+      // Without a usable service-role key the anon client hits RLS; retry as the uploader.
+      if (/row-level security/i.test(uploadErr.message || '') && req.userClient) {
+        storageClient = req.userClient;
+      }
       if (attempt === 1) await new Promise(r => setTimeout(r, 400));
     }
     if (uploadErr) {
@@ -1340,20 +1348,29 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
 
     const itemTitle = files.length === 1 ? title.trim() : (f.originalname.replace(/\.[^.]+$/, '') || title.trim());
 
-    const { data: material, error: insertErr } = await supabaseAdmin
-      .from('materials')
-      .insert({
-        title: itemTitle,
-        subject: subject || null,
-        strand: normalizedStrand,
-        grade_level: grade_level || null,
-        section: targetSection,
-        file_url: storagePath,
-        file_type: f.mimetype,
-        uploaded_by: profile.id,
-        status,
-      })
-      .select().single();
+    const insertRow = {
+      title: itemTitle,
+      subject: subject || null,
+      strand: normalizedStrand,
+      grade_level: grade_level || null,
+      section: targetSection,
+      file_url: storagePath,
+      file_type: f.mimetype,
+      uploaded_by: profile.id,
+      status,
+    };
+
+    let inserted = await supabaseAdmin.from('materials').insert(insertRow).select().single();
+
+    // If the deployment has no usable service-role key, the anon key hits RLS.
+    // Retry with the uploader's own session; the policy allows them to insert their own rows.
+    if (inserted.error && (inserted.error.code === '42501' || /row-level security/i.test(inserted.error.message || '')) && req.userClient) {
+      console.warn('Admin insert blocked by RLS; retrying with uploader session:', inserted.error.message);
+      inserted = await req.userClient.from('materials').insert(insertRow).select().single();
+    }
+
+    const material = inserted.data;
+    const insertErr = inserted.error;
 
     if (insertErr) {
       console.warn('Material insert error for file:', safeName, insertErr.message);
