@@ -1064,7 +1064,18 @@ async function sendChatMsg() {
   try {
     if (attachment) {
       if (text) attachment.caption = text;
-      await sendChatRawMessage(JSON.stringify(attachment));
+      const payloadObj = {
+        type: 'attachment',
+        name: attachment.name,
+        size: attachment.size,
+        mime: attachment.mime,
+        url: attachment.url,
+        caption: attachment.caption || null
+      };
+      if (!payloadObj.url && attachment.data && attachment.data.length < 3500) {
+        payloadObj.data = attachment.data;
+      }
+      await sendChatRawMessage(JSON.stringify(payloadObj));
     } else {
       await sendChatRawMessage(text);
     }

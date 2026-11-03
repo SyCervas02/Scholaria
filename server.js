@@ -1085,6 +1085,15 @@ app.post('/api/chat/send', async (req, res) => {
   const isProfanity = !isAttachment && !isSevere && (localCheck.profanityFlagged || modResult.flagged);
 
   let finalBody = text;
+  if (isAttachment) {
+    try {
+      const parsed = JSON.parse(finalBody);
+      delete parsed.dataUrl;
+      delete parsed.previewUrl;
+      if (parsed.data && parsed.data.length > 3500) delete parsed.data;
+      finalBody = JSON.stringify(parsed);
+    } catch (_) {}
+  }
   let warning = null;
   let violationToLog = null;
   let muteUpdate = null;
