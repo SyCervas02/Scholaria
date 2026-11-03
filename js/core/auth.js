@@ -1,56 +1,21 @@
-/* ── INSTITUTIONAL DEVTOOLS SECURITY BANNER ── */
-(() => {
-  try {
-    console.log(
-      "%c🛡️ HAVEN OF WISDOM ACADEMY • SCHOLARIA SECURITY ENFORCEMENT 🛡️",
-      "color: #2563eb; font-size: 16px; font-weight: 800; padding: 6px 0;"
-    );
-    console.log(
-      "%cWARNING: This browser console is an administrative developer interface. Unauthorized script execution, token extraction, or automated endpoint probing is strictly monitored and violates institutional computer usage policies.",
-      "color: #dc2626; font-size: 12px; font-weight: 600;"
-    );
-  } catch (_) {}
-})();
-
 /* ── SUPABASE INIT & SESSION GUARD ── */
 
 const SUPABASE_URL  = 'https://qxpsbewbgdwkermxeeso.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cHNiZXdiZ2R3a2VybXhlZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDgzMTgsImV4cCI6MjA5ODI4NDMxOH0.cmG-pVotNZ5KI81_8XsUN5AL5vNVYOPFy8oHegz6cvg';
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { storage: window.sessionStorage } });
-try {
-  Object.defineProperty(window, 'db', {
-    value: db,
-    writable: false,
-    configurable: false
-  });
-} catch (_) {
-  window.db = db;
-}
 
 const API_BASE = (function() {
-  if (typeof window !== 'undefined' && window.location) {
-    if (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null') {
-      return 'http://localhost:3001';
-    }
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const proto = window.location.protocol;
     const host = window.location.hostname;
     const port = window.location.port;
-    if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '3001') {
-      return 'http://localhost:3001';
+    if (port === '3001') {
+      return window.location.origin;
     }
-    return window.location.origin;
+    return `${proto}//${host}:3001`;
   }
   return 'http://localhost:3001';
 })();
-try {
-  Object.defineProperty(window, 'API_BASE', {
-    value: API_BASE,
-    writable: false,
-    configurable: false
-  });
-} catch (_) {
-  window.API_BASE = API_BASE;
-}
-
 let ROLE = null;
 let CURRENT_PROFILE = null;
 
@@ -79,7 +44,10 @@ async function guardSessionAndInit() {
   }
 
   ROLE = profile.role;
-  CURRENT_PROFILE = Object.freeze({ ...profile });
+  CURRENT_PROFILE = profile;
+  if (typeof loadSharedCurriculumSubjects === 'function') {
+    await loadSharedCurriculumSubjects().catch(err => console.warn('Shared curriculum subjects could not be loaded:', err.message));
+  }
   try {
     db.from('users').update({ last_active_at: new Date().toISOString() }).eq('id', profile.id).then();
   } catch (_) {}
