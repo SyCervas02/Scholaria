@@ -216,10 +216,18 @@ app.get('/uploads/chat/:filename', (req, res) => {
 });
 
 // Allowed public assets and folders
-app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'ignore' }));
-app.use('/js', express.static(path.join(__dirname, 'js'), { dotfiles: 'ignore' }));
+const staticFileOptions = {
+  dotfiles: 'ignore',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  }
+};
+app.use('/css', express.static(path.join(__dirname, 'css'), staticFileOptions));
+app.use('/js', express.static(path.join(__dirname, 'js'), staticFileOptions));
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { dotfiles: 'ignore' }));
-app.use(express.static(__dirname, { dotfiles: 'ignore', index: false }));
+app.use(express.static(__dirname, { ...staticFileOptions, index: false }));
 
 // 5. Rate Limiting: Global API Limiter & Dedicated Auth Limiter (Anti-Brute Force / DDoS)
 const authLimiter = rateLimit({
@@ -729,7 +737,7 @@ app.get('/api/admin/account-audit', async (req, res) => {
   if (!profile) return;
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can view audit records' });
 
-  const records = getAuditRecords();
+  const records = await getAuditRecords();
   res.json({ success: true, records });
 });
 
