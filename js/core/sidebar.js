@@ -5072,6 +5072,7 @@ function renderPage(page) {
   const mainContent = document.getElementById('mainContent');
   if (!mainContent) return;
   mainContent.dataset.page = page;
+  mainContent.dataset.role = ROLE || '';
   mainContent.innerHTML = getPageContent(ROLE, page);
   if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
