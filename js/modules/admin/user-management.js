@@ -858,6 +858,8 @@ async function loadUsersFromDB() {
       if (mainContent && typeof getPageContent === 'function') {
         mainContent.innerHTML = getPageContent(ROLE, currentPage);
       }
+    } else if (typeof currentPage !== 'undefined' && currentPage === 'quiz' && typeof refreshQuizAttemptCountLabels === 'function') {
+      refreshQuizAttemptCountLabels();
     }
   } finally {
     isFetchingUsers = false;
@@ -3308,6 +3310,20 @@ function downloadAllCredentialSlipsPdf(containerId) {
   });
 }
 
+function printOfficialCredentialSlips() {
+  const pageStyle = document.createElement('style');
+  pageStyle.textContent = '@page { size: A4 portrait; margin: 8mm; }';
+  document.head.appendChild(pageStyle);
+  const cleanup = () => {
+    document.body.classList.remove('printing-credential-slip');
+    pageStyle.remove();
+  };
+  document.body.classList.add('printing-credential-slip');
+  window.addEventListener('afterprint', cleanup, { once: true });
+  window.print();
+  setTimeout(cleanup, 1500);
+}
+
 function showOfficialCredentialSlipModal(slips) {
   const list = Array.isArray(slips) ? slips : [slips];
   if (!list.length) return;
@@ -3355,7 +3371,7 @@ function showOfficialCredentialSlipModal(slips) {
 
   foot.innerHTML = `
     <button class="foot-btn-secondary" onclick="closeAddUserModal()">Done / Close</button>
-    <button class="gen-btn" onclick="window.print()" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;display:inline-flex;align-items:center;gap:6px;">
+    <button class="gen-btn" onclick="printOfficialCredentialSlips()" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;display:inline-flex;align-items:center;gap:6px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       Print Slip
     </button>

@@ -1067,3 +1067,357 @@ body { background: #f1f7ff; }
   .main[data-role="student"][data-page="dashboard"] .student-dashboard-split { align-items: start; }
   .main[data-role="student"][data-page="dashboard"] #studentDeadlinesWidgetContainer { flex: initial; }
 }
+
+/* Item Analysis follows the bright blue psychometric report reference. */
+.main[data-role="teacher"][data-page="analysis"] {
+  padding: 24px 26px 38px !important;
+  gap: 16px !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-header {
+  align-items: flex-start;
+  gap: 0;
+  padding: 0 !important;
+  margin: 0 0 12px;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-heading h2 {
+  display: block;
+  margin: 0 0 2px;
+  color: #0f172a;
+  font-family: 'Poppins', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-heading h2::before {
+  content: none;
+  display: none;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-heading > span {
+  display: block;
+  margin-left: 0;
+  color: #637da8 !important;
+  font-size: 12px !important;
+  line-height: 1.5;
+}
+.main[data-role="teacher"][data-page="analysis"] .card-grid:has(> .info-card.horizontal-card) {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  grid-auto-rows: minmax(124px, auto);
+  gap: 14px;
+  margin: 0 0 2px !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  min-height: 124px;
+  overflow: hidden;
+  gap: 15px;
+  padding: 20px 18px !important;
+  border: 1px solid #d3e1ff !important;
+  border-radius: 20px;
+  background: linear-gradient(120deg, #fff 0%, #f0f5ff 100%) !important;
+  box-shadow: 0 8px 20px rgba(36, 82, 160, .075), inset 0 1px 0 #fff;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(2) {
+  background: linear-gradient(120deg, #fff 0%, #e9fbf6 100%) !important;
+  border-color: #c5eee3 !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(3) {
+  background: linear-gradient(120deg, #fff 0%, #fff4df 100%) !important;
+  border-color: #f6dfb8 !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(4) {
+  background: linear-gradient(120deg, #fff 0%, #f2edff 100%) !important;
+  border-color: #ded4ff !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 22px;
+  right: -38px;
+  width: 112px;
+  height: 112px;
+  border: 16px solid rgba(53, 110, 240, .07);
+  border-radius: 50%;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(2)::after { border-color: rgba(0, 166, 124, .09); }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(3)::after { border-color: rgba(235, 145, 25, .10); }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(4)::after { border-color: rgba(123, 76, 237, .09); }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  width: 148px;
+  height: 100%;
+  min-height: 124px;
+  background-image: radial-gradient(rgba(53, 111, 225, .18) 1.5px, transparent 1.7px);
+  background-size: 13px 13px;
+  background-position: right 7px top 7px;
+  -webkit-mask-image: linear-gradient(270deg, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
+  mask-image: linear-gradient(270deg, #000 0%, rgba(0,0,0,.55) 45%, transparent 100%);
+  opacity: .58;
+  pointer-events: none;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card > * { position: relative; z-index: 1; }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(2)::before {
+  width: 160px;
+  background-image: radial-gradient(circle at center, transparent 0 24px, rgba(18, 177, 132, .14) 25px 27px, transparent 28px 43px, rgba(18, 177, 132, .12) 44px 46px, transparent 47px 61px, rgba(18, 177, 132, .10) 62px 64px, transparent 65px);
+  background-size: 150px 150px;
+  background-position: right -28px center;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(3)::before {
+  background-image: radial-gradient(circle at center, transparent 0 22px, rgba(237, 149, 33, .16) 23px 25px, transparent 26px 39px, rgba(237, 149, 33, .12) 40px 42px, transparent 43px 56px, rgba(237, 149, 33, .10) 57px 59px, transparent 60px);
+  background-size: 136px 136px;
+  background-position: right -24px center;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(4)::before {
+  background-image: linear-gradient(rgba(117, 83, 225, .13) 0 0), linear-gradient(rgba(117, 83, 225, .10) 0 0), linear-gradient(rgba(117, 83, 225, .08) 0 0), linear-gradient(rgba(117, 83, 225, .10) 0 0), linear-gradient(rgba(117, 83, 225, .07) 0 0);
+  background-size: 24px 24px, 24px 24px, 24px 24px, 24px 24px, 24px 24px;
+  background-position: right 18px top 18px, right 48px top 18px, right 78px top 18px, right 48px top 48px, right 78px top 48px;
+  background-repeat: no-repeat;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card .ic-icon {
+  width: 58px !important;
+  height: 58px !important;
+  border-radius: 17px !important;
+  background: linear-gradient(145deg, #1782ff, #1754ec) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 6px 12px rgba(25,91,232,.18);
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(2) .ic-icon { background: linear-gradient(145deg, #0eb987, #07996e) !important; }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(3) .ic-icon { background: linear-gradient(145deg, #ff9f19, #ef7100) !important; }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(4) .ic-icon { background: linear-gradient(145deg, #8b43ff, #6225df) !important; }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card .ic-sub {
+  color: #344e79 !important;
+  font-size: 13px !important;
+  font-weight: 750 !important;
+  letter-spacing: .015em !important;
+  text-transform: uppercase !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card .ic-num {
+  color: #1554d1 !important;
+  font-size: 30px !important;
+  font-weight: 800 !important;
+  line-height: 1.12 !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(2) .ic-num { color: #087c62 !important; }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(3) .ic-num { color: #c05b06 !important; }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(4) .ic-num { color: #5d35d4 !important; }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card p {
+  color: #60799f !important;
+  font-size: 12px !important;
+  line-height: 1.45;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-filter-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 13px;
+  border: 1px solid #d9e6fb;
+  border-radius: 18px;
+  background: linear-gradient(115deg, rgba(255,255,255,.98), rgba(242,247,255,.96));
+  box-shadow: 0 7px 18px rgba(36, 82, 160, .07);
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-tab-bar {
+  flex-shrink: 0;
+  padding: 4px;
+  border: 1px solid #e5edfb;
+  border-radius: 14px;
+  background: #eef3fc;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-tab-btn {
+  min-height: 42px;
+  border-radius: 11px;
+  font-weight: 700;
+  color: #4b628a;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-tab-btn.active {
+  border-color: #d9e6ff;
+  background: #fff;
+  color: #145ce5;
+  box-shadow: 0 3px 9px rgba(33, 91, 190, .09);
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-filters-row { flex: 1 1 auto; justify-content: flex-end; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-filters-row > select {
+  min-height: 44px;
+  border: 1px solid #d7e4f8;
+  border-radius: 13px;
+  background-color: #fff;
+  color: #20395f;
+  box-shadow: 0 2px 5px rgba(34, 73, 135, .04);
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-refresh-btn {
+  border-radius: 13px;
+  background: linear-gradient(130deg, #087dff, #1749ee);
+  box-shadow: 0 6px 14px rgba(21, 88, 232, .2);
+}
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 124px;
+  margin: 0 !important;
+  padding: 24px 26px !important;
+  border: 1px solid rgba(89, 157, 255, .35) !important;
+  border-radius: 20px !important;
+  background: linear-gradient(115deg, #113fae 0%, #1263ec 56%, #2682ff 100%) !important;
+  color: #fff;
+  box-shadow: 0 12px 26px rgba(22, 84, 204, .22) !important;
+}
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  width: 280px;
+  height: 280px;
+  right: -72px;
+  top: -168px;
+  border: 30px solid rgba(255,255,255,.09);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card > * { position: relative; z-index: 1; }
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card h3 { color: #fff !important; font-size: 23px; }
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card p,
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card p strong,
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card .ann-meta { color: #e4efff !important; }
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card .status-pill { background: #effff8; color: #0b9066; }
+.main[data-role="teacher"][data-page="analysis"] :is(.analysis-question-table, .analysis-student-submissions) {
+  overflow: hidden !important;
+  border: 1px solid #d4e2fb !important;
+  border-radius: 20px !important;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 9px 24px rgba(28, 75, 160, .09) !important;
+}
+.main[data-role="teacher"][data-page="analysis"] :is(.analysis-question-table, .analysis-student-submissions) th {
+  padding: 15px 12px !important;
+  border: 0;
+  background: linear-gradient(100deg, #1355df, #087bff) !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  font-weight: 750 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+.main[data-role="teacher"][data-page="analysis"] :is(.analysis-question-table, .analysis-student-submissions) td {
+  padding: 14px 12px !important;
+  border-bottom: 1px solid #eaf0fa !important;
+  color: #263b5b;
+  line-height: 1.5 !important;
+}
+.main[data-role="teacher"][data-page="analysis"] :is(.analysis-question-table, .analysis-student-submissions) tbody tr:hover td { background: #f4f8ff; }
+
+@media (max-width: 1000px) {
+  .main[data-role="teacher"][data-page="analysis"] .card-grid:has(> .info-card.horizontal-card) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-filter-container { flex-direction: column; align-items: stretch; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-filters-row { justify-content: flex-start; }
+}
+@media (max-width: 560px) {
+  .main[data-role="teacher"][data-page="analysis"] { padding: 16px 12px 28px !important; }
+  .main[data-role="teacher"][data-page="analysis"] .card-grid:has(> .info-card.horizontal-card) { grid-template-columns: minmax(0, 1fr) !important; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-report-heading h2 { font-size: 20px; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-report-heading > span { margin-left: 0; font-size: 12px !important; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-tab-bar { width: 100%; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-tab-btn { flex: 1 1 auto; white-space: normal; font-size: 11px; }
+  .main[data-role="teacher"][data-page="analysis"] .analysis-filters-row > select,
+  .main[data-role="teacher"][data-page="analysis"] .analysis-filters-row > button { flex: 1 1 100%; width: 100%; }
+}
+
+/* Item Analysis summary cards return to the clean shared card style. */
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card {
+  position: relative;
+  isolation: auto;
+  min-height: 90px;
+  overflow: hidden;
+  padding: 14px 18px !important;
+  border: 1.5px solid rgba(37, 99, 235, .08) !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .04), 0 1px 2px rgba(15, 23, 42, .02) !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(n) {
+  border: 1.5px solid rgba(37, 99, 235, .08) !important;
+  background: #fff !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .04), 0 1px 2px rgba(15, 23, 42, .02) !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card::before,
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card::after {
+  content: none !important;
+  display: none !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card .ic-icon,
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(n) .ic-icon {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 12px !important;
+  background: #eef2f7 !important;
+  box-shadow: none !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card .ic-icon svg { stroke: #64748b !important; }
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card .ic-num,
+.main[data-role="teacher"][data-page="analysis"] .info-card.horizontal-card:nth-child(n) .ic-num {
+  color: #334155 !important;
+  font-size: 22px !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-header {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  margin: 0 0 12px;
+  padding: 0 !important;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-heading {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  width: 100%;
+  min-width: 0;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-heading h2 {
+  display: block;
+  margin: 0 0 2px;
+  color: #0f172a;
+  font-family: 'Poppins', sans-serif;
+  font-size: 20px !important;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-heading h2::before { content: none !important; display: none !important; }
+.main[data-role="teacher"][data-page="analysis"] .analysis-report-heading > span {
+  display: block;
+  width: 100%;
+  margin: 0;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  text-align: left;
+  line-height: 1.5;
+}
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card {
+  min-height: 0;
+  padding: 18px 20px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+  color: var(--text-primary);
+  box-shadow: var(--shadow) !important;
+}
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card::after { content: none !important; display: none !important; }
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card > * { position: static; z-index: auto; }
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card h3 { color: var(--text-primary) !important; font-size: 18px; }
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card p,
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card p strong,
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card .ann-meta { color: var(--text-muted) !important; }
+.main[data-role="teacher"][data-page="analysis"] > .announcement-card .status-pill { background: #f1f5f9 !important; color: #475569 !important; }

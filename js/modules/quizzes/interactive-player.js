@@ -471,6 +471,7 @@ function openInteractiveQuiz(quizId) {
     matchingFeedback: null,
     lastMatchingPointsEarned: 0,
     secondChanceActive: false,
+    mcSecondChanceActive: false,
     usedPowerups: {}
   });
 
@@ -482,6 +483,103 @@ function openInteractiveQuiz(quizId) {
 
   playInteractiveBGM();
   renderCurrentInteractiveQuestion();
+}
+
+function openQuizQuestionsPreview(quizId) {
+  const quizList = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
+  const quiz = quizList.find(item => String(item.id) === String(quizId));
+  const modal = document.getElementById('takeQuizModal');
+  if (!quiz || !modal) {
+    if (typeof showToast === 'function') showToast(quiz ? 'Preview is unavailable' : 'Quiz not found', 'error');
+    return;
+  }
+
+  const safeEsc = typeof escHtml === 'function' ? escHtml : value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const canShowAnswers = quiz.allowReviewAnswers !== false && quiz.allow_review_answers !== false && quiz._meta?.allowReviewAnswers !== false && quiz.questions?.[0]?._meta?.allowReviewAnswers !== false && quiz.questions?.[0]?._allowReviewAnswers !== false;
+  let questions = quiz.questions || [];
+  if (typeof questions === 'string') {
+    try { questions = JSON.parse(questions); } catch (_) { questions = []; }
+  }
+  if (!Array.isArray(questions)) questions = [];
+  const isInteractivePreview = quiz.type === 'interactive' || quiz.quiz_type === 'interactive';
+  const itemCount = questions.reduce((sum, question) => sum + (question.type === 'matching' ? (question.pairs || []).length : 1), 0);
+
+  const getCorrectAnswers = question => {
+    if (Array.isArray(question.answers) && question.answers.length) return question.answers;
+    if (Array.isArray(question.answer)) return question.answer;
+    if (Array.isArray(question._answerIndices) && Array.isArray(question.options)) return question._answerIndices.map(index => question.options[index]).filter(value => value != null);
+    if (typeof question._answerIdx === 'number' && Array.isArray(question.options)) return [question.options[question._answerIdx]];
+    const value = question.answer ?? question.correct ?? question.correctAnswer ?? question.correct_answer;
+    if (typeof value === 'string' && question.multipleAnswers && value.includes(',')) return value.split(',').map(answer => answer.trim()).filter(Boolean);
+    return value == null || value === '' ? [] : [value];
+  };
+  const cards = questions.map((question, questionIndex) => {
+    const type = String(question.type || 'question').toLowerCase();
+    const firstItemNumber = questions.slice(0, questionIndex).reduce((sum, previous) => sum + (String(previous.type || '').toLowerCase() === 'matching' ? (previous.pairs || []).length : 1), 0) + 1;
+    const currentItemCount = type === 'matching' ? (question.pairs || []).length : 1;
+    const numberLabel = type === 'matching'
+      ? `Items ${firstItemNumber}–${firstItemNumber + Math.max(0, currentItemCount - 1)}`
+      : `Item ${firstItemNumber}`;
+    const prompt = safeEsc(question.question || question.instructions || `Question ${questionIndex + 1}`);
+    let content = '';
+
+    if (type === 'multiple_choice') {
+      const correct = getCorrectAnswers(question).map(answer => String(answer ?? '').trim().toLowerCase());
+      content = `<div class="iq-preview-options">${(question.options || []).map((option, optionIndex) => {
+        const isCorrect = canShowAnswers && correct.includes(String(option).trim().toLowerCase());
+        return `<div class="iq-preview-option ${isCorrect ? 'is-correct' : ''}"><span class="iq-preview-option-letter">${String.fromCharCode(65 + optionIndex)}</span><span class="iq-preview-option-text">${safeEsc(option)}</span>${isCorrect ? '<strong class="iq-preview-correct-tag">Correct answer</strong>' : ''}</div>`;
+      }).join('')}</div>`;
+    } else if (type === 'true_false' || type === 'tf') {
+      const answer = String(getCorrectAnswers(question)[0] || 'True').trim().toLowerCase();
+      content = `<div class="iq-preview-options iq-preview-true-false">${['True', 'False'].map(option => {
+        const isCorrect = canShowAnswers && answer === option.toLowerCase();
+        return `<div class="iq-preview-option ${isCorrect ? 'is-correct' : ''}"><span class="iq-preview-option-text">${option}</span>${isCorrect ? '<strong class="iq-preview-correct-tag">Correct</strong>' : ''}</div>`;
+      }).join('')}</div>`;
+    } else if (type === 'matching') {
+      content = `<div class="iq-preview-matches">${(question.pairs || []).map(pair => `<div class="iq-preview-match-row ${canShowAnswers ? 'is-correct' : ''}"><span>${safeEsc(pair.left || '')}</span><span>${canShowAnswers ? safeEsc(pair.right || '') : 'Matching answer hidden'}</span></div>`).join('')}</div>`;
+    } else {
+      content = `<div class="iq-preview-input-placeholder">Your answer</div>${canShowAnswers ? `<div class="iq-preview-answer-key"><strong>Correct answer</strong><span>${safeEsc(getCorrectAnswers(question).join(', '))}</span></div>` : ''}`;
+    }
+
+    return `<article class="iq-preview-card"><div class="iq-preview-question-head"><span class="iq-preview-item-badge">${numberLabel}</span><span class="iq-preview-type-badge">${safeEsc(type.replace(/_/g, ' '))}</span></div><h3>${prompt}</h3>${content}${canShowAnswers && question.explanation ? `<p class="iq-preview-explanation"><strong>Explanation</strong><span>${safeEsc(question.explanation)}</span></p>` : ''}</article>`;
+  }).join('');
+
+  modal.innerHTML = `<div class="iq-preview-shell ${isInteractivePreview ? '' : 'standard-preview-shell'}">
+    <header class="iq-preview-header">
+      <div class="iq-preview-brand"><span class="iq-preview-brand-icon"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 10-13h-7l1-7Z"/></svg></span><div><span>${isInteractivePreview ? 'Interactive Arena' : 'Standard Quiz'} · Preview</span><h2>${safeEsc(quiz.title || (isInteractivePreview ? 'Interactive Quiz' : 'Quiz'))}</h2></div></div>
+      <button type="button" class="iq-preview-close" onclick="closeInteractiveQuizPreview()" aria-label="Close preview">×</button>
+    </header>
+    <div class="iq-preview-scroll">
+      <div class="iq-preview-summary"><span class="iq-preview-count"><strong>${itemCount}</strong> item${itemCount === 1 ? '' : 's'}</span><span class="iq-preview-answer-state ${canShowAnswers ? 'visible' : 'hidden'}">${canShowAnswers ? 'Answer key visible on review' : 'Answer key hidden on review'}</span></div>
+      ${cards || '<p class="iq-preview-empty">No questions available in this quiz.</p>'}
+    </div>
+    <footer class="iq-preview-footer"><span>Scroll to review all questions</span><button type="button" onclick="closeInteractiveQuizPreview()">Close Preview</button></footer>
+  </div>`;
+  modal.classList.remove('iq-preview-overlay', 'standard-preview-overlay');
+  modal.classList.add('active', 'sq-take-quiz-overlay', isInteractivePreview ? 'iq-preview-overlay' : 'standard-preview-overlay');
+}
+
+function closeInteractiveQuizPreview() {
+  const modal = document.getElementById('takeQuizModal');
+  if (document.activeElement && modal?.contains(document.activeElement)) document.activeElement.blur();
+  if (modal) {
+    modal.classList.remove('active', 'sq-take-quiz-overlay', 'iq-preview-overlay', 'standard-preview-overlay');
+    modal.innerHTML = '';
+  }
+  if (document.body.style.overflow === 'hidden') document.body.style.overflow = '';
+  if (typeof currentPage !== 'undefined' && currentPage === 'quiz') {
+    const resetQuizManagerScroll = () => {
+      const main = document.getElementById('mainContent');
+      if (main) main.scrollTop = 0;
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+    requestAnimationFrame(() => {
+      resetQuizManagerScroll();
+      setTimeout(resetQuizManagerScroll, 50);
+    });
+  }
 }
 
 /**
@@ -610,6 +708,7 @@ function handleQuestionTimeout() {
 function getHandoutPowerupKey(qType) {
   if (qType === 'identification') return 'id_letter_clue';
   if (qType === 'matching') return 'match_second_chance';
+  if (qType === 'multiple_choice') return 'mc_second_chance';
   if (qType === 'true_false' || qType === 'tf') return 'tf_keyword_lock';
   return 'mc_handout';
 }
@@ -637,6 +736,9 @@ function getHandoutPowerupTitle(qType) {
     return isUsed ? 'First Letter Clue already used' : 'Reveal First Letter · 1-time use';
   }
   if (qType === 'matching') {
+    return isUsed ? 'Second Chance already used' : 'Second Chance (Retry on Mistake) · 1-time use';
+  }
+  if (qType === 'multiple_choice') {
     return isUsed ? 'Second Chance already used' : 'Second Chance (Retry on Mistake) · 1-time use';
   }
   if (qType === 'true_false' || qType === 'tf') {
@@ -780,7 +882,7 @@ function renderCurrentInteractiveQuestion() {
     </div>
 
     <!-- Arena Power-ups Dock (Bottom Right) -->
-    <div class="iq-bottom-dock-right ${q.type === 'identification' ? 'iq-id-powerups' : q.type === 'matching' ? 'iq-match-powerups' : (q.type === 'true_false' || q.type === 'tf') ? 'iq-tf-powerups' : ''}" id="iqBottomDockRight">
+    <div class="iq-bottom-dock-right ${q.type === 'identification' ? 'iq-id-powerups' : (q.type === 'matching' || q.type === 'multiple_choice') ? 'iq-match-powerups' : (q.type === 'true_false' || q.type === 'tf') ? 'iq-tf-powerups' : ''}" id="iqBottomDockRight">
       <button type="button" 
               class="iq-powerup-btn iq-powerup-time ${interactivePlayerState.usedPowerups?.time ? 'used' : ''}" 
               id="iqPowerupTime" 
@@ -795,7 +897,7 @@ function renderCurrentInteractiveQuestion() {
               onclick="usePowerupHandout()" 
               ${isHandoutPowerupUsed(q.type) ? 'disabled' : ''}
               title="${getHandoutPowerupTitle(q.type)}">
-        ${q.type === 'identification' ? '<svg class="iq-id-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><path d="M2 14s4.5-7 12-7 12 7 12 7-4.5 7-12 7S2 14 2 14Z" fill="#fff" stroke="#334155" stroke-width="2" stroke-linejoin="round"/><circle cx="14" cy="14" r="5" fill="#f6be63" stroke="#334155" stroke-width="1.5"/><circle cx="14" cy="14" r="2.5" fill="#334155"/><circle cx="15.5" cy="12.5" r="1" fill="#fff"/></svg>' : q.type === 'matching' ? '<svg class="iq-match-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><path d="M6 4c3 1 5 0 8-2 3 2 5 3 8 2v9c0 6-4 10-8 13-4-3-8-7-8-13Z" fill="#fff" stroke="#334155" stroke-width="2" stroke-linejoin="round"/><path d="M14 5v17c3-3 5-6 5-10V7c-2 0-3-1-5-2Z" fill="#ef476f"/></svg>' : (q.type === 'true_false' || q.type === 'tf') ? '<svg class="iq-tf-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><circle cx="13" cy="15" r="11" fill="#fff" stroke="#334155" stroke-width="1.5"/><circle cx="13" cy="15" r="8" fill="none" stroke="#ef4444" stroke-width="3"/><circle cx="13" cy="15" r="3.5" fill="#ef4444"/><path d="m13 15 10-11m-1-2v5h5" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '📖'}
+        ${q.type === 'identification' ? '<svg class="iq-id-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><path d="M2 14s4.5-7 12-7 12 7 12 7-4.5 7-12 7S2 14 2 14Z" fill="#fff" stroke="#334155" stroke-width="2" stroke-linejoin="round"/><circle cx="14" cy="14" r="5" fill="#f6be63" stroke="#334155" stroke-width="1.5"/><circle cx="14" cy="14" r="2.5" fill="#334155"/><circle cx="15.5" cy="12.5" r="1" fill="#fff"/></svg>' : (q.type === 'matching' || q.type === 'multiple_choice') ? '<svg class="iq-match-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><path d="M6 4c3 1 5 0 8-2 3 2 5 3 8 2v9c0 6-4 10-8 13-4-3-8-7-8-13Z" fill="#fff" stroke="#334155" stroke-width="2" stroke-linejoin="round"/><path d="M14 5v17c3-3 5-6 5-10V7c-2 0-3-1-5-2Z" fill="#ef476f"/></svg>' : (q.type === 'true_false' || q.type === 'tf') ? '<svg class="iq-tf-powerup-icon" viewBox="0 0 28 28" aria-hidden="true"><circle cx="13" cy="15" r="11" fill="#fff" stroke="#334155" stroke-width="1.5"/><circle cx="13" cy="15" r="8" fill="none" stroke="#ef4444" stroke-width="3"/><circle cx="13" cy="15" r="3.5" fill="#ef4444"/><path d="m13 15 10-11m-1-2v5h5" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '📖'}
       </button>
       <button type="button" 
               class="iq-powerup-btn iq-powerup-hint ${isHintPowerupUsed(q.type) ? 'used' : ''}" 
@@ -1564,6 +1666,30 @@ function usePowerupHandout() {
     return;
   }
 
+  if (curQ.type === 'multiple_choice') {
+    if (interactivePlayerState.mcSecondChanceActive) {
+      if (typeof showToast === 'function') {
+        showToast('🛡️ Second Chance is already active for this question!', 'info');
+      }
+      return;
+    }
+
+    interactivePlayerState.mcSecondChanceActive = true;
+    showMatchingPowerupPopup('Second Chance Activated!', 'If you answer incorrectly, you can retry this question once without revealing the correct answer.');
+    interactivePlayerState.usedPowerups[powerupKey] = true;
+    const btn = document.getElementById('iqPowerupHandout');
+    if (btn) {
+      btn.classList.add('used');
+      btn.disabled = true;
+      btn.title = 'Second Chance already used';
+    }
+    playInteractiveSFX(true);
+    if (typeof showToast === 'function') {
+      showToast('🛡️ Second Chance activated! A wrong answer lets you retry this question without revealing the answer.', 'success');
+    }
+    return;
+  }
+
   if (!interactivePlayerState.usedPowerups) {
     interactivePlayerState.usedPowerups = {};
   }
@@ -1953,6 +2079,28 @@ function submitInteractiveMultiChoiceAnswer(isTimeout = false) {
 
   const correct = correctList.filter(Boolean).join(', ');
 
+  if (!isCorrect && q.type === 'multiple_choice' && interactivePlayerState.mcSecondChanceActive) {
+    interactivePlayerState.mcSecondChanceActive = false;
+    interactivePlayerState.isWaitingFeedback = false;
+    interactivePlayerState.multiChoiceSelectedIndices = [];
+    document.querySelectorAll('.iq-mc-card').forEach(card => {
+      card.classList.remove('selected', 'disabled', 'mc-correct', 'mc-incorrect');
+    });
+    const submitBtn = document.getElementById('iqSubmitMultiBtn');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('incomplete', 'ready');
+      submitBtn.classList.add('incomplete');
+    }
+    const badge = document.getElementById('iqMultiSelectedBadge');
+    if (badge) badge.innerText = '0 selected';
+    playInteractiveSFX(false);
+    showMatchingPowerupPopup('Second Chance: Try again!', 'That answer was incorrect. Try this question again; the correct answer has not been revealed.', true);
+    lastActiveTimerIndex = -1;
+    startQuestionTimer();
+    return;
+  }
+
   if (isCorrect) interactivePlayerState.score++;
   interactivePlayerState.userResponses[q.id] = {
     label: q.question || '',
@@ -2023,6 +2171,28 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
     : (Array.isArray(q.answer) ? q.answer : [q.answer || '']);
   const isCorrect = correctList.some(c => String(c).trim().toLowerCase() === given.toLowerCase());
   const correct = correctList.filter(Boolean).join(', ');
+
+  if (!isCorrect && q.type === 'multiple_choice' && interactivePlayerState.mcSecondChanceActive) {
+    interactivePlayerState.mcSecondChanceActive = false;
+    interactivePlayerState.isWaitingFeedback = false;
+    interactivePlayerState.multiChoiceSelectedIndices = [];
+    document.querySelectorAll('.iq-mc-card').forEach(card => {
+      card.classList.remove('selected', 'disabled', 'mc-correct', 'mc-incorrect');
+    });
+    const submitBtn = document.getElementById('iqSubmitMultiBtn');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('incomplete', 'ready');
+      submitBtn.classList.add('incomplete');
+    }
+    const badge = document.getElementById('iqMultiSelectedBadge');
+    if (badge) badge.innerText = '0 selected';
+    playInteractiveSFX(false);
+    showMatchingPowerupPopup('Second Chance: Try again!', 'That answer was incorrect. Try this question again; the correct answer has not been revealed.', true);
+    lastActiveTimerIndex = -1;
+    startQuestionTimer();
+    return;
+  }
 
   if (isCorrect) interactivePlayerState.score++;
   const isTf = q.type === 'true_false' || q.type === 'tf';
@@ -2180,6 +2350,7 @@ function advanceToNextQuestion() {
   interactivePlayerState.matchingSelections = {};
   interactivePlayerState.selectedMatchingChoice = null;
   interactivePlayerState.secondChanceActive = false;
+  interactivePlayerState.mcSecondChanceActive = false;
   closeInteractiveHandoutModal();
   interactivePlayerState.currentIndex++;
   if (interactivePlayerState.currentIndex >= interactivePlayerState.questions.length) {

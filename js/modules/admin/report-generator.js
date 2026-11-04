@@ -3,18 +3,45 @@
 let activeReportType = null; // 'section' | 'student'
 let activeReportSection = null;
 let activeReportStudent = null;
+let studentGradeSlipResizeHandler = null;
+
+function fitStudentGradeSlipPreview() {
+  const modal = document.getElementById('academicReportModal');
+  const sheet = document.querySelector('#academicReportModal .student-grade-report');
+  if (!modal?.classList.contains('student-grade-slip-fit') || !sheet) return;
+  sheet.style.zoom = '1';
+  const bounds = sheet.getBoundingClientRect();
+  const availableWidth = Math.max(280, window.innerWidth - 64);
+  const availableHeight = Math.max(240, window.innerHeight - 150);
+  const scale = Math.min(1, availableWidth / bounds.width, availableHeight / bounds.height);
+  sheet.style.zoom = String(Math.max(0.35, scale));
+}
 
 function closeAcademicReportModal() {
   const modal = document.getElementById('academicReportModal');
-  if (modal) modal.classList.remove('active');
+  if (modal) modal.classList.remove('active', 'student-grade-slip-fit');
+  if (studentGradeSlipResizeHandler) {
+    window.removeEventListener('resize', studentGradeSlipResizeHandler);
+    studentGradeSlipResizeHandler = null;
+  }
 }
 
 function triggerPrintReport() {
   const prevTitle = document.title;
+  let sectionPrintPageStyle = null;
+  const cleanupPrintState = () => {
+    document.body.classList.remove('printing-academic-report');
+    if (sectionPrintPageStyle) sectionPrintPageStyle.remove();
+    document.title = prevTitle;
+  };
+  document.body.classList.add('printing-academic-report');
   if (activeReportType === 'section') {
     document.title = activeReportSection
       ? `Master_Grade_Sheet_${activeReportSection.replace(/\s+/g, '_')}`
       : 'Master_Grade_Sheets_All_Sections';
+    sectionPrintPageStyle = document.createElement('style');
+    sectionPrintPageStyle.textContent = '@page { size: A4 landscape; margin: 8mm; }';
+    document.head.appendChild(sectionPrintPageStyle);
   } else if (activeReportType === 'student') {
     const studentObj = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).find(u => u.dbId === activeReportStudent || u.id === activeReportStudent || u.name === activeReportStudent);
     const sName = studentObj?.name || activeReportStudent || 'Student';
@@ -27,12 +54,13 @@ function triggerPrintReport() {
 
   // Wait for the report DOM and print styles to settle before Chromium captures it.
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => window.print());
+    requestAnimationFrame(() => {
+      window.addEventListener('afterprint', cleanupPrintState, { once: true });
+      window.print();
+    });
   });
 
-  setTimeout(() => {
-    document.title = prevTitle;
-  }, 1000);
+  setTimeout(cleanupPrintState, 1500);
 }
 
 /**
@@ -81,6 +109,12 @@ function openAllSectionReportsModal() {
  * Opens Section Master Grade Sheet Preview Modal
  */
 function openSectionReportModal(sectionName) {
+  const reportModal = document.getElementById('academicReportModal');
+  if (reportModal) reportModal.classList.remove('student-grade-slip-fit');
+  if (studentGradeSlipResizeHandler) {
+    window.removeEventListener('resize', studentGradeSlipResizeHandler);
+    studentGradeSlipResizeHandler = null;
+  }
   activeReportType = 'section';
   activeReportSection = sectionName || (managedSections[0]?.name || 'Section A');
   activeReportStudent = null;
@@ -93,6 +127,7 @@ function openSectionReportModal(sectionName) {
   };
 
   const quizzes = typeof getClassRecordQuizzes === 'function' ? getClassRecordQuizzes() : [];
+  const quizColumnWidth = quizzes.length ? (39 / quizzes.length).toFixed(3) : 0;
   const allEntries = typeof buildRealClassRecordEntries === 'function' ? buildRealClassRecordEntries() : [];
   
   // Filter students in this section
@@ -136,7 +171,7 @@ function openSectionReportModal(sectionName) {
   `;
 
   body.innerHTML = `
-    <div class="report-document-sheet printable-document" id="printableReportArea">
+    <div class="report-document-sheet printable-document section-master-report" id="printableReportArea">
       <!-- OFFICIAL SCHOOL HEADER -->
       <div class="report-school-header">
         <div class="report-logo-circle">
@@ -186,6 +221,11 @@ function openSectionReportModal(sectionName) {
       <!-- MASTER GRADING TABLE -->
       <div class="report-table-container">
         <table class="report-table">
+          <colgroup>
+            <col style="width:4%;"><col style="width:22%;"><col style="width:8%;">
+            ${quizzes.map(() => `<col style="width:${quizColumnWidth}%;">`).join('')}
+            <col style="width:6%;"><col style="width:9%;"><col style="width:12%;">
+          </colgroup>
           <thead>
             <tr>
               <th style="width:36px;text-align:center;">#</th>
@@ -255,7 +295,7 @@ function openSectionReportModal(sectionName) {
       <div class="report-document-footer">
         <span>Scholaria Academic System · Official Record</span>
         <span>Confidential Student Information · Haven of Wisdom Academy Inc.</span>
-        <span>Page 1 of 1</span>
+        <span>Official Section Record</span>
       </div>
     </div>
   `;
@@ -361,7 +401,7 @@ function openStudentReportModal(studentKey) {
   `;
 
   body.innerHTML = `
-    <div class="report-document-sheet printable-document" id="printableReportArea" style="max-width:680px;">
+    <div class="report-document-sheet printable-document student-grade-report" id="printableReportArea" style="max-width:680px;">
       <!-- OFFICIAL SCHOOL HEADER -->
       <div class="report-school-header">
         <div class="report-logo-circle">
@@ -403,6 +443,9 @@ function openStudentReportModal(studentKey) {
       <!-- ASSESSMENT BREAKDOWN TABLE -->
       <div class="report-table-container">
         <table class="report-table">
+          <colgroup>
+            <col style="width:5%;"><col style="width:31%;"><col style="width:19%;"><col style="width:15%;"><col style="width:13%;"><col style="width:17%;">
+          </colgroup>
           <thead>
             <tr>
               <th style="width:36px;text-align:center;">#</th>
@@ -460,7 +503,12 @@ function openStudentReportModal(studentKey) {
     </div>
   `;
 
-  document.getElementById('academicReportModal').classList.add('active');
+  const reportModal = document.getElementById('academicReportModal');
+  reportModal.classList.add('active', 'student-grade-slip-fit');
+  if (studentGradeSlipResizeHandler) window.removeEventListener('resize', studentGradeSlipResizeHandler);
+  studentGradeSlipResizeHandler = fitStudentGradeSlipPreview;
+  window.addEventListener('resize', studentGradeSlipResizeHandler);
+  requestAnimationFrame(() => requestAnimationFrame(fitStudentGradeSlipPreview));
 }
 
 /**

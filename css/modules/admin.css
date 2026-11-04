@@ -807,20 +807,71 @@ table.au-format-table tr:nth-child(even) td.req-cell { background: #fef3c7; }
 }
 
 @media print {
-  body * {
+  body.printing-credential-slip * {
     visibility: hidden;
   }
-  .credential-slip-card,
-  .credential-slip-card * {
+  body.printing-credential-slip .credential-slip-card,
+  body.printing-credential-slip .credential-slip-card * {
     visibility: visible;
   }
-  .credential-slip-card {
-    position: absolute;
+  body.printing-credential-slip .credential-slip-card {
+    position: relative;
     left: 0;
     top: 0;
     width: 100% !important;
     box-shadow: none !important;
     border: 1.5px solid #000 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  body.printing-credential-slip #addUserModal {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  body.printing-credential-slip #addUserModal .modal-card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+  body.printing-credential-slip #addUserModalHead,
+  body.printing-credential-slip #addUserModalFoot { display: none !important; }
+  body.printing-credential-slip #addUserModalBody,
+  body.printing-credential-slip .credential-slip-wrapper {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  body.printing-credential-slip .credential-slip-card {
+    margin: 0 0 8mm !important;
+    padding: 10mm !important;
+    overflow: visible !important;
+  }
+  body.printing-credential-slip .credential-slip-wrapper > div:last-child .credential-slip-card {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+  body.printing-credential-slip .credential-slip-wrapper > div > div:not(.credential-slip-card) {
+    display: none !important;
   }
 }
 
