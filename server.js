@@ -62,6 +62,7 @@ app.use(helmet({
         "https://cdnjs.cloudflare.com",
         "https://*.supabase.co"
       ],
+      scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: [
         "'self'",
         "'unsafe-inline'",
