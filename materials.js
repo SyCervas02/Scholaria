@@ -5190,8 +5190,8 @@ async function submitMaterialUpload() {
       uploaded_by_name: uploaderName,
       uploader_role: uploaderRole,
       uploaded_by: CURRENT_PROFILE?.id || 'local_user',
-      approved_by: CURRENT_PROFILE?.id || 'admin',
-      approved_by_name: ROLE === 'admin' ? uploaderName : 'System Administrator',
+      approved_by: ROLE === 'admin' ? (CURRENT_PROFILE?.id || 'admin') : null,
+      approved_by_name: ROLE === 'admin' ? uploaderName : null,
       is_curriculum: ROLE === 'admin',
       file_type: f.type || 'application/pdf',
       type: typeLabel,
@@ -5217,7 +5217,11 @@ async function submitMaterialUpload() {
   });
 
   const uploadCount = s.files.length;
-  showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
+  if (ROLE === 'admin') {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
+  } else {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts submitted for admin approval.` : 'Handout submitted for admin approval.', 'info');
+  }
   if (ROLE !== 'admin' && typeof addNotification === 'function') {
     addNotification({
       targetRole: 'admin',
