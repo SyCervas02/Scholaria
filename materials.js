@@ -280,8 +280,8 @@ function cleanupLegacyDummyStorage() {
           if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
           return true;
         }).map(m => ({
-          ...m,
-          status: 'approved' // Auto-approve teacher uploads so they reflect immediately for students
+          ...m
+          // Preserve existing status — do NOT force 'approved', teachers need admin review
         }));
         localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(cleaned));
       }
@@ -319,7 +319,7 @@ function getCustomMaterialsFromStorage() {
       return true;
     }).map(m => ({
       ...m,
-      status: m.status || 'approved'
+      status: m.status || 'pending' // Default to pending so materials without a status go through approval
     }));
   } catch (e) {
     return [];
@@ -4212,7 +4212,11 @@ function renderApprovalMaterialRows() {
 
 function runApprovalAction(kind, id, approve) {
   try {
-    return kind === 'quiz' ? (approve ? approveQuiz(id) : rejectQuiz(id)) : (approve ? approveMaterial(id) : rejectMaterial(id));
+    if (approve) {
+      return kind === 'quiz' ? approveQuiz(id) : approveMaterial(id);
+    }
+    // Show deny reason panel before actually rejecting
+    showDenyReasonPanel(kind, id, 'reject');
   } catch (e) {
     console.error('runApprovalAction error:', e);
     showToast('An error occurred while processing. Please try again.', 'error');
@@ -4220,56 +4224,129 @@ function runApprovalAction(kind, id, approve) {
 }
 
 async function markNeedsRevision(kind, id) {
-  const REVISION_KEY = 'scholaria_revision_items_v1';
-  let revisionList = [];
-  try { revisionList = JSON.parse(localStorage.getItem(REVISION_KEY) || '[]'); } catch (e) {}
-  const key = `${kind}:${String(id)}`;
-  if (!revisionList.includes(key)) revisionList.push(key);
-  localStorage.setItem(REVISION_KEY, JSON.stringify(revisionList));
+  // Show reason panel before marking as needs revision
+  showDenyReasonPanel(kind, id, 'revision');
+}
 
-  // Update in-memory status
-  if (kind === 'material') {
-    const idx = materialsData.findIndex(m => String(m.id) === String(id));
-    if (idx >= 0) materialsData[idx].status = 'revision';
-    // Also update localStorage custom materials
-    const localList = getCustomMaterialsFromStorage();
-    const lIdx = localList.findIndex(m => String(m.id) === String(id));
-    if (lIdx >= 0) {
-      localList[lIdx].status = 'revision';
-      localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(localList));
+function showDenyReasonPanel(kind, id, action) {
+  // Remove any existing panel first
+  const existingDialog = document.getElementById('denyReasonDialog');
+  if (existingDialog) existingDialog.remove();
+
+  const isRevision = action === 'revision';
+  const title = isRevision ? 'Request Revision' : 'Deny Submission';
+  const btnLabel = isRevision ? 'Mark as Needs Revision' : 'Deny Submission';
+  const btnClass = isRevision ? 'ca-revision-confirm-btn' : 'ca-deny-confirm-btn';
+  const btnColor = isRevision ? '#ea580c' : '#dc2626';
+
+  const dialog = document.createElement('dialog');
+  dialog.id = 'denyReasonDialog';
+  dialog.style.cssText = 'border:none;border-radius:12px;padding:0;max-width:480px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+  dialog.innerHTML = `
+    <div style="padding:28px 28px 24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h3 style="margin:0;font-size:18px;font-weight:700;color:#111827;">${title}</h3>
+        <button onclick="document.getElementById('denyReasonDialog').close()" style="background:none;border:none;cursor:pointer;font-size:22px;color:#6b7280;line-height:1;">&times;</button>
+      </div>
+      <p style="margin:0 0 14px;font-size:14px;color:#4b5563;">
+        ${isRevision
+          ? 'Describe what changes the teacher needs to make before resubmitting.'
+          : 'Explain why this submission is being denied. The teacher will be notified.'}
+      </p>
+      <textarea id="denyReasonText" placeholder="${isRevision ? 'e.g. Please fix the formatting and add proper references...' : 'e.g. This content does not align with the curriculum...'}"
+        style="width:100%;box-sizing:border-box;min-height:110px;border:1.5px solid #d1d5db;border-radius:8px;padding:10px 12px;font-size:14px;resize:vertical;font-family:inherit;color:#111827;outline:none;"
+        oninput="this.style.borderColor=this.value.trim()?'#6366f1':'#d1d5db'"></textarea>
+      <p style="margin:6px 0 20px;font-size:12px;color:#9ca3af;">Optional — leave blank to send without a reason.</p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="document.getElementById('denyReasonDialog').close()" style="padding:9px 18px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;color:#374151;">Cancel</button>
+        <button class="${btnClass}" onclick="_confirmDenyAction('${kind}','${id}','${action}')" style="padding:9px 18px;background:${btnColor};border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;color:#fff;">${btnLabel}</button>
+      </div>
+    </div>`;
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  setTimeout(() => { const ta = document.getElementById('denyReasonText'); if (ta) ta.focus(); }, 50);
+}
+window.showDenyReasonPanel = showDenyReasonPanel;
+
+async function _confirmDenyAction(kind, id, action) {
+  const reasonEl = document.getElementById('denyReasonText');
+  const reason = reasonEl ? reasonEl.value.trim() : '';
+  const dialog = document.getElementById('denyReasonDialog');
+  if (dialog) dialog.close();
+
+  const REVISION_KEY = 'scholaria_revision_items_v1';
+
+  if (action === 'revision') {
+    let revisionList = [];
+    try { revisionList = JSON.parse(localStorage.getItem(REVISION_KEY) || '[]'); } catch (e) {}
+    const key = `${kind}:${String(id)}`;
+    if (!revisionList.includes(key)) revisionList.push(key);
+    localStorage.setItem(REVISION_KEY, JSON.stringify(revisionList));
+
+    if (kind === 'material') {
+      const idx = materialsData.findIndex(m => String(m.id) === String(id));
+      if (idx >= 0) materialsData[idx].status = 'revision';
+      const localList = getCustomMaterialsFromStorage();
+      const lIdx = localList.findIndex(m => String(m.id) === String(id));
+      if (lIdx >= 0) {
+        localList[lIdx].status = 'revision';
+        localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(localList));
+      }
+      const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+      if (session && session.access_token) {
+        try {
+          await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+            body: JSON.stringify({ status: 'rejected', reason })
+          });
+        } catch (err) { console.warn('markNeedsRevision backend notice:', err); }
+      }
+      if (typeof addNotification === 'function') {
+        const mat = materialsData.find(m => String(m.id) === String(id));
+        if (mat && mat.uploaded_by) {
+          addNotification({
+            targetUserId: mat.uploaded_by,
+            targetRole: 'teacher',
+            title: 'Revision Requested',
+            message: `Your material "${mat.title || 'Material'}" needs revision.${reason ? ' Reason: ' + reason : ''}`,
+            type: 'material'
+          });
+        }
+      }
+    } else if (kind === 'quiz') {
+      const qIdx = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).findIndex(q => String(q.id) === String(id));
+      if (qIdx >= 0 && typeof customQuizzes !== 'undefined') customQuizzes[qIdx].status = 'revision';
+      const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+      if (session && session.access_token) {
+        try {
+          await fetch(`${API_BASE}/api/quizzes/${encodeURIComponent(id)}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+            body: JSON.stringify({ status: 'rejected', reason })
+          });
+        } catch (err) { console.warn('markNeedsRevision quiz backend notice:', err); }
+      }
     }
-    // Try backend
-    const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-    if (session && session.access_token) {
-      try {
-        await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-          body: JSON.stringify({ status: 'rejected' }) // 'rejected' maps to revision in backend
-        });
-      } catch (err) { console.warn('markNeedsRevision backend notice:', err); }
+
+    showToast('Marked as needs revision', 'info');
+  } else {
+    // reject / deny
+    if (kind === 'material') {
+      await rejectMaterial(id, reason);
+    } else {
+      await rejectQuiz(id, reason);
     }
-  } else if (kind === 'quiz') {
-    const qIdx = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).findIndex(q => String(q.id) === String(id));
-    if (qIdx >= 0 && typeof customQuizzes !== 'undefined') customQuizzes[qIdx].status = 'revision';
-    const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-    if (session && session.access_token) {
-      try {
-        await fetch(`${API_BASE}/api/quizzes/${encodeURIComponent(id)}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-          body: JSON.stringify({ status: 'rejected' })
-        });
-      } catch (err) { console.warn('markNeedsRevision quiz backend notice:', err); }
-    }
+    return; // rejectMaterial/rejectQuiz already show toast and re-render
   }
 
-  showToast('Marked as needs revision', 'info');
   const wrap = document.getElementById('approvalListWrap');
   if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
 }
+window._confirmDenyAction = _confirmDenyAction;
 
 async function approveQuiz(id) {
   // 1. Update in-memory customQuizzes
@@ -4325,7 +4402,7 @@ async function approveQuiz(id) {
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
 }
 
-async function rejectQuiz(id) {
+async function rejectQuiz(id, reason) {
   if (!confirm('Deny and remove this quiz? It will be deleted from the approval queue.')) return;
 
   // 1. Remove from in-memory customQuizzes
@@ -4460,7 +4537,7 @@ async function approveMaterial(id) {
   loadMaterialsFromDB().catch(() => {});
 }
 
-async function rejectMaterial(id) {
+async function rejectMaterial(id, reason) {
   if (!confirm('Deny and delete this material? It will be removed from the approval queue.')) return;
 
   // 1. Remove from localStorage
