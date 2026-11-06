@@ -1,6 +1,4 @@
 // server.js
-if (!globalThis.WebSocket) { try { globalThis.WebSocket = class DummyWS {}; } catch(e){} }
-// server.js
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') }); // Explicit absolute path for reliable env loading
 
@@ -19,53 +17,32 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
-// --- Account audit trail store (Supabase DB with local fallback) ---
+// --- Account audit trail store ---
 const AUDIT_FILE = path.join(__dirname, 'data', 'account-audit.json');
 
-async function getAuditRecords() {
+function getAuditRecords() {
   try {
-    if (typeof supabaseAdmin !== 'undefined') {
-      const { data, error } = await supabaseAdmin.from('account_audit').select('*').order('updated_at', { ascending: false });
-      if (!error && data && data.length > 0) {
-        const records = {};
-        data.forEach(r => { records[r.school_id] = r; });
-        return records;
-      }
-    }
-    if (fs.existsSync(AUDIT_FILE)) return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {};
-    return {};
+    if (!fs.existsSync(AUDIT_FILE)) return {};
+    return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {};
   } catch (e) {
-    try { if (fs.existsSync(AUDIT_FILE)) return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {}; } catch (_) {}
     return {};
   }
 }
 
-async function saveAuditRecord(record) {
+function saveAuditRecord(record) {
   try {
-    const key = record.school_id || record.user_id;
-    if (!key) return;
-    let savedToDb = false;
-    if (typeof supabaseAdmin !== 'undefined') {
-      try {
-        const { error } = await supabaseAdmin.from('account_audit').upsert({
-          school_id: record.school_id || key,
-          user_id: record.user_id || null,
-          full_name: record.full_name || null,
-          role: record.role || null,
-          email: record.email || null,
-          status: record.status || 'Active',
-          action: record.action || 'updated',
-          details: record.details || null,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'school_id' });
-        if (!error) savedToDb = true;
-      } catch (_) {}
-    }
     const dir = path.dirname(AUDIT_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const localRecords = fs.existsSync(AUDIT_FILE) ? JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {} : {};
-    localRecords[key] = { ...(localRecords[key] || {}), ...record, updated_at: new Date().toISOString() };
-    fs.writeFileSync(AUDIT_FILE, JSON.stringify(localRecords, null, 2), 'utf8');
+    const records = getAuditRecords();
+    const key = record.school_id || record.user_id;
+    if (key) {
+      records[key] = {
+        ...(records[key] || {}),
+        ...record,
+        updated_at: new Date().toISOString()
+      };
+      fs.writeFileSync(AUDIT_FILE, JSON.stringify(records, null, 2), 'utf8');
+    }
   } catch (e) {
     console.error('Failed to save audit record:', e.message);
   }
@@ -74,8 +51,55 @@ async function saveAuditRecord(record) {
 // --- Core Security Middleware ---
 // 1. Helmet Security Headers (CSP, Anti-Clickjacking, Anti-MIME Sniffing, Hide Express Signature)
 app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'", "https://*.supabase.co"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com",
+        "https://*.supabase.co"
+      ],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://fonts.googleapis.com",
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com"
+      ],
+      fontSrc: [
+        "'self'",
+        "https://fonts.gstatic.com",
+        "https://cdn.jsdelivr.net",
+        "data:"
+      ],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "blob:",
+        "https://*.supabase.co",
+        "https://images.unsplash.com",
+        "https://i.pravatar.cc"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://*.supabase.co",
+        "wss://*.supabase.co",
+        "https://generativelanguage.googleapis.com",
+        "https://api.openai.com",
+        "https://cdn.jsdelivr.net"
+      ],
+      frameAncestors: ["'self'"],
+      objectSrc: ["'none'"]
+    }
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  frameguard: { action: 'sameorigin' },
+  noSniff: true,
+  xssFilter: true,
+  hidePoweredBy: true
 }));
 
 // Additional defense-in-depth headers
@@ -216,18 +240,10 @@ app.get('/uploads/chat/:filename', (req, res) => {
 });
 
 // Allowed public assets and folders
-const staticFileOptions = {
-  dotfiles: 'ignore',
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    }
-  }
-};
-app.use('/css', express.static(path.join(__dirname, 'css'), staticFileOptions));
-app.use('/js', express.static(path.join(__dirname, 'js'), staticFileOptions));
+app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'ignore' }));
+app.use('/js', express.static(path.join(__dirname, 'js'), { dotfiles: 'ignore' }));
 app.use('/assets', express.static(path.join(__dirname, 'assets'), { dotfiles: 'ignore' }));
-app.use(express.static(__dirname, { ...staticFileOptions, index: false }));
+app.use(express.static(__dirname, { dotfiles: 'ignore', index: false }));
 
 // 5. Rate Limiting: Global API Limiter & Dedicated Auth Limiter (Anti-Brute Force / DDoS)
 const authLimiter = rateLimit({
@@ -251,7 +267,7 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 // Health check endpoint for uptime monitoring and hosting platforms
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', serviceKey: hasServiceKey, legacyKey: adminKeyIsLegacyJwt, timestamp: new Date().toISOString() });
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Client-safe dynamic Supabase config endpoint
@@ -270,13 +286,9 @@ app.use('/api/', (req, res, next) => {
 });
 
 // --- Supabase client for token validation & admin operations ---
-const rawAdminKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim().replace(/^["']|["']$/g, '');
-const adminKeyIsLegacyJwt = rawAdminKey.startsWith('eyJ');
-const hasServiceKey = adminKeyIsLegacyJwt || rawAdminKey.startsWith('sb_secret_');
-const activeAdminKey = hasServiceKey ? rawAdminKey : process.env.SUPABASE_ANON_KEY;
-if (!hasServiceKey) {
-  console.warn('SUPABASE_SERVICE_ROLE_KEY is missing or not a recognized service key; admin operations fall back to the anon key and may hit RLS.');
-}
+const activeAdminKey = (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('eyJ')) 
+  ? process.env.SUPABASE_SERVICE_ROLE_KEY 
+  : process.env.SUPABASE_ANON_KEY;
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -285,8 +297,7 @@ const supabaseAdmin = createClient(
     global: {
       headers: { Authorization: `Bearer ${activeAdminKey}` }
     },
-    auth: { autoRefreshToken: false, persistSession: false },
-    realtime: { createClient: false }
+    auth: { autoRefreshToken: false, persistSession: false }
   }
 );
 
@@ -294,8 +305,7 @@ const supabaseAnon = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY,
   {
-    auth: { autoRefreshToken: false, persistSession: false },
-    realtime: { createClient: false }
+    auth: { autoRefreshToken: false, persistSession: false }
   }
 );
 
@@ -741,7 +751,7 @@ app.get('/api/admin/account-audit', async (req, res) => {
   if (!profile) return;
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can view audit records' });
 
-  const records = await getAuditRecords();
+  const records = getAuditRecords();
   res.json({ success: true, records });
 });
 
@@ -940,14 +950,25 @@ function getMuteForStrikes(strikes) {
 }
 
 // --- Chat File Uploads ---
+const chatStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, chatUploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname) || '';
+    const safeBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+    cb(null, `${uniqueSuffix}_${safeBase}${ext}`);
+  }
+});
+
 const ALLOWED_UPLOAD_EXTS = new Set([
   '.png', '.jpg', '.jpeg', '.webp', '.gif',
   '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'
 ]);
 
-// Use memory storage so we can pipe to Supabase Storage (cloud-persistent)
 const chatUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: chatStorage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: function (req, file, cb) {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -958,17 +979,7 @@ const chatUpload = multer({
   }
 });
 
-app.post('/api/chat/upload', (req, res, next) => {
-  chatUpload.single('file')(req, res, (err) => {
-    if (err) {
-      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: 'File size exceeds 10MB limit. Please upload a smaller file.' });
-      }
-      return res.status(400).json({ error: err.message || 'File type not allowed. Supported formats: images, PDF, and documents.' });
-    }
-    next();
-  });
-}, async (req, res) => {
+app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
 
@@ -983,46 +994,9 @@ app.post('/api/chat/upload', (req, res, next) => {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  // Upload to Supabase Storage so the file is accessible from any device
-  const ext = path.extname(req.file.originalname) || '';
-  const safeBase = path.basename(req.file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
-  const storagePath = `${profile.id}/${Date.now()}-${crypto.randomBytes(4).toString('hex')}_${safeBase}${ext}`;
-
-  const { error: storageErr } = await supabaseAdmin.storage
-    .from('chat-attachments')
-    .upload(storagePath, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
-
-  if (storageErr) {
-    // Fallback to local disk if Supabase bucket unavailable
-    console.warn('Supabase chat storage upload failed, falling back to local:', storageErr.message);
-    const localFilename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}_${safeBase}${ext}`;
-    const localPath = path.join(chatUploadsDir, localFilename);
-    require('fs').writeFileSync(localPath, req.file.buffer);
-    return res.json({
-      url: `/uploads/chat/${localFilename}`,
-      name: req.file.originalname,
-      size: req.file.size,
-      mime: req.file.mimetype
-    });
-  }
-
-  let fileUrl = '';
-  try {
-    const { data: signedData } = await supabaseAdmin.storage
-      .from('chat-attachments')
-      .createSignedUrl(storagePath, 60 * 60 * 24 * 7); // 7 days
-    if (signedData && signedData.signedUrl) fileUrl = signedData.signedUrl;
-  } catch (_) {}
-
-  if (!fileUrl) {
-    const { data: publicData } = supabaseAdmin.storage
-      .from('chat-attachments')
-      .getPublicUrl(storagePath);
-    fileUrl = publicData ? publicData.publicUrl : '';
-  }
-
+  const relativeUrl = `/uploads/chat/${req.file.filename}`;
   res.json({
-    url: fileUrl,
+    url: relativeUrl,
     name: req.file.originalname,
     size: req.file.size,
     mime: req.file.mimetype
@@ -1089,15 +1063,6 @@ app.post('/api/chat/send', async (req, res) => {
   const isProfanity = !isAttachment && !isSevere && (localCheck.profanityFlagged || modResult.flagged);
 
   let finalBody = text;
-  if (isAttachment) {
-    try {
-      const parsed = JSON.parse(finalBody);
-      delete parsed.dataUrl;
-      delete parsed.previewUrl;
-      if (parsed.data && parsed.data.length > 3500) delete parsed.data;
-      finalBody = JSON.stringify(parsed);
-    } catch (_) {}
-  }
   let warning = null;
   let violationToLog = null;
   let muteUpdate = null;
@@ -1243,18 +1208,8 @@ app.get('/api/chat/seen-receipts', async (req, res) => {
 // --- Learning Materials (centralized storage) ---
 const materialUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // matches the 50MB-per-file limit shown in the upload UI
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB per file
 });
-
-function materialUploadMiddleware(req, res, next) {
-  materialUpload.any()(req, res, err => {
-    if (!err) return next();
-    const message = err.code === 'LIMIT_FILE_SIZE'
-      ? 'Each handout must be 50MB or smaller.'
-      : 'Unable to process the uploaded files.';
-    return res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: message });
-  });
-}
 
 function requireTeacherOrAdmin(profile, res) {
   if (!['teacher', 'admin'].includes(profile.role)) {
@@ -1263,7 +1218,6 @@ function requireTeacherOrAdmin(profile, res) {
   }
   return true;
 }
-
 
 // --- Shared curriculum subjects ---
 app.get('/api/curriculum-subjects', async (req, res) => {
@@ -1294,11 +1248,37 @@ app.post('/api/curriculum-subjects', async (req, res) => {
     description: `${gradeLevel} ${strand} ${track} subject.`,
     created_by: profile.id
   }).select('*').single();
-  if (error) return res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'A subject with this code already exists in that section.' : 'Unable to save subject', details: error.message });
+
+  if (error) {
+    // If the table doesn't exist (42P01) or is inaccessible, return a local-only record
+    // so the front-end can still persist the subject in localStorage without blocking the user.
+    if (error.code === '42P01' || error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+      return res.status(200).json({
+        id: `local_${Date.now()}`,
+        title, code, grade_level: gradeLevel, strand, track, section,
+        description: `${gradeLevel} ${strand} ${track} subject.`,
+        created_by: profile.id,
+        created_at: new Date().toISOString(),
+        local_only: true
+      });
+    }
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'A subject with this code already exists in that section.' });
+    }
+    // For any other DB error, still return a local-only record so the UI doesn't break
+    return res.status(200).json({
+      id: `local_${Date.now()}`,
+      title, code, grade_level: gradeLevel, strand, track, section,
+      description: `${gradeLevel} ${strand} ${track} subject.`,
+      created_by: profile.id,
+      created_at: new Date().toISOString(),
+      local_only: true
+    });
+  }
   res.status(201).json(data);
 });
 
-app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => {
+app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
   if (!requireTeacherOrAdmin(profile, res)) return;
@@ -1309,82 +1289,48 @@ app.post('/api/materials/upload', materialUploadMiddleware, async (req, res) => 
     return res.status(400).json({ error: 'Missing file(s) or title' });
   }
 
-  // The materials table only allows STEM/HUMSS/ABM/TVL. Composite selections such as
-  // "STEM, HUMSS" or "All Strands" mean general/core and must be stored as NULL.
-  const requestedStrand = String(strand || '').trim().toUpperCase();
-  const normalizedStrand = ['STEM', 'HUMSS', 'ABM', 'TVL'].includes(requestedStrand) ? requestedStrand : null;
-
   // Force section to teacher's connected section if assigned
   const targetSection = (profile.role === 'teacher' && profile.section) ? profile.section : (section || null);
   const status = profile.role === 'admin' ? 'approved' : 'pending';
 
   const insertedMaterials = [];
-  const failures = [];
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     const safeName = f.originalname.replace(/[^\w.\-]+/g, '_');
     const storagePath = `${profile.id}/${Date.now()}_${i}-${safeName}`;
 
-    let uploadErr = null;
-    // Storage only accepts legacy JWT keys; with an sb_secret_ key use the uploader's session.
-    let storageClient = (adminKeyIsLegacyJwt || !req.userClient) ? supabaseAdmin : req.userClient;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const { error } = await storageClient.storage
-        .from('learning-materials')
-        .upload(storagePath, f.buffer, { contentType: f.mimetype });
-      uploadErr = error;
-      // A retry can see the object from the first attempt if only the response was lost.
-      if (uploadErr && (uploadErr.statusCode === 409 || /already exists/i.test(uploadErr.message || ''))) uploadErr = null;
-      if (!uploadErr) break;
-      console.warn(`Storage upload attempt ${attempt} failed for ${safeName}:`, uploadErr.message);
-      // Retry as the uploader when the admin client is blocked (RLS or non-JWT key).
-      if (req.userClient && storageClient !== req.userClient) {
-        storageClient = req.userClient;
-      }
-      if (attempt === 1) await new Promise(r => setTimeout(r, 400));
-    }
+    const { error: uploadErr } = await supabaseAdmin.storage
+      .from('learning-materials')
+      .upload(storagePath, f.buffer, { contentType: f.mimetype });
     if (uploadErr) {
-      failures.push(`${safeName}: ${uploadErr.message}`);
+      console.warn('Storage upload error for file:', safeName, uploadErr.message);
       continue;
     }
 
     const itemTitle = files.length === 1 ? title.trim() : (f.originalname.replace(/\.[^.]+$/, '') || title.trim());
 
-    const insertRow = {
-      title: itemTitle,
-      subject: subject || null,
-      strand: normalizedStrand,
-      grade_level: grade_level || null,
-      section: targetSection,
-      file_url: storagePath,
-      file_type: f.mimetype,
-      uploaded_by: profile.id,
-      status,
-    };
+    const { data: material, error: insertErr } = await supabaseAdmin
+      .from('materials')
+      .insert({
+        title: itemTitle,
+        subject: subject || null,
+        strand: strand || null,
+        grade_level: grade_level || null,
+        section: targetSection,
+        file_url: storagePath,
+        file_type: f.mimetype,
+        uploaded_by: profile.id,
+        status,
+      })
+      .select().single();
 
-    let inserted = await supabaseAdmin.from('materials').insert(insertRow).select().single();
-
-    // If the deployment has no usable service-role key, the anon key hits RLS.
-    // Retry with the uploader's own session; the policy allows them to insert their own rows.
-    if (inserted.error && req.userClient && (inserted.error.code === '42501' || inserted.error.code === 'PGRST301' || /row-level security|invalid compact jws|invalid jwt|unregistered api key|invalid api key/i.test(inserted.error.message || ''))) {
-      console.warn('Admin insert blocked by RLS; retrying with uploader session:', inserted.error.message);
-      inserted = await req.userClient.from('materials').insert(insertRow).select().single();
-    }
-
-    const material = inserted.data;
-    const insertErr = inserted.error;
-
-    if (insertErr) {
-      console.warn('Material insert error for file:', safeName, insertErr.message);
-      failures.push(`${safeName}: ${insertErr.message}`);
-    } else if (material) {
+    if (!insertErr && material) {
       insertedMaterials.push(material);
     }
   }
 
   if (insertedMaterials.length === 0) {
-    console.warn('Material upload failed:', failures.join(' | '));
-    return res.status(500).json({ error: 'Failed to upload materials', details: failures.join(' | ') });
+    return res.status(500).json({ error: 'Failed to upload materials' });
   }
 
   if (files.length === 1) {
@@ -1416,23 +1362,13 @@ app.get('/api/materials', async (req, res) => {
 
   const uploaderIds = [...new Set((data || []).map(m => m.uploaded_by).filter(Boolean))];
   let namesById = {};
-  let rolesById = {};
   if (uploaderIds.length) {
     const { data: uploaders } = await supabaseAdmin
-      .from('users').select('id, full_name, role').in('id', uploaderIds);
+      .from('users').select('id, full_name').in('id', uploaderIds);
     namesById = Object.fromEntries((uploaders || []).map(u => [u.id, u.full_name]));
-    rolesById = Object.fromEntries((uploaders || []).map(u => [u.id, u.role]));
   }
 
-  res.json((data || []).map(m => {
-    const role = rolesById[m.uploaded_by];
-    return {
-      ...m,
-      uploaded_by_name: namesById[m.uploaded_by] || null,
-      uploaded_by_role: role || null,
-      uploader_role: role ? role.charAt(0).toUpperCase() + role.slice(1) : null
-    };
-  }));
+  res.json((data || []).map(m => ({ ...m, uploaded_by_name: namesById[m.uploaded_by] || null })));
 });
 
 app.get('/api/materials/:id/download', async (req, res) => {
@@ -1445,20 +1381,12 @@ app.get('/api/materials/:id/download', async (req, res) => {
 
   const canView = material.status === 'approved'
     || material.uploaded_by === profile.id
-    || profile.role === 'admin'
-    || profile.role === 'teacher';
+    || profile.role === 'admin';
   if (!canView) return res.status(403).json({ error: 'Not available' });
-
-  if (!material.file_url) return res.status(404).json({ error: 'File path missing' });
-
-  if (/^https?:/i.test(material.file_url)) {
-    if (req.query.redirect === '1') return res.redirect(material.file_url);
-    return res.json({ url: material.file_url, title: material.title, file_type: material.file_type });
-  }
 
   const { data, error } = await supabaseAdmin.storage
     .from('learning-materials')
-    .createSignedUrl(material.file_url, 60 * 60);
+    .createSignedUrl(material.file_url, 60 * 10);
   if (error) return res.status(500).json({ error: error.message });
 
   if (req.query.redirect === '1') {
@@ -2619,80 +2547,6 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
   }
 
   return res.status(500).json({ error: 'Could not generate questions from material.' });
-});
-
-
-// ══════════════════════════════════════════════════════════
-// SINGLE ACTIVE SESSION ENFORCEMENT
-// ══════════════════════════════════════════════════════════
-
-// POST /api/auth/register-session
-// Called after login — stores a unique session fingerprint on the user row.
-app.post('/api/auth/register-session', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.replace(/^Bearer\s+/, '');
-    if (!token) return res.status(401).json({ error: 'No token provided' });
-
-    const { data: { user }, error: verifyErr } = await supabaseAdmin.auth.getUser(token);
-    if (verifyErr || !user) return res.status(401).json({ error: 'Invalid token' });
-
-    const sessionToken = crypto.randomBytes(32).toString('hex');
-
-    const { error: updateErr } = await supabaseAdmin
-      .from('users')
-      .update({ active_session_token: sessionToken })
-      .eq('id', user.id);
-
-    if (updateErr) {
-      console.warn('Session token update skipped (column may not exist yet):', updateErr.message);
-      return res.json({ session_token: sessionToken, enforced: false });
-    }
-
-    return res.json({ session_token: sessionToken, enforced: true });
-  } catch (err) {
-    console.error('register-session error:', err.message);
-    return res.status(500).json({ error: 'Internal error' });
-  }
-});
-
-// POST /api/auth/validate-session
-// Called by the client heartbeat every 60s — checks stored fingerprint matches.
-app.post('/api/auth/validate-session', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.replace(/^Bearer\s+/, '');
-    if (!token) return res.status(401).json({ valid: false, reason: 'no_token' });
-
-    const { session_token } = req.body || {};
-
-    const { data: { user }, error: verifyErr } = await supabaseAdmin.auth.getUser(token);
-    if (verifyErr || !user) return res.status(401).json({ valid: false, reason: 'token_expired' });
-
-    if (!session_token) return res.json({ valid: true, enforced: false });
-
-    const { data: profile, error: profileErr } = await supabaseAdmin
-      .from('users')
-      .select('active_session_token')
-      .eq('id', user.id)
-      .single();
-
-    if (profileErr || !profile) return res.json({ valid: true, enforced: false });
-
-    // Column not yet added or null — skip enforcement gracefully
-    if (profile.active_session_token === undefined || profile.active_session_token === null) {
-      return res.json({ valid: true, enforced: false });
-    }
-
-    if (profile.active_session_token !== session_token) {
-      return res.json({ valid: false, reason: 'session_superseded' });
-    }
-
-    return res.json({ valid: true, enforced: true });
-  } catch (err) {
-    console.error('validate-session error:', err.message);
-    return res.status(500).json({ valid: true, enforced: false }); // fail-open to avoid lockout
-  }
 });
 
 module.exports = app;
