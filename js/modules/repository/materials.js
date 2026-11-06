@@ -4241,7 +4241,7 @@ function showDenyReasonPanel(kind, id, action) {
 
   const dialog = document.createElement('dialog');
   dialog.id = 'denyReasonDialog';
-  dialog.style.cssText = 'border:none;border-radius:12px;padding:0;max-width:480px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,0.3);';
+  dialog.style.cssText = 'border:none;border-radius:12px;padding:0;max-width:480px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,0.3);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;';
   dialog.innerHTML = `
     <div style="padding:28px 28px 24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
