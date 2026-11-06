@@ -90,7 +90,8 @@ app.use(helmet({
         "wss://*.supabase.co",
         "https://generativelanguage.googleapis.com",
         "https://api.openai.com",
-        "https://cdn.jsdelivr.net"
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com"
       ],
       frameAncestors: ["'self'"],
       objectSrc: ["'none'"]
@@ -638,13 +639,16 @@ app.post('/api/admin/create-account', async (req, res) => {
   const { full_name, role, email, strand, grade_level, section, subjects, custom_password } = req.body;
 
   if (!full_name || !full_name.trim()) return res.status(400).json({ error: 'Missing full name' });
-  if (!['student', 'teacher', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
-  
-  if (role !== 'admin' && (!email || !/^\S+@\S+\.\S+$/.test(email))) {
-    return res.status(400).json({ error: 'Missing or invalid email' });
+  if (!['student', 'teacher', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role. Must be student, teacher, or admin.' });
+
+  // Lenient email check: at least one char @ at least one char . at least one char
+  const isValidEmail = (e) => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+
+  if (role !== 'admin' && !isValidEmail(email)) {
+    return res.status(400).json({ error: `Invalid or missing email address for ${role} account. Please provide a valid email (e.g. student@hwa.edu.ph).` });
   }
-  if (role === 'admin' && email && !/^\S+@\S+\.\S+$/.test(email)) {
-    return res.status(400).json({ error: 'Invalid recovery email format' });
+  if (role === 'admin' && email && !isValidEmail(email)) {
+    return res.status(400).json({ error: 'Invalid recovery email format. Leave it blank or enter a valid email.' });
   }
 
   let school_id;
@@ -686,12 +690,15 @@ app.post('/api/admin/create-account', async (req, res) => {
     }
   });
   if (authErr) {
-    let msg = authErr.message;
-    if (/already.*regist/i.test(msg)) {
-      msg = 'An account with this email already exists';
+    let msg = authErr.message || 'Unknown Supabase error';
+    if (/already.*regist|already.*exist|duplicate/i.test(msg)) {
+      msg = `An account with the email "${accountEmail}" already exists in the system. Use a different email address.`;
     } else if (msg === 'User not allowed' || msg.includes('not allowed')) {
-      msg = 'Database Configuration Error: Supabase service_role secret key is missing or invalid in server .env (auth.admin.createUser permission denied). Your Excel format is valid, but the server needs the valid service_role key to register accounts.';
+      msg = 'Server Configuration Error: The Supabase service_role key is missing or invalid. Contact the system administrator to check the SUPABASE_SERVICE_ROLE_KEY environment variable on Railway.';
+    } else if (msg.includes('invalid') && msg.includes('email')) {
+      msg = `The email address "${accountEmail}" was rejected by the authentication server. Please use a standard email format.`;
     }
+    console.error('[create-account] Supabase auth error:', authErr.message, '| email:', accountEmail, '| role:', role);
     return res.status(400).json({ error: msg });
   }
 
