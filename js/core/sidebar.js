@@ -1,19 +1,3 @@
-
-function toggleProfileCurrentPassword() {
-  const input = document.getElementById('pfCurrentPassword');
-  const toggle = document.getElementById('pfCurrentPasswordToggle');
-  if (!input || !toggle) return;
-  const isVisible = input.type === 'text';
-  input.type = isVisible ? 'password' : 'text';
-  toggle.setAttribute('aria-label', isVisible ? 'Show current password' : 'Hide current password');
-  toggle.setAttribute('aria-pressed', String(!isVisible));
-  toggle.title = isVisible ? 'Show password' : 'Hide password';
-  toggle.innerHTML = isVisible
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
-    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a15 15 0 0 1-3.1 3.8M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7a10 10 0 0 0 4-.8"/></svg>';
-}
-window.toggleProfileCurrentPassword = toggleProfileCurrentPassword;
-
 /* ── SIDEBAR, NAVIGATION ROUTER & SHELL INIT ── */
 
 const SIDEBAR = {
@@ -115,6 +99,7 @@ function initDashboardShell() {
     sessionStorage.removeItem('scholaria_chat_attachment_return');
   } catch (_) {}
   if (typeof resetChatState === 'function') resetChatState();
+  if (typeof seedLocalNotificationTestSamples === 'function') seedLocalNotificationTestSamples();
   const initialPage = attachmentReturn?.conversationId
     ? 'chats'
     : (requestedPage === 'quiz' && (ROLE === 'teacher' || ROLE === 'admin') ? 'quiz' : 'dashboard');
@@ -379,6 +364,7 @@ async function loadClassRecAttempts(force = true) {
     });
 
     classRecAttemptsCache = combined;
+    if (typeof currentPage !== 'undefined' && currentPage === 'quiz') refreshQuizAttemptCountLabels();
   } catch(e) {
     console.error('Error loading class record attempts:', e);
   } finally {
@@ -468,6 +454,55 @@ function getAllRecordedAttempts() {
   } catch(e) {}
 
   return deduplicateQuizAttempts(pool);
+}
+
+function getQuizUniqueStudentAttemptCount(quizId, quizTitle) {
+  const attempts = typeof getAllRecordedAttempts === 'function' ? getAllRecordedAttempts() : [];
+  const students = typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers)
+    ? registeredUsers.filter(user => String(user.role || '').toLowerCase() === 'student')
+    : [];
+  const studentKeys = new Set();
+  attempts.filter(attempt => {
+    const attemptQuizId = String(attempt.quiz_id || '').trim();
+    return attemptQuizId
+      ? attemptQuizId === String(quizId)
+      : String(attempt.quiz_title || '').trim().toLowerCase() === String(quizTitle || '').trim().toLowerCase();
+  }).forEach(attempt => {
+    if (attempt.is_preview || (typeof isArtificialSeedAttempt === 'function' && isArtificialSeedAttempt(attempt))) return;
+    const id = String(attempt.student_id || attempt.studentId || attempt.user_id || attempt.email || attempt.student_email || '').trim().toLowerCase();
+    if (!id) return;
+    const email = String(attempt.student_email || attempt.email || '').trim().toLowerCase();
+    const student = students.find(user =>
+      [user.id, user.dbId, user.school_id].some(userId => userId && String(userId).trim().toLowerCase() === id) ||
+      (email && String(user.email || '').trim().toLowerCase() === email)
+    );
+    if (!student) return;
+    studentKeys.add(String(student.dbId || student.id || student.school_id).trim().toLowerCase());
+  });
+  return studentKeys.size;
+}
+
+let quizManagerAttemptRealtimeChannel = null;
+let quizManagerAttemptRefreshTimer = null;
+function ensureQuizManagerAttemptRealtime() {
+  if (quizManagerAttemptRealtimeChannel || typeof db === 'undefined' || !db?.channel) return;
+  const scheduleRefresh = () => {
+    if (typeof currentPage !== 'undefined' && currentPage !== 'quiz') return;
+    clearTimeout(quizManagerAttemptRefreshTimer);
+    quizManagerAttemptRefreshTimer = setTimeout(() => loadClassRecAttempts(true), 500);
+  };
+  quizManagerAttemptRealtimeChannel = db.channel('quiz-manager-attempt-counts')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'quiz_attempts' }, scheduleRefresh)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_records' }, scheduleRefresh)
+    .subscribe();
+}
+
+function refreshQuizAttemptCountLabels() {
+  document.querySelectorAll('[data-quiz-attempt-count]').forEach(label => {
+    const count = getQuizUniqueStudentAttemptCount(label.dataset.quizAttemptCount, label.dataset.quizTitle || '');
+    const text = label.querySelector('.quiz-attempt-count-text');
+    if (text) text.textContent = `${count} student${count === 1 ? '' : 's'} took this quiz`;
+  });
 }
 
 function isAttemptBelongingToStudent(a, u) {
@@ -801,7 +836,20 @@ function handleAvatarFileSelect(event) {
   const reader = new FileReader();
   reader.onload = function(e) {
     const dataUrl = e.target.result;
-    _showAvatarConfirmModal(dataUrl, file);
+    
+    const heroImg = document.getElementById('pfHeroAvatarImg');
+    const heroInitials = document.getElementById('pfHeroAvatarInitials');
+    const dataUrlInput = document.getElementById('pfAvatarDataUrl');
+
+    if (heroImg) {
+      heroImg.src = dataUrl;
+      heroImg.style.display = 'block';
+      if (heroInitials) heroInitials.style.display = 'none';
+    }
+    if (dataUrlInput) {
+      dataUrlInput.value = dataUrl;
+    }
+    showToast('Profile picture preview updated! Click "Save Changes" to apply.', 'info');
   };
   reader.readAsDataURL(file);
 }
@@ -816,6 +864,21 @@ function updateProfileNamePreview() {
   if (preview) preview.textContent = assembled || 'Your Full Name';
   if (heroName) heroName.textContent = assembled || 'Your Full Name';
 }
+
+function toggleProfileCurrentPassword() {
+  const input = document.getElementById('pfCurrentPassword');
+  const toggle = document.getElementById('pfCurrentPasswordToggle');
+  if (!input || !toggle) return;
+  const isVisible = input.type === 'text';
+  input.type = isVisible ? 'password' : 'text';
+  toggle.setAttribute('aria-label', isVisible ? 'Show current password' : 'Hide current password');
+  toggle.setAttribute('aria-pressed', String(!isVisible));
+  toggle.title = isVisible ? 'Show password' : 'Hide password';
+  toggle.innerHTML = isVisible
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a15 15 0 0 1-3.1 3.8M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7a10 10 0 0 0 4-.8"/></svg>';
+}
+window.toggleProfileCurrentPassword = toggleProfileCurrentPassword;
 
 async function confirmPasswordChange() {
   const button = document.getElementById('pfConfirmPasswordBtn');
@@ -2350,7 +2413,7 @@ function studentPage(page) {
       const hasActiveFilters = Boolean(studentQuizSearchQuery || studentQuizFilterSubject || studentQuizFilterStatus || studentQuizSortBy !== 'pending');
 
       return `
-      <div class="student-quizzes-container" style="max-width:1160px;width:100%;display:flex;flex-direction:column;gap:12px;">
+      <div class="student-quizzes-container" style="max-width:none;width:100%;display:flex;flex-direction:column;gap:12px;">
         <div class="section-hdr" style="margin-bottom:0;">
           <div>
             <h2 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 2px 0;">Quizzes</h2>
@@ -3080,6 +3143,7 @@ function teacherPage(page) {
             : (q.timeLimitMinutes ? `⏱️ ${q.timeLimitMinutes} mins` : 'Untimed');
           const dueText = q.dueDate ? `📅 Due: ${new Date(q.dueDate).toLocaleDateString()}` : '📅 No Expiration';
           const isReviewAllowed = q.allowReviewAnswers !== false && q.allow_review_answers !== false;
+          const takenStudentCount = getQuizUniqueStudentAttemptCount(q.id, q.title);
 
           return `
           <div class="quiz-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;gap:16px;flex-wrap:wrap;">
@@ -3099,21 +3163,29 @@ function teacherPage(page) {
             </div>
 
             <!-- ACTION BUTTONS & REVIEW CHECKBOX -->
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <div class="quiz-row-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <div class="quiz-attempt-count" data-quiz-attempt-count="${escHtml(q.id)}" data-quiz-title="${escHtml(q.title || '')}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
+              </div>
               <!-- REVIEW ANSWERS CHECKBOX -->
               <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
                 <input type="checkbox" ${isReviewAllowed ? 'checked' : ''} onchange="toggleQuizReviewAnswers('${q.id}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
                 <span>${isReviewAllowed ? '👁️ Show Answers on Review' : '🔒 Answers Hidden'}</span>
               </label>
 
-              <button class="table-act-btn take" onclick="openTakeQuizModal('${q.id}')" title="Preview Quiz Questions">
+              <button class="table-act-btn take" onclick="openQuizQuestionsPreview('${q.id}')" title="Preview Quiz Questions">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 Preview
               </button>
               ${isInter ? `
               <button class="table-act-btn" style="background:linear-gradient(135deg,#0284c7,#8b5cf6);color:#fff;border:none;" onclick="openInteractiveQuiz('${q.id}')" title="Play Interactive Game Mode">
                 🎮 Play Game
-              </button>` : ''}
+              </button>` : `
+              <button class="table-act-btn take" onclick="takeQuizAsTeacher('${q.id}')" title="Take this standard quiz as a student">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
+                Take Quiz
+              </button>`}
               <button class="table-act-btn review" onclick="setAnalysisQuiz('${q.id}')" title="View Question Accuracy & Psychometrics">
                 📊 Item Analysis
               </button>
@@ -3220,26 +3292,6 @@ function teacherPage(page) {
           <h2>Item Analysis Report</h2>
           <span style="font-size:12px;color:var(--text-muted);">Psychometric item discrimination, accuracy rates, and question difficulty breakdown</span>
         </div>
-        <div class="analysis-filter-container">
-          <div class="analysis-tab-bar" role="tablist" aria-label="Item analysis views">
-            <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('questions')">
-              <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${rows.length}</span>
-            </button>
-            <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('students')">
-              <span class="analysis-tab-icon" aria-hidden="true">${iconUsers()}</span> Student Submissions <span class="analysis-tab-count">${attemptCount}</span>
-            </button>
-          </div>
-          <div class="analysis-filters-row">
-            <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)">
-              <option value="">All Handled Sections</option>
-              ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
-            </select>
-            <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)">
-              ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
-            </select>
-            <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
-          </div>
-        </div>
       </div>
 
       <!-- PERFORMANCE STAT CARDS -->
@@ -3278,6 +3330,27 @@ function teacherPage(page) {
         </div>
       </div>
 
+      <div class="analysis-filter-container">
+        <div class="analysis-tab-bar" role="tablist" aria-label="Item analysis views">
+          <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('questions')">
+            <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${rows.length}</span>
+          </button>
+          <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('students')">
+            <span class="analysis-tab-icon" aria-hidden="true">${iconUsers()}</span> Student Submissions <span class="analysis-tab-count">${attemptCount}</span>
+          </button>
+        </div>
+        <div class="analysis-filters-row">
+          <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)">
+            <option value="">All Handled Sections</option>
+            ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+          </select>
+          <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)">
+            ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
+          </select>
+          <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
+        </div>
+      </div>
+
       <!-- QUIZ OVERVIEW CARD -->
       <div class="announcement-card" style="margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
@@ -3308,7 +3381,7 @@ function teacherPage(page) {
             ${attempts.length ? attempts.map((attempt, index) => `
               <tr>
                 <td style="font-weight:700;color:var(--blue);">${index + 1}</td>
-                <td style="font-weight:600;color:#0f172a;">${escHtml(attempt.student_name || attempt.studentName || attempt.name || 'Student')}</td>
+                <td style="font-weight:600;color:#0f172a;">${escHtml(attempt.student_name || attempt.studentName || attempt.name || '')}</td>
                 <td>${escHtml(attempt.section || attempt.section_name || '—')}</td>
                 <td style="text-align:center;font-weight:700;color:var(--blue);">${attempt.score != null ? escHtml(String(attempt.score)) : escHtml(String(attempt.score_percentage ?? '—'))}${attempt.total_items && attempt.score != null ? ` / ${escHtml(String(attempt.total_items))}` : ''}</td>
                 <td>${attempt.submitted_at ? escHtml(new Date(attempt.submitted_at).toLocaleDateString()) : '—'}</td>
@@ -3322,13 +3395,13 @@ function teacherPage(page) {
         <table>
           <thead>
             <tr>
-              <th style="width:40px;">#</th>
+              <th style="width:5%;">#</th>
               <th>Question & Type</th>
-              <th style="width:100px;text-align:center;">Correct</th>
-              <th style="width:100px;text-align:center;">Incorrect</th>
-              <th style="width:180px;">Accuracy Rate</th>
-              <th style="width:120px;text-align:center;">Difficulty</th>
-              <th>Key / Correct Answer</th>
+              <th style="text-align:center;">Correct</th>
+              <th style="text-align:center;">Incorrect</th>
+              <th>Accuracy Rate</th>
+              <th style="text-align:center;">Difficulty</th>
+              <th>Correct Answer</th>
             </tr>
           </thead>
           <tbody>
@@ -4580,9 +4653,18 @@ function exportAdminCensusCSV() {
 
 function printAdminCensus() {
   const prevTitle = document.title;
+  const cleanupPrintState = () => {
+    document.body.classList.remove('printing-admin-census');
+    document.title = prevTitle;
+  };
+  document.body.classList.add('printing-admin-census');
   document.title = 'Haven_of_Wisdom_Academy_Official_Census_SY2026_2027';
+  const pageStyle = document.createElement('style');
+  pageStyle.textContent = '@page { size: A4 landscape; margin: 8mm; }';
+  document.head.appendChild(pageStyle);
+  window.addEventListener('afterprint', () => { pageStyle.remove(); cleanupPrintState(); }, { once: true });
   window.print();
-  setTimeout(() => { document.title = prevTitle; }, 1200);
+  setTimeout(() => { pageStyle.remove(); cleanupPrintState(); }, 1500);
 }
 
 function renderAdminClassRecordCensus() {
@@ -5087,18 +5169,32 @@ function renderPage(page) {
   mainContent.dataset.page = page;
   mainContent.dataset.role = ROLE || '';
   mainContent.innerHTML = getPageContent(ROLE, page);
-  const mainScrollContainer = document.querySelector('.main') || mainContent;
-  if (mainScrollContainer) mainScrollContainer.scrollTop = 0;
-  window.scrollTo(0, 0);
   if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
 
   if (page === 'users' || page === 'classrec') loadUsersFromDB();
   if (page === 'classrec') loadClassRecAttempts();
-  if (page === 'quiz') loadQuizzesFromDB();
+  if (page === 'quiz') {
+    loadQuizzesFromDB();
+    if (ROLE === 'teacher') {
+      loadClassRecAttempts();
+      if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
+      ensureQuizManagerAttemptRealtime();
+    }
+  }
   if (page === 'quizzes' || page === 'progress') { loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
-  if (page === 'analysis') loadQuizzesFromDB();
+  if (page === 'analysis') {
+    loadQuizzesFromDB();
+    if (typeof ensureAnalysisAttemptsRealtime === 'function') ensureAnalysisAttemptsRealtime();
+    if (ROLE === 'teacher') {
+      Promise.resolve(typeof loadUsersFromDB === 'function' ? loadUsersFromDB() : null)
+        .then(() => typeof loadClassRecAttempts === 'function' ? loadClassRecAttempts(true) : null)
+        .then(() => {
+          if (analysisSelectedQuizId && typeof loadAttemptsForAnalysis === 'function') loadAttemptsForAnalysis(analysisSelectedQuizId, true);
+        });
+    }
+  }
   if (page === 'chats') loadChatsPage();
   if (page === 'dashboard') {
     if (ROLE === 'teacher' || ROLE === 'admin') {
@@ -5106,6 +5202,7 @@ function renderPage(page) {
       loadQuizzesFromDB();
       if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
       if (ROLE === 'teacher' && typeof refreshTeacherUnreadMessageCount === 'function') refreshTeacherUnreadMessageCount();
+      if (ROLE === 'teacher' && typeof ensureChatRealtimeSubscription === 'function') ensureChatRealtimeSubscription();
     }
     if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
     if (ROLE === 'student') { loadMaterialsFromDB(); loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
@@ -5341,80 +5438,3 @@ async function confirmTwoFactorEnrollment() {
   }
 }
 
-
-function _showAvatarConfirmModal(dataUrl, file) {
-  const existing = document.getElementById('avatarConfirmModal');
-  if (existing) existing.remove();
-
-  const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-  const ext = file.name.split('.').pop().toUpperCase();
-
-  const modal = document.createElement('div');
-  modal.id = 'avatarConfirmModal';
-  modal.style.cssText = [
-    'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;',
-    'background:rgba(15,23,42,0.65);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);',
-    'animation:fadeIn 0.2s ease;'
-  ].join('');
-
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:20px;padding:32px 28px;max-width:420px;width:90%;box-shadow:0 24px 60px rgba(15,23,42,0.25);font-family:'Plus Jakarta Sans',sans-serif;position:relative;">
-      <button onclick="document.getElementById('avatarConfirmModal').remove();document.getElementById('pfAvatarInput') && (document.getElementById('pfAvatarInput').value='');"
-        style="position:absolute;top:16px;right:16px;background:none;border:none;cursor:pointer;color:#94a3b8;padding:4px;border-radius:6px;display:flex;align-items:center;justify-content:center;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-
-      <h3 style="font-size:17px;font-weight:700;color:#0f172a;margin-bottom:4px;">Use this photo?</h3>
-      <p style="font-size:13px;color:#64748b;margin-bottom:20px;">Review your new profile picture before applying.</p>
-
-      <div style="display:flex;justify-content:center;margin-bottom:18px;">
-        <img src="${dataUrl}" alt="Preview"
-          style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0;box-shadow:0 4px 16px rgba(15,23,42,0.1);">
-      </div>
-
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12.5px;color:#475569;display:flex;gap:16px;">
-        <span><strong style="color:#0f172a;">Format:</strong> ${ext}</span>
-        <span><strong style="color:#0f172a;">Size:</strong> ${sizeMB} MB</span>
-      </div>
-
-      <div style="display:flex;gap:10px;">
-        <button onclick="document.getElementById('avatarConfirmModal').remove();document.getElementById('pfAvatarInput') && (document.getElementById('pfAvatarInput').value='');"
-          style="flex:1;padding:10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#64748b;font-size:13.5px;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;transition:background 0.2s;">
-          Cancel
-        </button>
-        <button id="_confirmAvatarBtn"
-          style="flex:1;padding:10px;border-radius:10px;border:none;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;box-shadow:0 4px 12px rgba(37,99,235,0.3);transition:opacity 0.2s;">
-          ✓ Use this photo
-        </button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-  modal.querySelector('#_confirmAvatarBtn').onclick = () => _applyAvatarFromConfirm(dataUrl);
-  modal.addEventListener('click', function(ev) {
-    if (ev.target === modal) {
-      modal.remove();
-      const inp = document.getElementById('pfAvatarInput');
-      if (inp) inp.value = '';
-    }
-  });
-}
-
-function _applyAvatarFromConfirm(dataUrl) {
-  document.getElementById('avatarConfirmModal')?.remove();
-
-  const heroImg = document.getElementById('pfHeroAvatarImg');
-  const heroInitials = document.getElementById('pfHeroAvatarInitials');
-  const dataUrlInput = document.getElementById('pfAvatarDataUrl');
-
-  if (heroImg) {
-    heroImg.src = dataUrl;
-    heroImg.style.display = 'block';
-    if (heroInitials) heroInitials.style.display = 'none';
-  }
-  if (dataUrlInput) {
-    dataUrlInput.value = dataUrl;
-  }
-  showToast('Profile picture updated! Click "Save Changes" to apply.', 'info');
-}
