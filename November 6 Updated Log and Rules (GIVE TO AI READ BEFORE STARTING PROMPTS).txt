@@ -1,0 +1,120 @@
+================================================================================
+SCHOLARIA — AI HANDOFF LOG & RULES
+Last Updated: November 6, 2026
+Deployment: https://scholaria-production-4e06.up.railway.app
+================================================================================
+
+IMPORTANT: This project runs on RAILWAY (cloud). All fixes must be uploaded to
+GitHub (web interface) for Railway to auto-deploy. DO NOT confuse local testing
+with the live Railway deployment. The user uploads files manually via GitHub.com
+web UI — NOT Git CLI, NOT GitHub Desktop.
+
+================================================================================
+1. DEPLOYMENT METHOD — READ THIS FIRST
+================================================================================
+- Live site: https://scholaria-production-4e06.up.railway.app
+- GitHub auto-deploys to Railway on every commit to the main branch.
+- User uploads files via GitHub.com web interface only (drag-and-drop or file picker).
+- CRITICAL: Subdirectory files (e.g. js/modules/repository/materials.js) will NOT
+  upload correctly if you use the root-level file picker. The user must navigate
+  INTO the subfolder on GitHub.com first, then upload.
+- To upload everything at once: GitHub repo → "Add file" → "Upload files" →
+  drag the entire local Scholaria folder onto the drop zone. This uploads all
+  files including subdirectories in one commit.
+- Always tell the user EXACTLY which file to upload and to which path on GitHub.
+- Railway redeploys automatically after each GitHub commit (takes ~1-2 min).
+- After redeploy, always test in an InPrivate Edge window with hard refresh (Ctrl+Shift+R).
+
+================================================================================
+2. RAILWAY-CONFIRMED FIXES (deployed and working on live site)
+================================================================================
+- Helmet CSP: Added scriptSrcAttr: ["'unsafe-inline'"] so inline onclick handlers work.
+- Helmet CSP: Added cdnjs.cloudflare.com to connectSrc.
+- login.html / admin-login.html: Edge -ms-reveal / -ms-clear CSS fix (double eye icon).
+- login.html / admin-login.html: Fixed SVG path in toggleEye() (was malformed).
+- server.js: Improved /api/admin/create-account with better error messages and logging.
+- dashboard.html: Archive Subject button added below "+ Add Subject" in hero banner (admin only).
+- materials.js: Full Archive Subject system implemented (localStorage key: scholaria_archived_subjects_v1).
+- materials.js: Content Approval fixed — replaced old submitApprovalDecision (which used db.From()
+  with capital F causing TypeError) with runApprovalAction using fetch API.
+- materials.js: Teacher uploads now go to status='pending' instead of auto-approved.
+  Fixed in 3 places: cleanupLegacyDummyStorage, getCustomMaterialsFromStorage, submitMaterialUpload.
+- materials.js: Deny button now opens a reason panel (showDenyReasonPanel) instead of bare confirm().
+- materials.js: Needs Revision button now opens a reason panel with a textarea for description.
+- materials.js: Deny/Needs Revision dialog is centered on screen (position:fixed + transform).
+- materials.js: Teacher upload toast changed from "published to students!" to "submitted for admin approval."
+
+================================================================================
+3. KNOWN GAPS (not yet implemented on Railway)
+================================================================================
+- Teacher edit-and-resubmit flow: When marked 'Needs Revision', teacher must upload
+  a new file — no dedicated in-place resubmit button exists yet.
+- api/auth/register-session → 404: Some code calls this endpoint but it doesn't exist
+  in server.js. Low priority — not investigated yet.
+- api/admin/create-account → 500 on Railway: Likely SUPABASE_SERVICE_ROLE_KEY missing
+  from Railway environment variables. Check Railway Variables dashboard.
+
+================================================================================
+4. SECURITY INCIDENT — ACTION REQUIRED
+================================================================================
+- User accidentally uploaded .env file to GitHub on Nov 6, 2026.
+- .env was deleted from GitHub immediately.
+- STATUS UNKNOWN: Supabase keys (SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY) may
+  still need to be rotated at https://supabase.com → Project Settings → API.
+- After rotating: update Railway Variables with the new keys.
+- Do NOT proceed with any Supabase-related work until keys are confirmed rotated.
+
+================================================================================
+5. RAILWAY ENVIRONMENT VARIABLES (required in Railway dashboard)
+================================================================================
+- SUPABASE_URL
+- SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY  ← most likely missing / needs rotation
+- DATABASE_URL               ← with SSL, used by pg package
+- PORT                       ← Railway sets this automatically
+- NODE_ENV=production
+
+================================================================================
+6. CRITICAL RULES FOR ALL AI (DO NOT BREAK)
+================================================================================
+- NEVER delete or drop any database table or existing user records.
+- Supabase JS v2 query builders are NOT native Promises. NEVER chain .catch()
+  directly on them. Always use: try { await db.from(...) } catch(err) {}
+- Supabase messages_body_check: char_length(body) >= 1 AND <= 4000. NEVER store
+  raw base64 dataUrl strings in the database body column.
+- Attachment payloads must never store raw base64 dataUrl strings in the DB body column.
+- Always include { ssl: { rejectUnauthorized: false } } when using the pg package with DATABASE_URL.
+- Use 'npm.cmd' instead of 'npm' in PowerShell on this Windows environment.
+- Python is NOT installed on this machine. All scripts must be Node.js.
+- The back button in login.html must remain an inline SVG — never an emoji or text icon.
+- Sidebar background color must strictly remain #112540 (dark navy) across all roles.
+- Always increment the cache-busting ?v= parameter in dashboard.html after editing any JS/CSS.
+- Current script cache versions as of Nov 6, 2026:
+    materials.js?v=20060
+    quiz-generator.js?v=20018
+    user-management.js?v=20046
+    chat.js?v=20011
+    auth.js?v=20006
+    sidebar.js?v=20053
+- Existing Supabase Storage buckets: 'chat-attachments' (private), 'learning-materials' (private).
+  Do NOT attempt to recreate them.
+- File .agents/rules/no-csp-changes.md exists — do not make unauthorized CSP changes.
+- Local git branch is 'michael_branch'. Railway deploys from main. Do not use git CLI.
+- The server runs on port 3001 (Railway sets PORT automatically via process.env.PORT).
+- ALLOWED_ORIGIN in server.js covers both local (http://127.0.0.1:5500) and Railway URL.
+
+================================================================================
+7. KEY FILE LOCATIONS
+================================================================================
+- Entry point:        server.js
+- Main dashboard:     dashboard.html
+- Materials logic:    js/modules/repository/materials.js
+- Auth logic:         js/core/auth.js
+- Sidebar:            js/core/sidebar.js
+- Quiz generator:     js/modules/quizzes/quiz-generator.js
+- User management:    js/modules/admin/user-management.js
+- Archive subjects:   localStorage key 'scholaria_archived_subjects_v1'
+- Custom materials:   localStorage key 'scholaria_custom_materials_v1'
+- Revision items:     localStorage key 'scholaria_revision_items_v1'
+
+================================================================================

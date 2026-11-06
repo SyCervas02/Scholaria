@@ -24,9 +24,11 @@ HWA-2026-008 - Aria Amara Armstrong - ariaarmstong01
 
 == HUMS == 
 HWA-2026-011 - Benjamin Blake Brown - benjaminbrown01
+HWA-2026-013 - Batam Bling Blake - AVz2QsQiprm4
 
 == ABM ==
 HWA-2026-003 - Cloe Cade Carter III - cloecarter01
+HWA-2026-014 - Cassandra Cassey Clay - i7J2r8p7xw36
 
 == TVL ==
 HWA-2026-012 - Dylan Derek Duncan III - dylanduncan01
