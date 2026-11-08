@@ -4675,19 +4675,7 @@ function exportAdminCensusCSV() {
 }
 
 function printAdminCensus() {
-  const prevTitle = document.title;
-  const cleanupPrintState = () => {
-    document.body.classList.remove('printing-admin-census');
-    document.title = prevTitle;
-  };
-  document.body.classList.add('printing-admin-census');
-  document.title = 'Haven_of_Wisdom_Academy_Official_Census_SY2026_2027';
-  const pageStyle = document.createElement('style');
-  pageStyle.textContent = '@page { size: A4 landscape; margin: 8mm; }';
-  document.head.appendChild(pageStyle);
-  window.addEventListener('afterprint', () => { pageStyle.remove(); cleanupPrintState(); }, { once: true });
-  window.print();
-  setTimeout(() => { pageStyle.remove(); cleanupPrintState(); }, 1500);
+  openInstitutionalCensusReportModal();
 }
 
 function renderAdminClassRecordCensus() {
