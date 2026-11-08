@@ -89,6 +89,7 @@ function reuseAnnouncement(id) {
 
   if (titleInput) titleInput.value = anc.title || '';
   if (msgInput) msgInput.value = anc.message || '';
+  updateAncCharCount();
 
   if (anc.category === 'others') {
     handleAncCategoryChange('others');
@@ -670,9 +671,77 @@ function onAncExpiryInputChange() {
 }
 
 /* ── ANNOUNCEMENT CREATOR MODAL (ADMIN & TEACHER) ── */
+function updateAncCharCount() {
+  const input = document.getElementById('ancMessageInput');
+  const counter = document.getElementById('ancCharCount');
+  if (!input || !counter) return;
+  const max = input.maxLength > 0 ? input.maxLength : 2000;
+  counter.textContent = `char count (${input.value.length}/${max})`;
+  counter.style.color = input.value.length >= max ? '#dc2626' : '#94a3b8';
+}
+
+function ancFormat(action) {
+  const input = document.getElementById('ancMessageInput');
+  if (!input) return;
+  input.focus();
+  const start = input.selectionStart || 0;
+  const end = input.selectionEnd || 0;
+  const value = input.value;
+  const selected = value.slice(start, end);
+  const insert = (text, selFrom, selTo) => {
+    input.value = value.slice(0, start) + text + value.slice(end);
+    input.selectionStart = selFrom;
+    input.selectionEnd = selTo;
+    updateAncCharCount();
+  };
+  const wrap = (marker) => {
+    const body = selected;
+    const wrapped = marker + body + marker;
+    insert(wrapped, start + marker.length, start + marker.length + body.length);
+  };
+  const prefixLines = (makePrefix) => {
+    const body = selected;
+    const lines = body.split('\n');
+    const out = lines.map((ln, i) => makePrefix(i) + ln).join('\n');
+    insert(out, start, start + out.length);
+  };
+  switch (action) {
+    case 'bold': wrap('*'); break;
+    case 'italic': wrap('_'); break;
+    case 'quote': wrap('"'); break;
+    case 'bullet': prefixLines(() => '• '); break;
+    case 'numbered': prefixLines(i => `${i + 1}. `); break;
+    case 'link': {
+      const url = prompt('Link URL:', 'https://');
+      if (!url) break;
+      const label = selected || url;
+      const text = `${label} (${url})`;
+      insert(text, start, start + text.length);
+      break;
+    }
+    case 'image': {
+      const url = prompt('Image URL:', 'https://');
+      if (!url) break;
+      const text = `[Image: ${url}]`;
+      insert(text, start, start + text.length);
+      break;
+    }
+    case 'attachment': {
+      const name = prompt('Attachment name / reference:', '');
+      if (!name) break;
+      const text = `[Attachment: ${name}]`;
+      insert(text, start, start + text.length);
+      break;
+    }
+  }
+}
+
 function openCreateAnnouncementModal() {
   const modal = document.getElementById('ancModal');
   if (modal) modal.classList.add('active');
+  const msgInput = document.getElementById('ancMessageInput');
+  if (msgInput) msgInput.value = '';
+  updateAncCharCount();
 
   const catSelect = document.getElementById('ancCategoryInput');
   const emergencyOpt = catSelect ? catSelect.querySelector('option[value="emergency"]') : null;

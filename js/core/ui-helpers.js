@@ -103,9 +103,20 @@ function isSearchInputField(el) {
          nameStr.includes('search') || nameStr.includes('query');
 }
 
+function isFreeTextField(el) {
+  const idStr = (el.id || '').toLowerCase();
+  const classStr = (el.className || '').toLowerCase();
+  const nameStr = (el.name || '').toLowerCase();
+  // Free-text bodies must never be treated as number/letter-only. Guards against
+  // substring false-positives (e.g. "messAGE" matching the "age" number keyword).
+  const freeTextKeywords = ['message', 'body', 'description', 'content', 'announcement', 'caption', 'comment', 'feedback', 'reason', 'note'];
+  return freeTextKeywords.some(kw => idStr.includes(kw) || classStr.includes(kw) || nameStr.includes(kw));
+}
+
 function isNumberOnlyInputField(el) {
   if (!el || !el.tagName) return false;
   if (isSearchInputField(el)) return false;
+  if (isFreeTextField(el)) return false;
   if (el.type === 'number' || el.inputMode === 'numeric') return true;
   if (el.dataset && el.dataset.type === 'number') return true;
   const idStr = (el.id || '').toLowerCase();
@@ -120,6 +131,7 @@ function isNumberOnlyInputField(el) {
 function isLetterOnlyInputField(el) {
   if (!el || !el.tagName) return false;
   if (isSearchInputField(el)) return false;
+  if (isFreeTextField(el)) return false;
   if (el.dataset && (el.dataset.type === 'alphanumeric' || el.dataset.type === 'text' || el.dataset.type === 'any')) return false;
   if (el.dataset && el.dataset.type === 'letters') return true;
   const idStr = (el.id || '').toLowerCase();
@@ -138,6 +150,7 @@ function isLetterOnlyInputField(el) {
 }
 
 function getSafeMaxInputLimit(el) {
+  if (el.maxLength && el.maxLength > 0) return el.maxLength;
   if (isSearchInputField(el)) return 100;
   if (isNumberOnlyInputField(el)) {
     const idStr = (el.id || '').toLowerCase();
