@@ -22,6 +22,9 @@ const API_BASE = (function() {
   }
   return 'http://localhost:3001';
 })();
+// Top-level const stays in the global lexical scope, not on window; chat.js
+// reads window.API_BASE, so mirror it there or production falls back to localhost:3001.
+window.API_BASE = API_BASE;
 let ROLE = null;
 let CURRENT_PROFILE = null;
 
