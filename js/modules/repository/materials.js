@@ -2249,53 +2249,43 @@ function renderAdminApprovedHandoutRow(m) {
 
   return '<tr data-material-id="' + escHtml(m.id) + '" data-origin="' + uploaderRole.toLowerCase() + '" data-section="' + escHtml(section.toLowerCase()) + '" data-search="' + escHtml((title + ' ' + (m.fileName || '') + ' ' + subject + ' ' + section + ' ' + uploaderName + ' ' + approverName).toLowerCase()) + '">' +
     '<td>' +
-      '<div style="display:flex;align-items:flex-start;gap:10px;">' +
-        '<div style="margin-top:2px;">' + formatBadge + '</div>' +
-        '<div style="min-width:0;">' +
-          '<div style="font-weight:700;color:var(--text-primary);font-size:13.5px;margin-bottom:2px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(title) + '">' + escHtml(title) + '</div>' +
-          '<div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">' +
-            '<span style="max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="' + escHtml(m.fileName || title) + '">' + escHtml(m.fileName || title) + '</span>' +
-            '<span>&middot;</span>' +
-            '<span>' + escHtml(size) + '</span>' +
-            '<span>&middot;</span>' +
-            '<span>' + escHtml(date) + '</span>' +
-          '</div>' +
+      '<div class="repo-cell-flex">' +
+        '<span class="repo-format">' + formatBadge + '</span>' +
+        '<div class="repo-min">' +
+          '<div class="repo-clip repo-title" title="' + escHtml(title + (m.fileName ? ' — ' + m.fileName : '')) + '">' + escHtml(title) + '</div>' +
+          '<div class="repo-clip repo-sub" title="' + escHtml(m.fileName || '') + '">' + escHtml(size) + ' &middot; ' + escHtml(date) + '</div>' +
         '</div>' +
       '</div>' +
     '</td>' +
     '<td>' +
-      '<div style="font-weight:600;color:var(--text-primary);font-size:13px;">' + escHtml(subject) + '</div>' +
-      '<div style="font-size:11.5px;color:var(--text-muted);">' + escHtml(strandGrade) + '</div>' +
+      '<div class="repo-clip repo-subject" title="' + escHtml(subject) + '">' + escHtml(subject) + '</div>' +
+      '<div class="repo-clip repo-sub" title="' + escHtml(strandGrade) + '">' + escHtml(strandGrade) + '</div>' +
     '</td>' +
+    '<td><span class="repo-section" title="' + escHtml(section) + '">' + escHtml(section) + '</span></td>' +
     '<td>' +
-      '<span style="background:#f1f5f9;color:#334155;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:6px;display:inline-block;">' +
-        escHtml(section) +
-      '</span>' +
-    '</td>' +
-    '<td>' +
-      '<div style="display:flex;align-items:center;gap:8px;">' +
-        '<span class="role-tag ' + uploaderRole.toLowerCase() + '">' + uploaderRole + '</span>' +
-        '<span style="font-weight:600;color:var(--text-primary);font-size:13px;">' + escHtml(uploaderName) + '</span>' +
+      '<div class="repo-cell-flex">' +
+        '<span class="role-tag ' + uploaderRole.toLowerCase() + '" style="flex-shrink:0;">' + uploaderRole + '</span>' +
+        '<div class="repo-min"><div class="repo-clip repo-name" title="' + escHtml(uploaderName) + '">' + escHtml(uploaderName) + '</div></div>' +
       '</div>' +
     '</td>' +
     '<td>' +
-      '<div style="display:inline-flex;align-items:center;gap:6px;color:#15803d;font-weight:600;font-size:12.5px;">' +
-        '<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#dcfce7;color:#16a34a;font-size:11px;flex-shrink:0;">✓</span>' +
-        '<span>' + escHtml(approverName) + '</span>' +
+      '<div class="repo-cell-flex">' +
+        '<span class="repo-check">✓</span>' +
+        '<div class="repo-min"><div class="repo-clip repo-approve" title="' + escHtml(approverName) + '">' + escHtml(approverName) + '</div></div>' +
       '</div>' +
     '</td>' +
     '<td>' +
-      '<div style="display:inline-flex;align-items:center;gap:8px;">' +
-        '<button class="table-act-btn preview" onclick="previewSubjectUploadedMaterial(\'' + escHtml(m.id) + '\')" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" title="Instant Handout Preview">' +
-          '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' +
+      '<div class="repo-actions">' +
+        '<button class="repo-act preview" onclick="previewSubjectUploadedMaterial(\'' + escHtml(m.id) + '\')" title="Instant Handout Preview">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' +
           'Preview' +
         '</button>' +
-        '<button class="table-act-btn download" onclick="downloadMaterial(\'' + escHtml(m.id) + '\')" style="background:#f8fafc;color:#334155;border:1px solid #cbd5e1;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" title="Download Handout">' +
-          '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
+        '<button class="repo-act download" onclick="downloadMaterial(\'' + escHtml(m.id) + '\')" title="Download Handout">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
           'Download' +
         '</button>' +
-        '<button class="table-act-btn delete" onclick="deleteMaterial(\'' + escHtml(m.id) + '\')" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:7px;padding:6px 9px;font-size:12px;font-weight:700;cursor:pointer;" title="Delete Handout">' +
-          '🗑️' +
+        '<button class="repo-act delete" onclick="deleteMaterial(\'' + escHtml(m.id) + '\')" title="Delete Handout">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>' +
         '</button>' +
       '</div>' +
     '</td>' +
@@ -2342,8 +2332,16 @@ function renderAdminApprovedHandoutsTableHTML() {
         '<option value="az">Title (A-Z)</option>' +
       '</select>' +
     '</div>' +
-    '<div class="user-table" id="adminApprovedTableWrap">' +
-      '<table style="width:100%;border-collapse:collapse;min-width:980px;">' +
+    '<div class="repo-table-wrap" id="adminApprovedTableWrap">' +
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">' +
+        '<colgroup>' +
+          '<col style="width:24%;">' +
+          '<col style="width:16%;">' +
+          '<col style="width:9%;">' +
+          '<col style="width:15%;">' +
+          '<col style="width:14%;">' +
+          '<col style="width:22%;">' +
+        '</colgroup>' +
         '<thead>' +
           '<tr>' +
             '<th>Handout &amp; Document</th>' +
@@ -3731,7 +3729,7 @@ function renderMaterialsManagerPage(role) {
                                   <div class="mm-ad-item" onclick="approveMaterial('${m.id}')">
                                     <span>✓</span> Approve
                                   </div>
-                                  <div class="mm-ad-item reject" onclick="rejectMaterial('${m.id}')">
+                                  <div class="mm-ad-item reject" onclick="runApprovalAction('material','${m.id}',false)">
                                     <span>✕</span> Reject
                                   </div>
                                 ` : ''}
@@ -4403,8 +4401,6 @@ async function approveQuiz(id) {
 }
 
 async function rejectQuiz(id, reason) {
-  if (!confirm('Deny and remove this quiz? It will be deleted from the approval queue.')) return;
-
   // 1. Remove from in-memory customQuizzes
   const quizIdx = customQuizzes.findIndex(q => String(q.id) === String(id));
   if (quizIdx >= 0) customQuizzes.splice(quizIdx, 1);
@@ -4419,7 +4415,7 @@ async function rejectQuiz(id, reason) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ status: 'rejected' })
+        body: JSON.stringify({ status: 'rejected', reason: reason || '' })
       });
     } catch (err) {
       console.warn('Quiz reject backend error:', err);
@@ -4538,7 +4534,9 @@ async function approveMaterial(id) {
 }
 
 async function rejectMaterial(id, reason) {
-  if (!confirm('Deny and delete this material? It will be removed from the approval queue.')) return;
+  // Capture the uploader before removal so the denial reason can reach them.
+  const deniedMat = materialsData.find(m => String(m.id) === String(id))
+    || getCustomMaterialsFromStorage().find(m => String(m.id) === String(id));
 
   // 1. Remove from localStorage
   try {
@@ -4558,11 +4556,21 @@ async function rejectMaterial(id, reason) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ status: 'rejected' })
+        body: JSON.stringify({ status: 'rejected', reason: reason || '' })
       });
     } catch (err) {
       console.warn('Backend reject notice:', err);
     }
+  }
+
+  if (typeof addNotification === 'function' && deniedMat && deniedMat.uploaded_by) {
+    addNotification({
+      targetUserId: deniedMat.uploaded_by,
+      targetRole: 'teacher',
+      title: 'Submission Denied',
+      message: `Your material "${deniedMat.title || 'Material'}" was denied.${reason ? ' Reason: ' + reason : ''}`,
+      type: 'material'
+    });
   }
 
   showToast('Material denied and removed', 'success');
