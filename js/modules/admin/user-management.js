@@ -858,6 +858,8 @@ async function loadUsersFromDB() {
       if (mainContent && typeof getPageContent === 'function') {
         mainContent.innerHTML = getPageContent(ROLE, currentPage);
       }
+    } else if (typeof currentPage !== 'undefined' && currentPage === 'quiz' && typeof refreshQuizAttemptCountLabels === 'function') {
+      refreshQuizAttemptCountLabels();
     }
   } finally {
     isFetchingUsers = false;
@@ -1159,7 +1161,8 @@ function renderSectionCards() {
     const assignedTeachers = registeredUsers.filter(u =>
       u.role === 'teacher' &&
       u.isActive !== false &&
-      isTeacherAssignedToSection(u, s.name)
+      isTeacherAssignedToSection(u, s.name) &&
+      isTeacherCompatibleWithSection(u, s)
     );
 
     const isArchived = Boolean(s.isArchived);
@@ -1185,7 +1188,7 @@ function renderSectionCards() {
           <div class="sec-card-details">
             <div><strong>Adviser:</strong> ${escHtml(s.adviser || 'Not Assigned')}</div>
             <div><strong>Room / Location:</strong> ${escHtml(s.room || 'TBD')}</div>
-            <div><strong>Assigned Teachers:</strong> ${assignedTeachers.length > 0 ? assignedTeachers.map(t => escHtml(t.name)).join(', ') : '<span style="color:#94a3b8;font-style:italic;">None assigned</span>'}</div>
+            <div><strong>Subject Teachers:</strong> ${assignedTeachers.length > 0 ? assignedTeachers.map(t => escHtml(t.name)).join(', ') : '<span style="color:#94a3b8;font-style:italic;">None assigned</span>'}</div>
             ${isArchived && s.archivedAt ? `<div style="color:#b45309;font-size:11.5px;margin-top:4px;">Archived on ${new Date(s.archivedAt).toLocaleDateString()}</div>` : ''}
           </div>
         </div>
@@ -1249,7 +1252,13 @@ function getAvailableCampusRooms() {
     const raw = localStorage.getItem('scholaria_managed_rooms');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Apply the same placeholder filter as rooms-management.js
+        return parsed.filter(r => {
+          if (['room-301', 'room-302', 'room-401', 'room-402', 'room-avr', 'room-comlab1'].includes(r.id)) return false;
+          return r.id && /^room-\d{13}$/.test(r.id);
+        });
+      }
     }
   } catch (e) {}
   return [];
@@ -1286,7 +1295,7 @@ function renderSectionModalForm(sec) {
 
     <div class="gen-row">
       <div class="gen-field">
-        <label>Class Adviser</label>
+        <label>Class Adviser <span style="font-weight:600;color:#64748b;font-size:11px;">(any strand)</span></label>
         <select id="secFormAdviser" class="user-filter-select" style="width:100%;" onchange="if(this.value) { const c = document.getElementById('secFormAdviserCustom'); if(c) c.value = ''; }">
           <option value="">Select a Teacher as Adviser (Optional)</option>
           ${registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false).map(t => `<option value="${escHtml(t.name)}" ${sec.adviser === t.name ? 'selected' : ''}>${escHtml(t.name)} (${escHtml(t.strand || t.subjects || 'General')})</option>`).join('')}
@@ -1294,6 +1303,7 @@ function renderSectionModalForm(sec) {
         <div style="margin-top:5px;">
           <input type="text" id="secFormAdviserCustom" placeholder="Or type unlisted adviser name…" value="${registeredUsers.some(u => u.role === 'teacher' && u.isActive !== false && u.name === sec.adviser) ? '' : escHtml(sec.adviser || '')}" style="width:100%;font-size:12px;padding:6px 10px;border:1px solid var(--blue-light);border-radius:6px;">
         </div>
+        <div style="margin-top:5px;font-size:11px;color:#64748b;line-height:1.4;">The adviser may come from any strand and is separate from subject teachers, who must match this section's strand.</div>
       </div>
       <div class="gen-field">
         <label>Room / Location (Optional)</label>
@@ -1373,22 +1383,9 @@ function saveSectionForm() {
     });
   }
 
-  // Link teacher to this section if adviser appointed
-  if (adviser) {
-    const teacherObj = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers))
-      ? registeredUsers.find(u => u.role === 'teacher' && u.name && u.name.trim().toLowerCase() === adviser.trim().toLowerCase())
-      : null;
-    if (teacherObj) {
-      const curSecs = (teacherObj.section || '').split(',').map(s => s.trim()).filter(Boolean);
-      if (!curSecs.some(s => s.toLowerCase() === name.toLowerCase())) {
-        curSecs.push(name);
-        teacherObj.section = curSecs.join(', ');
-        if (typeof persistUserSectionChange === 'function') {
-          persistUserSectionChange(teacherObj, teacherObj.section);
-        }
-      }
-    }
-  }
+  // The class adviser is stored only on the section (sec.adviser). It is a separate
+  // role from subject teacher, so appointing an adviser does NOT add the section to
+  // the teacher's subject-teacher assignments (teacher.section).
 
   saveManagedSections();
   closeSectionModal();
@@ -1462,10 +1459,8 @@ function getTeacherHandledStrands(teacher) {
 
 function isTeacherCompatibleWithSection(teacher, section) {
   if (!teacher || !section) return false;
-  // If this teacher is the appointed class adviser, they are unconditionally compatible!
-  if (section.adviser && teacher.name && section.adviser.trim().toLowerCase() === teacher.name.trim().toLowerCase()) {
-    return true;
-  }
+  // Subject teachers must match the section's strand. Advisers are exempt from
+  // this rule, but being an adviser does NOT make someone a subject teacher.
   const teacherStrands = getTeacherHandledStrands(teacher);
   if (teacherStrands.includes('General')) return true;
 
@@ -1478,12 +1473,8 @@ function isTeacherCompatibleWithSection(teacher, section) {
 function isTeacherAssignedToSection(teacher, secName) {
   if (!teacher || !secName) return false;
   const sName = secName.trim().toLowerCase();
-  // 1. If appointed as adviser of this section, unconditionally recognized as assigned faculty
-  const sec = managedSections.find(s => (s.name || '').trim().toLowerCase() === sName);
-  if (sec && sec.adviser && teacher.name && sec.adviser.trim().toLowerCase() === teacher.name.trim().toLowerCase()) {
-    return true;
-  }
-  // 2. Or if teacher.section explicitly contains this section
+  // Subject-teacher assignment is driven ONLY by explicit teacher.section membership.
+  // Being the class adviser is a separate role and does not imply a subject assignment.
   if (!teacher.section) return false;
   const parts = teacher.section.split(',').map(s => s.trim().toLowerCase());
   return parts.includes(sName);
@@ -1790,12 +1781,8 @@ async function removeTeacherFromSection(teacherKey, secName) {
   const filtered = curSections.filter(s => s.toLowerCase() !== secName.trim().toLowerCase());
   teacher.section = filtered.length > 0 ? filtered.join(', ') : null;
 
-  // If this teacher was the appointed class adviser, clear adviser on section
-  const sec = managedSections.find(s => (s.name || '').trim().toLowerCase() === secName.trim().toLowerCase());
-  if (sec && sec.adviser && sec.adviser.trim().toLowerCase() === teacher.name.trim().toLowerCase()) {
-    sec.adviser = '';
-    saveManagedSections();
-  }
+  // Removing a subject-teacher assignment does not touch the class-adviser role;
+  // the two are independent. Advisers are changed only via Edit Details & Adviser.
 
   await persistUserSectionChange(teacher, teacher.section);
 
@@ -1820,7 +1807,8 @@ function openManageSectionModal(secName) {
   const assignedTeachers = registeredUsers.filter(u =>
     u.role === 'teacher' &&
     u.isActive !== false &&
-    isTeacherAssignedToSection(u, secName)
+    isTeacherAssignedToSection(u, secName) &&
+    isTeacherCompatibleWithSection(u, sec)
   );
 
   document.getElementById('sectionRosterTitle').textContent = `Manage Section — ${sec.name}`;
@@ -3308,6 +3296,20 @@ function downloadAllCredentialSlipsPdf(containerId) {
   });
 }
 
+function printOfficialCredentialSlips() {
+  const pageStyle = document.createElement('style');
+  pageStyle.textContent = '@page { size: A4 portrait; margin: 8mm; }';
+  document.head.appendChild(pageStyle);
+  const cleanup = () => {
+    document.body.classList.remove('printing-credential-slip');
+    pageStyle.remove();
+  };
+  document.body.classList.add('printing-credential-slip');
+  window.addEventListener('afterprint', cleanup, { once: true });
+  window.print();
+  setTimeout(cleanup, 1500);
+}
+
 function showOfficialCredentialSlipModal(slips) {
   const list = Array.isArray(slips) ? slips : [slips];
   if (!list.length) return;
@@ -3355,7 +3357,7 @@ function showOfficialCredentialSlipModal(slips) {
 
   foot.innerHTML = `
     <button class="foot-btn-secondary" onclick="closeAddUserModal()">Done / Close</button>
-    <button class="gen-btn" onclick="window.print()" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;display:inline-flex;align-items:center;gap:6px;">
+    <button class="gen-btn" onclick="printOfficialCredentialSlips()" style="background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;display:inline-flex;align-items:center;gap:6px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
       Print Slip
     </button>
