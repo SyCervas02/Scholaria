@@ -116,9 +116,6 @@ async function loadConversationsFromDB() {
     return;
   }
 
-  const prevUnread = {};
-  chatConversations.forEach(c => { prevUnread[c.id] = c.unread; });
-
   const validPartRows = (partRows || []).filter(r => r && r.conversation_id && r.conversations);
   const convIds = validPartRows.map(r => r.conversation_id);
   if (convIds.length === 0) { chatConversations = []; return; }
@@ -137,6 +134,17 @@ async function loadConversationsFromDB() {
   const lastByConv = {};
   (lastMsgs || []).forEach(m => { if (!lastByConv[m.conversation_id]) lastByConv[m.conversation_id] = m; });
 
+  // Persistent unread queue: count incoming messages newer than each conversation's
+  // stored read marker, so badges survive reloads (not just in-memory state).
+  const unreadByConv = {};
+  (lastMsgs || []).forEach(m => {
+    if (String(m.sender_id) === String(CURRENT_PROFILE.id)) return;
+    const marker = getChatReadMarker(m.conversation_id);
+    if (!marker || new Date(m.created_at).getTime() > new Date(marker).getTime()) {
+      unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id] || 0) + 1;
+    }
+  });
+
   chatConversations = validPartRows.map(r => {
     const conv = Array.isArray(r.conversations) ? r.conversations[0] : r.conversations;
     if (!conv) return null;
@@ -149,7 +157,7 @@ async function loadConversationsFromDB() {
       participants,
       lastMessage: last ? last.body : '',
       lastMessageAt: last ? last.created_at : conv.created_at,
-      unread: prevUnread[conv.id] || 0
+      unread: conv.id === activeConversationId ? 0 : (unreadByConv[conv.id] || 0)
     };
   }).filter(Boolean).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
 }
@@ -248,6 +256,7 @@ async function openConversation(id) {
 
   const conv = chatConversations.find(c => c.id === id);
   if (!conv) return;
+  const prevReadMarker = getChatReadMarker(id);
   conv.unread = 0;
   renderContactsList();
 
@@ -273,7 +282,7 @@ async function openConversation(id) {
   if (latestIncoming) setChatReadMarker(id, latestIncoming.created_at);
   conv.unread = 0;
   if (currentPage === 'dashboard' && ROLE === 'teacher') refreshTeacherUnreadMessageCount();
-  renderMessages(conv, data || []);
+  renderMessages(conv, data || [], prevReadMarker);
 
   const lastMsg = (data && data.length) ? data[data.length - 1] : null;
   markConversationSeen(id, lastMsg?.id, lastMsg?.created_at);
@@ -375,123 +384,105 @@ function updateSeenReceiptsUI(convId) {
   const myBubbles = document.querySelectorAll('#cwMessages .msg-bubble.me');
   if (!myBubbles.length) return;
 
-  // Clear existing seen receipts
-  document.querySelectorAll('#cwMessages .msg-seen-receipt').forEach(el => el.remove());
+  const seenIcon = '<svg viewBox="0 0 24 24" width="15" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12.5l4.5 4.5L16 7"/><path d="M11.5 16.5l1 1L22 7"/></svg>';
+  const sentIcon = '<svg viewBox="0 0 24 24" width="12" height="11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
 
-  // Find the last sent bubble
-  const lastBubble = myBubbles[myBubbles.length - 1];
-  const lastMid = lastBubble.getAttribute('data-mid');
-
-  // Check if any other participant has seen this conversation
+  // Determine how far each other participant has read (the latest message time they've seen).
   const otherReceipts = Object.values(receipts).filter(r => String(r.userId) !== String(CURRENT_PROFILE?.id));
-  if (!otherReceipts.length) {
-    const sentEl = document.createElement('div');
-    sentEl.className = 'msg-seen-receipt sent';
-    sentEl.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Sent`;
-    lastBubble.insertAdjacentElement('afterend', sentEl);
+  let latestOtherReadTime = 0;
+  let latestOtherReceipt = null;
+  otherReceipts.forEach(r => {
+    const t = new Date(r.lastMessageTime || r.seenAt || 0).getTime();
+    if (t >= latestOtherReadTime) { latestOtherReadTime = t; latestOtherReceipt = r; }
+  });
+
+  // Per-message read state on every sent bubble (mutual visibility for the sender).
+  myBubbles.forEach(b => {
+    const statusEl = b.querySelector('.msg-read-status');
+    if (!statusEl) return;
+    const created = new Date(b.getAttribute('data-created') || 0).getTime();
+    const isSeen = Boolean(latestOtherReceipt) && created <= latestOtherReadTime;
+    statusEl.classList.toggle('seen', isSeen);
+    statusEl.innerHTML = isSeen ? `${seenIcon}<span>Seen</span>` : `${sentIcon}<span>Sent</span>`;
+    statusEl.title = isSeen ? 'Read by the recipient' : 'Sent — not yet read';
+  });
+
+  // Summary receipt line beneath the most recent sent bubble.
+  document.querySelectorAll('#cwMessages .msg-seen-receipt').forEach(el => el.remove());
+  const lastBubble = myBubbles[myBubbles.length - 1];
+  const lastCreated = new Date(lastBubble.getAttribute('data-created') || 0).getTime();
+  const lastSeen = Boolean(latestOtherReceipt) && lastCreated <= latestOtherReadTime;
+  const summary = document.createElement('div');
+  if (lastSeen) {
+    summary.className = 'msg-seen-receipt';
+    const timeStr = formatMsgTime(latestOtherReceipt.seenAt);
+    const conv = chatConversations.find(c => c.id === convId);
+    const label = conv?.isGroup
+      ? `Seen by ${escHtml(latestOtherReceipt.userName?.split(' ')[0] || 'Member')}`
+      : 'Seen';
+    summary.innerHTML = `${seenIcon} ${label} · ${timeStr}`;
+  } else {
+    summary.className = 'msg-seen-receipt sent';
+    summary.innerHTML = `${sentIcon} Sent`;
+  }
+  lastBubble.insertAdjacentElement('afterend', summary);
+}
+
+function renderMessages(conv, msgs, prevReadMarker) {
+  const box = document.getElementById('cwMessages');
+  if (!box) return;
+  if (!msgs.length) {
+    box.innerHTML = '<div class="cw-empty">No messages yet — say hi!</div>';
+    updateSeenReceiptsUI(conv.id);
+    box.scrollTop = box.scrollHeight;
     return;
   }
 
-  // Find most recent seen receipt
-  otherReceipts.sort((a, b) => new Date(b.seenAt) - new Date(a.seenAt));
-  const latestOtherReceipt = otherReceipts[0];
+  // Incoming messages newer than the reader's last read marker form the unread queue.
+  const isIncoming = m => String(m.sender_id) !== String(CURRENT_PROFILE?.id);
+  const markerTime = prevReadMarker ? new Date(prevReadMarker).getTime() : 0;
+  const isUnread = m => isIncoming(m) && (!prevReadMarker || new Date(m.created_at).getTime() > markerTime);
+  const unreadTotal = msgs.filter(isUnread).length;
 
-  const seenEl = document.createElement('div');
-  seenEl.className = 'msg-seen-receipt';
-  const timeStr = formatMsgTime(latestOtherReceipt.seenAt);
-  const conv = chatConversations.find(c => c.id === convId);
-  if (conv?.isGroup) {
-    const firstOther = escHtml(latestOtherReceipt.userName?.split(' ')[0] || 'Member');
-    seenEl.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Seen by ${firstOther} · ${timeStr}`;
-  } else {
-    seenEl.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Seen · ${timeStr}`;
-  }
-  lastBubble.insertAdjacentElement('afterend', seenEl);
-}
+  let dividerPlaced = false;
+  const parts = [];
+  msgs.forEach(m => {
+    const unread = isUnread(m);
+    if (unread && !dividerPlaced) {
+      parts.push(`<div class="chat-unread-divider"><span>${unreadTotal} unread message${unreadTotal !== 1 ? 's' : ''}</span></div>`);
+      dividerPlaced = true;
+    }
+    parts.push(messageBubbleHtml(conv, m, unread));
+  });
 
-function renderMessages(conv, msgs) {
-  const box = document.getElementById('cwMessages');
-  if (!box) return;
-  box.innerHTML = msgs.length
-    ? msgs.map(m => messageBubbleHtml(conv, m)).join('')
-    : '<div class="cw-empty">No messages yet — say hi!</div>';
+  box.innerHTML = parts.join('');
   updateSeenReceiptsUI(conv.id);
   box.scrollTop = box.scrollHeight;
 }
 
 window._chatAttachmentMap = window._chatAttachmentMap || {};
 
-function createChatImageThumbnail(file, maxDim, quality) {
-  maxDim = maxDim || 480;
-  quality = quality || 0.72;
-  return new Promise(function(resolve) {
-    if (!file || !file.type || !file.type.startsWith('image/')) return resolve(null);
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      var img = new Image();
-      img.onload = function() {
-        var w = img.naturalWidth || img.width;
-        var h = img.naturalHeight || img.height;
-        if (w > maxDim || h > maxDim) {
-          var ratio = Math.min(maxDim / w, maxDim / h);
-          w = Math.max(1, Math.round(w * ratio));
-          h = Math.max(1, Math.round(h * ratio));
-        }
-        var canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        var ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        try {
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        } catch (_) {
-          resolve(null);
-        }
-      };
-      img.onerror = function() { resolve(null); };
-      img.src = e.target.result;
-    };
-    reader.onerror = function() { resolve(null); };
-    reader.readAsDataURL(file);
-  });
-}
-window.createChatImageThumbnail = createChatImageThumbnail;
-
 function getChatAttachmentUrl(attach) {
   if (!attach) return '';
-  if (attach.url && /^(https?:|data:|blob:)/i.test(attach.url)) return attach.url;
-  if (attach.url) {
-    const base = (window.API_BASE && window.API_BASE !== 'null' && !/^file:/i.test(window.API_BASE))
-      ? window.API_BASE.replace(/\/+$/, '')
-      : (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:') ? window.location.origin : 'http://localhost:3001');
-    const cleanUrl = attach.url.startsWith('/') ? attach.url : `/${attach.url}`;
-    return `${base}${cleanUrl}`;
-  }
-  if (attach.dataUrl) return attach.dataUrl;
   if (attach.data) return attach.data;
-  return '';
+  if (!attach.url) return '';
+  if (/^(https?:|data:|blob:)/i.test(attach.url)) return attach.url;
+
+  let base = window.API_BASE;
+  if (!base || base === 'null' || base.startsWith('file:')) {
+    base = 'http://localhost:3001';
+  } else if (typeof window !== 'undefined' && window.location) {
+    if (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null') {
+      base = 'http://localhost:3001';
+    }
+  }
+
+  const cleanUrl = attach.url.startsWith('/') ? attach.url : `/${attach.url}`;
+  return `${base.replace(/\/+$/, '')}${cleanUrl}`;
 }
 
 function handleChatBubbleImgError(imgEl, msgId) {
   if (!imgEl) return;
-  const entry = window._chatAttachmentMap && window._chatAttachmentMap[msgId];
-  if (entry && entry.attach) {
-    if (entry.attach.dataUrl && imgEl.src !== entry.attach.dataUrl) {
-      imgEl.src = entry.attach.dataUrl;
-      return;
-    }
-    if (entry.attach.data && imgEl.src !== entry.attach.data) {
-      imgEl.src = entry.attach.data;
-      return;
-    }
-    if (entry.attach.url && !imgEl.dataset.retried) {
-      imgEl.dataset.retried = 'true';
-      const fallbackBase = 'http://localhost:3001';
-      const cleanUrl = entry.attach.url.startsWith('/') ? entry.attach.url : '/' + entry.attach.url;
-      imgEl.src = fallbackBase + cleanUrl;
-      return;
-    }
-  }
   const card = imgEl.closest('.chat-attachment-card');
   if (card) {
     card.classList.add('image-fallback-active');
@@ -527,7 +518,7 @@ function downloadChatAttachment(msgId) {
 window.toggleChatAttachmentMenu = toggleChatAttachmentMenu;
 window.downloadChatAttachment = downloadChatAttachment;
 
-function messageBubbleHtml(conv, m) {
+function messageBubbleHtml(conv, m, isUnread = false) {
   const mine = String(m.sender_id) === String(CURRENT_PROFILE?.id);
   const showName = (conv.isGroup || !mine) && m.sender_name && !mine;
   const attach = parseChatAttachment(m.body);
@@ -572,7 +563,6 @@ function messageBubbleHtml(conv, m) {
               Download
             </a>
           </div>
-        </div>
         ${attach.caption ? `<div class="msg-text" style="margin-top:6px;font-size:13px;line-height:1.45;word-break:break-word;">${escHtml(attach.caption)}</div>` : ''}
       </div>
     `;
@@ -580,10 +570,11 @@ function messageBubbleHtml(conv, m) {
     bodyHtml = `<div class="msg-text">${escHtml(m.body)}</div>`;
   }
 
-  return `<div class="msg-bubble ${mine ? 'me' : 'them'}" data-mid="${m.id}">
+  return `<div class="msg-bubble ${mine ? 'me' : 'them'}${isUnread ? ' msg-unread' : ''}" data-mid="${m.id}" data-created="${m.created_at}">
+    ${isUnread ? '<span class="msg-new-tag">New</span>' : ''}
     ${showName ? `<div class="msg-sender">${escHtml(m.sender_name)}</div>` : ''}
     ${bodyHtml}
-    <div class="msg-time">${formatMsgTime(m.created_at)}</div>
+    <div class="msg-time">${formatMsgTime(m.created_at)}${mine ? '<span class="msg-read-status"></span>' : ''}</div>
   </div>`;
 }
 
@@ -675,31 +666,6 @@ function openChatAttachmentOverview(msgId) {
   const isImg = (attach.mime || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|svg)$/i.test(attach.name);
   const isPdf = (attach.mime || '').includes('pdf') || /\.pdf$/i.test(attach.name);
 
-  // Real fileUrl first so full resolution displays, fallbacks to thumbnails/data
-  window._chatLightboxFallbacks = [
-    fileUrl,
-    attach.previewUrl,
-    attach.dataUrl,
-    attach.data,
-    ((window.API_BASE && window.API_BASE !== 'null' && !window.API_BASE.startsWith('file:')) ? window.API_BASE.replace(/\/+$/, '') : '') + "/uploads/chat/" + encodeURIComponent(attach.name || '')
-  ].filter(function(s, i, a) { return s && typeof s === 'string' && a.indexOf(s) === i; });
-  if (!window._chatLightboxFallbacks.length) window._chatLightboxFallbacks = [fileUrl];
-  window._chatLightboxFbIdx = 0;
-  window._chatLbTryNext = function(img) {
-    window._chatLightboxFbIdx = (window._chatLightboxFbIdx || 0) + 1;
-    var next = window._chatLightboxFallbacks[window._chatLightboxFbIdx];
-    if (next) { img.onerror = function() { window._chatLbTryNext(img); }; img.src = next; }
-    else {
-      img.onerror = null; img.style.display = 'none';
-      var stage = document.getElementById('chatLightboxStage');
-      if (stage && !stage.querySelector('.lb-no-preview')) {
-        var d = document.createElement('div'); d.className = 'lb-no-preview';
-        d.style.cssText = 'color:#94a3b8;text-align:center;';
-        d.innerHTML = '<div style="font-size:36px;margin-bottom:8px">🖼️</div><div style="font-size:13px">Preview unavailable — file only exists on the sender\'s local server.<br>Use <b>Download</b> to save a copy.</div>';
-        stage.appendChild(d);
-      }
-    }
-  };
   let previewContent = '';
   if (isImg) {
     previewContent = `
@@ -715,7 +681,7 @@ function openChatAttachmentOverview(msgId) {
         </div>
       </div>
       <div id="chatLightboxStage" style="display:flex;justify-content:center;align-items:center;min-height:460px;max-height:72vh;background:#0f172a;border-radius:12px;padding:20px;overflow:auto;position:relative;">
-        <img id="chatLightboxImg" src="${escHtml(window._chatLightboxFallbacks[0])}" alt="${escHtml(attach.name)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.5);transition:transform 0.15s ease;" onerror="window._chatLbTryNext(this)"/>
+        <img id="chatLightboxImg" src="${fileUrl}" alt="${escHtml(attach.name)}" style="max-width:100%;max-height:68vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.5);transition:transform 0.15s ease;" onerror="this.onerror=null;this.src='/uploads/chat/${encodeURIComponent(attach.name)}';"/>
       </div>
     `;
   } else if (isPdf) {
@@ -799,8 +765,8 @@ function renderInputArea() {
         <button type="button" class="cw-attachment-btn" id="cwAttachmentBtn" title="Attach file (max 5MB)" aria-label="Attach file" onclick="event.preventDefault();event.stopPropagation();triggerChatAttachment()" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l8-8a4 4 0 0 1 5.7 5.7l-8 8a2 2 0 0 1-2.8-2.8L15 6"/></svg></button>
         <button type="button" class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" aria-label="Choose emoji" onclick="toggleEmojiPicker(event)" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 8h.01M16 8h.01"/></svg></button>
         <div class="emoji-picker" id="cwEmojiPicker"></div>
-        <input type="text" id="cwInput" aria-label="Message" placeholder="${pendingChatAttachment ? 'Add an optional caption…' : (activeConversationId ? 'Type a message…' : 'Select a conversation to start messaging')}" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMsg();}" ${(activeConversationId && !isSendingChatMsg) ? '' : 'disabled'}>
-        <button class="cw-send" aria-label="Send message" onclick="sendChatMsg()" ${(activeConversationId && !isSendingChatMsg) ? '' : 'disabled'} style="${isSendingChatMsg ? 'opacity:0.5;pointer-events:none;' : ''}">${iconSend()}</button>
+        <input type="text" id="cwInput" aria-label="Message" placeholder="${pendingChatAttachment ? 'Add an optional caption…' : (activeConversationId ? 'Type a message…' : 'Select a conversation to start messaging')}" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMsg();}" ${activeConversationId ? '' : 'disabled'}>
+        <button class="cw-send" aria-label="Send message" onclick="sendChatMsg()" ${activeConversationId ? '' : 'disabled'}>${iconSend()}</button>
       </div>
     </div>`;
 }
@@ -854,11 +820,8 @@ function clearPendingChatAttachment() {
 window.clearPendingChatAttachment = clearPendingChatAttachment;
 
 async function handleChatFileUpload(event) {
-  if (isUploadingChatFile) return;
-  isUploadingChatFile = true;
-  try {
-    const file = event.target.files && event.target.files[0];
-    if (!file || !activeConversationId) return;
+  const file = event.target.files && event.target.files[0];
+  if (!file || !activeConversationId) return;
 
   const MAX_SIZE = 5 * 1024 * 1024; // 5 MB limit
   if (file.size > MAX_SIZE) {
@@ -867,27 +830,13 @@ async function handleChatFileUpload(event) {
     return;
   }
 
-  const ALLOWED_CHAT_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'];
-  const fileName = (file.name || '').toLowerCase();
-  const fileExt = fileName.includes('.') ? fileName.substring(fileName.lastIndexOf('.')) : '';
-  if (fileExt && !ALLOWED_CHAT_EXTS.includes(fileExt)) {
-    showToast(`File format "${fileExt}" is not supported. Please upload an image, PDF, or document.`, 'warning');
-    event.target.value = '';
-    return;
-  }
-
   const messageDraft = document.getElementById('cwInput')?.value || '';
   showToast(`Uploading ${file.name}…`, 'info');
 
   let localPreviewUrl = null;
-  let localThumbDataUrl = null;
   if (file.type && file.type.startsWith('image/')) {
     try {
       localPreviewUrl = URL.createObjectURL(file);
-    } catch (_) {}
-    // Generate a compact base64 thumbnail so ALL recipients can view the image
-    try {
-      localThumbDataUrl = await createChatImageThumbnail(file, 480, 0.72);
     } catch (_) {}
   }
 
@@ -932,17 +881,12 @@ async function handleChatFileUpload(event) {
           size: upData.size || file.size,
           mime: upData.mime || file.type || 'application/octet-stream',
           url: upData.url,
-          dataUrl: localThumbDataUrl || null,
-          previewUrl: localThumbDataUrl || localPreviewUrl || getChatAttachmentUrl({ url: upData.url })
+          previewUrl: localPreviewUrl || getChatAttachmentUrl({ url: upData.url })
         });
       } else {
         const errJson = await upRes.json().catch(() => ({}));
         console.warn('Chat upload failed:', upRes.status, errJson);
-        const errMsg = errJson.error || `Upload failed (${upRes.status}). Unsupported file format or network issue.`;
-        showToast(errMsg, 'error');
-        clearChatAttachmentReturnState();
-        event.target.value = '';
-        return;
+        showToast(errJson.error || 'Attachment upload failed. Please try again.', 'error');
       }
     } catch (upErr) {
       console.warn('Chat upload network error:', upErr);
@@ -987,9 +931,6 @@ async function handleChatFileUpload(event) {
   const draftInput = document.getElementById('cwInput');
   if (draftInput) draftInput.value = messageDraft;
   showToast('Attachment ready. Click preview to maximize or Send to send.', 'success');
-  } finally {
-    isUploadingChatFile = false;
-  }
 }
 
 async function sendChatRawMessage(text) {
@@ -1089,60 +1030,21 @@ async function sendChatRawMessage(text) {
   await refreshOwnMuteStatus();
 }
 
-let isSendingChatMsg = false;
-let lastSendChatTimestamp = 0;
-let isUploadingChatFile = false;
-
 async function sendChatMsg() {
-  const now = Date.now();
-  if (isSendingChatMsg || (now - lastSendChatTimestamp < 1000)) return;
-
   const input = document.getElementById('cwInput');
   if (!input) return;
   const text = input.value.trim();
   if (!text && !pendingChatAttachment) return;
-
-  lastSendChatTimestamp = now;
-  isSendingChatMsg = true;
-
-  const sendBtn = document.querySelector('.cw-send');
-  if (sendBtn) {
-    sendBtn.disabled = true;
-    sendBtn.style.opacity = '0.5';
-    sendBtn.style.pointerEvents = 'none';
-  }
-
   const attachment = pendingChatAttachment;
   pendingChatAttachment = null;
   input.value = '';
-  // Dismiss preview immediately so user cannot double-click or spam
-  if (currentPage === 'chats') renderInputArea();
-
-  try {
-    if (attachment) {
-      if (text) attachment.caption = text;
-      const payloadObj = {
-        type: 'attachment',
-        name: attachment.name,
-        size: attachment.size,
-        mime: attachment.mime,
-        url: attachment.url,
-        caption: attachment.caption || null
-      };
-      if (!payloadObj.url && attachment.data && attachment.data.length < 3500) {
-        payloadObj.data = attachment.data;
-      }
-      await sendChatRawMessage(JSON.stringify(payloadObj));
-    } else {
-      await sendChatRawMessage(text);
-    }
-  } catch (err) {
-    console.error('Failed to send message:', err);
-    showToast('Failed to send message. Please try again.', 'error');
-  } finally {
-    isSendingChatMsg = false;
-    if (currentPage === 'chats') renderInputArea();
+  if (attachment) {
+    if (text) attachment.caption = text;
+    await sendChatRawMessage(JSON.stringify(attachment));
+  } else {
+    await sendChatRawMessage(text);
   }
+  if (currentPage === 'chats') renderInputArea();
 }
 
 function ensureChatRealtimeSubscription() {
