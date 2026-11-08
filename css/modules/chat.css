@@ -122,13 +122,13 @@
 .scholaria-chat .cw-send:disabled { background: #e5e8ef; color: #b6bfd2; }
 .scholaria-chat button:disabled { cursor: default; }
 .scholaria-chat button:focus-visible { outline: 3px solid #91b1ff; outline-offset: 3px; }
-/* Authoritative bubble geometry. Loaded after dashboard-overrides.css so it
-   supersedes any stale "discrete bubbles" enforcement still cached there. */
-.scholaria-chat .cw-messages { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
-.scholaria-chat .msg-bubble { display: block !important; width: auto !important; max-width: 70% !important; margin-left: 0 !important; margin-right: 0 !important; overflow-wrap: anywhere; }
-.scholaria-chat .msg-bubble.me { align-self: flex-end !important; background: var(--chat-blue) !important; color: #fff !important; }
-.scholaria-chat .msg-bubble.them { align-self: flex-start !important; }
-.scholaria-chat .msg-bubble.them:not(.msg-unread) { background: #e9effb !important; color: var(--text-primary) !important; border: none !important; }
+/* Authoritative bubble geometry. ID-scoped so these !important rules win any
+   tie against stale class-scoped !important copies regardless of load order. */
+#cwMessages { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+#cwMessages .msg-bubble { display: block !important; width: auto !important; max-width: 70% !important; margin-left: 0 !important; margin-right: 0 !important; border-radius: 14px !important; overflow-wrap: anywhere; }
+#cwMessages .msg-bubble.me { align-self: flex-end !important; background: var(--chat-blue) !important; color: #fff !important; }
+#cwMessages .msg-bubble.them { align-self: flex-start !important; }
+#cwMessages .msg-bubble.them:not(.msg-unread) { background: #e9effb !important; color: var(--text-primary) !important; border: none !important; }
 .chat-overview-btn:hover { background: rgba(255,255,255,0.32) !important; }
 .msg-bubble.them .chat-overview-btn:hover { background: #cbd5e1 !important; }
 
