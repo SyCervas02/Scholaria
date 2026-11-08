@@ -727,18 +727,6 @@
         .submit-btn:hover { opacity: 0.94; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(180, 83, 9, 0.35); }
         .submit-btn:active { transform: translateY(0); }
 
-        /* â”€â”€ DIVIDER â”€â”€ */
-        .divider {
-            text-align: center;
-            margin-top: 16px;
-            font-size: 12.5px;
-        }
-        .divider a { color: #b45309; text-decoration: none; font-weight: 600; }
-        .divider a:hover { text-decoration: underline; color: #78350f; }
-        .divider a.demoLink { color: #d4a017; }
-        .divider a.demoLink:hover { color: #b45309; text-decoration: underline; }
-        .divider a.disabled { pointer-events: none; opacity: 0.5; }
-
         .portal-switch-box {
             margin-top: 20px;
             padding-top: 16px;
@@ -971,7 +959,7 @@
                         <input type="password" id="l-pw" placeholder="Enter your password" autocomplete="current-password" oninput="clearError('l-pw-err')" onkeydown="if(event.key==='Enter') handleLogin()">
                         <button class="eye-btn" type="button" onclick="toggleEye('l-pw', this)" aria-label="Toggle password visibility">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M1 12s4-8 11-8 11 8 11 8 -4 8 -11 8 -11 -8z"/>
+                                <path d="M1 12s4-8 11-8 11 8-4 8-11 8-11-8z"/>
                                 <circle cx="12" cy="12" r="3"/>
                             </svg>
                         </button>
@@ -980,10 +968,6 @@
                 </div>
 
                 <button class="submit-btn" id="loginSubmitBtn" onclick="handleLogin()">Login to Admin Portal</button>
-
-                <div class="divider">
-                    <a href="#" class="demoLink" onclick="handleDemoLogin();return false;">Skip for now (development mode) &rarr;</a>
-                </div>
 
                 <div class="portal-switch-box">
                     <a href="login.html" class="portal-switch-link">
@@ -1192,35 +1176,6 @@
             showToast('Invalid credentials', 'error');
         } finally {
             setLoginBusy(false);
-        }
-    }
-
-    async function handleDemoLogin() {
-        const links = document.querySelectorAll('.demoLink');
-        links.forEach(l => { l.textContent = 'Loading demo...'; l.classList.add('disabled'); });
-        try {
-            const res = await fetch(`${API_BASE}/api/auth/demo-login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ role: 'admin' })
-            });
-            if (res.status === 404) {
-                showToast('Demo mode is currently disabled', 'error');
-                return;
-            }
-            if (res.status === 429) {
-                showToast('Too many requests &mdash; please wait a few seconds', 'error');
-                return;
-            }
-            if (!res.ok) { showToast('Demo login is temporarily unavailable', 'error'); return; }
-            const { access_token, refresh_token } = await res.json();
-            const { error } = await db.auth.setSession({ access_token, refresh_token });
-            if (error) { showToast('Demo login is temporarily unavailable', 'error'); return; }
-            window.location.href = 'dashboard.html';
-        } catch {
-            showToast('Could not reach the server', 'error');
-        } finally {
-            links.forEach(l => { l.textContent = 'Skip for now (development mode) â†’'; l.classList.remove('disabled'); });
         }
     }
 
