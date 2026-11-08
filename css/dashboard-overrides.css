@@ -461,6 +461,61 @@ body.has-anc-banner {
   border: 1px solid #fef08a;
 }
 
+/* Keep teacher quiz manager actions in the same columns on every quiz row. */
+.quiz-row-actions {
+  display: grid !important;
+  grid-template-columns: max-content 220px 116px 136px 158px 155px 78px 42px;
+  gap: 6px;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.quiz-row-actions > .table-act-btn {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.quiz-row-actions > .table-act-btn[title="Take this standard quiz as a student"] {
+  gap: 4px;
+}
+.quiz-row-actions > label,
+.quiz-row-actions > .table-act-btn,
+.quiz-row-actions > .quiz-action-spacer {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+}
+.quiz-row-actions > .quiz-action-spacer {
+  height: 1px;
+}
+.quiz-row-actions > .table-act-btn[title="Delete Quiz"] {
+  grid-column: 8;
+}
+.quiz-attempt-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: max-content;
+  margin-top: 0;
+  padding: 6px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f5f9ff;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.quiz-attempt-count svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  fill: none;
+  stroke: #3b82f6;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* ── SCORE TABLE MODERN ACTION BUTTONS ── */
 .table-act-btn {
   display: inline-flex;
@@ -534,6 +589,41 @@ body.has-anc-banner {
 
 #academicReportModal.active {
   display: flex !important;
+}
+
+/* Fit individual grade slips in the preview without an inner scroll area. */
+#academicReportModal.student-grade-slip-fit {
+  overflow: hidden !important;
+  padding: 10px !important;
+}
+#academicReportModal.student-grade-slip-fit .report-modal-card {
+  width: min(860px, 96vw) !important;
+  max-width: 96vw !important;
+  max-height: none !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+#academicReportModal.student-grade-slip-fit .report-modal-body {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 8px 12px !important;
+}
+#academicReportModal.student-grade-slip-fit .student-grade-report {
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+}
+#academicReportModal.student-grade-slip-fit .report-table-container {
+  overflow: visible !important;
+  margin-bottom: 12px !important;
+}
+#academicReportModal.student-grade-slip-fit .report-table {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
 }
 
 #academicReportModal .report-modal-card {
@@ -826,8 +916,8 @@ body.has-anc-banner {
    ═══════════════════════════════════════════════════════════════ */
 @media print {
   @page {
-    size: A4 landscape;
-    margin: 8mm 8mm;
+    size: auto;
+    margin: 8mm 10mm;
   }
 
   *, *::before, *::after {
@@ -853,21 +943,22 @@ body.has-anc-banner {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
   }
 
-  /* Completely hide all elements except the academic report modal */
-  body > *:not(#academicReportModal) {
+  /* Hide unrelated page content only for the academic report print flow. */
+  body.printing-academic-report > *:not(#academicReportModal) {
     display: none !important;
   }
-  #chatFab, .chat-fab, .hamburger, .toast, #toast, .sidebar, .top-nav, .layout, #emergencyBannerContainer {
+  #chatFab, .chat-fab, .hamburger, .toast, #toast, .sidebar, .top-nav, #emergencyBannerContainer {
+    display: none !important;
+  }
+  body.printing-academic-report .layout { display: none !important; }
+
+  body.printing-academic-report .modal-overlay:not(#academicReportModal) {
     display: none !important;
   }
 
-  .modal-overlay:not(#academicReportModal) {
-    display: none !important;
-  }
-
-  #academicReportModal,
-  body > #academicReportModal,
-  body > #academicReportModal.active {
+  body.printing-academic-report #academicReportModal,
+  body.printing-academic-report > #academicReportModal,
+  body.printing-academic-report > #academicReportModal.active {
     display: block !important;
     position: static !important;
     inset: auto !important;
@@ -886,7 +977,7 @@ body.has-anc-banner {
     break-before: avoid !important;
   }
 
-  #academicReportModal .report-modal-card {
+  body.printing-academic-report #academicReportModal .report-modal-card {
     position: static !important;
     display: block !important;
     box-shadow: none !important;
@@ -904,12 +995,12 @@ body.has-anc-banner {
     break-before: avoid !important;
   }
 
-  #academicReportModal .report-modal-head,
-  #academicReportModal .report-modal-head * {
+  body.printing-academic-report #academicReportModal .report-modal-head,
+  body.printing-academic-report #academicReportModal .report-modal-head * {
     display: none !important;
   }
 
-  #academicReportModal .report-modal-body {
+  body.printing-academic-report #academicReportModal .report-modal-body {
     display: block !important;
     visibility: visible !important;
     background: #ffffff !important;
@@ -922,9 +1013,9 @@ body.has-anc-banner {
     break-before: avoid !important;
   }
 
-  #academicReportModal .report-document-sheet,
-  .report-document-sheet,
-  .printable-document {
+  body.printing-academic-report #academicReportModal .report-document-sheet,
+  body.printing-academic-report .report-document-sheet,
+  body.printing-academic-report .printable-document {
     display: block !important;
     visibility: visible !important;
     border: none !important;
@@ -939,7 +1030,7 @@ body.has-anc-banner {
     break-before: avoid !important;
   }
 
-  .report-school-header {
+  body.printing-academic-report .report-school-header {
     display: flex !important;
     flex-direction: row !important;
     align-items: center !important;
@@ -952,7 +1043,7 @@ body.has-anc-banner {
     width: 100% !important;
   }
 
-  .report-logo-circle {
+  body.printing-academic-report .report-logo-circle {
     background: #1d4ed8 !important;
     color: #ffffff !important;
     border-radius: 12px !important;
@@ -964,24 +1055,24 @@ body.has-anc-banner {
     flex-shrink: 0 !important;
   }
 
-  .report-logo-circle svg {
+  body.printing-academic-report .report-logo-circle svg {
     stroke: #ffffff !important;
     width: 26px !important;
     height: 26px !important;
   }
 
-  .report-school-details h2 {
+  body.printing-academic-report .report-school-details h2 {
     font-size: 17px !important;
     font-weight: 700 !important;
     color: #0f172a !important;
     margin: 0 0 2px 0 !important;
   }
-  .report-school-details p {
+  body.printing-academic-report .report-school-details p {
     font-size: 11px !important;
     color: #475569 !important;
     margin: 0 0 4px 0 !important;
   }
-  .report-doc-badge {
+  body.printing-academic-report .report-doc-badge {
     background: #1e293b !important;
     color: #ffffff !important;
     font-size: 9.5px !important;
@@ -990,7 +1081,7 @@ body.has-anc-banner {
     display: inline-block !important;
   }
 
-  .report-info-grid {
+  body.printing-academic-report .report-info-grid {
     display: grid !important;
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 6px 18px !important;
@@ -1004,7 +1095,7 @@ body.has-anc-banner {
     width: 100% !important;
   }
 
-  .report-kpi-row {
+  body.printing-academic-report .report-kpi-row {
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: nowrap !important;
@@ -1015,7 +1106,7 @@ body.has-anc-banner {
     margin-bottom: 14px !important;
   }
 
-  .report-kpi-card {
+  body.printing-academic-report .report-kpi-card {
     flex: 1 1 0 !important;
     width: auto !important;
     min-width: 0 !important;
@@ -1030,11 +1121,11 @@ body.has-anc-banner {
     border-radius: 6px !important;
   }
 
-  .report-kpi-card .kpi-label { font-size: 8.5px !important; }
-  .report-kpi-card .kpi-value { font-size: 13.5px !important; line-height: 1.1 !important; margin: 2px 0 !important; }
-  .report-kpi-card .kpi-sub { font-size: 8px !important; white-space: nowrap !important; }
+  body.printing-academic-report .report-kpi-card .kpi-label { font-size: 8.5px !important; }
+  body.printing-academic-report .report-kpi-card .kpi-value { font-size: 13.5px !important; line-height: 1.1 !important; margin: 2px 0 !important; }
+  body.printing-academic-report .report-kpi-card .kpi-sub { font-size: 8px !important; white-space: nowrap !important; }
 
-  .report-table-container {
+  body.printing-academic-report .report-table-container {
     border: 1px solid #cbd5e1 !important;
     border-radius: 6px !important;
     overflow: visible !important;
@@ -1044,7 +1135,7 @@ body.has-anc-banner {
     margin-bottom: 16px !important;
   }
 
-  .report-table {
+  body.printing-academic-report .report-table {
     width: 100% !important;
     min-width: 0 !important;
     table-layout: auto !important;
@@ -1054,11 +1145,11 @@ body.has-anc-banner {
     font-size: 9.5px !important;
   }
 
-  .report-table thead {
+  body.printing-academic-report .report-table thead {
     display: table-header-group !important;
   }
 
-  .report-table th {
+  body.printing-academic-report .report-table th {
     background: #f1f5f9 !important;
     color: #0f172a !important;
     border: 1px solid #cbd5e1 !important;
@@ -1068,19 +1159,19 @@ body.has-anc-banner {
     white-space: nowrap !important;
   }
 
-  .report-table tr {
+  body.printing-academic-report .report-table tr {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
 
-  .report-table td {
+  body.printing-academic-report .report-table td {
     border: 1px solid #e2e8f0 !important;
     padding: 4px 6px !important;
     font-size: 9px !important;
     color: #0f172a !important;
   }
 
-  .report-table .report-status-pill {
+  body.printing-academic-report .report-table .report-status-pill {
     display: inline-block !important;
     max-width: 100% !important;
     padding: 2px 5px !important;
@@ -1090,22 +1181,22 @@ body.has-anc-banner {
     letter-spacing: 0 !important;
   }
 
-  .report-status-pill.pass {
+  body.printing-academic-report .report-status-pill.pass {
     background: #dcfce7 !important;
     color: #15803d !important;
   }
 
-  .report-status-pill.fail {
+  body.printing-academic-report .report-status-pill.fail {
     background: #fee2e2 !important;
     color: #991b1b !important;
   }
 
-  .report-status-pill.pending {
+  body.printing-academic-report .report-status-pill.pending {
     background: #f1f5f9 !important;
     color: #64748b !important;
   }
 
-  .report-code {
+  body.printing-academic-report .report-code {
     background: #f1f5f9 !important;
     border: 1px solid #cbd5e1 !important;
     color: #0f172a !important;
@@ -1113,7 +1204,7 @@ body.has-anc-banner {
   }
 
   /* 3-Column Horizontal Grid for Signatures - PREVENTS VERTICAL STACKING */
-  .report-signatures-grid {
+  body.printing-academic-report .report-signatures-grid {
     display: grid !important;
     grid-template-columns: repeat(3, 1fr) !important;
     gap: 20px !important;
@@ -1124,30 +1215,30 @@ body.has-anc-banner {
     break-inside: avoid !important;
   }
 
-  .signature-block {
+  body.printing-academic-report .signature-block {
     display: block !important;
     text-align: center !important;
     width: 100% !important;
   }
 
-  .signature-line {
+  body.printing-academic-report .signature-line {
     border-top: 1.5px solid #0f172a !important;
     width: 80% !important;
     margin: 0 auto 6px auto !important;
   }
 
-  .signature-name {
+  body.printing-academic-report .signature-name {
     font-size: 11px !important;
     font-weight: 700 !important;
     color: #0f172a !important;
   }
 
-  .signature-title {
+  body.printing-academic-report .signature-title {
     font-size: 9.5px !important;
     color: #64748b !important;
   }
 
-  .report-document-footer {
+  body.printing-academic-report .report-document-footer {
     display: flex !important;
     flex-direction: row !important;
     justify-content: space-between !important;
@@ -1162,7 +1253,7 @@ body.has-anc-banner {
     break-inside: avoid !important;
   }
 
-  .student-grade-summary-card {
+  body.printing-academic-report .student-grade-summary-card {
     display: flex !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
@@ -1170,13 +1261,103 @@ body.has-anc-banner {
     padding: 12px 16px !important;
     margin-bottom: 16px !important;
   }
-  .student-grade-summary-card.pass-card {
+  body.printing-academic-report .student-grade-summary-card.pass-card {
     background: #f0fdf4 !important;
     border-color: #bbf7d0 !important;
   }
-  .student-grade-summary-card.fail-card {
+  body.printing-academic-report .student-grade-summary-card.fail-card {
     background: #fef2f2 !important;
     border-color: #fecaca !important;
+  }
+}
+
+/* Safety net: reveal the open academic report in print even if the transient
+   `printing-academic-report` body class was cleared while the preview renders.
+   Keyed on the stable `.active` modal state so the sheet can never print blank. */
+@media print {
+  body:not(.printing-academic-report):has(#academicReportModal.active) > *:not(#academicReportModal) {
+    display: none !important;
+  }
+  body:not(.printing-academic-report):has(#academicReportModal.active) .layout,
+  body:not(.printing-academic-report):has(#academicReportModal.active) .modal-overlay:not(#academicReportModal) {
+    display: none !important;
+  }
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal .report-modal-card {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal .report-modal-head,
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal .report-modal-head * {
+    display: none !important;
+  }
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal .report-modal-body {
+    display: block !important;
+    visibility: visible !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal .report-document-sheet {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    zoom: 1 !important;
+  }
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal .report-table-container {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal .report-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal .report-table th,
+  body:not(.printing-academic-report):has(#academicReportModal.active) #academicReportModal .report-table td {
+    overflow-wrap: anywhere !important;
+    white-space: normal !important;
   }
 }
 
@@ -3794,13 +3975,6 @@ button,
   word-break: normal !important;
   padding: 7px 6px !important;
 }
-.report-table th:nth-child(1) { width: 5%; }
-.report-table th:nth-child(2) { width: 18%; }
-.report-table th:nth-child(3) { width: 8%; }
-.report-table th:nth-child(n+4):nth-child(-n+11) { width: 5%; }
-.report-table th:nth-child(12) { width: 6%; }
-.report-table th:nth-child(13) { width: 8%; }
-.report-table th:nth-child(14) { width: 9%; }
 .report-table td:nth-child(2) strong {
   display: block;
   overflow-wrap: normal;
@@ -3814,6 +3988,149 @@ button,
   width: 100%;
   min-width: 680px;
   border-collapse: collapse;
+}
+
+/* Keep academic report prints flowing across pages with no clipped scroll areas. */
+@media print {
+  body.printing-admin-census .layout {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  body.printing-academic-report #academicReportModal,
+  body.printing-academic-report #academicReportModal .report-modal-card,
+  body.printing-academic-report #academicReportModal .report-modal-body,
+  body.printing-academic-report #academicReportModal .report-document-sheet,
+  body.printing-academic-report #academicReportModal .report-table-container {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  body.printing-academic-report #academicReportModal .report-table-container {
+    width: 100% !important;
+    margin-bottom: 12px !important;
+  }
+  body.printing-academic-report #academicReportModal .report-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 8.5px !important;
+  }
+  body.printing-academic-report #academicReportModal .report-table th,
+  body.printing-academic-report #academicReportModal .report-table td {
+    padding: 4px 5px !important;
+    line-height: 1.25 !important;
+    vertical-align: middle !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+  }
+  body.printing-academic-report #academicReportModal .report-table th {
+    white-space: normal !important;
+    font-size: 8px !important;
+  }
+  body.printing-academic-report #academicReportModal .report-table td:nth-child(2) strong {
+    display: block !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+  }
+  body.printing-academic-report #academicReportModal .report-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-academic-report #academicReportModal .report-signatures-grid,
+  body.printing-academic-report #academicReportModal .report-document-footer {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-academic-report #academicReportModal .report-signatures-grid {
+    margin-top: 16px !important;
+    gap: 16px !important;
+  }
+  body.printing-academic-report #academicReportModal .report-document-footer {
+    margin-top: 12px !important;
+  }
+  body.printing-academic-report .student-grade-report .report-signatures-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  body.printing-academic-report .section-master-report .report-signatures-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+  body.printing-academic-report .report-info-item {
+    line-height: 1.35 !important;
+    break-inside: avoid !important;
+  }
+  body.printing-academic-report .student-grade-report { zoom: 1 !important; }
+  body.printing-academic-report .student-grade-summary-card {
+    margin-bottom: 12px !important;
+  }
+}
+
+@media print {
+  body.printing-admin-census #mainContent {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  body.printing-admin-census .admin-census-page,
+  body.printing-admin-census .admin-census-page * {
+    visibility: visible !important;
+  }
+  body.printing-admin-census .admin-census-page {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    color: #0f172a !important;
+  }
+  body.printing-admin-census .admin-census-page > * {
+    margin: 0 0 10px !important;
+    padding: 10px 12px !important;
+    box-shadow: none !important;
+    border-radius: 6px !important;
+    break-inside: avoid-page !important;
+    page-break-inside: avoid !important;
+  }
+  body.printing-admin-census .admin-census-page button { display: none !important; }
+  body.printing-admin-census .admin-census-page .card-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  body.printing-admin-census .admin-census-page .score-table,
+  body.printing-admin-census .admin-census-page .score-table-responsive {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  body.printing-admin-census .admin-census-page .score-table table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    font-size: 8px !important;
+  }
+  body.printing-admin-census .admin-census-page .score-table th,
+  body.printing-admin-census .admin-census-page .score-table td {
+    padding: 4px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    vertical-align: top !important;
+  }
+  body.printing-admin-census .admin-census-page .score-table thead { display: table-header-group !important; }
+  body.printing-admin-census .admin-census-page .score-table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
 }
 
 /* ── ADMIN CENSUS PRINT LAYOUT ── */
@@ -4557,139 +4874,114 @@ button,
   letter-spacing: 0.4px;
 }
 
-
-
-/* ── A4 FIT & ITEM ANALYSIS RESPONSIVENESS OVERRIDES ── */
-#academicReportModal .report-modal-card {
-  width: 96vw !important;
-  max-width: 1260px !important;
+.notification-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .54);
+  backdrop-filter: blur(4px);
 }
-#academicReportModal .report-modal-body {
-  overflow-x: auto !important;
+.notification-detail-overlay.active { display: flex; animation: notificationOverlayIn .16s ease-out; }
+.notification-detail-card {
+  position: relative;
+  width: min(820px, 100%);
+  min-height: min(420px, 62vh);
+  max-height: min(88vh, 900px);
+  overflow-y: auto;
+  padding: 38px;
+  border: 1px solid #dbe6f5;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, .28);
+  color: #0f172a;
+  animation: notificationCardIn .2s ease-out;
 }
-.report-document-sheet {
-  max-width: 100% !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
+.notification-detail-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 12px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 26px;
+  cursor: pointer;
 }
-.report-table-container {
-  max-width: 100% !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-}
-.report-table {
-  width: 100% !important;
-  table-layout: auto !important;
-}
-.report-status-pill {
-  white-space: nowrap !important;
-  display: inline-block !important;
-}
-
-/* Item analysis table fluid responsiveness */
-.score-table,
-.score-table.analysis-question-table,
-.analysis-question-table {
-  width: 100% !important;
-  max-width: 100% !important;
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch !important;
-  scrollbar-width: thin !important;
-  scrollbar-color: #cbd5e1 #f8fafc !important;
-}
-.score-table::-webkit-scrollbar,
-.analysis-question-table::-webkit-scrollbar {
-  height: 6px !important;
-}
-.score-table::-webkit-scrollbar-track,
-.analysis-question-table::-webkit-scrollbar-track {
-  background: #f8fafc !important;
-}
-.score-table::-webkit-scrollbar-thumb,
-.analysis-question-table::-webkit-scrollbar-thumb {
-  background: #cbd5e1 !important;
-  border-radius: 4px !important;
-}
-.analysis-question-table table {
-  width: 100% !important;
-  min-width: 780px !important;
-  table-layout: auto !important;
-}
-
-/* Discrete Chat Message Bubbles Enforcement */
-.scholaria-chat .cw-messages {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 10px !important;
-  padding: 18px 22px !important;
-  overflow-y: auto !important;
-}
-.scholaria-chat .msg-bubble {
-  display: block !important;
-  width: fit-content !important;
-  max-width: 72% !important;
-  padding: 10px 16px !important;
-  border-radius: 16px !important;
-  font-size: 13.5px !important;
-  line-height: 1.48 !important;
-  margin-top: 2px !important;
-  margin-bottom: 4px !important;
-  position: relative !important;
-  clear: both !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
-}
-.scholaria-chat .msg-bubble.me {
-  background: var(--chat-blue, #2563eb) !important;
-  color: #ffffff !important;
-  align-self: flex-end !important;
-  margin-left: auto !important;
-  margin-right: 0 !important;
-  border-bottom-right-radius: 4px !important;
-}
-.scholaria-chat .msg-bubble.them {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  align-self: flex-start !important;
-  margin-right: auto !important;
-  margin-left: 0 !important;
-  border: 1px solid #e2e8f0 !important;
-  border-bottom-left-radius: 4px !important;
-}
-
-
-/* ── MATERIAL UPLOAD MODAL — wider, evenly spaced fields ── */
-#materialModal .modal-card {
-  max-width: 700px !important;
-  width: 94vw !important;
-}
-#materialModal .modal-body {
-  padding: 22px 28px !important;
-}
-#materialModal .gen-row {
+.notification-detail-close:hover { background: #e2e8f0; color: #0f172a; }
+.notification-detail-kicker { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding-right: 44px; }
+.notification-detail-card #notifDetailTitle { margin: 22px 0 14px; font-size: clamp(23px, 3vw, 30px); line-height: 1.3; overflow-wrap: anywhere; }
+.notification-detail-meta { display: flex; flex-direction: column; gap: 8px; color: #64748b; font-size: 14px; }
+.notification-detail-message { min-height: 170px; margin-top: 26px; padding: 24px; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; color: #334155; font-size: 16px; line-height: 1.8; overflow-wrap: anywhere; white-space: pre-wrap; }
+.notification-detail-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.notification-delete-confirm { z-index: 2200; }
+.notification-delete-card { width: min(500px, 100%); min-height: 0; text-align: center; }
+.notification-delete-icon {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  align-items: start;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 14px;
+  border-radius: 18px;
+  background: #fff1f2;
+  color: #dc2626;
+  font-size: 30px;
+  font-weight: 800;
 }
-#materialModal .gen-field select,
-#materialModal .gen-field input[type="text"] {
-  height: 44px;
-  padding: 10px 14px !important;
-  box-sizing: border-box;
-  font-size: 13.5px;
-  border: 1.5px solid rgba(37,99,235,0.15);
-  border-radius: 10px;
-  width: 100%;
-}
-#materialModal .gen-field select:focus,
-#materialModal .gen-field input[type="text"]:focus {
-  border-color: var(--blue, #2563eb) !important;
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+.notification-delete-card #notificationDeleteTitle { margin: 0 0 9px; font-size: 23px; }
+.notification-delete-card #notificationDeleteMessage { margin: 0; color: #64748b; font-size: 14px; line-height: 1.6; }
+.notification-delete-card .notification-detail-actions { justify-content: center; }
+.notification-delete-card .notification-detail-actions button { min-width: 130px; justify-content: center; }
+@keyframes notificationOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes notificationCardIn { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+@media (max-width: 600px) {
+  .notification-detail-overlay { align-items: flex-end; padding: 10px; }
+  .notification-detail-card { width: 100%; min-height: min(360px, 58vh); max-height: 92vh; padding: 24px 18px 18px; border-radius: 20px 20px 14px 14px; }
+  .notification-detail-message { min-height: 140px; padding: 18px; font-size: 15px; }
+  .notification-detail-actions > button { flex: 1 1 100%; justify-content: center; }
 }
 
-/* ── QUIZ MAKER — lesson dropdown right column only ── */
-#quizGenModalBody .gen-row > .gen-field[style*="grid-column:2"],
-#quizGenModalBody .gen-row > .gen-field[style*="grid-column: 2"] {
-  grid-column: 2;
+/* Student quiz and progress views use the full available width without table scrolling. */
+.student-quizzes-container {
+  max-width: none !important;
+  width: 100% !important;
 }
+
+@media (min-width: 641px) {
+  .main .student-progress-table {
+    width: 100%;
+    overflow-x: hidden !important;
+  }
+  .main .student-progress-table table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+  .main .student-progress-table th,
+  .main .student-progress-table td {
+    min-width: 0 !important;
+    padding: 11px 10px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: normal !important;
+    line-height: 1.4;
+  }
+  .main .student-progress-table th:nth-child(1) { width: 14%; }
+  .main .student-progress-table th:nth-child(2) { width: 22%; }
+  .main .student-progress-table th:nth-child(3) { width: 14%; }
+  .main .student-progress-table th:nth-child(4) { width: 12%; }
+  .main .student-progress-table th:nth-child(5) { width: 13%; }
+  .main .student-progress-table th:nth-child(6) { width: 13%; }
+  .main .student-progress-table th:nth-child(7) { width: 12%; }
+  .main .student-progress-table th { letter-spacing: .02em; }
+  .main .student-progress-table td:has(.table-act-btn),
+  .main .student-progress-table th:last-child { min-width: 0 !important; }
+  .main .student-progress-table .table-act-btn { max-width: 100%; padding-inline: 9px; }
+}
+
