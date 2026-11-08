@@ -2310,7 +2310,6 @@ function auRegenerateAdminPassword() {
   if (disp) disp.textContent = addUser.generatedAdminPassword;
 }
 function auSetGrade(g)   { addUser.grade = g; renderAddUserModal(); }
-function auSetSection(s) { addUser.section = s; renderAddUserModal(); }
 function auToggleStrand(s) {
   if (addUser.userType === 'student') {
     // A student is strictly enrolled in ONE strand only
@@ -3541,27 +3540,13 @@ function renderAddUserModal() {
             ${!isStudent ? `<div style="font-size:11px;color:var(--text-muted);margin-top:5px;">Select all strands this teacher is capable of handling</div>` : ''}
           </div>
 
-          <div class="gen-row">
-            ${isStudent ? `
-            <div class="gen-field">
-              <label>Grade Level <span style="color:#ef4444;">*</span></label>
-              <div class="au-grade-pills">
-                ${GRADE_LEVELS.map(g => `<div class="au-grade-pill ${addUser.grade === g ? 'on' : ''}" onclick="auSetGrade('${g}')">${g}</div>`).join('')}
-              </div>
-            </div>` : ''}
-            <div class="gen-field">
-              <label>Section <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${isStudent ? '(Optional)' : '(Optional)'}</span></label>
-              <div class="au-grade-pills" style="max-height:110px;overflow-y:auto;">
-                <div class="au-grade-pill ${!addUser.section ? 'on' : ''}" onclick="auSetSection(null)">
-                  ${isStudent ? 'Unassigned' : 'None (All)'}
-                </div>
-                ${SECTIONS.map(s => {
-                  const isSelected = addUser.section === s;
-                  return `<div class="au-grade-pill ${isSelected ? 'on' : ''}" onclick="auSetSection('${s}')">${s}</div>`;
-                }).join('')}
-              </div>
+          ${isStudent ? `
+          <div class="gen-field">
+            <label>Grade Level <span style="color:#ef4444;">*</span></label>
+            <div class="au-grade-pills">
+              ${GRADE_LEVELS.map(g => `<div class="au-grade-pill ${addUser.grade === g ? 'on' : ''}" onclick="auSetGrade('${g}')">${g}</div>`).join('')}
             </div>
-          </div>
+          </div>` : ''}
 
           <div style="border-top:1px dashed #cbd5e1;padding-top:12px;margin-top:4px;">
             <div style="font-size:11.5px;font-weight:700;color:#475569;margin-bottom:8px;text-transform:uppercase;">Bulk Spreadsheet Upload (Recommended)</div>
