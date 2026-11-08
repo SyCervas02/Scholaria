@@ -925,7 +925,7 @@ function renderSearchableSubjectPicker({
   };
 
   return `
-  <div class="searchable-subject-picker" id="${pickerId}_wrap" data-picker-id="${pickerId}">
+  <div class="searchable-subject-picker ${value ? 'has-value' : ''}" id="${pickerId}_wrap" data-picker-id="${pickerId}">
     <div class="ssp-input-group">
       <input type="text"
         id="${targetInputId}"
@@ -939,6 +939,9 @@ function renderSearchableSubjectPicker({
         onkeydown="sspOnKeyDown(event, '${pickerId}')"
       />
       <div class="ssp-actions">
+        <button type="button" class="ssp-btn ssp-clear-btn" title="Clear subject" onclick="sspClearValue('${pickerId}')">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
         <button type="button" class="ssp-btn ssp-search-btn" title="Search subjects with highlight" onclick="sspSearchClick('${pickerId}')">
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         </button>
@@ -947,7 +950,7 @@ function renderSearchableSubjectPicker({
         </button>
       </div>
     </div>
-    <div class="ssp-dropdown scholaria-custom-scroll" id="${pickerId}_dropdown" role="listbox"></div>
+    <div class="ssp-dropdown" id="${pickerId}_dropdown" role="listbox"></div>
   </div>`;
 }
 window.renderSearchableSubjectPicker = renderSearchableSubjectPicker;
@@ -979,7 +982,7 @@ function sspPopulateDropdown(pickerId, query = '') {
     const isSelected = opt.toLowerCase() === currentVal;
     const highlightedLabel = highlightTextMatch(opt, query);
     return `
-      <div class="ssp-option ${isSelected ? 'selected' : ''}" role="option" onclick="sspSelectOption('${pickerId}', '${escapeFn(opt.replace(/'/g, "\\'"))}')">
+      <div class="ssp-option ${isSelected ? 'selected' : ''}" role="option" data-value="${escapeFn(opt)}" onclick="sspSelectOption('${pickerId}', this.dataset.value)">
         <span>${highlightedLabel}</span>
         ${isSelected ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#2563eb" stroke-width="3" style="pointer-events:none;"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
       </div>
@@ -990,9 +993,10 @@ function sspPopulateDropdown(pickerId, query = '') {
 function sspOpenDropdown(pickerId) {
   const dropdown = document.getElementById(`${pickerId}_dropdown`);
   if (!dropdown) return;
-  const input = document.getElementById(sspGetRegistry(pickerId).inputId);
-  const val = input ? input.value : '';
-  sspPopulateDropdown(pickerId, val);
+  // Always browse the full list on open; the selected value gets a check mark.
+  // Filtering happens while typing, so reopening after a selection never
+  // collapses the list down to the single chosen option.
+  sspPopulateDropdown(pickerId, '');
   dropdown.classList.add('open');
 }
 window.sspOpenDropdown = sspOpenDropdown;
@@ -1030,6 +1034,7 @@ function sspSearchClick(pickerId) {
 window.sspSearchClick = sspSearchClick;
 
 function sspOnInput(pickerId, val) {
+  sspSyncValueState(pickerId);
   sspPopulateDropdown(pickerId, val);
   const dropdown = document.getElementById(`${pickerId}_dropdown`);
   if (dropdown) dropdown.classList.add('open');
@@ -1051,6 +1056,7 @@ function sspSelectOption(pickerId, value) {
   if (input) {
     input.value = value;
   }
+  sspSyncValueState(pickerId);
   sspCloseDropdown(pickerId);
 
   if (reg.onSelect) {
@@ -1063,16 +1069,66 @@ function sspSelectOption(pickerId, value) {
 }
 window.sspSelectOption = sspSelectOption;
 
+function sspSyncValueState(pickerId) {
+  const reg = sspGetRegistry(pickerId);
+  const input = document.getElementById(reg.inputId);
+  const wrap = document.getElementById(`${pickerId}_wrap`);
+  if (wrap) wrap.classList.toggle('has-value', !!(input && input.value.trim()));
+}
+window.sspSyncValueState = sspSyncValueState;
+
+function sspClearValue(pickerId) {
+  const reg = sspGetRegistry(pickerId);
+  const input = document.getElementById(reg.inputId);
+  if (input) input.value = '';
+  sspSyncValueState(pickerId);
+  sspPopulateDropdown(pickerId, '');
+  const dropdown = document.getElementById(`${pickerId}_dropdown`);
+  if (dropdown) dropdown.classList.add('open');
+  if (input) input.focus();
+  if (reg.onSelect) {
+    if (typeof reg.onSelect === 'function') reg.onSelect('');
+    else if (typeof window[reg.onSelect] === 'function') window[reg.onSelect]('');
+  }
+}
+window.sspClearValue = sspClearValue;
+
+function sspSetOptions(pickerId, options) {
+  const reg = window._sspRegistries[pickerId];
+  if (!reg) return;
+  reg.options = Array.isArray(options) ? options : [];
+  const input = document.getElementById(reg.inputId);
+  const val = (input ? input.value : '').trim().toLowerCase();
+  if (val && !reg.options.some(o => (o || '').trim().toLowerCase() === val)) {
+    if (input) input.value = '';
+    sspSyncValueState(pickerId);
+  }
+  const dropdown = document.getElementById(`${pickerId}_dropdown`);
+  if (dropdown && dropdown.classList.contains('open')) sspPopulateDropdown(pickerId, '');
+}
+window.sspSetOptions = sspSetOptions;
+
 function sspOnKeyDown(e, pickerId) {
+  const dropdown = document.getElementById(`${pickerId}_dropdown`);
   if (e.key === 'Escape') {
     sspCloseDropdown(pickerId);
+  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!dropdown) return;
+    if (!dropdown.classList.contains('open')) { sspOpenDropdown(pickerId); return; }
+    const opts = Array.from(dropdown.querySelectorAll('.ssp-option'));
+    if (!opts.length) return;
+    let idx = opts.findIndex(o => o.classList.contains('ssp-active'));
+    idx = e.key === 'ArrowDown' ? Math.min(opts.length - 1, idx + 1) : Math.max(0, idx - 1);
+    opts.forEach(o => o.classList.remove('ssp-active'));
+    opts[idx].classList.add('ssp-active');
+    opts[idx].scrollIntoView({ block: 'nearest' });
   } else if (e.key === 'Enter') {
     e.preventDefault();
-    const dropdown = document.getElementById(`${pickerId}_dropdown`);
     if (dropdown && dropdown.classList.contains('open')) {
-      const firstOpt = dropdown.querySelector('.ssp-option');
-      if (firstOpt) {
-        firstOpt.click();
+      const target = dropdown.querySelector('.ssp-option.ssp-active') || dropdown.querySelector('.ssp-option');
+      if (target) {
+        target.click();
       } else {
         sspCloseDropdown(pickerId);
       }
