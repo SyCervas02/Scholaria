@@ -563,6 +563,7 @@ function messageBubbleHtml(conv, m, isUnread = false) {
               Download
             </a>
           </div>
+        </div>
         ${attach.caption ? `<div class="msg-text" style="margin-top:6px;font-size:13px;line-height:1.45;word-break:break-word;">${escHtml(attach.caption)}</div>` : ''}
       </div>
     `;
