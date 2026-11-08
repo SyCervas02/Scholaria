@@ -4,13 +4,17 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Scholaria • Dashboard</title>
+  <script>
+    // bfcache restores keep stale CSS/JS and dead realtime sockets; force a fresh load.
+    window.addEventListener('pageshow', function (e) { if (e.persisted) window.location.reload(); });
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css?v=20061"/>
   <link rel="stylesheet" href="css/modules/deadlines.css?v=1"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20063"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20065"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css?v=20061"/>
-  <link rel="stylesheet" href="css/modules/chat.css?v=20064"/>
+  <link rel="stylesheet" href="css/modules/chat.css?v=20066"/>
   <link rel="stylesheet" href="css/modules/admin.css"/>
   <link rel="stylesheet" href="css/modules/courses.css"/>
   <link rel="stylesheet" href="css/modules/announcements.css"/>
@@ -764,15 +768,15 @@
   <script src="js/modules/quizzes/take-quiz.js?v=20010"></script>
   <script src="js/modules/quizzes/interactive-player.js?v=20012"></script>
   <script src="js/modules/quizzes/item-analysis.js?v=20005"></script>
-  <script src="js/modules/quizzes/quiz-generator.js?v=20061"></script>
-  <script src="js/modules/chat/chat.js?v=20061"></script>
+  <script src="js/modules/quizzes/quiz-generator.js?v=20066"></script>
+  <script src="js/modules/chat/chat.js?v=20066"></script>
   <script src="js/modules/admin/user-management.js?v=20062"></script>
-  <script src="js/modules/admin/report-generator.js?v=20063"></script>
+  <script src="js/modules/admin/report-generator.js?v=20065"></script>
   <script src="js/modules/admin/rooms-management.js?v=20062"></script>
   <script src="js/modules/courses.js?v=20005"></script>
-  <script src="js/core/sidebar.js?v=20061"></script>
+  <script src="js/core/sidebar.js?v=20065"></script>
   <script src="js/core/search.js?v=20015"></script>
-  <script src="js/core/auth.js?v=20006"></script>
+  <script src="js/core/auth.js?v=20066"></script>
 </body>
 </html>
 
