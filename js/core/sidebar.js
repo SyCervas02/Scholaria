@@ -3203,7 +3203,7 @@ function teacherPage(page) {
                 </button>
               ` : ROLE === 'admin' ? `
                 <button class="table-act-btn take" onclick="approveQuiz('${q.id}')">Approve</button>
-                <button class="table-act-btn" style="color:#dc2626;" onclick="rejectQuiz('${q.id}')">Reject</button>
+                <button class="table-act-btn" style="color:#dc2626;" onclick="runApprovalAction('quiz','${q.id}',false)">Reject</button>
               ` : ''}
 
               <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 10px;" onclick="deleteQuiz('${q.id}')" title="Delete Quiz">
@@ -3702,6 +3702,19 @@ function setAdminReportsTab(tab) {
   if (typeof renderPage === 'function') renderPage('reports');
 }
 
+function switchCensusTab(tab) {
+  const showArchived = tab === 'archived';
+  const activeTable = document.getElementById('censusActiveTable');
+  const archivedTable = document.getElementById('censusArchivedTable');
+  const activeTab = document.getElementById('censusActiveTab');
+  const archivedTab = document.getElementById('censusArchivedTab');
+  if (activeTable) activeTable.style.display = showArchived ? 'none' : '';
+  if (archivedTable) archivedTable.style.display = showArchived ? '' : 'none';
+  if (activeTab) activeTab.classList.toggle('active', !showArchived);
+  if (archivedTab) archivedTab.classList.toggle('active', showArchived);
+}
+window.switchCensusTab = switchCensusTab;
+
 function adminPage(page) {
   switch(page) {
     case 'dashboard': {
@@ -3718,6 +3731,21 @@ function adminPage(page) {
       const entries = typeof approvalEntries==='function' ? approvalEntries().filter(e=>e.status==='pending') : [];
       const pendingHandouts = entries.filter(e => !e.isQuiz && e.type !== 'quiz').length;
       const pendingQuizzes = entries.filter(e => e.isQuiz || e.type === 'quiz').length;
+      // Real pending approvals that carry a deadline, sorted soonest-first so admins can
+      // approve them before the deadline is reached (replaces the old placeholder dates).
+      const quizzesRef = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+      const matsRef = typeof materialsData !== 'undefined' ? materialsData : [];
+      const pendingDeadlineItems = entries.map(item => {
+        const isQ = item.kind === 'quiz' || /quiz/i.test(item.type || '');
+        const src = isQ
+          ? quizzesRef.find(q => String(q.id) === String(item.id))
+          : matsRef.find(m => String(m.id) === String(item.id));
+        const dueRaw = src ? (src.dueDate || src.due_date || src.deadline || null) : null;
+        const dueTs = dueRaw ? new Date(dueRaw).getTime() : NaN;
+        return { id: item.id, title: item.title || (isQ ? 'Quiz submission' : 'Learning material'), isQuiz: isQ, dueTs: isNaN(dueTs) ? null : dueTs };
+      });
+      const upcomingDeadlineItems = pendingDeadlineItems.filter(d => d.dueTs).sort((a, b) => a.dueTs - b.dueTs);
+      const pendingNoDeadlineCount = pendingDeadlineItems.length - upcomingDeadlineItems.length;
       const announcements = typeof getStoredAnnouncements==='function' ? getStoredAnnouncements() : [];
       const oneWeekAgo = Date.now() - 7 * 86400000;
       const live = announcements.filter(n=>!n.isArchived && n.status!=='draft' && !n.isDraft && !(n.expiresAt && new Date(n.expiresAt).getTime() <= Date.now()));
@@ -4271,32 +4299,27 @@ function adminPage(page) {
                   </div>
                   <div>
                     <h3>Upcoming Deadlines</h3>
-                    <p>Important school submissions</p>
+                    <p>Pending approvals &middot; approve before the deadline</p>
                   </div>
                 </div>
               </div>
               <div class="ad-deadline-list">
-                <div class="ad-deadline-item">
-                  <div class="ad-dl-left">
-                    <span class="ad-dl-icon" style="color:#2563eb;">${adSvg.doc}</span>
-                    <span>Learning materials</span>
-                  </div>
-                  <span class="ad-dl-pill blue">Feb 12</span>
-                </div>
-                <div class="ad-deadline-item">
-                  <div class="ad-dl-left">
-                    <span class="ad-dl-icon" style="color:#ef4444;">${adSvg.quiz}</span>
-                    <span>Quiz submissions</span>
-                  </div>
-                  <span class="ad-dl-pill pink">Feb 14</span>
-                </div>
-                <div class="ad-deadline-item">
-                  <div class="ad-dl-left">
-                    <span class="ad-dl-icon" style="color:#2563eb;">${adSvg.bars}</span>
-                    <span>Grade reports</span>
-                  </div>
-                  <span class="ad-dl-pill blue">Feb 20</span>
-                </div>
+                ${upcomingDeadlineItems.length ? upcomingDeadlineItems.slice(0, 5).map(d => {
+                  const now = Date.now();
+                  const overdue = d.dueTs < now;
+                  const soon = !overdue && (d.dueTs - now) <= 3 * 86400000;
+                  const pillStyle = overdue ? 'background:#fee2e2;color:#b91c1c;' : (soon ? 'background:#fef3c7;color:#b45309;' : '');
+                  const pillLabel = overdue ? 'Overdue' : new Date(d.dueTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  return `<div class="ad-deadline-item" style="cursor:pointer;" onclick="renderPage('approval')" title="Open Content Approval to review this submission">
+                    <div class="ad-dl-left" style="min-width:0;flex:1;">
+                      <span class="ad-dl-icon" style="color:${d.isQuiz ? '#db2777' : '#2563eb'};flex-shrink:0;">${d.isQuiz ? adSvg.quiz : adSvg.doc}</span>
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escHtml(d.title)}</span>
+                    </div>
+                    <span class="ad-dl-pill" style="${pillStyle}">${pillLabel}</span>
+                  </div>`;
+                }).join('') : `<div style="padding:16px 8px;text-align:center;color:#8798b2;font-size:11px;line-height:1.5;">${pendingDeadlineItems.length ? 'No pending approvals have a deadline set.' : 'No pending approvals right now.'}</div>`}
+                ${pendingNoDeadlineCount > 0 ? `<div style="padding:4px 8px;text-align:center;color:#0879b7;font-size:10px;font-weight:700;cursor:pointer;" onclick="renderPage('approval')">+${pendingNoDeadlineCount} pending without a deadline &rarr; Review</div>` : ''}
+                ${upcomingDeadlineItems.length > 5 ? `<div style="padding:4px 8px;text-align:center;color:#0879b7;font-size:10px;font-weight:700;cursor:pointer;" onclick="renderPage('approval')">View all ${upcomingDeadlineItems.length} deadlines &rarr;</div>` : ''}
               </div>
             </div>
 
@@ -4467,7 +4490,7 @@ function renderAdminAcademicReportsContent() {
       <p>Achieving 75% or higher</p>
     </div>
     <div class="info-card">
-      <div class="ic-head"><div class="ic-icon">${iconFolder()}</div><div><div class="ic-sub">Active Sections</div><div class="ic-num">${managedSections.length}</div></div></div>
+      <div class="ic-head"><div class="ic-icon">${iconFolder()}</div><div><div class="ic-sub">Active Sections</div><div class="ic-num">${typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived).length : 0}</div></div></div>
       <p>Managed senior high sections</p>
     </div>
   </div>
@@ -4614,13 +4637,13 @@ function exportAdminCensusCSV() {
   const humssCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('HUMSS')).length;
   const abmCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('ABM')).length;
   const tvlCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('TVL') || (s.strand || '').toUpperCase().includes('ICT')).length;
-  const secCount = typeof managedSections !== 'undefined' ? managedSections.length : 12;
+  const secCount = typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived).length : 12;
 
   let csv = 'HAVEN OF WISDOM ACADEMY - INSTITUTIONAL CENSUS & CLASS RECORD DASHBOARD\n';
   csv += 'Generated Date: ' + new Date().toLocaleString() + '\n';
   csv += 'Current Academic Year: S.Y. 2026-2027\n\n';
 
-  csv += '--- LONGITUDINAL ENROLMENT & FACULTY COMPARATIVE CENSUS ---\n';
+  csv += '--- LONGITUDINAL ENROLLMENT & FACULTY COMPARATIVE CENSUS ---\n';
   csv += 'Academic Year,Status,Total Students,Active Teachers,Student-Teacher Ratio,Sections,STEM,HUMSS,ABM,TVL/ICT,Passing Rate,YoY Growth\n';
   let savedHistoricalArchives = [];
   try {
@@ -4634,7 +4657,7 @@ function exportAdminCensusCSV() {
 
   csv += '--- CURRENT ACADEMIC YEAR SECTION ROSTER CENSUS ---\n';
   csv += 'Section Name,Grade Level,Strand,Class Adviser,Enrolled Students,Capacity Limit,Utilization\n';
-  (typeof managedSections !== 'undefined' ? managedSections : []).forEach(sec => {
+  (typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived) : []).forEach(sec => {
     const enrolled = activeStudents.filter(s => (s.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()).length;
     csv += `"${sec.name}","${sec.gradeLevel || 'Grade 11'}","${sec.strand || 'STEM'}","${sec.adviser || 'Department Faculty'}",${enrolled},45,${Math.round((enrolled / 45) * 100)}%\n`;
   });
@@ -4726,7 +4749,7 @@ function renderAdminClassRecordCensus() {
     students: currentYearTotalStudents,
     teachers: currentYearTotalTeachers,
     ratio: currentYearRatio,
-    sections: (typeof managedSections !== 'undefined' ? managedSections.length : 0),
+    sections: (typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived).length : 0),
     stem: strandCounts.STEM,
     humss: strandCounts.HUMSS,
     abm: strandCounts.ABM,
@@ -4742,7 +4765,9 @@ function renderAdminClassRecordCensus() {
 
   // Section summary metrics
   const sectionsList = typeof managedSections !== 'undefined' ? managedSections : [];
-  const secCensusRows = sectionsList.map(sec => {
+  const activeSections = sectionsList.filter(s => !s.isArchived);
+  const archivedSections = sectionsList.filter(s => s.isArchived);
+  const secCensusRows = activeSections.map(sec => {
     const enrolled = activeStudents.filter(s => (s.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()).length;
     const capacity = 45;
     const utilPct = Math.min(100, Math.round((enrolled / capacity) * 100));
@@ -4754,6 +4779,17 @@ function renderAdminClassRecordCensus() {
       enrolled,
       capacity,
       utilPct
+    };
+  });
+  const archivedCensusRows = archivedSections.map(sec => {
+    const enrolled = activeStudents.filter(s => (s.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()).length;
+    return {
+      name: sec.name,
+      gradeLevel: sec.gradeLevel || 'Grade 11',
+      strand: sec.strand || 'STEM',
+      adviser: sec.adviser || 'Department Adviser',
+      enrolled,
+      archivedAt: sec.archivedAt
     };
   });
 
@@ -4774,7 +4810,7 @@ function renderAdminClassRecordCensus() {
             Overall Institutional Census
           </h2>
           <p style="font-size:13px;color:#94a3b8;margin:0;max-width:620px;line-height:1.5;">
-            Official senior high school institutional census, longitudinal student enrolment trends across all academic years, active faculty counts, and section allocations.
+            Official senior high school institutional census, longitudinal student enrollment trends across all academic years, active faculty counts, and section allocations.
           </p>
         </div>
 
@@ -4864,11 +4900,11 @@ function renderAdminClassRecordCensus() {
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="color:#0284c7;font-size:18px;">📈</span>
               <h3 style="font-size:17px;font-weight:800;color:var(--text-primary);margin:0;">
-                Comparative Longitudinal Enrolment Breakdown
+                Comparative Longitudinal Enrollment Breakdown
               </h3>
             </div>
             <p style="font-size:12.5px;color:var(--text-secondary);margin:4px 0 0 0;">
-              Longitudinal institutional audit comparing enrolment records, faculty counts, and academic metrics across academic years.
+              Longitudinal institutional audit comparing enrollment records, faculty counts, and academic metrics across academic years.
             </p>
           </div>
           <span style="font-size:12px;color:var(--text-muted);font-weight:600;background:#f8fafc;padding:5px 12px;border-radius:8px;border:1px solid #e2e8f0;">
@@ -4913,7 +4949,7 @@ function renderAdminClassRecordCensus() {
             <thead>
               <tr>
                 <th style="white-space:nowrap;">Academic Year</th>
-                <th style="white-space:nowrap;">Total Enrolment</th>
+                <th style="white-space:nowrap;">Total Enrollment</th>
                 <th style="white-space:nowrap;">YoY Trend</th>
                 <th style="white-space:nowrap;">Faculty</th>
                 <th style="white-space:nowrap;">Student-Teacher Ratio</th>
@@ -5010,13 +5046,13 @@ function renderAdminClassRecordCensus() {
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
             <div style="background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
-              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 11 Enrolment</div>
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 11 Enrollment</div>
               <div style="font-size:24px;font-weight:800;color:#0284c7;margin:4px 0;">${gr11Count}</div>
               <span style="font-size:11px;color:var(--text-muted);">${currentYearTotalStudents > 0 ? Math.round((gr11Count / currentYearTotalStudents) * 100) : 0}% of institutional total</span>
             </div>
 
             <div style="background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
-              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 12 Enrolment</div>
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 12 Enrollment</div>
               <div style="font-size:24px;font-weight:800;color:#059669;margin:4px 0;">${gr12Count}</div>
               <span style="font-size:11px;color:var(--text-muted);">${currentYearTotalStudents > 0 ? Math.round((gr12Count / currentYearTotalStudents) * 100) : 0}% of institutional total</span>
             </div>
@@ -5047,15 +5083,23 @@ function renderAdminClassRecordCensus() {
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
           <div>
             <h3 style="font-size:16.5px;font-weight:800;color:var(--text-primary);margin:0 0 2px 0;">
-              Class Section Enrolment & Capacity Census
+              Class Section Enrollment & Capacity Census
             </h3>
             <span style="font-size:12px;color:var(--text-muted);">
               Official distribution of learners per section against DepEd maximum capacity of 45 students
             </span>
           </div>
+          <div style="display:inline-flex;background:#f1f5f9;padding:4px;border-radius:12px;gap:6px;border:1px solid #e2e8f0;">
+            <button type="button" class="anc-archive-tab active" id="censusActiveTab" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="switchCensusTab('active')">
+              🏫 Active (${secCensusRows.length})
+            </button>
+            <button type="button" class="anc-archive-tab" id="censusArchivedTab" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="switchCensusTab('archived')">
+              📦 Archived (${archivedCensusRows.length})
+            </button>
+          </div>
         </div>
 
-        <div class="score-table score-table-responsive" style="box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+        <div id="censusActiveTable" class="score-table score-table-responsive" style="box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
           <table style="min-width:920px;width:100%;border-collapse:collapse;">
             <thead>
               <tr>
@@ -5093,6 +5137,39 @@ function renderAdminClassRecordCensus() {
                 </tr>
               `).join('') : `
                 <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);white-space:nowrap;">No sections configured in the census yet.</td></tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+
+        <div id="censusArchivedTable" class="score-table score-table-responsive" style="display:none;box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+          <table style="min-width:920px;width:100%;border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="white-space:nowrap;">Section</th>
+                <th style="white-space:nowrap;">Grade Level & Strand</th>
+                <th style="white-space:nowrap;">Class Adviser</th>
+                <th style="white-space:nowrap;">Enrolled Headcount</th>
+                <th style="white-space:nowrap;">Archived Date</th>
+                <th style="white-space:nowrap;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${archivedCensusRows.length ? archivedCensusRows.map(s => `
+                <tr style="opacity:0.85;background:#fffdfa;">
+                  <td style="white-space:nowrap;">
+                    <strong><span class="user-role-badge student" style="font-size:12.5px;padding:3px 9px;white-space:nowrap;">${escHtml(s.name)}</span></strong>
+                  </td>
+                  <td style="white-space:nowrap;">${escHtml(s.gradeLevel)} · <span class="role-tag student" style="white-space:nowrap;">${escHtml(s.strand)}</span></td>
+                  <td style="white-space:nowrap;">${escHtml(s.adviser)}</td>
+                  <td style="white-space:nowrap;"><strong>${s.enrolled}</strong> students</td>
+                  <td style="white-space:nowrap;">${s.archivedAt ? new Date(s.archivedAt).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : 'N/A'}</td>
+                  <td style="white-space:nowrap;">
+                    <span style="background:#fef3c7;color:#b45309;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:6px;display:inline-block;">📦 Archived</span>
+                  </td>
+                </tr>
+              `).join('') : `
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);white-space:nowrap;">No archived sections.</td></tr>
               `}
             </tbody>
           </table>

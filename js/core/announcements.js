@@ -191,6 +191,7 @@ function closeEmergencyBanner() {
 }
 
 function openEmergencyHotlinesModal() {
+  if (typeof renderHotlinesUI === 'function') renderHotlinesUI();
   const modal = document.getElementById('hotlineDirectoryModal');
   if (modal) modal.classList.add('active');
 }
@@ -545,41 +546,21 @@ function buildAnnouncementsPage() {
 
         <div class="anc-widget-card">
           <h4 class="anc-widget-title">City of Imus Emergency Directory</h4>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🚨</div>
-            <div class="anc-dir-details">
-              <h5>Imus Disaster Risk (CDRRMO)</h5>
-              <span style="font-weight:800;color:#dc2626;">(046) 515-1358</span>
-            </div>
-          </div>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🚒</div>
-            <div class="anc-dir-details">
-              <h5>Imus Bureau of Fire (BFP)</h5>
-              <span style="font-weight:800;color:#dc2626;">(046) 970-5161</span>
-            </div>
-          </div>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🚓</div>
-            <div class="anc-dir-details">
-              <h5>Imus PNP Police Station</h5>
-              <span>(046) 471-3993</span>
-            </div>
-          </div>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🏥</div>
-            <div class="anc-dir-details">
-              <h5>Medical Center Imus</h5>
-              <span>(046) 471-9487</span>
-            </div>
-          </div>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🏛️</div>
-            <div class="anc-dir-details">
-              <h5>Imus City Hall (Mayor)</h5>
-              <span>(046) 471-2732</span>
-            </div>
-          </div>
+          ${(() => {
+            const hls = typeof getStoredHotlines === 'function' ? getStoredHotlines() : [];
+            if (!hls.length) {
+              return '<p style="font-size:12.5px;color:#64748b;padding:6px 0;">No emergency hotlines configured yet.</p>';
+            }
+            return hls.map(hl => `
+              <a href="tel:${escHtml(hl.tel || hl.number.replace(/[^0-9+]/g, ''))}" class="anc-dir-item" style="text-decoration:none;color:inherit;" title="Click to call ${escHtml(hl.name)}">
+                <div class="anc-dir-icon" style="background:transparent;">${typeof hotlineIconSvg === 'function' ? hotlineIconSvg(hl, 32) : '📞'}</div>
+                <div class="anc-dir-details">
+                  <h5>${escHtml(hl.name)}</h5>
+                  <span style="font-weight:800;color:#dc2626;">${escHtml(hl.number)}</span>
+                </div>
+              </a>
+            `).join('');
+          })()}
         </div>
       </div>
     </div>
