@@ -791,10 +791,24 @@ async function loadUsersFromDB() {
         const { data: crStudents } = await db.from('class_records').select('student_id, student_name, section, strand').order('submitted_at', { ascending: false });
         if (crStudents && crStudents.length) {
           crStudents.forEach(cs => {
+            const csName = (cs.student_name || '').toLowerCase().trim();
+            const csId = String(cs.student_id || '').toLowerCase().trim();
+
+            // Strict check: never harvest records that belong to teachers or admins
+            const isTeacherOrAdmin = (data || []).some(existing => {
+              const r = String(existing.role || '').toLowerCase();
+              if (r !== 'teacher' && r !== 'admin' && r !== 'faculty') return false;
+              const exName = String(existing.full_name || existing.name || '').toLowerCase().trim();
+              const exId = String(existing.id || '').toLowerCase().trim();
+              const exSchoolId = String(existing.school_id || '').toLowerCase().trim();
+              return (csId && (csId === exId || csId === exSchoolId)) || (csName && csName === exName);
+            });
+            if (isTeacherOrAdmin) return;
+
             const exists = data.some(existing =>
               (existing.id && existing.id === cs.student_id) ||
               (existing.school_id && existing.school_id === cs.student_id) ||
-              (existing.full_name && existing.full_name.toLowerCase().trim() === (cs.student_name || '').toLowerCase().trim())
+              (existing.full_name && existing.full_name.toLowerCase().trim() === csName)
             );
             if (!exists) {
               data.push({
