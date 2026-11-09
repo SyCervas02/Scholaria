@@ -382,10 +382,8 @@ function openQuizModal() {
     return;
   }
 
-  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
   const allowedStrands = getTeacherAllowedStrands();
   const allowedGrades = getTeacherAllowedGradeLevels();
-  const allowedSections = getTeacherAllowedSections();
 
   const defaultSections = (isTeacher && CURRENT_PROFILE && CURRENT_PROFILE.section) 
     ? new Set(allowedSections) 
