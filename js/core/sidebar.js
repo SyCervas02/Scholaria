@@ -700,7 +700,27 @@ function buildRealClassRecordEntries() {
     loadUsersFromDB();
   }
 
-  const students = registeredUsers.filter(u => u.role === 'student');
+  let students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
+
+  // If viewing as a teacher, only include students handled by this teacher!
+  // Exclude unassigned students and students from unhandled sections.
+  if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+    const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
+    const teacherSections = (prof.section || '')
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (!teacherSections.length) {
+      return [];
+    }
+
+    students = students.filter(u => {
+      const studSec = (u.section || '').trim().toLowerCase();
+      return studSec && teacherSections.includes(studSec);
+    });
+  }
+
   const custom = getCustomClassRecEntries();
   const quizzes = getClassRecordQuizzes();
   const allAttempts = getAllRecordedAttempts();
@@ -804,7 +824,9 @@ function buildSectionSummaryEntries() {
   const sectionMap = new Map();
 
   allStudentEntries.forEach(st => {
-    const sec = st.section || 'Unassigned';
+    const sec = (st.section || '').trim();
+    // Exclude Unassigned, empty, or placeholder section labels
+    if (!sec || sec.toLowerCase() === 'unassigned' || sec.toLowerCase() === 'none') return;
     if (!sectionMap.has(sec)) {
       sectionMap.set(sec, {
         section: sec,
@@ -3536,7 +3558,10 @@ function teacherPage(page) {
 
       // MODE 1: MAIN CLASS RECORD PAGE (SECTIONS ONLY)
       if (!classRecExpandedSection) {
-        const targetPrintSec = classRecSectionFilter || (managedSections[0]?.name || 'Section A');
+        const availableClassRecSections = (ROLE === 'teacher')
+          ? (typeof getTeacherAnalysisSections === 'function' ? getTeacherAnalysisSections() : (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim()).filter(Boolean))
+          : SECTIONS;
+        const targetPrintSec = classRecSectionFilter || (availableClassRecSections[0] || 'Section A');
         return `
         <div class="section-hdr">
           <div>
@@ -3546,7 +3571,7 @@ function teacherPage(page) {
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <select class="user-filter-select" onchange="setClassRecSectionFilter(this.value)">
               <option value="">All Handled Sections</option>
-              ${SECTIONS.map(sec => `<option value="${sec}" ${classRecSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+              ${availableClassRecSections.map(sec => `<option value="${sec}" ${classRecSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
             </select>
             <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openAllSectionReportsModal()">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
