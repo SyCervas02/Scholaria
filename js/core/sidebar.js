@@ -390,8 +390,15 @@ function saveCustomClassRecEntry(studentKey, data) {
 }
 
 function isStudentHandledByTeacher(student, teacherProfile) {
-  // Teachers and Admins are permitted to view and inspect all students' progress specification and academic records
-  return true;
+  if (typeof ROLE !== 'undefined' && ROLE === 'admin') return true;
+  if (!teacherProfile || !student) return false;
+  const teacherSections = (teacherProfile.section || '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (!teacherSections.length) return false;
+  const studentSection = (student.section || '').trim().toLowerCase();
+  return studentSection && teacherSections.includes(studentSection);
 }
 
 function deduplicateQuizAttempts(attemptsList) {
@@ -473,13 +480,15 @@ function getTeacherAnalysisSections(selectedQuiz) {
       ? prof.section.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
       : [];
 
+    if (teacherSections.length === 0) {
+      return [];
+    }
+
     candidateSections = candidateSections.filter(sec => {
       const secName = (sec.name || sec).trim().toLowerCase();
       const secStrand = String(sec.strand || '').trim().toUpperCase();
 
-      if (teacherSections.length > 0) {
-        if (!teacherSections.includes(secName)) return false;
-      }
+      if (!teacherSections.includes(secName)) return false;
       if (secStrand && teacherStrand && secStrand !== 'ALL' && teacherStrand !== 'ALL') {
         if (secStrand !== teacherStrand) return false;
       }
@@ -3224,53 +3233,59 @@ function teacherPage(page) {
               </div>
             </div>
 
-            <!-- ACTION BUTTONS & REVIEW CHECKBOX -->
-            <div class="quiz-row-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <div class="quiz-attempt-count" data-quiz-attempt-count="${escHtml(q.id)}" data-quiz-title="${escHtml(q.title || '')}">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
+            <!-- ACTION BUTTONS & REVIEW CHECKBOX (2 CLEAN STACKS) -->
+            <div class="quiz-row-actions">
+              <!-- TOP STACK: Attempts, Review toggle, Preview, Take/Play -->
+              <div class="quiz-actions-stack">
+                <div class="quiz-attempt-count" data-quiz-attempt-count="${escHtml(q.id)}" data-quiz-title="${escHtml(q.title || '')}">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
+                </div>
+                <!-- REVIEW ANSWERS CHECKBOX -->
+                <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
+                  <input type="checkbox" ${isReviewAllowed ? 'checked' : ''} onchange="toggleQuizReviewAnswers('${q.id}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
+                  <span>${isReviewAllowed ? '👁️ Show Answers on Review' : '🔒 Answers Hidden'}</span>
+                </label>
+                <button class="table-act-btn take" onclick="openQuizQuestionsPreview('${q.id}')" title="Preview Quiz Questions">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  Preview
+                </button>
+                ${isInter ? `
+                <button class="table-act-btn" style="background:linear-gradient(135deg,#0284c7,#8b5cf6);color:#fff;border:none;" onclick="openInteractiveQuiz('${q.id}')" title="Play Interactive Game Mode">
+                  🎮 Play Game
+                </button>` : `
+                <button class="table-act-btn take" onclick="takeQuizAsTeacher('${q.id}')" title="Take this standard quiz as a student">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
+                  Take Quiz
+                </button>`}
               </div>
-              <!-- REVIEW ANSWERS CHECKBOX -->
-              <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
-                <input type="checkbox" ${isReviewAllowed ? 'checked' : ''} onchange="toggleQuizReviewAnswers('${q.id}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
-                <span>${isReviewAllowed ? '👁️ Show Answers on Review' : '🔒 Answers Hidden'}</span>
-              </label>
 
-              <button class="table-act-btn take" onclick="openQuizQuestionsPreview('${q.id}')" title="Preview Quiz Questions">
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                Preview
-              </button>
-              ${isInter ? `
-              <button class="table-act-btn" style="background:linear-gradient(135deg,#0284c7,#8b5cf6);color:#fff;border:none;" onclick="openInteractiveQuiz('${q.id}')" title="Play Interactive Game Mode">
-                🎮 Play Game
-              </button>` : `
-              <button class="table-act-btn take" onclick="takeQuizAsTeacher('${q.id}')" title="Take this standard quiz as a student">
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
-                Take Quiz
-              </button>`}
-              <button class="table-act-btn review" onclick="setAnalysisQuiz('${q.id}')" title="View Question Accuracy & Psychometrics">
-                📊 Item Analysis
-              </button>
-              <button class="table-act-btn" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">
-                🏆 Leaderboard
-              </button>
-
-              ${q.status === 'active' ? `
-                <button class="table-act-btn" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;" onclick="toggleQuizStatus('${q.id}', 'closed')" title="Close Quiz submissions">
-                  Close
+              <!-- BOTTOM STACK: Item Analysis, Leaderboard, Close/Activate, Trash -->
+              <div class="quiz-actions-stack">
+                <button class="table-act-btn review" onclick="setAnalysisQuiz('${q.id}')" title="View Question Accuracy & Psychometrics">
+                  📊 Item Analysis
                 </button>
-              ` : q.status === 'closed' ? `
-                <button class="table-act-btn" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;" onclick="toggleQuizStatus('${q.id}', 'active')" title="Re-open Quiz submissions">
-                  Activate
+                <button class="table-act-btn" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">
+                  🏆 Leaderboard
                 </button>
-              ` : ROLE === 'admin' ? `
-                <button class="table-act-btn take" onclick="approveQuiz('${q.id}')">Approve</button>
-                <button class="table-act-btn" style="color:#dc2626;" onclick="runApprovalAction('quiz','${q.id}',false)">Reject</button>
-              ` : ''}
 
-              <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 10px;" onclick="deleteQuiz('${q.id}')" title="Delete Quiz">
-                ${iconTrash()}
-              </button>
+                ${q.status === 'active' ? `
+                  <button class="table-act-btn" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;" onclick="toggleQuizStatus('${q.id}', 'closed')" title="Close Quiz submissions">
+                    Close
+                  </button>
+                ` : q.status === 'closed' ? `
+                  <button class="table-act-btn" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;" onclick="toggleQuizStatus('${q.id}', 'active')" title="Re-open Quiz submissions">
+                    Activate
+                  </button>
+                ` : ROLE === 'admin' ? `
+                  <button class="table-act-btn take" onclick="approveQuiz('${q.id}')">Approve</button>
+                  <button class="table-act-btn" style="color:#dc2626;" onclick="runApprovalAction('quiz','${q.id}',false)">Reject</button>
+                ` : ''}
+
+                <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 10px;" onclick="deleteQuiz('${q.id}')" title="Delete Quiz">
+                  ${iconTrash()}
+                </button>
+              </div>
             </div>
           </div>`;
         }).join('')
