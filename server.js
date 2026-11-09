@@ -17,37 +17,6 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
-// --- Account audit trail store ---
-const AUDIT_FILE = path.join(__dirname, 'data', 'account-audit.json');
-
-function getAuditRecords() {
-  try {
-    if (!fs.existsSync(AUDIT_FILE)) return {};
-    return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveAuditRecord(record) {
-  try {
-    const dir = path.dirname(AUDIT_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const records = getAuditRecords();
-    const key = record.school_id || record.user_id;
-    if (key) {
-      records[key] = {
-        ...(records[key] || {}),
-        ...record,
-        updated_at: new Date().toISOString()
-      };
-      fs.writeFileSync(AUDIT_FILE, JSON.stringify(records, null, 2), 'utf8');
-    }
-  } catch (e) {
-    console.error('Failed to save audit record:', e.message);
-  }
-}
-
 // --- Core Security Middleware ---
 // 1. Helmet Security Headers (CSP, Anti-Clickjacking, Anti-MIME Sniffing, Hide Express Signature)
 app.use(helmet({
@@ -198,6 +167,72 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- Supabase client for token validation & admin operations ---
+const activeAdminKey = (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('eyJ')) 
+  ? process.env.SUPABASE_SERVICE_ROLE_KEY 
+  : process.env.SUPABASE_ANON_KEY;
+
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  activeAdminKey,
+  {
+    global: {
+      headers: { Authorization: `Bearer ${activeAdminKey}` }
+    },
+    auth: { autoRefreshToken: false, persistSession: false }
+  }
+);
+
+const supabaseAnon = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
+
+// --- Persistent Account Audit Trail Store (Supabase Cloud Table 'account_audit') ---
+async function getAuditRecords() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('account_audit')
+      .select('*')
+      .order('updated_at', { ascending: false });
+    if (error || !data) return {};
+    const records = {};
+    data.forEach(r => {
+      const key = r.school_id || r.user_id;
+      if (key) records[key] = r;
+    });
+    return records;
+  } catch (e) {
+    console.warn('[Audit] Supabase fetch note:', e.message);
+    return {};
+  }
+}
+
+async function saveAuditRecord(record) {
+  try {
+    const key = record.school_id || record.user_id;
+    if (!key) return;
+    await supabaseAdmin.from('account_audit').upsert({
+      school_id: record.school_id || key,
+      user_id: record.user_id || null,
+      name: record.name || null,
+      role: record.role || null,
+      email: record.email || null,
+      strand: record.strand || null,
+      grade_level: record.grade_level || null,
+      section: record.section || null,
+      is_active: record.is_active !== undefined ? record.is_active : true,
+      created_at: record.created_at || new Date().toISOString(),
+      created_by: record.created_by || null,
+      updated_at: new Date().toISOString(),
+      status_history: record.status_history || []
+    }, { onConflict: 'school_id' });
+  } catch (e) {
+    console.error('[Audit] Failed to save audit record to Supabase:', e.message);
+  }
+}
+
 // Redirect root to login page
 app.get('/', (req, res) => {
   res.redirect('/login.html');
@@ -214,45 +249,76 @@ if (!fs.existsSync(chatUploadsDir)) {
 }
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { dotfiles: 'ignore' }));
 
-// Resilient recovery for chat uploads stored across multiple devices
+// Resilient recovery for chat uploads stored permanently across Railway container rebuilds & multi-devices
 app.get('/uploads/chat/:filename', async (req, res) => {
   const filename = path.basename(req.params.filename || '');
+  if (!filename) return res.status(404).send('File not found');
+
   const filePath = path.join(chatUploadsDir, filename);
   if (fs.existsSync(filePath)) {
     return res.sendFile(filePath);
   }
 
-  // 1. Recover original file from Supabase database if stored in messages
+  const ext = path.extname(filename).toLowerCase();
+  const mimeTypes = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+    '.pdf': 'application/pdf', '.txt': 'text/plain', '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  };
+
+  // 1. Recover original file from permanent Supabase Storage 'chat-attachments' bucket
   try {
-    if (typeof supabaseAdmin !== 'undefined' && supabaseAdmin) {
+    if (supabaseAdmin && supabaseAdmin.storage) {
+      const { data: fileBlob, error: dlErr } = await supabaseAdmin.storage
+        .from('chat-attachments')
+        .download(filename);
+      if (fileBlob && !dlErr) {
+        const buffer = Buffer.from(await fileBlob.arrayBuffer());
+        try { fs.writeFileSync(filePath, buffer); } catch (_) {}
+        res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.send(buffer);
+      }
+    }
+  } catch (storageErr) {
+    console.warn('[Chat] Storage recovery attempt note:', storageErr.message);
+  }
+
+  // 2. Recover original file from Supabase messages database if present
+  try {
+    if (supabaseAdmin) {
       const { data: msg } = await supabaseAdmin
         .from('messages')
         .select('body')
-        .ilike('body', `%"${filename}"%`)
+        .ilike('body', `%${filename}%`)
         .limit(1)
         .maybeSingle();
 
       if (msg && msg.body) {
         let parsed = null;
         try { parsed = JSON.parse(msg.body); } catch (_) {}
-        if (parsed && parsed.data && typeof parsed.data === 'string' && parsed.data.startsWith('data:')) {
-          const match = parsed.data.match(/^data:([^;]+);base64,(.+)$/);
+        const rawData = parsed?.data || parsed?.previewUrl;
+        if (rawData && typeof rawData === 'string' && rawData.startsWith('data:')) {
+          const match = rawData.match(/^data:([^;]+);base64,(.+)$/);
           if (match) {
             const mime = match[1];
             const buffer = Buffer.from(match[2], 'base64');
             res.setHeader('Content-Type', mime);
-            res.setHeader('Cache-Control', 'public, max-age=86400');
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
             try { fs.writeFileSync(filePath, buffer); } catch (_) {}
+            // Mirror to cloud storage so future downloads are instant
+            supabaseAdmin.storage.from('chat-attachments').upload(filename, buffer, { contentType: mime, upsert: true }).catch(() => {});
             return res.send(buffer);
           }
         }
       }
     }
   } catch (err) {
-    console.warn('Error recovering chat attachment from database:', err.message);
+    console.warn('[Chat] Database attachment recovery check:', err.message);
   }
 
-  // 2. Clean fallback if image file is not on local server disk
+  // 3. Fallback only if the attachment file was truly removed or unavailable
   const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(filename);
   if (isImage) {
     res.setHeader('Content-Type', 'image/svg+xml');
@@ -266,7 +332,7 @@ app.get('/uploads/chat/:filename', async (req, res) => {
         <circle cx="192" cy="62" r="2.5" fill="#2563eb"/>
         <text x="200" y="130" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="13" font-weight="700" fill="#1e293b" text-anchor="middle">Image Attachment</text>
         <text x="200" y="152" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" font-weight="500" fill="#64748b" text-anchor="middle">${safeName}</text>
-        <text x="200" y="176" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="10.5" font-weight="500" fill="#94a3b8" text-anchor="middle">Available in chat message overview</text>
+        <text x="200" y="176" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="10.5" font-weight="500" fill="#94a3b8" text-anchor="middle">Attachment unavailable</text>
       </svg>
     `.trim());
   }
@@ -318,30 +384,6 @@ app.use('/api/', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
-
-// --- Supabase client for token validation & admin operations ---
-const activeAdminKey = (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('eyJ')) 
-  ? process.env.SUPABASE_SERVICE_ROLE_KEY 
-  : process.env.SUPABASE_ANON_KEY;
-
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL,
-  activeAdminKey,
-  {
-    global: {
-      headers: { Authorization: `Bearer ${activeAdminKey}` }
-    },
-    auth: { autoRefreshToken: false, persistSession: false }
-  }
-);
-
-const supabaseAnon = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY,
-  {
-    auth: { autoRefreshToken: false, persistSession: false }
-  }
-);
 
 // --- Profanity / severe-word filter ---
 const PROFANITY_LIST = [
@@ -756,8 +798,8 @@ app.post('/api/admin/create-account', async (req, res) => {
     return res.status(500).json({ error: insertErr.message });
   }
 
-  // Persistent provenance audit record
-  saveAuditRecord({
+  // Persistent provenance audit record directly in Supabase
+  await saveAuditRecord({
     user_id: authData.user.id,
     school_id,
     name: full_name.trim(),
@@ -791,7 +833,7 @@ app.get('/api/admin/account-audit', async (req, res) => {
   if (!profile) return;
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can view audit records' });
 
-  const records = getAuditRecords();
+  const records = await getAuditRecords();
   res.json({ success: true, records });
 });
 
@@ -827,7 +869,7 @@ app.post('/api/admin/toggle-user-status', async (req, res) => {
     }
   }
 
-  const currentRecords = getAuditRecords();
+  const currentRecords = await getAuditRecords();
   const key = updatedUser.school_id || user_id;
   const existingAudit = currentRecords[key] || {};
   const statusHistory = existingAudit.status_history || [];
@@ -843,7 +885,7 @@ app.post('/api/admin/toggle-user-status', async (req, res) => {
     reason: reason || (is_active ? 'Account reactivated by administrator' : 'Account deactivated by administrator')
   });
 
-  saveAuditRecord({
+  await saveAuditRecord({
     ...existingAudit,
     user_id,
     school_id: updatedUser.school_id,
@@ -946,16 +988,33 @@ app.post('/api/admin/update-user-sections', async (req, res) => {
   }
 });
 
-// --- Managed Sections Store & Sync ---
-const SECTIONS_FILE = path.join(__dirname, 'data', 'managed-sections.json');
-
-app.get('/api/sections', (req, res) => {
+// --- Managed Sections Store & Sync (Supabase Cloud Table 'sections') ---
+app.get('/api/sections', async (req, res) => {
   try {
-    if (fs.existsSync(SECTIONS_FILE)) {
-      const data = JSON.parse(fs.readFileSync(SECTIONS_FILE, 'utf8'));
-      if (Array.isArray(data)) return res.json(data);
+    const { data, error } = await supabaseAdmin
+      .from('sections')
+      .select('*')
+      .order('name');
+    if (error) throw error;
+    if (Array.isArray(data)) {
+      const formatted = data.map(s => ({
+        id: s.id,
+        name: s.name,
+        gradeLevel: s.grade_level,
+        strand: s.strand,
+        adviser: s.adviser || '',
+        room: s.room || '',
+        isArchived: !!s.is_archived,
+        archivedAt: s.archived_at,
+        unarchivedAt: s.unarchived_at,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at
+      }));
+      return res.json(formatted);
     }
-  } catch (_) {}
+  } catch (e) {
+    console.warn('[Sections] Supabase query note:', e.message);
+  }
   res.json([]);
 });
 
@@ -970,13 +1029,25 @@ app.post('/api/admin/sections', async (req, res) => {
   }
 
   try {
-    const dir = path.dirname(SECTIONS_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(SECTIONS_FILE, JSON.stringify(sections, null, 2), 'utf8');
+    for (const sec of sections) {
+      if (!sec || !sec.name) continue;
+      await supabaseAdmin.from('sections').upsert({
+        id: sec.id || `sec-${sec.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+        name: sec.name.trim(),
+        grade_level: sec.gradeLevel || sec.grade_level || 'Grade 11',
+        strand: sec.strand || 'STEM',
+        adviser: sec.adviser || '',
+        room: sec.room || '',
+        is_archived: !!(sec.isArchived ?? sec.is_archived),
+        archived_at: sec.archivedAt || sec.archived_at || null,
+        unarchived_at: sec.unarchivedAt || sec.unarchived_at || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'name' });
+    }
     return res.json({ success: true, count: sections.length });
   } catch (err) {
-    console.error('Failed to save sections file:', err);
-    return res.status(500).json({ error: 'Failed to persist sections' });
+    console.error('Failed to save sections to Supabase:', err);
+    return res.status(500).json({ error: 'Failed to persist sections to Supabase' });
   }
 });
 
@@ -1073,7 +1144,24 @@ app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
   try {
     const fileBuf = fs.readFileSync(req.file.path);
     base64Data = `data:${req.file.mimetype};base64,${fileBuf.toString('base64')}`;
-  } catch (_) {}
+
+    // Upload immediately to permanent Supabase Storage 'chat-attachments' bucket
+    if (supabaseAdmin && supabaseAdmin.storage) {
+      const { error: storageErr } = await supabaseAdmin.storage
+        .from('chat-attachments')
+        .upload(req.file.filename, fileBuf, {
+          contentType: req.file.mimetype,
+          upsert: true
+        });
+      if (storageErr) {
+        console.warn('[Chat] Supabase Storage upload error:', storageErr.message);
+      } else {
+        console.log('[Chat] Successfully uploaded attachment to Supabase Storage:', req.file.filename);
+      }
+    }
+  } catch (err) {
+    console.warn('[Chat] File read/storage error:', err.message);
+  }
 
   res.json({
     url: relativeUrl,
@@ -1230,24 +1318,7 @@ app.post('/api/chat/send', async (req, res) => {
   res.json({ ...message, warning });
 });
 
-// --- Chat Seen Receipts (Facebook-style Read Receipts) ---
-const chatReceiptsFile = path.join(__dirname, 'data', 'chat-seen-receipts.json');
-function getChatReceipts() {
-  try {
-    if (!fs.existsSync(chatReceiptsFile)) return {};
-    return JSON.parse(fs.readFileSync(chatReceiptsFile, 'utf8'));
-  } catch (err) {
-    return {};
-  }
-}
-function saveChatReceipts(data) {
-  try {
-    fs.writeFileSync(chatReceiptsFile, JSON.stringify(data, null, 2), 'utf8');
-  } catch (err) {
-    console.error('Failed to save chat receipts:', err.message);
-  }
-}
-
+// --- Chat Seen Receipts (Stored in Supabase Cloud Table 'chat_read_receipts') ---
 app.post('/api/chat/mark-seen', async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
@@ -1257,21 +1328,33 @@ app.post('/api/chat/mark-seen', async (req, res) => {
     return res.status(400).json({ error: 'Missing conversationId' });
   }
 
-  const receipts = getChatReceipts();
-  if (!receipts[conversationId]) {
-    receipts[conversationId] = {};
-  }
-
-  receipts[conversationId][profile.id] = {
-    userId: profile.id,
-    userName: profile.full_name || 'Participant',
-    lastMessageId: lastMessageId || null,
-    lastMessageTime: lastMessageTime || new Date().toISOString(),
-    seenAt: new Date().toISOString()
+  const receipt = {
+    conversation_id: conversationId,
+    user_id: profile.id,
+    user_name: profile.full_name || 'Participant',
+    last_message_id: lastMessageId || null,
+    last_message_time: lastMessageTime || new Date().toISOString(),
+    seen_at: new Date().toISOString()
   };
 
-  saveChatReceipts(receipts);
-  res.json({ success: true, receipt: receipts[conversationId][profile.id] });
+  try {
+    await supabaseAdmin.from('chat_read_receipts').upsert(receipt, {
+      onConflict: 'conversation_id,user_id'
+    });
+  } catch (err) {
+    console.warn('[Chat] Supabase mark-seen note:', err.message);
+  }
+
+  res.json({
+    success: true,
+    receipt: {
+      userId: profile.id,
+      userName: profile.full_name || 'Participant',
+      lastMessageId: receipt.last_message_id,
+      lastMessageTime: receipt.last_message_time,
+      seenAt: receipt.seen_at
+    }
+  });
 });
 
 app.get('/api/chat/seen-receipts', async (req, res) => {
@@ -1279,11 +1362,42 @@ app.get('/api/chat/seen-receipts', async (req, res) => {
   if (!profile) return;
 
   const { conversationId } = req.query;
-  const receipts = getChatReceipts();
-  if (conversationId) {
-    return res.json({ receipts: receipts[conversationId] || {} });
+  try {
+    let query = supabaseAdmin.from('chat_read_receipts').select('*');
+    if (conversationId) query = query.eq('conversation_id', conversationId);
+    const { data, error } = await query;
+    if (!error && Array.isArray(data)) {
+      if (conversationId) {
+        const convReceipts = {};
+        data.forEach(r => {
+          convReceipts[r.user_id] = {
+            userId: r.user_id,
+            userName: r.user_name || 'Participant',
+            lastMessageId: r.last_message_id,
+            lastMessageTime: r.last_message_time,
+            seenAt: r.seen_at
+          };
+        });
+        return res.json({ receipts: convReceipts });
+      } else {
+        const grouped = {};
+        data.forEach(r => {
+          if (!grouped[r.conversation_id]) grouped[r.conversation_id] = {};
+          grouped[r.conversation_id][r.user_id] = {
+            userId: r.user_id,
+            userName: r.user_name || 'Participant',
+            lastMessageId: r.last_message_id,
+            lastMessageTime: r.last_message_time,
+            seenAt: r.seen_at
+          };
+        });
+        return res.json({ receipts: grouped });
+      }
+    }
+  } catch (err) {
+    console.warn('[Chat] Supabase seen-receipts note:', err.message);
   }
-  res.json({ receipts });
+  res.json({ receipts: conversationId ? {} : {} });
 });
 
 // --- Learning Materials (centralized storage) ---
