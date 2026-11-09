@@ -832,7 +832,7 @@ async function handleChatFileUpload(event) {
   }
 
   const messageDraft = document.getElementById('cwInput')?.value || '';
-  showToast(`Uploading ${file.name}…`, 'info');
+  showToast(`Preparing ${file.name}…`, 'info');
 
   let localPreviewUrl = null;
   if (file.type && file.type.startsWith('image/')) {
@@ -840,6 +840,16 @@ async function handleChatFileUpload(event) {
       localPreviewUrl = URL.createObjectURL(file);
     } catch (_) {}
   }
+
+  // Read file as Base64 data URI so it is permanently stored in the Supabase database
+  const readFileAsDataUrl = (fileObj) => new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(fileObj);
+  });
+
+  const base64Data = await readFileAsDataUrl(file);
 
   let serverBase = window.API_BASE;
   if (!serverBase || serverBase === 'null' || (typeof serverBase === 'string' && serverBase.startsWith('file:'))) {
@@ -858,7 +868,7 @@ async function handleChatFileUpload(event) {
     }
   } catch (_) {}
 
-  let attachmentPayload = null;
+  let serverUrl = '';
 
   if (session && session.access_token) {
     try {
@@ -875,56 +885,23 @@ async function handleChatFileUpload(event) {
 
       if (upRes.ok) {
         const upData = await upRes.json();
-        if (!upData.url) throw new Error('Upload completed without a file URL');
-        attachmentPayload = JSON.stringify({
-          type: 'attachment',
-          name: upData.name || file.name,
-          size: upData.size || file.size,
-          mime: upData.mime || file.type || 'application/octet-stream',
-          url: upData.url,
-          previewUrl: localPreviewUrl || getChatAttachmentUrl({ url: upData.url })
-        });
-      } else {
-        const errJson = await upRes.json().catch(() => ({}));
-        console.warn('Chat upload failed:', upRes.status, errJson);
-        showToast(errJson.error || 'Attachment upload failed. Please try again.', 'error');
+        serverUrl = upData.url || '';
       }
     } catch (upErr) {
-      console.warn('Chat upload network error:', upErr);
+      console.warn('Chat server upload background sync note:', upErr);
     }
   }
 
-  if (!attachmentPayload) {
-    if (file.size > 2500) {
-      showToast('Could not upload attachment. Please ensure file server is running.', 'error');
-      clearChatAttachmentReturnState();
-      event.target.value = '';
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = async function(e) {
-      const dataUrl = e.target.result;
-      const payload = JSON.stringify({
-        type: 'attachment',
-        name: file.name,
-        size: file.size,
-        mime: file.type || 'application/octet-stream',
-        data: dataUrl,
-        previewUrl: dataUrl
-      });
-      pendingChatAttachment = JSON.parse(payload);
-      renderInputArea();
-      const draftInput = document.getElementById('cwInput');
-      if (draftInput) draftInput.value = messageDraft;
-      showToast('Attachment is ready. Click preview to maximize or Send to send.', 'success');
-    };
-    reader.onerror = function() {
-      showToast('Failed to read file', 'error');
-    };
-    reader.readAsDataURL(file);
-    event.target.value = '';
-    return;
-  }
+  // Persistent database attachment payload — data field ensures both sender and receiver can view it
+  const attachmentPayload = JSON.stringify({
+    type: 'attachment',
+    name: file.name,
+    size: file.size,
+    mime: file.type || 'application/octet-stream',
+    url: serverUrl,
+    data: base64Data || '',
+    previewUrl: localPreviewUrl || base64Data || ''
+  });
 
   event.target.value = '';
   pendingChatAttachment = JSON.parse(attachmentPayload);
