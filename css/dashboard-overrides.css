@@ -461,13 +461,19 @@ body.has-anc-banner {
   border: 1px solid #fef08a;
 }
 
-/* Keep teacher quiz manager actions cleanly stacked into two neat rows */
+/* Responsive Quiz Manager Actions:
+   - When zoomed out or on wide screens: utilizes the full row horizontally in a single line.
+   - When space is constrained (e.g. 100% zoom, smaller screen): neatly wraps into two clean stacks,
+     never breaking one button per line or overflowing the card boundary.
+*/
 .quiz-row-actions {
   display: flex !important;
-  flex-direction: column !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
   gap: 8px !important;
-  align-items: flex-end !important;
-  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  flex: 1 1 auto !important;
   margin-left: auto !important;
   max-width: 100% !important;
 }
@@ -475,8 +481,9 @@ body.has-anc-banner {
   display: flex !important;
   gap: 8px !important;
   align-items: center !important;
-  flex-wrap: wrap !important;
+  flex-wrap: nowrap !important;
   justify-content: flex-end !important;
+  flex: 0 0 auto !important;
 }
 .quiz-actions-stack > .table-act-btn {
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -494,6 +501,24 @@ body.has-anc-banner {
 .quiz-row-actions > .quiz-action-spacer,
 .quiz-actions-stack > .quiz-action-spacer {
   display: none !important;
+}
+
+@media (max-width: 1380px) {
+  .quiz-row-actions {
+    flex-direction: column !important;
+    align-items: flex-end !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .quiz-actions-stack {
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+  }
+  .quiz-row-actions {
+    align-items: flex-start !important;
+    width: 100% !important;
+  }
 }
 
 /* Accuracy Rate Progress Bar visual cues */
