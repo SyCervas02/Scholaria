@@ -882,6 +882,14 @@ async function loadUsersFromDB() {
         u.section = '';
         saveUserSectionToStorage(u.school_id || u.id, null);
         if (u.dbId) saveUserSectionToStorage(u.dbId, null);
+      } else if (u.role === 'teacher' && u.section) {
+        const valid = u.section.split(',').map(s => s.trim()).filter(s => Boolean(s) && (typeof isSectionArchived === 'function' ? !isSectionArchived(s) : true));
+        const cleanedSec = valid.join(', ');
+        if (cleanedSec !== u.section) {
+          u.section = cleanedSec;
+          saveUserSectionToStorage(u.school_id || u.id, cleanedSec || null);
+          if (u.dbId) saveUserSectionToStorage(u.dbId, cleanedSec || null);
+        }
       }
     });
 
@@ -1465,6 +1473,23 @@ function archiveSectionPrompt(secId) {
     persistUserSectionChange(stud, null);
   });
 
+  // Automatically remove this archived section from any assigned teachers
+  const teachersHandlingSec = registeredUsers.filter(u =>
+    u.role === 'teacher' &&
+    (u.section || '').split(',').map(s => s.trim().toLowerCase()).includes(sec.name.trim().toLowerCase())
+  );
+  teachersHandlingSec.forEach(t => {
+    const updated = (t.section || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.toLowerCase() !== sec.name.trim().toLowerCase())
+      .join(', ');
+    t.section = updated || null;
+    saveUserSectionToStorage(t.id || t.school_id, updated || null);
+    if (t.dbId) saveUserSectionToStorage(t.dbId, updated || null);
+    persistUserSectionChange(t, updated || null);
+  });
+
   showToast(`Section "${sec.name}" archived successfully.${enrolled.length ? ` ${enrolled.length} student(s) set to Unassigned and ready for reassignment.` : ''}`, 'info');
 
   refreshSectionAndUserViews();
@@ -1910,17 +1935,20 @@ function openManageSectionModal(secName) {
         </thead>
         <tbody>
           ${assignedTeachers.length > 0 ? assignedTeachers.map(t => {
-            const curHandled = (t.section || '').split(',').map(s => s.trim()).filter(Boolean);
+            const curHandled = (t.section || '')
+              .split(',')
+              .map(s => s.trim())
+              .filter(s => Boolean(s) && (typeof isSectionArchived === 'function' ? !isSectionArchived(s) : true));
             return `
             <tr>
               <td><strong>${escHtml(t.name)}</strong></td>
               <td><code style="font-size:12px;background:#fffbeb;padding:2px 6px;border-radius:4px;color:#d97706;">${escHtml(t.id)}</code></td>
               <td><span class="role-tag teacher">${escHtml(t.subjects || t.strand || 'General')}</span></td>
               <td>
-                <div style="display:flex;gap:4px;flex-wrap:wrap;max-width:260px;align-items:center;"
+                <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;"
                      onclick="openAssignTeacherSectionsModal('${escHtml(t.dbId || t.id)}')"
                      title="Click to edit / reassign teacher sections">
-                  ${curHandled.length > 0 ? curHandled.map(s => `<span class="sec-badge grade" style="font-size:11px;cursor:pointer;">${escHtml(s)}</span>`).join('') : '<span style="font-size:11px;color:#94a3b8;">None</span>'}
+                  ${curHandled.length > 0 ? curHandled.map(s => `<span class="sec-badge grade" style="font-size:11px;cursor:pointer;white-space:nowrap;margin:2px 0;">${escHtml(s)}</span>`).join('') : '<span style="font-size:11px;color:#94a3b8;">None</span>'}
                 </div>
               </td>
               <td style="text-align:right;">
