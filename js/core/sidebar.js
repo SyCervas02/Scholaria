@@ -3351,8 +3351,8 @@ function teacherPage(page) {
       if (ROLE === 'teacher') {
         const teacherSections = (CURRENT_PROFILE?.section || '')
           .split(',')
-          .map(s => s.trim().toLowerCase())
-          .filter(Boolean);
+          .map(s => s.trim())
+          .filter(s => Boolean(s) && (typeof isSectionArchived === 'function' ? !isSectionArchived(s) : true));
 
         if (!teacherSections.length) {
           return `
