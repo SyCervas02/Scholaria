@@ -759,7 +759,7 @@ async function loadUsersFromDB() {
     let auditMap = {};
     try {
       const { data: { session } } = await db.auth.getSession();
-      if (session) {
+      if (session && (typeof ROLE !== 'undefined' && ROLE === 'admin')) {
         const auditRes = await fetch(`${API_BASE}/api/admin/account-audit`, {
           headers: { 'Authorization': `Bearer ${session.access_token}` }
         });
