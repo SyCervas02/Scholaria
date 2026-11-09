@@ -57,7 +57,28 @@ function saveManagedSections() {
   }
   syncSectionsArray();
 
-  // Also sync to server so all teachers/students across sessions receive archived/active status
+  // 1. Direct Supabase Cloud sync
+  try {
+    if (typeof db !== 'undefined' && db?.from) {
+      managedSections.forEach(sec => {
+        if (!sec || !sec.name) return;
+        db.from('sections').upsert({
+          id: sec.id || `sec-${sec.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          name: sec.name.trim(),
+          grade_level: sec.gradeLevel || sec.grade_level || 'Grade 11',
+          strand: sec.strand || 'STEM',
+          adviser: sec.adviser || '',
+          room: sec.room || '',
+          is_archived: !!(sec.isArchived ?? sec.is_archived),
+          archived_at: sec.archivedAt || sec.archived_at || null,
+          unarchived_at: sec.unarchivedAt || sec.unarchived_at || null,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'name' }).then(() => {}).catch(() => {});
+      });
+    }
+  } catch (_) {}
+
+  // 2. Also sync to backend API endpoint (which writes to Supabase via service role)
   try {
     if (typeof db !== 'undefined' && db?.auth?.getSession) {
       db.auth.getSession().then(({ data }) => {
@@ -76,6 +97,32 @@ function saveManagedSections() {
 }
 
 async function loadSharedManagedSections() {
+  // 1. Try direct Supabase Cloud query
+  try {
+    if (typeof db !== 'undefined' && db?.from) {
+      const { data, error } = await db.from('sections').select('*').order('name');
+      if (!error && Array.isArray(data) && data.length > 0) {
+        managedSections = sortSectionsNaturally(data.map(s => ({
+          id: s.id,
+          name: s.name,
+          gradeLevel: s.grade_level,
+          strand: s.strand,
+          adviser: s.adviser || '',
+          room: s.room || '',
+          isArchived: !!s.is_archived,
+          archivedAt: s.archived_at,
+          unarchivedAt: s.unarchived_at,
+          createdAt: s.created_at,
+          updatedAt: s.updated_at
+        })));
+        try { localStorage.setItem('scholaria_managed_sections', JSON.stringify(managedSections)); } catch (_) {}
+        syncSectionsArray();
+        return;
+      }
+    }
+  } catch (_) {}
+
+  // 2. Fallback to API endpoint
   try {
     const base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
     const res = await fetch(`${base}/api/sections`);
@@ -83,9 +130,7 @@ async function loadSharedManagedSections() {
       const serverSections = await res.json();
       if (Array.isArray(serverSections) && serverSections.length > 0) {
         managedSections = sortSectionsNaturally(serverSections);
-        try {
-          localStorage.setItem('scholaria_managed_sections', JSON.stringify(managedSections));
-        } catch (_) {}
+        try { localStorage.setItem('scholaria_managed_sections', JSON.stringify(managedSections)); } catch (_) {}
         syncSectionsArray();
       }
     }
