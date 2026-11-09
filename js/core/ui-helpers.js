@@ -39,6 +39,15 @@ let managedSections = (() => {
   return sortSectionsNaturally([...DEFAULT_MANAGED_SECTIONS]);
 })();
 
+function isSectionArchived(secName) {
+  if (!secName) return false;
+  const sName = String(secName).trim().toLowerCase();
+  const list = (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) ? managedSections : [];
+  const found = list.find(s => (s.name || '').trim().toLowerCase() === sName || (s.id || '').trim().toLowerCase() === sName);
+  return Boolean(found && found.isArchived);
+}
+window.isSectionArchived = isSectionArchived;
+
 function saveManagedSections() {
   try {
     managedSections = sortSectionsNaturally(managedSections);
@@ -47,7 +56,42 @@ function saveManagedSections() {
     console.warn('Could not save sections to localStorage:', e);
   }
   syncSectionsArray();
+
+  // Also sync to server so all teachers/students across sessions receive archived/active status
+  try {
+    if (typeof db !== 'undefined' && db?.auth?.getSession) {
+      db.auth.getSession().then(({ data }) => {
+        const token = data?.session?.access_token;
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+        fetch(`${base}/api/admin/sections`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ sections: managedSections })
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+  } catch (_) {}
 }
+
+async function loadSharedManagedSections() {
+  try {
+    const base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : '';
+    const res = await fetch(`${base}/api/sections`);
+    if (res.ok) {
+      const serverSections = await res.json();
+      if (Array.isArray(serverSections) && serverSections.length > 0) {
+        managedSections = sortSectionsNaturally(serverSections);
+        try {
+          localStorage.setItem('scholaria_managed_sections', JSON.stringify(managedSections));
+        } catch (_) {}
+        syncSectionsArray();
+      }
+    }
+  } catch (_) {}
+}
+window.loadSharedManagedSections = loadSharedManagedSections;
 
 let SECTIONS = sortSectionsNaturally(managedSections.filter(s => !s.isArchived)).map(s => s.name);
 

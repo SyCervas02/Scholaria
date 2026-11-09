@@ -392,13 +392,18 @@ function saveCustomClassRecEntry(studentKey, data) {
 function isStudentHandledByTeacher(student, teacherProfile) {
   if (typeof ROLE !== 'undefined' && ROLE === 'admin') return true;
   if (!teacherProfile || !student) return false;
+  const studentSection = (student.section || '').trim().toLowerCase();
+  if (!studentSection) return false;
+  if (typeof isSectionArchived === 'function' && isSectionArchived(studentSection)) return false;
+
   const teacherSections = (teacherProfile.section || '')
     .split(',')
     .map(s => s.trim().toLowerCase())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+
   if (!teacherSections.length) return false;
-  const studentSection = (student.section || '').trim().toLowerCase();
-  return studentSection && teacherSections.includes(studentSection);
+  return teacherSections.includes(studentSection);
 }
 
 function deduplicateQuizAttempts(attemptsList) {
@@ -477,7 +482,7 @@ function getTeacherAnalysisSections(selectedQuiz) {
   if (isTeacher) {
     const teacherStrand = String(prof.strand || '').trim().toUpperCase();
     const teacherSections = prof.section
-      ? prof.section.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      ? prof.section.split(',').map(s => s.trim().toLowerCase()).filter(Boolean).filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec))
       : [];
 
     if (teacherSections.length === 0) {
@@ -488,6 +493,7 @@ function getTeacherAnalysisSections(selectedQuiz) {
       const secName = (sec.name || sec).trim().toLowerCase();
       const secStrand = String(sec.strand || '').trim().toUpperCase();
 
+      if (typeof isSectionArchived === 'function' && isSectionArchived(secName)) return false;
       if (!teacherSections.includes(secName)) return false;
       if (secStrand && teacherStrand && secStrand !== 'ALL' && teacherStrand !== 'ALL') {
         if (secStrand !== teacherStrand) return false;
@@ -703,13 +709,14 @@ function buildRealClassRecordEntries() {
   let students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
 
   // If viewing as a teacher, only include students handled by this teacher!
-  // Exclude unassigned students and students from unhandled sections.
+  // Exclude unassigned students and students from unhandled or archived sections.
   if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
     const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
     const teacherSections = (prof.section || '')
       .split(',')
       .map(s => s.trim().toLowerCase())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
 
     if (!teacherSections.length) {
       return [];
@@ -717,7 +724,13 @@ function buildRealClassRecordEntries() {
 
     students = students.filter(u => {
       const studSec = (u.section || '').trim().toLowerCase();
-      return studSec && teacherSections.includes(studSec);
+      return studSec && teacherSections.includes(studSec) && (typeof isSectionArchived !== 'function' || !isSectionArchived(studSec));
+    });
+  } else {
+    // For admin or other active views, also exclude students in archived sections
+    students = students.filter(u => {
+      const studSec = (u.section || '').trim().toLowerCase();
+      return !studSec || (typeof isSectionArchived !== 'function' || !isSectionArchived(studSec));
     });
   }
 
@@ -825,8 +838,9 @@ function buildSectionSummaryEntries() {
 
   allStudentEntries.forEach(st => {
     const sec = (st.section || '').trim();
-    // Exclude Unassigned, empty, or placeholder section labels
+    // Exclude Unassigned, empty, placeholder, or archived section labels
     if (!sec || sec.toLowerCase() === 'unassigned' || sec.toLowerCase() === 'none') return;
+    if (typeof isSectionArchived === 'function' && isSectionArchived(sec)) return;
     if (!sectionMap.has(sec)) {
       sectionMap.set(sec, {
         section: sec,
@@ -3042,6 +3056,7 @@ function teacherPage(page) {
       const news = (typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : []).filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft);
       const read = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
       const attempts = classRecAttemptsCache.filter(a => quizzes.some(q => String(q.id) === String(a.quiz_id)));
+      const teacherAssignedSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim()).filter(Boolean);
       const strands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
       const go = page => `renderPage('${page}')`;
       const icon = (svg, tone='blue') => `<span class="td-icon td-${tone}">${svg}</span>`;
@@ -3050,7 +3065,7 @@ function teacherPage(page) {
       const panel = (title, svg, content, page, cls='') => `<section class="td-panel ${cls}"><header>${icon(svg)}<h3>${title}</h3><button type="button" class="td-link" onclick="${go(page)}">View All</button></header>${content}</section>`;
       const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
       const metrics = [
-        ['My Classes',demo?2:strands.length,'Classes handled','classrec',iconUsers(),'blue'],
+        ['My Classes',demo?2:teacherAssignedSections.length,'Classes handled','classrec',iconUsers(),'blue'],
         ['Total Students',demo?68:new Set(attempts.map(a=>a.student_id).filter(Boolean)).size,'Across all classes','classrec',iconUsers(),'green'],
         ['Materials Uploaded',demo?12:materials.length,'This semester','materials',iconFolder(),'orange'],
         ['Published Lessons',demo?8:materials.filter(m=>m.status==='approved').length,'Ready for students','materials',iconFolder(),'purple'],
@@ -3067,7 +3082,7 @@ function teacherPage(page) {
       ].map(r=>row(r[0],r[1],`<b>${r[2]}</b> submissions<small>Due: ${r[3]}</small>`)).join('') : empty('No submissions awaiting review.');
       const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials')).join('') || empty('No materials uploaded yet.');
       const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : news.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
-      const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : strands).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned.');
+      const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : teacherAssignedSections).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned yet.');
       const assessments = demo ? [['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM'],['Essay: Role of Media in Society','Komunikasyon at Pananaliksik - Grade 11 - HUMSS'],['Quiz 1 - 21st Century Literature','Research in Daily Life - Grade 11 - STEM']].map(q=>row(q[0],q[1],'<em>Ongoing</em>')).join('') : active.slice(0,3).map(q=>row(q.title,q.subject||q.meta||'','<em>Ongoing</em>')).join('') || empty('No active quizzes right now.');
       const eventItems = demo ? [
         {title:'Faculty Meeting',detail:'All Teachers',when:'8:00 AM - 10:00 AM',date:'2025-02-03'},
@@ -3096,14 +3111,21 @@ function teacherPage(page) {
     case 'quiz': {
       let filtered = customQuizzes.slice();
       if (ROLE === 'teacher') {
-        const myQuizzes = customQuizzes.filter(q => 
-          !q.createdBy || 
-          q.createdBy === CURRENT_PROFILE?.id || 
-          q.createdBy === CURRENT_PROFILE?.dbId || 
-          q.isDemo ||
-          ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
-        );
-        filtered = myQuizzes.length ? myQuizzes : customQuizzes;
+        const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        const teacherSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        filtered = customQuizzes.filter(q => {
+          const isCreator = (q.createdBy && (
+            q.createdBy === CURRENT_PROFILE?.id || 
+            q.createdBy === CURRENT_PROFILE?.dbId || 
+            q.createdBy === CURRENT_PROFILE?.school_id
+          ));
+          if (isCreator) return true;
+          if (q.strand && myStrands.length > 0 && teacherSections.length > 0) {
+            const qStrand = String(q.strand).toUpperCase();
+            return myStrands.some(st => qStrand.includes(st) || st === 'GENERAL' || qStrand === 'ALL');
+          }
+          return false;
+        });
       }
 
       const totalCount = filtered.length;
@@ -3326,18 +3348,48 @@ function teacherPage(page) {
     }
 
     case 'analysis': {
+      if (ROLE === 'teacher') {
+        const teacherSections = (CURRENT_PROFILE?.section || '')
+          .split(',')
+          .map(s => s.trim().toLowerCase())
+          .filter(Boolean);
+
+        if (!teacherSections.length) {
+          return `
+          <div class="section-hdr">
+            <div>
+              <h2>Item Analysis Report</h2>
+              <span style="font-size:12px;color:var(--text-muted);">Question-level psychometrics and difficulty metrics</span>
+            </div>
+          </div>
+          <div style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:16px;padding:48px 24px;text-align:center;max-width:680px;margin:30px auto;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+            <div style="font-size:48px;margin-bottom:12px;">📊</div>
+            <h3 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">No Assigned Class Sections</h3>
+            <p style="font-size:13.5px;color:#64748b;line-height:1.5;margin:0 auto;max-width:480px;">
+              Your faculty account (<strong>${escHtml(CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || 'Teacher')}</strong>) is not assigned to handle any class sections yet. Student psychometrics and accuracy rates are calculated exclusively from sections you handle.
+            </p>
+          </div>`;
+        }
+      }
+
       let myQuizzesForAnalysis = customQuizzes.slice();
       if (ROLE === 'teacher') {
-        const myQuizzes = customQuizzes.filter(q => 
-          !q.createdBy || 
-          q.createdBy === CURRENT_PROFILE?.id || 
-          q.createdBy === CURRENT_PROFILE?.dbId || 
-          q.isDemo ||
-          ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
-        );
-        myQuizzesForAnalysis = myQuizzes.length ? myQuizzes : customQuizzes;
+        const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        myQuizzesForAnalysis = customQuizzes.filter(q => {
+          const isCreator = (q.createdBy && (
+            q.createdBy === CURRENT_PROFILE?.id || 
+            q.createdBy === CURRENT_PROFILE?.dbId || 
+            q.createdBy === CURRENT_PROFILE?.school_id
+          ));
+          if (isCreator) return true;
+          if (q.strand && myStrands.length > 0) {
+            const qStrand = String(q.strand).toUpperCase();
+            return myStrands.some(st => qStrand.includes(st) || st === 'GENERAL' || qStrand === 'ALL');
+          }
+          return false;
+        });
       }
-      const displayQuizzes = myQuizzesForAnalysis.length ? myQuizzesForAnalysis : customQuizzes;
+      const displayQuizzes = myQuizzesForAnalysis;
 
       if (!displayQuizzes.length) {
         return `
@@ -3348,9 +3400,11 @@ function teacherPage(page) {
           </div>
           <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
         </div>
-        <div class="announcement-card">
-          <h3>No Quizzes Found</h3>
-          <p style="color:var(--text-muted);font-size:13px;margin-top:6px;">You haven't created any quizzes yet — create one in Quiz Manager first to view student performance and question difficulty metrics.</p>
+        <div class="announcement-card" style="padding:48px 24px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:12px;">📝</div>
+          <h3 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">No Quizzes Found</h3>
+          <p style="color:var(--text-muted);font-size:13.5px;max-width:480px;margin:0 auto 16px;">You haven't created any quizzes for your handled sections yet. Create an assessment in Quiz Manager to begin tracking question psychometrics and difficulty metrics.</p>
+          <button class="add-btn" style="margin:0 auto;" onclick="openQuizModal()">${iconPlus()} Create First Quiz</button>
         </div>`;
       }
 
@@ -3543,6 +3597,31 @@ function teacherPage(page) {
 
 
     case 'classrec': {
+      if (ROLE === 'teacher') {
+        const teacherSections = (CURRENT_PROFILE?.section || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+          .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+
+        if (!teacherSections.length) {
+          return `
+          <div class="section-hdr">
+            <div>
+              <h2>Class Record Portal</h2>
+              <span style="font-size:12px;color:var(--text-muted);">Overview of handled class sections and combined section grade performance</span>
+            </div>
+          </div>
+          <div style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:16px;padding:48px 24px;text-align:center;max-width:680px;margin:30px auto;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+            <div style="font-size:48px;margin-bottom:12px;">📋</div>
+            <h3 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">No Active Handled Class Sections</h3>
+            <p style="font-size:13.5px;color:#64748b;line-height:1.5;margin:0 auto;max-width:480px;">
+              You do not have any active class sections assigned. Your previously handled section(s) may have been archived by the administration.
+            </p>
+          </div>`;
+        }
+      }
+
       if (!classRecAttemptsCache.length) loadClassRecAttempts(true);
       const quizzes = getClassRecordQuizzes();
       const filteredEntries = buildRealClassRecordEntries();
