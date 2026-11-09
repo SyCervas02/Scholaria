@@ -214,17 +214,49 @@ if (!fs.existsSync(chatUploadsDir)) {
 }
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { dotfiles: 'ignore' }));
 
-// Resilient fallback for chat uploads stored across multiple devices
-app.get('/uploads/chat/:filename', (req, res) => {
+// Resilient recovery for chat uploads stored across multiple devices
+app.get('/uploads/chat/:filename', async (req, res) => {
   const filename = path.basename(req.params.filename || '');
   const filePath = path.join(chatUploadsDir, filename);
   if (fs.existsSync(filePath)) {
     return res.sendFile(filePath);
   }
+
+  // 1. Recover original file from Supabase database if stored in messages
+  try {
+    if (typeof supabaseAdmin !== 'undefined' && supabaseAdmin) {
+      const { data: msg } = await supabaseAdmin
+        .from('messages')
+        .select('body')
+        .ilike('body', `%"${filename}"%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (msg && msg.body) {
+        let parsed = null;
+        try { parsed = JSON.parse(msg.body); } catch (_) {}
+        if (parsed && parsed.data && typeof parsed.data === 'string' && parsed.data.startsWith('data:')) {
+          const match = parsed.data.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            const mime = match[1];
+            const buffer = Buffer.from(match[2], 'base64');
+            res.setHeader('Content-Type', mime);
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            try { fs.writeFileSync(filePath, buffer); } catch (_) {}
+            return res.send(buffer);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error recovering chat attachment from database:', err.message);
+  }
+
+  // 2. Clean fallback if image file is not on local server disk
   const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(filename);
   if (isImage) {
     res.setHeader('Content-Type', 'image/svg+xml');
-    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.setHeader('Cache-Control', 'public, max-age=60');
     const safeName = filename.replace(/[<>&"']/g, '').slice(0, 36);
     return res.send(`
       <svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
@@ -232,13 +264,13 @@ app.get('/uploads/chat/:filename', (req, res) => {
         <circle cx="200" cy="72" r="32" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
         <path d="M190 72 l7 -8 l13 14" stroke="#2563eb" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
         <circle cx="192" cy="62" r="2.5" fill="#2563eb"/>
-        <text x="200" y="130" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="13" font-weight="700" fill="#1e293b" text-anchor="middle">Image stored on sender's device</text>
+        <text x="200" y="130" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="13" font-weight="700" fill="#1e293b" text-anchor="middle">Image Attachment</text>
         <text x="200" y="152" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" font-weight="500" fill="#64748b" text-anchor="middle">${safeName}</text>
-        <text x="200" y="176" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="10.5" font-weight="500" fill="#94a3b8" text-anchor="middle">Click Overview to view details</text>
+        <text x="200" y="176" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="10.5" font-weight="500" fill="#94a3b8" text-anchor="middle">Available in chat message overview</text>
       </svg>
     `.trim());
   }
-  res.status(404).send('File not found on this local instance');
+  res.status(404).send('File not found');
 });
 
 // Allowed public assets and folders
@@ -1003,11 +1035,18 @@ app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
   }
 
   const relativeUrl = `/uploads/chat/${req.file.filename}`;
+  let base64Data = null;
+  try {
+    const fileBuf = fs.readFileSync(req.file.path);
+    base64Data = `data:${req.file.mimetype};base64,${fileBuf.toString('base64')}`;
+  } catch (_) {}
+
   res.json({
     url: relativeUrl,
     name: req.file.originalname,
     size: req.file.size,
-    mime: req.file.mimetype
+    mime: req.file.mimetype,
+    data: base64Data
   });
 });
 
