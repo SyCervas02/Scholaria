@@ -239,11 +239,11 @@ body { background: #f1f7ff; }
 .roster-table-wrap { max-height: none !important; overflow-y: visible !important; overflow-x: visible !important; }
 .roster-table { min-width: 0 !important; table-layout: fixed; }
 .roster-table th, .roster-table td { white-space: normal !important; overflow-wrap: anywhere; }
-.roster-table th:nth-child(1), .roster-table td:nth-child(1) { width: 30%; }
-.roster-table th:nth-child(2), .roster-table td:nth-child(2) { width: 22%; }
-.roster-table th:nth-child(3), .roster-table td:nth-child(3) { width: 17%; }
-.roster-table th:nth-child(4), .roster-table td:nth-child(4) { width: 15%; }
-.roster-table th:nth-child(5), .roster-table td:nth-child(5) { width: 16%; }
+.roster-table th:nth-child(1), .roster-table td:nth-child(1) { width: 24%; }
+.roster-table th:nth-child(2), .roster-table td:nth-child(2) { width: 18%; }
+.roster-table th:nth-child(3), .roster-table td:nth-child(3) { width: 15%; }
+.roster-table th:nth-child(4), .roster-table td:nth-child(4) { width: 31%; }
+.roster-table th:nth-child(5), .roster-table td:nth-child(5) { width: 12%; text-align: right; }
 .priority-choice-icon { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 20px; }
 .priority-choice-icon svg { width: 18px; height: 18px; display: block; }
 .priority-choice-icon.critical { color: #dc2626; }
