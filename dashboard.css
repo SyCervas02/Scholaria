@@ -684,10 +684,10 @@ body {
 .score-val.low  { color: var(--red); }
 
 /* Item analysis bar */
-.analysis-bar-wrap { background: var(--blue-light); border-radius: 4px; height: 7px; width: 110px; display: inline-block; vertical-align: middle; }
-.analysis-bar { background: var(--blue); height: 100%; border-radius: 4px; }
-.analysis-bar.high { background: var(--green); }
-.analysis-bar.low  { background: var(--red); }
+.analysis-bar-wrap { background: #e2e8f0; border-radius: 6px; height: 8px; width: 100%; min-width: 70px; display: block; overflow: hidden; vertical-align: middle; }
+.analysis-bar { background: #3b82f6; height: 100%; border-radius: 6px; display: block; transition: width 0.3s ease; }
+.analysis-bar.high { background: #10b981; }
+.analysis-bar.low  { background: #ef4444; }
 
 /* ════════════════════════════════
    APPROVAL ROWS
@@ -1023,7 +1023,7 @@ body {
 .gen-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .gen-field { display: flex; flex-direction: column; gap: 6px; }
 .gen-field label { font-size: 11px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: 0.7px; }
-.gen-field input[type=text], .gen-field textarea {
+.gen-field input[type=text], .gen-field input[type=email], .gen-field input[type=tel], .gen-field textarea {
   border: 1.5px solid rgba(37,99,235,0.12); border-radius: 10px; padding: 10px 13px;
   font-size: 13.5px; font-family: 'Plus Jakarta Sans', sans-serif; color: var(--text-primary);
   outline: none; background: #f8fbff; transition: 0.2s;
