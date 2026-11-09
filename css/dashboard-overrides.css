@@ -994,24 +994,44 @@ body.has-anc-banner {
   }
 
   /* Hide unrelated page content only for the academic report print flow. */
-  body.printing-academic-report > *:not(#academicReportModal) {
-    display: none !important;
+  body.printing-academic-report * {
+    visibility: hidden;
   }
-  #chatFab, .chat-fab, .hamburger, .toast, #toast, .sidebar, .top-nav, #emergencyBannerContainer {
-    display: none !important;
-  }
-  body.printing-academic-report .layout { display: none !important; }
-
+  body.printing-academic-report .layout,
+  body.printing-academic-report .sidebar,
+  body.printing-academic-report .top-nav,
+  body.printing-academic-report #chatFab,
+  body.printing-academic-report .chat-fab,
+  body.printing-academic-report .hamburger,
+  body.printing-academic-report .toast,
+  body.printing-academic-report #toast,
+  body.printing-academic-report #emergencyBannerContainer,
+  body.printing-academic-report .admin-census-page,
   body.printing-academic-report .modal-overlay:not(#academicReportModal) {
     display: none !important;
+    visibility: hidden !important;
+  }
+
+  body.printing-academic-report #academicReportModal,
+  body.printing-academic-report #academicReportModal *,
+  body.printing-academic-report #academicReportModal .report-modal-body,
+  body.printing-academic-report #academicReportModal .report-modal-body *,
+  body.printing-academic-report #academicReportModal .report-document-sheet,
+  body.printing-academic-report #academicReportModal .report-document-sheet *,
+  body.printing-academic-report #printableReportArea,
+  body.printing-academic-report #printableReportArea * {
+    visibility: visible !important;
   }
 
   body.printing-academic-report #academicReportModal,
   body.printing-academic-report > #academicReportModal,
   body.printing-academic-report > #academicReportModal.active {
     display: block !important;
-    position: static !important;
-    inset: auto !important;
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    inset: 0 auto auto 0 !important;
     background: #ffffff !important;
     padding: 0 !important;
     margin: 0 !important;
@@ -1019,17 +1039,20 @@ body.has-anc-banner {
     max-width: 100% !important;
     height: auto !important;
     min-height: 0 !important;
+    max-height: none !important;
     overflow: visible !important;
     border: none !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
     page-break-before: avoid !important;
     break-before: avoid !important;
+    z-index: 99999 !important;
   }
 
   body.printing-academic-report #academicReportModal .report-modal-card {
     position: static !important;
     display: block !important;
+    visibility: visible !important;
     box-shadow: none !important;
     border: none !important;
     border-radius: 0 !important;
@@ -1046,13 +1069,17 @@ body.has-anc-banner {
   }
 
   body.printing-academic-report #academicReportModal .report-modal-head,
-  body.printing-academic-report #academicReportModal .report-modal-head * {
+  body.printing-academic-report #academicReportModal .report-modal-head *,
+  body.printing-academic-report #academicReportModal .modal-x,
+  body.printing-academic-report #academicReportModal button {
     display: none !important;
+    visibility: hidden !important;
   }
 
   body.printing-academic-report #academicReportModal .report-modal-body {
     display: block !important;
     visibility: visible !important;
+    position: static !important;
     background: #ffffff !important;
     padding: 0 !important;
     margin: 0 !important;
@@ -4257,23 +4284,30 @@ button,
   }
 }
 
-/* ── ADMIN CENSUS PRINT LAYOUT ── */
+/* ── ADMIN CENSUS PRINT LAYOUT (Direct page print fallback) ── */
 @media print {
-  .portal-header, .sidebar, .menu-item, .chat-page-heading, button, .foot-btn-secondary, .add-btn, .table-act-btn {
+  body:not(.printing-academic-report) .portal-header,
+  body:not(.printing-academic-report) .sidebar,
+  body:not(.printing-academic-report) .menu-item,
+  body:not(.printing-academic-report) .chat-page-heading,
+  body:not(.printing-academic-report) button,
+  body:not(.printing-academic-report) .foot-btn-secondary,
+  body:not(.printing-academic-report) .add-btn,
+  body:not(.printing-academic-report) .table-act-btn {
     display: none !important;
   }
-  .admin-census-page {
+  body:not(.printing-academic-report) .admin-census-page {
     display: block !important;
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
   }
-  .admin-census-page .card-grid {
+  body:not(.printing-academic-report) .admin-census-page .card-grid {
     display: flex !important;
     flex-wrap: wrap !important;
     gap: 12px !important;
   }
-  .admin-census-page .info-card {
+  body:not(.printing-academic-report) .admin-census-page .info-card {
     border: 1px solid #cbd5e1 !important;
     page-break-inside: avoid !important;
   }
