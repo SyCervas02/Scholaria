@@ -461,31 +461,38 @@ body.has-anc-banner {
   border: 1px solid #fef08a;
 }
 
-/* Keep teacher quiz manager actions cleanly aligned without overflowing the card */
+/* Keep teacher quiz manager actions cleanly stacked into two neat rows */
 .quiz-row-actions {
   display: flex !important;
-  flex-wrap: wrap !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  align-items: flex-end !important;
+  flex: 0 0 auto !important;
+  margin-left: auto !important;
+  max-width: 100% !important;
+}
+.quiz-actions-stack {
+  display: flex !important;
   gap: 8px !important;
   align-items: center !important;
+  flex-wrap: wrap !important;
   justify-content: flex-end !important;
-  flex: 1 1 auto;
-  max-width: 100%;
-  margin-left: auto;
 }
-.quiz-row-actions > .table-act-btn {
+.quiz-actions-stack > .table-act-btn {
   font-family: 'Plus Jakarta Sans', sans-serif;
 }
-.quiz-row-actions > .table-act-btn[title="Take this standard quiz as a student"] {
+.quiz-actions-stack > .table-act-btn[title="Take this standard quiz as a student"] {
   gap: 4px;
 }
-.quiz-row-actions > label,
-.quiz-row-actions > .table-act-btn {
+.quiz-actions-stack > label,
+.quiz-actions-stack > .table-act-btn {
   box-sizing: border-box;
   width: auto !important;
   min-width: 0;
   white-space: nowrap;
 }
-.quiz-row-actions > .quiz-action-spacer {
+.quiz-row-actions > .quiz-action-spacer,
+.quiz-actions-stack > .quiz-action-spacer {
   display: none !important;
 }
 
