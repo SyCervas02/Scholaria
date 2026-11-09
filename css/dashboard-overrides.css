@@ -461,13 +461,15 @@ body.has-anc-banner {
   border: 1px solid #fef08a;
 }
 
-/* Keep teacher quiz manager actions in the same columns on every quiz row. */
+/* Keep teacher quiz manager actions cleanly aligned without overflowing the card */
 .quiz-row-actions {
-  display: grid !important;
-  grid-template-columns: max-content 220px 116px 136px 158px 155px 78px 42px;
-  gap: 6px;
-  align-items: center;
-  flex: 0 0 auto;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  flex: 1 1 auto;
+  max-width: 100%;
   margin-left: auto;
 }
 .quiz-row-actions > .table-act-btn {
@@ -477,18 +479,39 @@ body.has-anc-banner {
   gap: 4px;
 }
 .quiz-row-actions > label,
-.quiz-row-actions > .table-act-btn,
-.quiz-row-actions > .quiz-action-spacer {
+.quiz-row-actions > .table-act-btn {
   box-sizing: border-box;
-  width: 100%;
+  width: auto !important;
   min-width: 0;
-  justify-self: stretch;
+  white-space: nowrap;
 }
 .quiz-row-actions > .quiz-action-spacer {
-  height: 1px;
+  display: none !important;
 }
-.quiz-row-actions > .table-act-btn[title="Delete Quiz"] {
-  grid-column: 8;
+
+/* Accuracy Rate Progress Bar visual cues */
+.analysis-bar-wrap {
+  display: block !important;
+  background: #e2e8f0 !important;
+  border-radius: 6px !important;
+  height: 8px !important;
+  min-width: 70px !important;
+  overflow: hidden !important;
+  position: relative !important;
+  vertical-align: middle !important;
+}
+.analysis-bar {
+  display: block !important;
+  background: #3b82f6 !important;
+  height: 100% !important;
+  border-radius: 6px !important;
+  transition: width 0.3s ease !important;
+}
+.analysis-bar.high {
+  background: #10b981 !important;
+}
+.analysis-bar.low {
+  background: #ef4444 !important;
 }
 .quiz-attempt-count {
   display: inline-flex;
