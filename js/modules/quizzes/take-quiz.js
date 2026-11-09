@@ -301,6 +301,12 @@ function openTakeQuizModal(quizId) {
     return; 
   }
 
+  // Teacher or Admin preview mode flag
+  const curRole = String(typeof ROLE !== 'undefined' ? ROLE : ((typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role) || '')).toLowerCase();
+  if (curRole === 'teacher' || curRole === 'admin' || curRole === 'faculty') {
+    quiz = { ...quiz, is_preview: true };
+  }
+
   // Prevent students from taking overdue quizzes
   if (typeof ROLE !== 'undefined' && ROLE === 'student') {
     const rawDue = quiz.dueDate || quiz.due_date;
@@ -354,6 +360,18 @@ function openTakeQuizModal(quizId) {
   if (timeLimitMins > 0) {
     startTakeQuizTimer();
   }
+}
+
+// Let teachers experience a standard quiz in the same answer-hidden view as students.
+function takeQuizAsTeacher(quizId) {
+  const quizList = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
+  const quiz = quizList.find(q => String(q.id) === String(quizId));
+  if (!quiz) {
+    if (typeof showToast === 'function') showToast('Quiz not found', 'error');
+    return;
+  }
+  if (quiz.type === 'interactive' || quiz.quiz_type === 'interactive') return;
+  openTakeQuizModal({ ...quiz, is_preview: true });
 }
 
 async function openReviewAttempt(quizIdOrAttemptId, optionalAttemptId) {
@@ -1033,15 +1051,26 @@ async function submitQuizAttempt(isAutoSubmit = false) {
   const total = gradedAnswers.length;
 
   const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
+  const userRole = String(typeof ROLE !== 'undefined' ? ROLE : (prof.role || '')).toLowerCase();
+  const isTeacherOrAdmin = userRole === 'teacher' || userRole === 'admin' || userRole === 'faculty' || (prof.role && prof.role !== 'student');
+
+  // TEACHER / ADMIN PREVIEW HANDLING:
+  // Teachers and Admins previewing or taking quizzes must NEVER have attempts recorded in class_records,
+  // quiz_attempts, or student records.
+  if (isTeacherOrAdmin || quiz?.is_preview) {
+    takeQuizState.submitting = false;
+    closeTakeQuizModal();
+    if (typeof showToast === 'function') {
+      showToast(`[Teacher Preview] Score: ${score}/${total} (${total ? Math.round((score / total) * 100) : 0}%)`, 'info');
+    }
+    return;
+  }
+
   const studentId = prof.id || prof.school_id || 'stud_1';
   const studentName = prof.full_name || 'Student';
   const section = prof.section || 'Unassigned';
   const strand = prof.strand || 'STEM';
   const subject = quiz?.subject || strand;
-
-  const elapsedSec = (takeQuizState.startTime) 
-    ? Math.max(1, Math.round((Date.now() - takeQuizState.startTime) / 1000))
-    : (takeQuizState.timeLimitMinutes ? (takeQuizState.timeLimitMinutes * 60 - (takeQuizState.secondsLeft || 0)) : 45);
 
   const attemptObj = {
     id: 'att_' + Date.now(),
@@ -1056,8 +1085,6 @@ async function submitQuizAttempt(isAutoSubmit = false) {
     total_items: total,
     score_percentage: total ? Math.round((score / total) * 100) : 0,
     answers: gradedAnswers,
-    time_taken_seconds: elapsedSec,
-    duration: elapsedSec,
     submitted_at: new Date().toISOString()
   };
 
@@ -1089,9 +1116,7 @@ async function submitQuizAttempt(isAutoSubmit = false) {
           quiz_title: quiz?.title || 'Quiz',
           score,
           total_items: total,
-          score_percentage: total ? Math.round((score / total) * 100) : 0,
-          time_taken_seconds: elapsedSec,
-          duration: elapsedSec
+          score_percentage: total ? Math.round((score / total) * 100) : 0
         });
       } catch(crErr) {
         console.warn('Class Records table sync notice:', crErr);
@@ -1104,11 +1129,9 @@ async function submitQuizAttempt(isAutoSubmit = false) {
           await db.from('quiz_attempts').insert({
             quiz_id: quiz?.id || '',
             student_id: studentUUID,
-            student_name: studentName,
             score,
             total_items: total,
-            answers: gradedAnswers,
-            time_taken_seconds: elapsedSec
+            answers: gradedAnswers
           });
         }
       } catch(dbErr) {
@@ -1117,7 +1140,7 @@ async function submitQuizAttempt(isAutoSubmit = false) {
     }
   }
 
-
+  const elapsedSec = Math.max(1, Math.round((Date.now() - (takeQuizState.startTime || Date.now())) / 1000));
   takeQuizState.submitting = false;
   closeTakeQuizModal();
   
@@ -1213,7 +1236,7 @@ async function openClassLeaderboardModal(quiz) {
     </div>`;
   modal.style.display = 'flex';
 
-  // 1. Fetch live attempts from Supabase for this quiz
+  // 1. Fetch live quiz attempts and class records for this quiz.
   let liveAttempts = [];
   if (typeof db !== 'undefined' && db && db.from && quiz?.id) {
     try {
@@ -1227,25 +1250,15 @@ async function openClassLeaderboardModal(quiz) {
     } catch (dbErr) {
       console.warn('Leaderboard Supabase fetch notice:', dbErr);
     }
-
     try {
-      const { data: crData } = await db.from('class_records')
+      const { data, error } = await db.from('class_records')
         .select('*')
-        .eq('quiz_id', quiz.id);
-      if (crData && Array.isArray(crData)) {
-        crData.forEach(cr => {
-          liveAttempts.push({
-            id: 'cr_' + (cr.id || cr.student_id),
-            student_id: cr.student_id,
-            student_name: cr.student_name,
-            score: cr.score,
-            total_items: cr.total_items,
-            time_taken_seconds: cr.time_taken_seconds || cr.duration || null,
-            submitted_at: cr.created_at || cr.submitted_at
-          });
-        });
-      }
-    } catch (_) {}
+        .eq('quiz_id', quiz.id)
+        .order('submitted_at', { ascending: false });
+      if (!error && Array.isArray(data)) liveAttempts.push(...data);
+    } catch (dbErr) {
+      console.warn('Leaderboard class record fetch notice:', dbErr);
+    }
   }
 
   // 2. Fetch local storage attempts fallback
@@ -1259,6 +1272,15 @@ async function openClassLeaderboardModal(quiz) {
       }
     }
   } catch (_) {}
+  try {
+    const raw = localStorage.getItem('scholaria_class_records_v2');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        localAttempts.push(...parsed.filter(a => String(a.quiz_id) === String(quiz?.id || '')));
+      }
+    }
+  } catch (_) {}
 
   // 3. Cached in-memory attempts
   const cachedAttempts = [
@@ -1269,79 +1291,73 @@ async function openClassLeaderboardModal(quiz) {
   // Combine attempts uniquely
   const attemptMap = new Map();
   [...liveAttempts, ...localAttempts, ...cachedAttempts].forEach(a => {
-    if (!a) return;
+    if (!a || a.is_preview || (typeof isArtificialSeedAttempt === 'function' && isArtificialSeedAttempt(a))) return;
     const key = a.id || `${a.student_id || a.user_id}_${a.submitted_at || a.created_at || a.score}`;
     if (!attemptMap.has(key)) attemptMap.set(key, a);
   });
   const allAttempts = Array.from(attemptMap.values());
 
-  // 4. Resolve registered students to get official names
-  const handledStudents = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : []).filter(u => u.role === 'student');
+  // 4. Resolve registered students to get official names. quiz_attempts stores
+  // the auth UUID while class_records often stores the school ID.
+  if (typeof loadUsersFromDB === 'function') {
+    try { await loadUsersFromDB(); } catch (_) {}
+  }
+  const registeredAccounts = typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : [];
+  const handledStudents = registeredAccounts.filter(u => String(u.role || '').toLowerCase() === 'student');
+  const teacherAndStaff = registeredAccounts.filter(u => {
+    const r = String(u.role || '').toLowerCase();
+    return r === 'teacher' || r === 'admin' || r === 'faculty';
+  });
 
   // 5. Aggregate best attempt per student (highest score, tie-breaker: fastest time)
   const studentBestMap = new Map();
   allAttempts.forEach(att => {
-    const sId = String(att.student_id || att.user_id || att.email || '').trim();
+    if (!att || att.is_preview) return;
+    const sId = String(att.student_id || att.studentId || att.user_id || att.email || att.student_email || att.student_name || att.studentName || '').trim();
     if (!sId) return;
 
-    const score = Number(att.score != null ? att.score : 0);
-    const total = Number(att.total_items || totalQuestions);
-    let durationSec = att.time_taken_seconds != null ? Number(att.time_taken_seconds) : (att.duration != null ? Number(att.duration) : null);
+    const attemptEmail = String(att.student_email || att.email || '').trim().toLowerCase();
+    const recordedName = String(att.student_name || att.studentName || att.name || '').trim();
+    const cleanAttemptName = recordedName.toLowerCase();
 
-    const studentObj = handledStudents.find(u => 
-      String(u.id) === sId || 
-      String(u.dbId) === sId || 
-      String(u.school_id) === sId || 
-      (u.email && (u.email === att.student_email || u.email === att.email)) ||
-      (att.student_name && (u.full_name === att.student_name || u.name === att.student_name))
+    // STRICT CHECK: Exclude attempts from teachers or admins (by ID, email, or name)
+    const isTeacherOrStaff = teacherAndStaff.some(u => {
+      const uIds = [u.id, u.dbId, u.school_id].filter(Boolean).map(id => String(id).toLowerCase());
+      const uEmail = String(u.email || '').trim().toLowerCase();
+      const uName = String(u.name || u.full_name || '').trim().toLowerCase();
+      return (sId && uIds.includes(sId.toLowerCase())) ||
+             (attemptEmail && uEmail && attemptEmail === uEmail) ||
+             (cleanAttemptName && uName && cleanAttemptName === uName);
+    });
+    if (isTeacherOrStaff) return;
+
+    const score = Number(att.score != null ? att.score : (att.score_percentage != null ? att.score_percentage : 0));
+    const total = Number(att.total_items || att.totalItems || totalQuestions);
+    const durationSec = att.time_taken_seconds != null ? Number(att.time_taken_seconds) : (att.duration != null ? Number(att.duration) : null);
+
+    const studentObj = handledStudents.find(u =>
+      [u.id, u.dbId, u.school_id].some(id => id && String(id).toLowerCase() === sId.toLowerCase()) ||
+      (attemptEmail && String(u.email || '').trim().toLowerCase() === attemptEmail) ||
+      (cleanAttemptName && String(u.name || u.full_name || '').trim().toLowerCase() === cleanAttemptName)
     ) || null;
+    // Only show attempts tied to a registered student account; teacher/admin
+    // test runs and unknown account records do not belong on the class board.
+    if (!studentObj) return;
+    const usableRecordedName = recordedName && !/^student(?: user)?$/i.test(recordedName) ? recordedName : '';
+    const studentName = usableRecordedName || (studentObj ? (studentObj.full_name || studentObj.name) : '') || 'Unknown Student';
+    const studentKey = String(studentObj?.dbId || studentObj?.id || sId);
 
-    let studentName = (att.student_name && att.student_name !== 'Student User')
-      ? att.student_name
-      : (studentObj ? (studentObj.full_name || studentObj.name) : '');
-
-    if (!studentName || studentName === 'Student User') {
-      const anyUser = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).find(u => 
-        String(u.id) === sId || String(u.school_id) === sId || String(u.dbId) === sId || (u.email && u.email === sId)
-      );
-      if (anyUser) studentName = anyUser.full_name || anyUser.name;
-    }
-
-    if (!studentName || studentName === 'Student User') {
-      try {
-        const rawCR = localStorage.getItem('scholaria_class_records_v2');
-        if (rawCR) {
-          const parsedCR = JSON.parse(rawCR);
-          const crMatch = parsedCR.find(c => String(c.student_id) === sId && c.student_name && c.student_name !== 'Student User');
-          if (crMatch) studentName = crMatch.student_name;
-        }
-      } catch (_) {}
-    }
-
-    if (!studentName || studentName === 'Student User') {
-      // Pick student name from teacher handled student list based on hash if available
-      if (handledStudents.length > 0) {
-        const idx = Math.abs((sId.charCodeAt(0) || 0) + (score || 0)) % handledStudents.length;
-        studentName = handledStudents[idx]?.full_name || handledStudents[idx]?.name || 'Student User';
-      } else {
-        studentName = 'Student User';
-      }
-    }
-
-    // Calculate duration
-    if (!durationSec || isNaN(durationSec) || durationSec <= 0) {
-      const baseSeed = ((score * 19) + (total * 23) + (sId.charCodeAt(0) || 42)) % 65;
-      durationSec = 55 + baseSeed;
-    }
-
-    const existing = studentBestMap.get(sId);
+    const existing = studentBestMap.get(studentKey);
     if (!existing) {
-      studentBestMap.set(sId, { id: sId, name: studentName, score, total, durationSec });
+      studentBestMap.set(studentKey, { id: studentKey, name: studentName, score, total, durationSec });
     } else {
+      if ((!existing.name || /^student(?: user)?$/i.test(existing.name) || existing.name === 'Unknown Student') && studentName !== 'Unknown Student') {
+        existing.name = studentName;
+      }
       if (score > existing.score) {
-        studentBestMap.set(sId, { id: sId, name: studentName, score, total, durationSec });
+        studentBestMap.set(studentKey, { id: studentKey, name: studentName, score, total, durationSec });
       } else if (score === existing.score && durationSec != null && (existing.durationSec == null || durationSec < existing.durationSec)) {
-        studentBestMap.set(sId, { id: sId, name: studentName, score, total, durationSec });
+        studentBestMap.set(studentKey, { id: studentKey, name: studentName, score, total, durationSec });
       }
     }
   });
@@ -1494,6 +1510,7 @@ async function openClassLeaderboardModal(quiz) {
 }
 
 if (typeof window !== 'undefined') {
+  window.takeQuizAsTeacher = takeQuizAsTeacher;
   window.openClassLeaderboardModalById = openClassLeaderboardModalById;
   window.openClassLeaderboardModal = openClassLeaderboardModal;
   window.closeClassLeaderboardModal = closeClassLeaderboardModal;
