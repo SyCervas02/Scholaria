@@ -911,6 +911,25 @@ async function handleChatFileUpload(event) {
   showToast('Attachment ready. Click preview to maximize or Send to send.', 'success');
 }
 
+// Profanity & severe content sanitizer for instant optimistic client rendering
+function censorProfanityText(rawText) {
+  if (!rawText || typeof rawText !== 'string' || rawText.trim().startsWith('{"type":"attachment"')) return rawText;
+  const badWords = [
+    'fuck', 'fucking', 'fucker', 'fuckin', 'motherfucker',
+    'shit', 'shitty', 'bullshit',
+    'ass', 'bitch', 'asshole', 'bastard', 'dick', 'piss', 'cunt', 'whore', 'slut',
+    'douchebag', 'putangina', 'tangina', 'gago', 'gaga', 'tarantado', 'ulol', 'bobo',
+    'inutil', 'leche', 'peste', 'kupal', 'punyeta',
+    'nigga', 'nigger', 'chink', 'spic', 'kike', 'faggot', 'tranny', 'retard'
+  ];
+  let censored = rawText;
+  badWords.forEach(bad => {
+    const reg = new RegExp(`\\b${bad}\\b|\\b${bad}s\\b`, 'gi');
+    censored = censored.replace(reg, match => '*'.repeat(match.length));
+  });
+  return censored;
+}
+
 async function sendChatRawMessage(text) {
   if (!text || !activeConversationId) return;
   if (CURRENT_PROFILE.permanently_muted || (CURRENT_PROFILE.muted_until && new Date(CURRENT_PROFILE.muted_until) > new Date())) {
@@ -926,7 +945,9 @@ async function sendChatRawMessage(text) {
     if (empty) empty.remove();
   }
   const tempId = 'temp-' + Date.now();
-  const optimistic = { id: tempId, sender_id: CURRENT_PROFILE.id, sender_name: CURRENT_PROFILE.full_name, body: text, created_at: new Date().toISOString() };
+  // Sanitize text client-side immediately so uncensored words never persist in sender DOM
+  const displayBody = censorProfanityText(text);
+  const optimistic = { id: tempId, sender_id: CURRENT_PROFILE.id, sender_name: CURRENT_PROFILE.full_name, body: displayBody, created_at: new Date().toISOString() };
   if (box) {
     box.insertAdjacentHTML('beforeend', messageBubbleHtml(conv, optimistic));
     box.scrollTop = box.scrollHeight;
@@ -951,11 +972,11 @@ async function sendChatRawMessage(text) {
         sentData = await res.json();
       } else {
         const errData = await res.json().catch(() => ({}));
+        if (box) {
+          const failedBubble = box.querySelector(`[data-mid="${tempId}"]`);
+          if (failedBubble) failedBubble.remove();
+        }
         if (errData.error === 'CHAT_MUTED_PERMANENT' || errData.error === 'CHAT_MUTED_UNTIL') {
-          if (box) {
-            const failedBubble = box.querySelector(`[data-mid="${tempId}"]`);
-            if (failedBubble) failedBubble.remove();
-          }
           showToast(errData.error === 'CHAT_MUTED_PERMANENT' ? "You're muted from chat — visit or message Guidance to be unmuted." : "You're temporarily muted for inappropriate language.", 'error');
           await refreshOwnMuteStatus();
           return;
@@ -974,7 +995,7 @@ async function sendChatRawMessage(text) {
         conversation_id: activeConversationId,
         sender_id: CURRENT_PROFILE.id,
         sender_name: CURRENT_PROFILE.full_name,
-        body: text
+        body: displayBody
       })
       .select().single();
 
@@ -993,7 +1014,13 @@ async function sendChatRawMessage(text) {
   if (box) {
     const sentBubble = box.querySelector(`[data-mid="${tempId}"]`);
     if (sentBubble) {
-      sentBubble.dataset.mid = sentData.id;
+      // If handleIncomingMessage already added a bubble for sentData.id, remove the optimistic one to avoid duplicates!
+      const alreadyRendered = box.querySelector(`[data-mid="${sentData.id}"]`);
+      if (alreadyRendered && alreadyRendered !== sentBubble) {
+        sentBubble.remove();
+      } else {
+        sentBubble.outerHTML = messageBubbleHtml(conv, sentData);
+      }
     }
   }
   if (sentData.warning) showToast(sentData.warning, 'error');
@@ -1059,7 +1086,14 @@ function handleIncomingMessage(msg) {
     if (box) {
       const empty = box.querySelector('.cw-empty');
       if (empty) empty.remove();
-      box.insertAdjacentHTML('beforeend', messageBubbleHtml(conv, msg));
+
+      // If this is my own message that was previously rendered optimistically, replace it instead of duplicating
+      const pendingOptimistic = isMine ? box.querySelector('[data-mid^="temp-"]') : null;
+      if (pendingOptimistic) {
+        pendingOptimistic.outerHTML = messageBubbleHtml(conv, msg);
+      } else if (!box.querySelector(`[data-mid="${msg.id}"]`)) {
+        box.insertAdjacentHTML('beforeend', messageBubbleHtml(conv, msg));
+      }
       box.scrollTop = box.scrollHeight;
     }
     if (!isMine) {
