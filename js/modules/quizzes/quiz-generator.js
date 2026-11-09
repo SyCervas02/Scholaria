@@ -375,6 +375,8 @@ function openQuizModal() {
       }
       return;
     }
+    renderQuizModal();
+    return;
   }
 
   if (!container && !modal) {
@@ -2465,6 +2467,29 @@ function renderQuizModal() {
   const foot = document.getElementById('quizModalFoot');
   if (body) body.scrollTop = 0;
 
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedSections = getTeacherAllowedSections();
+  if (isTeacher && allowedSections.length === 0) {
+    if (body) {
+      body.innerHTML = `
+        <div style="max-width:540px;margin:50px auto;background:#fff;border-radius:20px;padding:44px 32px;text-align:center;box-shadow:0 12px 36px rgba(15,23,42,0.08);border:1px solid #e2e8f0;">
+          <div style="width:64px;height:64px;border-radius:18px;background:#fef3c7;color:#d97706;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h3 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 8px 0;">Quiz Creation Restricted</h3>
+          <p style="font-size:13.5px;color:#64748b;line-height:1.6;margin:0 0 24px 0;">
+            You currently have <strong>no assigned active class sections</strong>. Quizzes and interactive games cannot be created or distributed until an administrator assigns you to a class section in Section Management.
+          </p>
+          <a href="dashboard.html" style="display:inline-flex;align-items:center;gap:8px;padding:11px 22px;background:#0284c7;color:#fff;border-radius:10px;font-weight:700;font-size:13.5px;text-decoration:none;box-shadow:0 4px 14px rgba(2,132,199,0.3);">
+            &larr; Return to Dashboard
+          </a>
+        </div>
+      `;
+    }
+    if (foot) foot.innerHTML = '';
+    return;
+  }
+
   if (quizGen.step === 'loading') {
     const numFiles = (quizGen.files && quizGen.files.length > 1) ? quizGen.files.length : (quizGen.file ? 1 : 1);
     const fileCountText = numFiles > 1 ? `Analyzing ${numFiles} uploaded handouts` : 'Analyzing your uploaded handout';
@@ -2488,27 +2513,6 @@ function renderQuizModal() {
       ${isDemo ? `<div class="demo-banner">${iconChip()} <div><strong>Preview Mode</strong> — The system API is currently not working or temporarily busy. Showing sample generated questions. You may try generating again shortly.</div></div>` : ''}
       <div class="qresult-list">${quizGen.questions.map((q, idx) => renderQuestionCard(q, idx)).join('')}</div>`;
     foot.innerHTML = `<button class="foot-btn-secondary" onclick="quizGen.step='setup';quizGen.wizardStep=4;renderQuizModal();">Back</button><button class="gen-btn" onclick="saveQuiz()">${iconChip()} Save Quiz (${quizGen.questions.length} items)</button>`;
-    return;
-  }
-
-  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
-  const allowedSections = getTeacherAllowedSections();
-  if (isTeacher && allowedSections.length === 0) {
-    body.innerHTML = `
-      <div style="max-width:540px;margin:50px auto;background:#fff;border-radius:20px;padding:44px 32px;text-align:center;box-shadow:0 12px 36px rgba(15,23,42,0.08);border:1px solid #e2e8f0;">
-        <div style="width:64px;height:64px;border-radius:18px;background:#fef3c7;color:#d97706;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;">
-          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        </div>
-        <h3 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 8px 0;">Quiz Creation Restricted</h3>
-        <p style="font-size:13.5px;color:#64748b;line-height:1.6;margin:0 0 24px 0;">
-          You currently have <strong>no assigned active class sections</strong>. Quizzes and interactive games cannot be created or distributed until an administrator assigns you to a class section in Section Management.
-        </p>
-        <a href="dashboard.html" style="display:inline-flex;align-items:center;gap:8px;padding:11px 22px;background:#0284c7;color:#fff;border-radius:10px;font-weight:700;font-size:13.5px;text-decoration:none;box-shadow:0 4px 14px rgba(2,132,199,0.3);">
-          &larr; Return to Dashboard
-        </a>
-      </div>
-    `;
-    if (foot) foot.innerHTML = '';
     return;
   }
 
