@@ -31,15 +31,27 @@ function triggerPrintReport() {
   const prevTitle = document.title;
   let sectionPrintPageStyle = null;
   let cleaned = false;
+
+  const body = document.getElementById('academicReportModalBody');
+  const sheet = document.getElementById('printableReportArea') || document.querySelector('#academicReportModal .report-document-sheet');
+  const prevBodyOverflow = body?.style.overflowY;
+  const prevBodyMaxH = body?.style.maxHeight;
+  const prevSheetZoom = sheet?.style.zoom;
+
   const cleanupPrintState = () => {
     if (cleaned) return;
     cleaned = true;
-    setTimeout(() => {
-      document.body.classList.remove('printing-academic-report');
-      if (sectionPrintPageStyle) { sectionPrintPageStyle.remove(); sectionPrintPageStyle = null; }
-      document.title = prevTitle;
-      window.removeEventListener('afterprint', cleanupPrintState);
-    }, 1200);
+    document.body.classList.remove('printing-academic-report');
+    if (sectionPrintPageStyle) { sectionPrintPageStyle.remove(); sectionPrintPageStyle = null; }
+    document.title = prevTitle;
+    if (body) {
+      body.style.overflowY = prevBodyOverflow || 'auto';
+      body.style.maxHeight = prevBodyMaxH || '80vh';
+    }
+    if (sheet && prevSheetZoom) {
+      sheet.style.zoom = prevSheetZoom;
+    }
+    window.removeEventListener('afterprint', cleanupPrintState);
   };
 
   document.body.classList.add('printing-academic-report');
@@ -61,12 +73,20 @@ function triggerPrintReport() {
     document.head.appendChild(sectionPrintPageStyle);
   }
 
-  const body = document.getElementById('academicReportModalBody');
-  if (body) body.scrollTop = 0;
+  // Ensure modal body has full visible height and reset zoom to 1 for printer capture
+  if (body) {
+    body.scrollTop = 0;
+    body.style.overflowY = 'visible';
+    body.style.maxHeight = 'none';
+  }
+  if (sheet) {
+    sheet.style.zoom = '1';
+  }
   window.scrollTo(0, 0);
 
-  // Clean up safely after print completes without stripping state during Edge preview generation
-  window.addEventListener('afterprint', cleanupPrintState);
+  // Clean up safely on the actual afterprint event with a 60s fallback (not 1.2s!)
+  window.addEventListener('afterprint', cleanupPrintState, { once: true });
+  setTimeout(cleanupPrintState, 60000);
 
   // Wait for the report DOM and print styles to settle before Chromium captures it.
   requestAnimationFrame(() => {

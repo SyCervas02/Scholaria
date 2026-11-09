@@ -373,7 +373,7 @@ async function adminToggleUserStatus(userId, shouldActivate, name) {
 function renderStudentRow(u) {
   const isAdmin = (typeof ROLE !== 'undefined' && ROLE === 'admin') || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role === 'admin');
   const isMuted = u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()) || (u.strikes && u.strikes > 0);
-  const isUnassigned = !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—';
+  const isUnassigned = !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—' || (typeof isSectionArchived === 'function' && isSectionArchived(u.section));
   const targetId = u.dbId || u.id;
   const actionBtn = isMuted
     ? `<span class="action-link" style="color:#2563eb;font-weight:600;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`
@@ -468,7 +468,7 @@ function renderDeactivatedRow(u) {
   } else if (u.role === 'teacher') {
     secHtml = u.section ? `<span class="sec-badge grade" style="white-space:nowrap;">${escHtml(u.section)}</span>` : `<span style="color:#94a3b8;font-style:italic;font-size:12px;">All / None</span>`;
   } else {
-    const isUnassigned = !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—';
+    const isUnassigned = !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—' || (typeof isSectionArchived === 'function' && isSectionArchived(u.section));
     secHtml = isUnassigned
       ? `<span style="color:#94a3b8;font-style:italic;font-size:12px;">Unassigned</span>`
       : `<span class="sec-badge grade" style="white-space:nowrap;">${escHtml(u.section)}</span>`;
@@ -839,7 +839,12 @@ async function loadUsersFromDB() {
       const auditInfo = auditMap[u.school_id] || auditMap[u.id] || localAudits[u.school_id] || localAudits[u.id] || null;
       const origin = auditInfo?.created_by || null;
       const cachedSec = savedSectionMap[u.school_id] ?? savedSectionMap[u.id];
-      const effectiveSection = (cachedSec !== undefined && cachedSec !== null) ? cachedSec : (u.section || '');
+      let effectiveSection = (cachedSec !== undefined && cachedSec !== null) ? cachedSec : (u.section || '');
+      if (u.role === 'student' && effectiveSection && typeof isSectionArchived === 'function' && isSectionArchived(effectiveSection)) {
+        effectiveSection = '';
+        saveUserSectionToStorage(u.school_id, null);
+        saveUserSectionToStorage(u.id, null);
+      }
 
       return {
         name: u.full_name,
@@ -872,6 +877,13 @@ async function loadUsersFromDB() {
     const hasAdminInDB = fetchedUsers.some(u => u.role === 'admin');
     const missingAdmins = hasAdminInDB ? [] : DEFAULT_SEED_ADMINS.filter(su => !existingNames.has(su.name.toLowerCase()));
     registeredUsers = [...fetchedUsers, ...missingSeeds, ...missingAdmins];
+    registeredUsers.forEach(u => {
+      if (u.role === 'student' && u.section && typeof isSectionArchived === 'function' && isSectionArchived(u.section)) {
+        u.section = '';
+        saveUserSectionToStorage(u.school_id || u.id, null);
+        if (u.dbId) saveUserSectionToStorage(u.dbId, null);
+      }
+    });
 
     if (typeof currentPage !== 'undefined' && currentPage === 'users') {
       const wrap = document.getElementById('userManagementContentWrap');
@@ -1078,8 +1090,8 @@ function setSectionViewTab(tab) {
 }
 
 function renderSectionsTabContent() {
-  const unassignedStudents = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—'));
-  const targetDefaultSection = managedSections.find(s => !s.isArchived)?.name || managedSections[0]?.name || 'Section A';
+  const unassignedStudents = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—' || (typeof isSectionArchived === 'function' && isSectionArchived(u.section))));
+  const targetDefaultSection = managedSections.find(s => !s.isArchived)?.name || 'Section Honesty';
   const activeCount = managedSections.filter(s => !s.isArchived).length;
   const archivedCount = managedSections.filter(s => s.isArchived).length;
 
@@ -1436,7 +1448,7 @@ function archiveSectionPrompt(secId) {
   );
 
   const confirmMsg = enrolled.length > 0
-    ? `Archive section "${sec.name}"?\n\nThis section currently has ${enrolled.length} enrolled student(s). Archiving will safely preserve all academic history, student records, and class rosters while moving the section to the archive view. You can unarchive it at any time.`
+    ? `Archive section "${sec.name}"?\n\nThis section currently has ${enrolled.length} enrolled student(s). Archiving will preserve academic history while setting all ${enrolled.length} student(s) to Unassigned so they can immediately be reassigned to an active section.`
     : `Archive section "${sec.name}"?\n\nThe section will be archived. Academic records are preserved and you can unarchive it at any time.`;
 
   if (!confirm(confirmMsg)) return;
@@ -1444,7 +1456,16 @@ function archiveSectionPrompt(secId) {
   sec.isArchived = true;
   sec.archivedAt = new Date().toISOString();
   saveManagedSections();
-  showToast(`Section "${sec.name}" archived successfully.`, 'info');
+
+  // Automatically unassign all students enrolled in this archived section
+  enrolled.forEach(stud => {
+    stud.section = null;
+    saveUserSectionToStorage(stud.id || stud.school_id, null);
+    if (stud.dbId) saveUserSectionToStorage(stud.dbId, null);
+    persistUserSectionChange(stud, null);
+  });
+
+  showToast(`Section "${sec.name}" archived successfully.${enrolled.length ? ` ${enrolled.length} student(s) set to Unassigned and ready for reassignment.` : ''}`, 'info');
 
   refreshSectionAndUserViews();
 }
@@ -1839,6 +1860,12 @@ function openManageSectionModal(secName) {
   const foot = document.getElementById('sectionRosterFoot');
 
   body.innerHTML = `
+    ${sec.isArchived ? `
+      <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:10px 14px;margin-bottom:14px;color:#92400e;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:8px;">
+        <span>📦 This section is currently archived. Unarchive it from the Archived Sections tab to assign teachers or enroll students.</span>
+      </div>
+    ` : ''}
+
     <!-- SECTION DETAILS & ADVISER STRIP -->
     <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
       <div>
@@ -1846,14 +1873,16 @@ function openManageSectionModal(secName) {
           <h4 style="font-size:15px;font-weight:700;color:var(--text-primary);margin:0;">${escHtml(sec.name)}</h4>
           <span class="sec-badge grade">${escHtml(sec.gradeLevel || 'Grade 11')}</span>
           <span class="sec-badge strand">${escHtml(sec.strand || 'General')}</span>
+          ${sec.isArchived ? '<span class="report-status-pill" style="background:#fef3c7;color:#b45309;">Archived</span>' : ''}
         </div>
         <div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px;">
           <strong>Class Adviser:</strong> ${escHtml(sec.adviser || 'Not Assigned')} &nbsp;·&nbsp; <strong>Room:</strong> ${escHtml(sec.room || 'TBD')}
         </div>
       </div>
+      ${!sec.isArchived ? `
       <button type="button" class="sec-edit-shortcut-btn" onclick="closeSectionRosterModal(); openEditSectionModal('${escHtml(sec.id)}')">
         ${iconDoc()} Edit Details & Adviser
-      </button>
+      </button>` : ''}
     </div>
 
     <!-- ASSIGNED SUBJECT TEACHERS -->
@@ -1862,9 +1891,10 @@ function openManageSectionModal(secName) {
         <h4>${assignedTeachers.length} Assigned Subject Teacher${assignedTeachers.length !== 1 ? 's' : ''}</h4>
         <span>Faculty handling subjects for this section (${sec.strand || 'General'} specialization)</span>
       </div>
+      ${!sec.isArchived ? `
       <button class="add-btn" style="margin:0;padding:6px 14px;font-size:12px;height:32px;background:#0284c7;" onclick="openAssignTeachersToSectionModal('${escHtml(sec.name)}')">
         ${iconUsers()} Assign / Reassign Teachers
-      </button>
+      </button>` : ''}
     </div>
 
     <div class="roster-table-wrap" style="margin-bottom:20px;">
@@ -1894,18 +1924,20 @@ function openManageSectionModal(secName) {
                 </div>
               </td>
               <td style="text-align:right;">
+                ${!sec.isArchived ? `
                 <button class="action-link" style="color:#dc2626;background:none;border:none;cursor:pointer;font-family:inherit;font-weight:600;" onclick="removeTeacherFromSection('${t.dbId || t.id}', '${escHtml(secName)}')">
                   Remove
-                </button>
+                </button>` : '—'}
               </td>
             </tr>
           `;}).join('') : `
             <tr>
               <td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted);font-size:13px;">
                 No subject teachers assigned to this section yet.<br>
+                ${!sec.isArchived ? `
                 <button class="foot-btn-secondary" style="margin-top:8px;" onclick="openAssignTeachersToSectionModal('${escHtml(sec.name)}')">
                   ${iconPlus()} Assign Teachers Now
-                </button>
+                </button>` : ''}
               </td>
             </tr>
           `}
@@ -1919,9 +1951,10 @@ function openManageSectionModal(secName) {
         <h4>${enrolled.length} Enrolled Student${enrolled.length !== 1 ? 's' : ''}</h4>
         <span>Students assigned to this section</span>
       </div>
+      ${!sec.isArchived ? `
       <button class="add-btn" style="margin:0;padding:6px 14px;font-size:12px;height:32px;" onclick="openMassAssignModal('${escHtml(sec.name)}')">
         ${iconPlus()} Add Students to Section
-      </button>
+      </button>` : ''}
     </div>
 
     <div class="roster-table-wrap">
@@ -1943,18 +1976,20 @@ function openManageSectionModal(secName) {
               <td>${escHtml(u.gradeLevel || 'Grade 11')}</td>
               <td><span class="role-tag student">${escHtml(u.strand || 'N/A')}</span></td>
               <td style="text-align:right;">
+                ${!sec.isArchived ? `
                 <button class="action-link" style="color:#dc2626;background:none;border:none;cursor:pointer;font-family:inherit;" onclick="removeStudentFromSection('${u.dbId || u.id}', '${escHtml(secName)}')">
                   Remove
-                </button>
+                </button>` : '—'}
               </td>
             </tr>
           `).join('') : `
             <tr>
               <td colspan="5" style="text-align:center;padding:28px;color:var(--text-muted);font-size:13px;">
                 No students enrolled in this section yet.<br>
+                ${!sec.isArchived ? `
                 <button class="foot-btn-secondary" style="margin-top:10px;" onclick="openMassAssignModal('${escHtml(sec.name)}')">
                   ${iconPlus()} Add Students to Section Now
-                </button>
+                </button>` : ''}
               </td>
             </tr>
           `}
@@ -1965,7 +2000,7 @@ function openManageSectionModal(secName) {
 
   foot.innerHTML = `
     <button class="foot-btn-secondary" onclick="closeSectionRosterModal()">Done</button>
-    <button class="gen-btn" onclick="openMassAssignModal('${escHtml(sec.name)}')">${iconPlus()} Add Students to Section</button>
+    ${!sec.isArchived ? `<button class="gen-btn" onclick="openMassAssignModal('${escHtml(sec.name)}')">${iconPlus()} Add Students to Section</button>` : ''}
   `;
 
   document.getElementById('sectionRosterModal').classList.add('active');
@@ -2000,11 +2035,17 @@ function openMassAssignForSingleStudent(studentKey) {
   const student = registeredUsers.find(u => (u.dbId === studentKey || u.id === studentKey));
   massAssignSelectedIds.clear();
   if (student) massAssignSelectedIds.add(student.dbId || student.id);
-  openMassAssignModal(managedSections[0]?.name || 'Section A');
+  const activeSections = (typeof managedSections !== 'undefined' ? managedSections : []).filter(s => !s.isArchived);
+  const fallbackSec = activeSections[0]?.name || 'Section Honesty';
+  openMassAssignModal(fallbackSec);
 }
 
 function openMassAssignModal(targetSectionName) {
-  massAssignTargetSection = targetSectionName || (managedSections[0]?.name || 'Section A');
+  const activeSections = (typeof managedSections !== 'undefined' ? managedSections : []).filter(s => !s.isArchived);
+  const fallbackSec = activeSections[0]?.name || 'Section Honesty';
+  massAssignTargetSection = (targetSectionName && (typeof isSectionArchived === 'function' ? !isSectionArchived(targetSectionName) : true))
+    ? targetSectionName
+    : fallbackSec;
   massAssignFilterMode = 'unassigned';
   massAssignSearchQuery = '';
   massAssignGradeFilter = '';
@@ -2038,7 +2079,7 @@ function getFilteredMassStudents() {
   let list = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
 
   if (massAssignFilterMode === 'unassigned') {
-    list = list.filter(u => !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—');
+    list = list.filter(u => !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—' || (typeof isSectionArchived === 'function' && isSectionArchived(u.section)));
   } else {
     // Show all students not currently in the target section
     list = list.filter(u => (u.section || '').trim().toLowerCase() !== massAssignTargetSection.trim().toLowerCase());
@@ -2097,7 +2138,7 @@ function renderMassAssignContent(isPartial = false) {
       <div style="flex:1;">
         <label style="font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;display:block;margin-bottom:4px;">Target Destination Section</label>
         <select id="massTargetSectionSelect" class="user-filter-select" style="width:100%;font-size:14px;font-weight:600;color:var(--blue);" onchange="massAssignTargetSection = this.value; renderMassAssignContent(true);">
-          ${managedSections.map(s => `<option value="${escHtml(s.name)}" ${massAssignTargetSection === s.name ? 'selected' : ''}>${escHtml(s.name)} (${escHtml(s.gradeLevel || 'Grade 11')} · ${escHtml(s.strand || 'General')})</option>`).join('')}
+          ${managedSections.filter(s => !s.isArchived).map(s => `<option value="${escHtml(s.name)}" ${massAssignTargetSection === s.name ? 'selected' : ''}>${escHtml(s.name)} (${escHtml(s.gradeLevel || 'Grade 11')} · ${escHtml(s.strand || 'General')})</option>`).join('')}
         </select>
       </div>
       <div class="mass-selection-count">
