@@ -946,6 +946,40 @@ app.post('/api/admin/update-user-sections', async (req, res) => {
   }
 });
 
+// --- Managed Sections Store & Sync ---
+const SECTIONS_FILE = path.join(__dirname, 'data', 'managed-sections.json');
+
+app.get('/api/sections', (req, res) => {
+  try {
+    if (fs.existsSync(SECTIONS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(SECTIONS_FILE, 'utf8'));
+      if (Array.isArray(data)) return res.json(data);
+    }
+  } catch (_) {}
+  res.json([]);
+});
+
+app.post('/api/admin/sections', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can manage sections' });
+
+  const { sections } = req.body;
+  if (!Array.isArray(sections)) {
+    return res.status(400).json({ error: 'Expected an array of sections' });
+  }
+
+  try {
+    const dir = path.dirname(SECTIONS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SECTIONS_FILE, JSON.stringify(sections, null, 2), 'utf8');
+    return res.json({ success: true, count: sections.length });
+  } catch (err) {
+    console.error('Failed to save sections file:', err);
+    return res.status(500).json({ error: 'Failed to persist sections' });
+  }
+});
+
 app.post('/api/auth/demo-login', async (req, res) => {
   if (process.env.DEMO_MODE !== 'true') {
     return res.status(404).json({ error: 'Not found' });
