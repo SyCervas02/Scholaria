@@ -204,7 +204,7 @@ function getAttemptsForAnalysis(quizId, secFilter = '') {
   if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
     const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
     const teacherSections = prof.section
-      ? prof.section.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      ? prof.section.split(',').map(s => s.trim().toLowerCase()).filter(Boolean).filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec))
       : [];
 
     if (teacherSections.length === 0) {
@@ -213,7 +213,7 @@ function getAttemptsForAnalysis(quizId, secFilter = '') {
 
     uniqueAttempts = uniqueAttempts.filter(a => {
       const sec = (a.section || '').trim().toLowerCase();
-      return sec && teacherSections.includes(sec);
+      return sec && teacherSections.includes(sec) && (typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
     });
   }
 
