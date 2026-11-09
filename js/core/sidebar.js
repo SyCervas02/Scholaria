@@ -456,11 +456,61 @@ function getAllRecordedAttempts() {
   return deduplicateQuizAttempts(pool);
 }
 
+function getTeacherAnalysisSections(selectedQuiz) {
+  const isTeacher = typeof ROLE !== 'undefined' && ROLE === 'teacher';
+  const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
+  const allManaged = typeof managedSections !== 'undefined' && Array.isArray(managedSections)
+    ? managedSections.filter(s => !s.isArchived)
+    : [];
+
+  let candidateSections = allManaged.length
+    ? allManaged
+    : (typeof SECTIONS !== 'undefined' ? SECTIONS.map(name => ({ name, strand: '' })) : []);
+
+  if (isTeacher) {
+    const teacherStrand = String(prof.strand || '').trim().toUpperCase();
+    const teacherSections = prof.section
+      ? prof.section.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      : [];
+
+    candidateSections = candidateSections.filter(sec => {
+      const secName = (sec.name || sec).trim().toLowerCase();
+      const secStrand = String(sec.strand || '').trim().toUpperCase();
+
+      if (teacherSections.length > 0) {
+        if (!teacherSections.includes(secName)) return false;
+      }
+      if (secStrand && teacherStrand && secStrand !== 'ALL' && teacherStrand !== 'ALL') {
+        if (secStrand !== teacherStrand) return false;
+      }
+      return true;
+    });
+  }
+
+  if (selectedQuiz && selectedQuiz.strand) {
+    const quizStrand = String(selectedQuiz.strand).trim().toUpperCase();
+    if (quizStrand && quizStrand !== 'ALL' && quizStrand !== 'ALL STRANDS') {
+      candidateSections = candidateSections.filter(sec => {
+        const secStrand = String(sec.strand || '').trim().toUpperCase();
+        return !secStrand || secStrand === 'ALL' || secStrand === quizStrand;
+      });
+    }
+  }
+
+  const names = candidateSections.map(s => s.name || s);
+  return typeof sortSectionsNaturally === 'function' ? sortSectionsNaturally(names) : [...new Set(names)].sort();
+}
+window.getTeacherAnalysisSections = getTeacherAnalysisSections;
+
 function getQuizUniqueStudentAttemptCount(quizId, quizTitle) {
   const attempts = typeof getAllRecordedAttempts === 'function' ? getAllRecordedAttempts() : [];
-  const students = typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers)
-    ? registeredUsers.filter(user => String(user.role || '').toLowerCase() === 'student')
-    : [];
+  const registered = typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : [];
+  const students = registered.filter(user => String(user.role || '').toLowerCase() === 'student');
+  const teachersAndAdmins = registered.filter(user => {
+    const r = String(user.role || '').toLowerCase();
+    return r === 'teacher' || r === 'admin' || r === 'faculty';
+  });
+
   const studentKeys = new Set();
   attempts.filter(attempt => {
     const attemptQuizId = String(attempt.quiz_id || '').trim();
@@ -472,9 +522,21 @@ function getQuizUniqueStudentAttemptCount(quizId, quizTitle) {
     const id = String(attempt.student_id || attempt.studentId || attempt.user_id || attempt.email || attempt.student_email || '').trim().toLowerCase();
     if (!id) return;
     const email = String(attempt.student_email || attempt.email || '').trim().toLowerCase();
+    const name = String(attempt.student_name || attempt.studentName || attempt.name || '').trim().toLowerCase();
+
+    // Skip attempts made by teachers or administrators
+    const isTeacherOrAdmin = teachersAndAdmins.some(u => {
+      const uIds = [u.id, u.dbId, u.school_id].filter(Boolean).map(uid => String(uid).trim().toLowerCase());
+      const uEmail = String(u.email || '').trim().toLowerCase();
+      const uName = String(u.name || u.full_name || '').trim().toLowerCase();
+      return (id && uIds.includes(id)) || (email && uEmail && email === uEmail) || (name && uName && name === uName);
+    });
+    if (isTeacherOrAdmin) return;
+
     const student = students.find(user =>
       [user.id, user.dbId, user.school_id].some(userId => userId && String(userId).trim().toLowerCase() === id) ||
-      (email && String(user.email || '').trim().toLowerCase() === email)
+      (email && String(user.email || '').trim().toLowerCase() === email) ||
+      (name && String(user.name || user.full_name || '').trim().toLowerCase() === name)
     );
     if (!student) return;
     studentKeys.add(String(student.dbId || student.id || student.school_id).trim().toLowerCase());
@@ -3286,6 +3348,11 @@ function teacherPage(page) {
       const quizStatus = String(selectedQuiz.status || 'Active').trim();
       const quizStatusClass = /reject/i.test(quizStatus) ? 'not-taken' : /pending/i.test(quizStatus) ? 'pending' : /complete|done|closed/i.test(quizStatus) ? 'done' : 'ongoing';
 
+      const analysisFilteredSections = getTeacherAnalysisSections(selectedQuiz);
+      if (analysisSectionFilter && !analysisFilteredSections.includes(analysisSectionFilter)) {
+        analysisSectionFilter = '';
+      }
+
       return `
       <div class="section-hdr analysis-report-header">
         <div class="analysis-report-heading">
@@ -3342,7 +3409,7 @@ function teacherPage(page) {
         <div class="analysis-filters-row">
           <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)">
             <option value="">All Handled Sections</option>
-            ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+            ${analysisFilteredSections.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
           </select>
           <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)">
             ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
@@ -3415,9 +3482,11 @@ function teacherPage(page) {
                 <td style="text-align:center;font-weight:700;color:#059669;">${r.correct}</td>
                 <td style="text-align:center;font-weight:700;color:#dc2626;">${r.incorrect}</td>
                 <td>
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <span class="analysis-bar-wrap" style="flex:1;"><span class="analysis-bar ${r.pct >= 80 ? 'high' : r.pct < 50 ? 'low' : ''}" style="width:${r.pct}%"></span></span>
-                    <span style="font-weight:700;font-size:12px;min-width:36px;">${r.pct}%</span>
+                  <div style="display:flex;align-items:center;gap:8px;min-width:110px;">
+                    <span class="analysis-bar-wrap" style="display:block;flex:1;height:8px;background:#e2e8f0;border-radius:6px;overflow:hidden;min-width:70px;">
+                      <span class="analysis-bar ${r.pct >= 80 ? 'high' : r.pct < 50 ? 'low' : ''}" style="display:block;height:100%;width:${r.pct}%;background:${r.pct >= 80 ? '#10b981' : r.pct < 50 ? '#ef4444' : '#3b82f6'};border-radius:6px;transition:width 0.3s ease;"></span>
+                    </span>
+                    <span style="font-weight:700;font-size:12px;min-width:36px;color:#334155;">${r.pct}%</span>
                   </div>
                 </td>
                 <td style="text-align:center;">
