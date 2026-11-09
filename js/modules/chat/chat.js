@@ -464,13 +464,15 @@ window._chatAttachmentMap = window._chatAttachmentMap || {};
 
 function getChatAttachmentUrl(attach) {
   if (!attach) return '';
-  if (attach.data) return attach.data;
-  if (!attach.url) return '';
+  if (attach.data && typeof attach.data === 'string' && attach.data.startsWith('data:')) return attach.data;
+  if (!attach.url) return attach.data || '';
   if (/^(https?:|data:|blob:)/i.test(attach.url)) return attach.url;
 
   let base = window.API_BASE;
   if (!base || base === 'null' || base.startsWith('file:')) {
-    base = 'http://localhost:3001';
+    base = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:'))
+      ? window.location.origin
+      : 'http://localhost:3001';
   } else if (typeof window !== 'undefined' && window.location) {
     if (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null') {
       base = 'http://localhost:3001';
@@ -483,6 +485,11 @@ function getChatAttachmentUrl(attach) {
 
 function handleChatBubbleImgError(imgEl, msgId) {
   if (!imgEl) return;
+  const entry = window._chatAttachmentMap?.[msgId];
+  if (entry?.attach?.data && imgEl.src !== entry.attach.data) {
+    imgEl.src = entry.attach.data;
+    return;
+  }
   const card = imgEl.closest('.chat-attachment-card');
   if (card) {
     card.classList.add('image-fallback-active');
@@ -1130,8 +1137,33 @@ function closeNewChatModal() {
   document.getElementById('newChatModal').classList.remove('active');
 }
 function ncToggleContact(id) {
-  if (newChatState.selected.has(id)) newChatState.selected.delete(id);
-  else newChatState.selected.add(id);
+  const isStudent = typeof ROLE !== 'undefined' && ROLE === 'student';
+  const target = newChatState.directory.find(c => c.id === id);
+  const targetRole = String(target?.role || '').toLowerCase();
+
+  if (newChatState.selected.has(id)) {
+    newChatState.selected.delete(id);
+  } else {
+    if (isStudent) {
+      const selectedContacts = newChatState.directory.filter(c => newChatState.selected.has(c.id));
+      const hasFaculty = selectedContacts.some(c => String(c.role || '').toLowerCase() !== 'student');
+      const hasStudents = selectedContacts.some(c => String(c.role || '').toLowerCase() === 'student');
+
+      if (hasFaculty) {
+        showToast('Direct messaging with faculty is 1-on-1 only. Unselect faculty to create a group chat with students.', 'warning');
+        return;
+      }
+      if (hasStudents && targetRole !== 'student') {
+        showToast('Students can only create group chats with other students.', 'warning');
+        return;
+      }
+      if (targetRole !== 'student' && newChatState.selected.size >= 1) {
+        showToast('Students can only create group chats with other students.', 'warning');
+        return;
+      }
+    }
+    newChatState.selected.add(id);
+  }
   renderNewChatModal();
 }
 function ncFilterContacts(v) {
@@ -1145,22 +1177,50 @@ function ncFilterContacts(v) {
 }
 function renderNewChatModal() {
   const body = document.getElementById('newChatModalBody');
+  const isStudent = typeof ROLE !== 'undefined' && ROLE === 'student';
   const q = newChatState.search.trim().toLowerCase();
   const filtered = newChatState.directory.filter(c =>
     !q || c.full_name.toLowerCase().includes(q) || c.role.toLowerCase().includes(q));
-  const rowsHtml = filtered.length ? filtered.map(c => `
-    <label class="nc-contact-row ${newChatState.selected.has(c.id) ? 'picked' : ''}">
-      <input type="checkbox" ${newChatState.selected.has(c.id) ? 'checked' : ''} onchange="ncToggleContact('${c.id}')">
+
+  const selectedList = newChatState.directory.filter(c => newChatState.selected.has(c.id));
+  const hasFacultySelected = selectedList.some(c => String(c.role || '').toLowerCase() !== 'student');
+  const hasStudentSelected = selectedList.some(c => String(c.role || '').toLowerCase() === 'student');
+
+  const rowsHtml = filtered.length ? filtered.map(c => {
+    const isContactStudent = String(c.role || '').toLowerCase() === 'student';
+    const isSelected = newChatState.selected.has(c.id);
+    const isDisabled = isStudent && !isSelected && (
+      hasFacultySelected || (hasStudentSelected && !isContactStudent)
+    );
+    const rowTitle = isDisabled
+      ? (hasFacultySelected ? 'Direct messaging with faculty is 1-on-1 only' : 'Students can only create group chats with other students')
+      : '';
+
+    return `
+    <label class="nc-contact-row ${isSelected ? 'picked' : ''}" style="${isDisabled ? 'opacity:0.45;cursor:not-allowed;' : ''}" title="${rowTitle}">
+      <input type="checkbox" ${isSelected ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="ncToggleContact('${c.id}')">
       <div class="contact-avatar" style="width:32px;height:32px;font-size:11px;">${initialsFor(c.full_name)}</div>
-      <div class="contact-info"><h4>${escHtml(c.full_name)}</h4><span>${escHtml(c.role.charAt(0).toUpperCase() + c.role.slice(1))}${c.school_id ? ' · ' + escHtml(c.school_id) : ''}</span></div>
-    </label>`).join('') : `<div class="nc-empty">No matching people found.</div>`;
+      <div class="contact-info">
+        <h4>${escHtml(c.full_name)}</h4>
+        <span>${escHtml(c.role.charAt(0).toUpperCase() + c.role.slice(1))}${c.school_id ? ' · ' + escHtml(c.school_id) : ''}</span>
+      </div>
+      ${isDisabled ? `<span style="font-size:11px;color:#94a3b8;margin-left:auto;padding-right:6px;">${hasFacultySelected ? '1-on-1 only' : 'Students only'}</span>` : ''}
+    </label>`;
+  }).join('') : `<div class="nc-empty">No matching people found.</div>`;
+
+  const bannerHtml = isStudent ? `
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:10px;padding:9px 13px;font-size:12px;margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:15px;flex-shrink:0;">ℹ️</span>
+      <span>Students can message teachers 1-on-1 for consultation, or form group chats with fellow students.</span>
+    </div>` : '';
 
   body.innerHTML = `
+    ${bannerHtml}
     <input type="text" class="nc-search" placeholder="Search by name or role…" value="${escHtml(newChatState.search)}" oninput="ncFilterContacts(this.value)">
     <div class="nc-contact-list">${rowsHtml}</div>
     ${newChatState.selected.size > 1 ? `
       <div class="gen-field"><label>Group name (optional)</label>
-        <input type="text" class="nc-group-name" id="ncGroupName" placeholder="e.g. Grade 12 STEM — Section A">
+        <input type="text" class="nc-group-name" id="ncGroupName" placeholder="e.g. Grade 12 STEM — Study Group">
       </div>` : ''}`;
 
   const n = newChatState.selected.size;
@@ -1189,6 +1249,15 @@ async function ncCreateConversation() {
   }
 
   const picked = newChatState.directory.filter(c => newChatState.selected.has(c.id));
+  const isStudent = typeof ROLE !== 'undefined' && ROLE === 'student';
+  if (isGroup && isStudent) {
+    const nonStudents = picked.filter(p => String(p.role || '').toLowerCase() !== 'student');
+    if (nonStudents.length > 0) {
+      showToast('Students can only create group chats with other students.', 'error');
+      return;
+    }
+  }
+
   const groupNameInput = document.getElementById('ncGroupName');
   const title = isGroup
     ? ((groupNameInput && groupNameInput.value.trim()) || picked.map(p => p.full_name.split(',')[0]).join(', '))
