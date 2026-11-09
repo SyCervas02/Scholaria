@@ -389,6 +389,16 @@ body {
     padding-right: 46px;
 }
 
+/* Hide Edge/IE built-in password reveal to prevent double eye icon */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input::-ms-reveal,
+input::-ms-clear {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
 /* error hint */
 .field-error {
     font-size: 11.5px;
