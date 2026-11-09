@@ -1778,7 +1778,8 @@ function scrollStudentSubjectShelf(direction) {
 
 function renderStudentEssentials() {
   const attempted = new Set(myQuizAttempts.map(attempt => String(attempt.quiz_id)));
-  const upcoming = customQuizzes.filter(quiz => isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !attempted.has(String(quiz.id)) && new Date(quiz.dueDate || quiz.due_date).getTime() >= Date.now())
+  const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+  const upcoming = quizList.filter(quiz => isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !attempted.has(String(quiz.id)) && new Date(quiz.dueDate || quiz.due_date).getTime() >= Date.now())
     .sort((a,b) => new Date(a.dueDate || a.due_date) - new Date(b.dueDate || b.due_date));
   const next = upcoming[0];
   const profile = CURRENT_PROFILE || {};
@@ -1798,7 +1799,8 @@ function renderStudentAssessmentOverview() {
   const completed = new Set(attempts.map(attempt => String(attempt.quiz_id)));
   const now = Date.now();
   const weekEnd = now + 7 * 24 * 60 * 60 * 1000;
-  const dueSoon = customQuizzes.filter(quiz => {
+  const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+  const dueSoon = quizList.filter(quiz => {
     const due = new Date(quiz.dueDate || quiz.due_date).getTime();
     return isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !completed.has(String(quiz.id)) && due >= now && due <= weekEnd;
   }).length;
@@ -1806,7 +1808,7 @@ function renderStudentAssessmentOverview() {
     <header><h3 id="assessmentOverviewTitle">${dashboardIcon('chart')} Assessment Overview</h3><p>A quick look at your assessment activity.</p></header>
     <dl class="assessment-overview-stats"><div><dt>Completed quizzes</dt><dd>${completed.size}</dd></div><div><dt>Due in the next 7 days</dt><dd>${dueSoon}</dd></div></dl>
     <h4>Recent Results</h4><div class="assessment-recent-results">${attempts.length ? attempts.slice(0,3).map(attempt => {
-      const quiz = customQuizzes.find(item => String(item.id) === String(attempt.quiz_id));
+      const quiz = quizList.find(item => String(item.id) === String(attempt.quiz_id));
       const score = Number(attempt.score);
       const total = Number(attempt.total_items);
       const result = attempt.score != null && Number.isFinite(score) && Number.isFinite(total) && total > 0 ? Math.round(score / total * 100) + '%' : 'Submitted';
@@ -2158,7 +2160,7 @@ function studentPage(page) {
       const mySubjects = [...new Set(materialsData.map(m => m.subject).filter(Boolean))];
       const attemptedQuizIds = new Set(myQuizAttempts.map(a => a.quiz_id));
       const now = Date.now();
-      const availableQuizzes = customQuizzes.filter(q =>
+      const availableQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q =>
         ['active', 'approved', 'ongoing'].includes(String(q.status || '').toLowerCase()) &&
         !q.isDemo &&
         !attemptedQuizIds.has(String(q.id)) &&
@@ -2166,7 +2168,7 @@ function studentPage(page) {
         (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
       );
       const latestAttempt = myQuizAttempts[0] || null;
-      const latestQuizTitle = latestAttempt ? (customQuizzes.find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
+      const latestQuizTitle = latestAttempt ? ((typeof customQuizzes !== 'undefined' ? customQuizzes : []).find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
       const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : 63;
 
       const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function'
@@ -2418,7 +2420,7 @@ function studentPage(page) {
 
     case 'quizzes': {
       const attemptsByQuiz = new Map(myQuizAttempts.map(a => [a.quiz_id, a]));
-      const visibleQuizzes = customQuizzes.filter(q =>
+      const visibleQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q =>
         q.status === 'closed' || isQuizTargetedForStudent(q, CURRENT_PROFILE)
       );
       const nowMs = Date.now();
@@ -2666,7 +2668,7 @@ function studentPage(page) {
         : myQuizAttempts;
 
       // Filter quizzes targeted for this student
-      const targetedQuizzes = customQuizzes.filter(q =>
+      const targetedQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q =>
         (q.status === 'active' || q.status === 'approved' || q.status === 'closed' || q.isDemo) &&
         isQuizTargetedForStudent(q, CURRENT_PROFILE)
       );
@@ -3051,7 +3053,7 @@ function teacherPage(page) {
       const demo = !!CURRENT_PROFILE?.is_demo;
       const own = item => !item.uploaded_by || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(item.uploaded_by);
       const materials = materialsData.filter(own);
-      const quizzes = customQuizzes.filter(q => (!q.isDemo || demo) && (!q.createdBy || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(q.createdBy)));
+      const quizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => (!q.isDemo || demo) && (!q.createdBy || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(q.createdBy)));
       const active = quizzes.filter(q => q.status === 'active');
       const news = (typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : []).filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft);
       const read = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
@@ -3109,11 +3111,11 @@ function teacherPage(page) {
       <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
 
     case 'quiz': {
-      let filtered = customQuizzes.slice();
+      let filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).slice();
       if (ROLE === 'teacher') {
         const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
         const teacherSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-        filtered = customQuizzes.filter(q => {
+        filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => {
           const isCreator = (q.createdBy && (
             q.createdBy === CURRENT_PROFILE?.id || 
             q.createdBy === CURRENT_PROFILE?.dbId || 
@@ -3372,10 +3374,10 @@ function teacherPage(page) {
         }
       }
 
-      let myQuizzesForAnalysis = customQuizzes.slice();
+      let myQuizzesForAnalysis = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).slice();
       if (ROLE === 'teacher') {
         const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-        myQuizzesForAnalysis = customQuizzes.filter(q => {
+        myQuizzesForAnalysis = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => {
           const isCreator = (q.createdBy && (
             q.createdBy === CURRENT_PROFILE?.id || 
             q.createdBy === CURRENT_PROFILE?.dbId || 
