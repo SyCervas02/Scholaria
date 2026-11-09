@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800&family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="dashboard.css?v=20070"/>
   <link rel="stylesheet" href="css/modules/deadlines.css?v=1"/>
-  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20070"/>
+  <link rel="stylesheet" href="css/dashboard-overrides.css?v=20072"/>
   <link rel="stylesheet" href="css/modules/materials.css"/>
   <link rel="stylesheet" href="css/modules/quiz.css?v=20070"/>
   <link rel="stylesheet" href="css/modules/chat.css?v=20070"/>
@@ -239,6 +239,22 @@
       </div>
       <div class="modal-body" id="massAssignBody"></div>
       <div class="modal-foot" id="massAssignFoot"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="assignTeachersToSectionModal">
+    <div class="modal-card" style="max-width:760px;">
+      <div class="modal-head">
+        <div>
+          <h3 id="assignTeachersToSectionTitle">Assign Faculty</h3>
+          <span id="assignTeachersToSectionSubtitle">Faculty handling subjects for this section</span>
+        </div>
+        <button class="modal-x" onclick="closeAssignTeachersToSectionModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="assignTeachersToSectionBody"></div>
+      <div class="modal-foot" id="assignTeachersToSectionFoot"></div>
     </div>
   </div>
 
@@ -767,14 +783,14 @@
   <script src="js/modules/repository/materials.js?v=20062"></script>
   <script src="js/modules/quizzes/take-quiz.js?v=20070"></script>
   <script src="js/modules/quizzes/interactive-player.js?v=20070"></script>
-  <script src="js/modules/quizzes/item-analysis.js?v=20070"></script>
+  <script src="js/modules/quizzes/item-analysis.js?v=20072"></script>
   <script src="js/modules/quizzes/quiz-generator.js?v=20066"></script>
   <script src="js/modules/chat/chat.js?v=20070"></script>
   <script src="js/modules/admin/user-management.js?v=20070"></script>
   <script src="js/modules/admin/report-generator.js?v=20069"></script>
   <script src="js/modules/admin/rooms-management.js?v=20062"></script>
   <script src="js/modules/courses.js?v=20005"></script>
-  <script src="js/core/sidebar.js?v=20070"></script>
+  <script src="js/core/sidebar.js?v=20072"></script>
   <script src="js/core/search.js?v=20015"></script>
   <script src="js/core/auth.js?v=20067"></script>
 </body>
