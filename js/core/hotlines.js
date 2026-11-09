@@ -1,5 +1,45 @@
 const HOTLINES_STORAGE_KEY = 'scholaria_hotlines';
 
+function copyHotlineNumber(number, name, event) {
+  if (event) {
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+  }
+  const cleanNum = String(number || '').trim();
+  if (!cleanNum) return;
+
+  const label = name ? `${name} ` : '';
+  const successMsg = `Copied ${label}hotline: ${cleanNum}`;
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cleanNum).then(() => {
+      if (typeof showToast === 'function') showToast(successMsg, 'success');
+    }).catch(() => {
+      fallbackCopyHotline(cleanNum, successMsg);
+    });
+  } else {
+    fallbackCopyHotline(cleanNum, successMsg);
+  }
+}
+
+function fallbackCopyHotline(text, msg) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    if (typeof showToast === 'function') showToast(msg, 'success');
+  } catch (_) {
+    if (typeof showToast === 'function') showToast(`Hotline: ${text}`, 'info');
+  }
+}
+window.copyHotlineNumber = copyHotlineNumber;
+
 const HOTLINE_ICON_META = {
   emergency: { label: 'Emergency response', color: '#dc2626', bg: '#fee2e2', path: '<path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="5"/><path d="m10 12 1.3 1.3L14.5 10"/>' },
   fire: { label: 'Fire department', color: '#ea580c', bg: '#ffedd5', path: '<path d="M8.5 14.5A4.5 4.5 0 0 0 17 17c2-4-1-7-4-10 0 3-2 4-2 4 0-4-3-7-3-7s1 4-2 8a7 7 0 1 0 13 4"/>' },
@@ -135,10 +175,10 @@ function renderHotlinesUI() {
   const directoryContainer = document.getElementById('directoryHotlinesContainer');
   if (directoryContainer) {
     directoryContainer.innerHTML = hotlines.map(hl => `
-      <a href="tel:${hl.tel}" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;display:flex;align-items:center;background:#fff;border:1px solid #e2e8f0;text-decoration:none;color:#0f172a;margin-bottom:8px;">
+      <div role="button" tabindex="0" onclick="copyHotlineNumber('${escHtml(hl.number)}', '${escHtml(hl.shortName || hl.name)}', event)" onkeydown="if(event.key==='Enter'||event.key===' '){copyHotlineNumber('${escHtml(hl.number)}', '${escHtml(hl.shortName || hl.name)}', event);}" class="anc-hotline-chip" style="padding:10px 14px;border-radius:12px;justify-content:space-between;font-size:13px;display:flex;align-items:center;background:#fff;border:1px solid #e2e8f0;text-decoration:none;color:#0f172a;margin-bottom:8px;cursor:pointer;transition:transform 0.15s ease, box-shadow 0.15s ease;" title="Click to copy ${escHtml(hl.number)}">
         <span style="display:flex;align-items:center;gap:10px;">${hotlineIconSvg(hl, 34)} <strong>${hl.name}</strong></span>
-        <span class="anc-hotline-num" style="color:#b91c1c;font-weight:700;">${hl.number}</span>
-      </a>
+        <span class="anc-hotline-num" style="color:#b91c1c;font-weight:700;">📋 ${hl.number}</span>
+      </div>
     `).join('');
   }
 

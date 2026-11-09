@@ -258,10 +258,10 @@ function openAnnouncementDetailModal(id) {
     if (anc.hotlines && anc.hotlines.length) {
       hotlinesWrap.style.display = 'block';
       hotlinesList.innerHTML = anc.hotlines.map(h => `
-        <a href="tel:${h.number.replace(/[^0-9+]/g, '')}" class="anc-hotline-chip" title="Click to call ${h.name}" onclick="event.stopPropagation()">
+        <div role="button" tabindex="0" class="anc-hotline-chip" title="Click to copy ${escHtml(h.number)}" onclick="copyHotlineNumber('${escHtml(h.number)}', '${escHtml(h.shortName || h.name)}', event)" onkeydown="if(event.key==='Enter'||event.key===' '){copyHotlineNumber('${escHtml(h.number)}', '${escHtml(h.shortName || h.name)}', event);}" style="cursor:pointer;">
           <span style="display:inline-flex;align-items:center;gap:8px;">${typeof hotlineIconSvg === 'function' ? hotlineIconSvg(h, 24) : ''} <strong>${escHtml(h.name)}:</strong></span>
-          <span class="anc-hotline-num">${escHtml(h.number)}</span>
-        </a>
+          <span class="anc-hotline-num">📋 ${escHtml(h.number)}</span>
+        </div>
       `).join('');
     } else {
       hotlinesWrap.style.display = 'none';
@@ -487,10 +487,10 @@ function buildAnnouncementsPage() {
                     <div style="font-size:11.5px;font-weight:800;color:#b91c1c;text-transform:uppercase;letter-spacing:0.5px;">📞 City of Imus Emergency Hotlines</div>
                     <div class="anc-hotline-chips">
                       ${anc.hotlines.map(h => `
-                        <a href="tel:${h.number.replace(/[^0-9+]/g, '')}" class="anc-hotline-chip" title="Click to call ${h.name}" onclick="event.stopPropagation()">
+                        <div role="button" tabindex="0" class="anc-hotline-chip" title="Click to copy ${escHtml(h.number)}" onclick="copyHotlineNumber('${escHtml(h.number)}', '${escHtml(h.shortName || h.name)}', event)" onkeydown="if(event.key==='Enter'||event.key===' '){copyHotlineNumber('${escHtml(h.number)}', '${escHtml(h.shortName || h.name)}', event);}" style="cursor:pointer;">
                           <span style="display:inline-flex;align-items:center;gap:8px;">${typeof hotlineIconSvg === 'function' ? hotlineIconSvg(h, 24) : ''} <strong>${escHtml(h.name)}:</strong></span>
-                          <span class="anc-hotline-num">${escHtml(h.number)}</span>
-                        </a>
+                          <span class="anc-hotline-num">📋 ${escHtml(h.number)}</span>
+                        </div>
                       `).join('')}
                     </div>
                   </div>
@@ -553,13 +553,13 @@ function buildAnnouncementsPage() {
               return '<p style="font-size:12.5px;color:#64748b;padding:6px 0;">No emergency hotlines configured yet.</p>';
             }
             return hls.map(hl => `
-              <a href="tel:${escHtml(hl.tel || hl.number.replace(/[^0-9+]/g, ''))}" class="anc-dir-item" style="text-decoration:none;color:inherit;" title="Click to call ${escHtml(hl.name)}">
+              <div role="button" tabindex="0" onclick="copyHotlineNumber('${escHtml(hl.number)}', '${escHtml(hl.shortName || hl.name)}', event)" onkeydown="if(event.key==='Enter'||event.key===' '){copyHotlineNumber('${escHtml(hl.number)}', '${escHtml(hl.shortName || hl.name)}', event);}" class="anc-dir-item" style="cursor:pointer;text-decoration:none;color:inherit;" title="Click to copy ${escHtml(hl.number)}">
                 <div class="anc-dir-icon" style="background:transparent;">${typeof hotlineIconSvg === 'function' ? hotlineIconSvg(hl, 32) : '📞'}</div>
                 <div class="anc-dir-details">
                   <h5>${escHtml(hl.name)}</h5>
-                  <span style="font-weight:800;color:#dc2626;">${escHtml(hl.number)}</span>
+                  <span style="font-weight:800;color:#dc2626;">📋 ${escHtml(hl.number)}</span>
                 </div>
-              </a>
+              </div>
             `).join('');
           })()}
         </div>

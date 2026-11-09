@@ -326,15 +326,15 @@
         hotlineMatches.push({
           id: hl.id,
           title: `${hl.icon || '📞'} ${hl.name}`,
-          subtitle: `Tel: ${hl.number} (${hl.tel}) • Click to Dial Hotline`,
+          subtitle: `Tel: ${hl.number} • Click to Copy Number`,
           icon: hl.icon || '🚨',
           badge: 'Emergency',
           action: () => {
             closeGlobalSearch();
-            if (typeof openEmergencyHotlinesModal === 'function') {
-              openEmergencyHotlinesModal();
-            } else {
-              window.location.href = `tel:${hl.tel}`;
+            if (typeof copyHotlineNumber === 'function') {
+              copyHotlineNumber(hl.number, hl.shortName || hl.name);
+            } else if (typeof showToast === 'function') {
+              showToast(`Hotline: ${hl.number}`, 'info');
             }
           }
         });
