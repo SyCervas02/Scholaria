@@ -3,6 +3,9 @@
 const SUPABASE_URL  = 'https://qxpsbewbgdwkermxeeso.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cHNiZXdiZ2R3a2VybXhlZXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MDgzMTgsImV4cCI6MjA5ODI4NDMxOH0.cmG-pVotNZ5KI81_8XsUN5AL5vNVYOPFy8oHegz6cvg';
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { storage: window.sessionStorage } });
+// Top-level const is not a window property; chat.js upload and ui-helpers signOut
+// read window.db, so mirror it there or they silently skip the session.
+window.db = db;
 
 const API_BASE = (function() {
   if (typeof window !== 'undefined' && window.location && window.location.hostname) {
