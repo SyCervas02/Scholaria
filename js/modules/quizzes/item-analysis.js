@@ -6,6 +6,31 @@ let analysisSearchQuery = '';
 let analysisActiveTab = 'questions';
 let analysisAttemptsCache = {};
 let analysisFetchInFlightFor = null;
+let analysisRealtimeChannel = null;
+
+function ensureAnalysisAttemptsRealtime() {
+  if (analysisRealtimeChannel || typeof db === 'undefined' || !db?.channel) return;
+  analysisRealtimeChannel = db.channel('item-analysis-student-submissions')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'quiz_attempts' }, payload => {
+      const quizId = payload?.new?.quiz_id || payload?.old?.quiz_id;
+      if (analysisSelectedQuizId && (!quizId || String(quizId) === String(analysisSelectedQuizId))) loadAttemptsForAnalysis(analysisSelectedQuizId, true);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'class_records' }, payload => {
+      const quizId = payload?.new?.quiz_id || payload?.old?.quiz_id;
+      if (analysisSelectedQuizId && (!quizId || String(quizId) === String(analysisSelectedQuizId))) loadAttemptsForAnalysis(analysisSelectedQuizId, true);
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
+      if (typeof currentPage !== 'undefined' && currentPage !== 'analysis') return;
+      if (typeof loadUsersFromDB === 'function') await loadUsersFromDB();
+      if (analysisSelectedQuizId) loadAttemptsForAnalysis(analysisSelectedQuizId, true);
+    })
+    .subscribe();
+}
+
+function isGenericAttemptName(name) {
+  const normalized = String(name || '').trim().toLowerCase();
+  return !normalized || ['student', 'student user', 'user', 'demo user', 'teacher / tester', 'teacher/tester'].includes(normalized);
+}
 
 function setAnalysisTab(tab) {
   analysisActiveTab = tab === 'students' ? 'students' : 'questions';
@@ -77,35 +102,62 @@ function getAttemptsForAnalysis(quizId, secFilter = '') {
     all.forEach(a => {
       const matchId = String(a.quiz_id || a.quizId || '').toLowerCase() === String(quizId).toLowerCase();
       const matchTitle = targetTitle && String(a.quiz_title || a.quizTitle || '').toLowerCase().trim() === targetTitle;
-      if (matchId || matchTitle) pool.push(a);
+      if (matchId || (!a.quiz_id && !a.quizId && matchTitle)) pool.push(a);
     });
   }
 
-  // Resolve section from registeredUsers if missing
+  // Resolve student identity and section from real account records/class records.
   const userList = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers)) ? registeredUsers : [];
-  pool.forEach(a => {
-    if (!a.section && a.student_id) {
-      const matchU = userList.find(u => (u.dbId || u.id) === a.student_id);
-      if (matchU && matchU.section) a.section = matchU.section;
+  const classRecords = (typeof classRecAttemptsCache !== 'undefined' && Array.isArray(classRecAttemptsCache)) ? classRecAttemptsCache : [];
+  const normalizedPool = pool.map(attempt => {
+    const sid = String(attempt.student_id || attempt.studentId || attempt.user_id || '').trim().toLowerCase();
+    const matchingRecord = classRecords.find(record => {
+      const recordQuiz = String(record.quiz_id || record.quizId || '').trim().toLowerCase();
+      const recordSid = String(record.student_id || record.studentId || record.user_id || '').trim().toLowerCase();
+      return recordQuiz === String(quizId).trim().toLowerCase() && sid && sid === recordSid;
+    });
+    const submitter = userList.find(user => {
+      const ids = [user.id, user.dbId, user.school_id].filter(Boolean).map(value => String(value).trim().toLowerCase());
+      return sid && ids.includes(sid);
+    });
+    let name = submitter?.name || submitter?.full_name || attempt.student_name || attempt.studentName || attempt.name || matchingRecord?.student_name || '';
+    if (!name && sid) {
+      const matched = userList.find(u =>
+        [u.id, u.dbId, u.school_id].filter(Boolean).some(id => String(id).trim().toLowerCase() === sid)
+      );
+      if (matched) name = matched.name || matched.full_name || '';
     }
+    return Object.assign({}, matchingRecord || {}, attempt, {
+      student_name: name,
+      // The account assignment is authoritative; attempts/class records are fallbacks
+      // for older data or accounts without a saved section.
+      section: submitter?.section || attempt.section || attempt.section_name || matchingRecord?.section || ''
+    });
   });
 
   // Deduplicate by student and submission, prioritizing attempts that contain answers
   const attemptsByKey = new Map();
-  pool.forEach(a => {
+  normalizedPool.forEach(a => {
     if (!a) return;
     const studentKey = String(a.student_id || a.studentId || a.student_name || a.studentName || '').toLowerCase().trim();
-    const idKey = a.id || `${studentKey}_${a.submitted_at || a.created_at || a.score}`;
+    const submittedAt = a.submitted_at || a.created_at || '';
+    const idKey = submittedAt
+      ? `${String(a.quiz_id || quizId).toLowerCase()}_${studentKey}_${submittedAt}_${a.score ?? ''}`
+      : (a.id || `${studentKey}_${a.score}`);
     const existing = attemptsByKey.get(idKey);
     if (!existing) {
       attemptsByKey.set(idKey, a);
     } else {
       const existingHasAnswers = Array.isArray(existing.answers) && existing.answers.length > 0;
       const newHasAnswers = Array.isArray(a.answers) && a.answers.length > 0;
+      const mergedName = a.student_name || existing.student_name || '';
       if (!existingHasAnswers && newHasAnswers) {
-        attemptsByKey.set(idKey, Object.assign({}, existing, a));
-      } else if (!existing.section && a.section) {
-        existing.section = a.section;
+        attemptsByKey.set(idKey, Object.assign({}, existing, a, { student_name: mergedName }));
+      } else {
+        if (!existing.student_name && mergedName) existing.student_name = mergedName;
+        if (!existing.section && a.section) {
+          existing.section = a.section;
+        }
       }
     }
   });
@@ -113,7 +165,57 @@ function getAttemptsForAnalysis(quizId, secFilter = '') {
   let uniqueAttempts = Array.from(attemptsByKey.values());
 
   // Item analysis counts real student submissions only; previews and teacher test runs are excluded.
-  uniqueAttempts = uniqueAttempts.filter(a => !isPreviewOrTeacherAttempt(a));
+  uniqueAttempts = uniqueAttempts.filter(a => {
+    if (isPreviewOrTeacherAttempt(a) || isGenericAttemptName(a.student_name || a.studentName || a.name)) return false;
+    const sid = String(a.student_id || a.studentId || a.user_id || '').trim().toLowerCase();
+    const users = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers)) ? registeredUsers : [];
+    const user = users.find(candidate => [candidate.id, candidate.dbId, candidate.school_id].filter(Boolean).some(id => String(id).trim().toLowerCase() === sid));
+    return String(user?.role || '').toLowerCase() === 'student';
+  });
+
+  // quiz_attempts and class_records contain the same submission, and a student
+  // can also have multiple attempts. Student Submissions shows one latest row
+  // per student for the selected quiz.
+  const latestAttemptByStudent = new Map();
+  uniqueAttempts.forEach(attempt => {
+    const sid = String(attempt.student_id || attempt.studentId || attempt.user_id || '').trim().toLowerCase();
+    const user = userList.find(candidate => [candidate.id, candidate.dbId, candidate.school_id]
+      .filter(Boolean).some(id => String(id).trim().toLowerCase() === sid));
+    const canonicalStudentId = user ? String(user.dbId || user.id || user.school_id).trim().toLowerCase() : sid;
+    const key = canonicalStudentId || String(attempt.student_name || attempt.studentName || '').trim().toLowerCase();
+    if (!key) return;
+    const existing = latestAttemptByStudent.get(key);
+    const attemptTime = Date.parse(attempt.submitted_at || attempt.created_at || '') || 0;
+    const existingTime = existing ? (Date.parse(existing.submitted_at || existing.created_at || '') || 0) : -1;
+    if (!existing || attemptTime > existingTime || (attemptTime === existingTime &&
+      (!existing.student_name && attempt.student_name ||
+       (!(Array.isArray(existing.answers) && existing.answers.length) && Array.isArray(attempt.answers) && attempt.answers.length)))) {
+      const mergedName = attempt.student_name || existing?.student_name || '';
+      latestAttemptByStudent.set(key, Object.assign({}, existing || {}, attempt, { student_name: mergedName }));
+    }
+  });
+  uniqueAttempts = Array.from(latestAttemptByStudent.values()).sort((a, b) =>
+    (Date.parse(b.submitted_at || b.created_at || '') || 0) - (Date.parse(a.submitted_at || a.created_at || '') || 0)
+  );
+
+  // TEACHER ACCESS CONTROL:
+  // If viewing as a teacher, only display student submissions for sections assigned to this teacher!
+  // If the teacher has no assigned sections, they cannot view submissions (prevents unauthorized grade viewing).
+  if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+    const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
+    const teacherSections = prof.section
+      ? prof.section.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      : [];
+
+    if (teacherSections.length === 0) {
+      return [];
+    }
+
+    uniqueAttempts = uniqueAttempts.filter(a => {
+      const sec = (a.section || '').trim().toLowerCase();
+      return sec && teacherSections.includes(sec);
+    });
+  }
 
   // Filter by section if specified
   if (secFilter) {
@@ -311,13 +413,20 @@ async function loadAttemptsForAnalysis(quizId, force = false) {
   analysisFetchInFlightFor = quizId;
   try {
     if (typeof db !== 'undefined' && db) {
-      const { data, error } = await db.from('quiz_attempts').select('*').eq('quiz_id', quizId).order('submitted_at', { ascending: false });
-      if (error) {
-        console.warn('Failed to load attempts for analysis:', error.message);
-        if (!analysisAttemptsCache[quizId]) analysisAttemptsCache[quizId] = [];
-      } else {
-        analysisAttemptsCache[quizId] = data || [];
+      if ((typeof registeredUsers === 'undefined' || !registeredUsers || !registeredUsers.length) && typeof loadUsersFromDB === 'function') {
+        try { await loadUsersFromDB(); } catch(_) {}
       }
+      const [{ data, error }, { data: records }] = await Promise.all([
+        db.from('quiz_attempts').select('*').eq('quiz_id', quizId).order('submitted_at', { ascending: false }),
+        db.from('class_records').select('*').eq('quiz_id', quizId).order('submitted_at', { ascending: false })
+      ]);
+      if (error) console.warn('Failed to load attempts for analysis:', error.message);
+      const currentRecords = Array.isArray(records) ? records : [];
+      if (typeof classRecAttemptsCache !== 'undefined') {
+        const otherQuizRecords = classRecAttemptsCache.filter(record => String(record.quiz_id || '') !== String(quizId));
+        classRecAttemptsCache = [...otherQuizRecords, ...currentRecords];
+      }
+      analysisAttemptsCache[quizId] = [...(data || []), ...currentRecords];
     }
   } catch (e) {
     console.warn('Failed to load attempts for analysis:', e.message);
@@ -332,4 +441,5 @@ async function loadAttemptsForAnalysis(quizId, force = false) {
     }
   }
 }
+window.ensureAnalysisAttemptsRealtime = ensureAnalysisAttemptsRealtime;
 
