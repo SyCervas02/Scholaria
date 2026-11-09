@@ -1364,6 +1364,141 @@ body.has-anc-banner {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   INSTITUTIONAL CENSUS — SINGLE-PAGE PRINT FIT
+   Scoped by #academicReportModal so these beat the general report
+   print rules (and apply in both the body-class and :has() paths).
+   Compact type/spacing lets a typical census fit one A4 landscape
+   sheet; unusually large rosters still flow to a second page.
+   ═══════════════════════════════════════════════════════════════ */
+@media print {
+  #academicReportModal .institutional-census-report {
+    font-size: 9px !important;
+    line-height: 1.3 !important;
+    zoom: 0.94;
+    width: 106.383% !important; /* 100 / 0.94 keeps the sheet full page width after zoom */
+  }
+
+  #academicReportModal .institutional-census-report .report-school-header {
+    gap: 10px !important;
+    padding-bottom: 5px !important;
+    margin-bottom: 5px !important;
+    border-bottom-width: 2px !important;
+  }
+  #academicReportModal .institutional-census-report .report-logo-circle {
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 9px !important;
+  }
+  #academicReportModal .institutional-census-report .report-logo-circle svg {
+    width: 19px !important;
+    height: 19px !important;
+  }
+  #academicReportModal .institutional-census-report .report-school-details h2 {
+    font-size: 13.5px !important;
+    margin: 0 0 1px 0 !important;
+  }
+  #academicReportModal .institutional-census-report .report-school-details p {
+    font-size: 8.5px !important;
+    margin: 0 0 3px 0 !important;
+  }
+  #academicReportModal .institutional-census-report .report-doc-badge {
+    font-size: 7.5px !important;
+    padding: 1.5px 6px !important;
+    letter-spacing: .05em !important;
+  }
+
+  #academicReportModal .institutional-census-report .report-info-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 2px 14px !important;
+    padding: 4px 10px !important;
+    margin-bottom: 5px !important;
+    font-size: 8.5px !important;
+    border-radius: 5px !important;
+  }
+
+  #academicReportModal .institutional-census-report .report-kpi-row {
+    gap: 7px !important;
+    margin-bottom: 5px !important;
+  }
+  #academicReportModal .institutional-census-report .report-kpi-card {
+    padding: 3px 5px !important;
+    border-radius: 5px !important;
+    border-width: 1px !important;
+  }
+  #academicReportModal .institutional-census-report .report-kpi-card .kpi-label { font-size: 7px !important; }
+  #academicReportModal .institutional-census-report .report-kpi-card .kpi-value { font-size: 12px !important; margin: 1px 0 !important; }
+  #academicReportModal .institutional-census-report .report-kpi-card .kpi-sub { font-size: 6.8px !important; }
+
+  #academicReportModal .institutional-census-report .census-part-heading {
+    margin: 4px 0 2px !important;
+    padding-bottom: 1.5px !important;
+    border-bottom-width: 1px !important;
+    gap: 10px !important;
+  }
+  #academicReportModal .institutional-census-report .census-part-label {
+    font-size: 9px !important;
+    letter-spacing: .04em !important;
+  }
+  #academicReportModal .institutional-census-report .census-part-note { font-size: 7.5px !important; }
+
+  #academicReportModal .institutional-census-report .report-table-container {
+    margin-bottom: 4px !important;
+    border-radius: 5px !important;
+  }
+  #academicReportModal .institutional-census-report .report-table { font-size: 8px !important; }
+  #academicReportModal .institutional-census-report .report-table th {
+    padding: 2px 4px !important;
+    font-size: 7.5px !important;
+    border-width: .5px !important;
+  }
+  #academicReportModal .institutional-census-report .report-table td {
+    padding: 1.5px 4px !important;
+    font-size: 8px !important;
+    border-width: .5px !important;
+  }
+  #academicReportModal .institutional-census-report .report-table .report-status-pill {
+    font-size: 6.5px !important;
+    padding: 1px 4px !important;
+  }
+
+  #academicReportModal .institutional-census-report .census-breakdown-grid {
+    gap: 12px !important;
+    margin-bottom: 0 !important;
+  }
+  #academicReportModal .institutional-census-report .census-breakdown-grid .report-table-container { margin-bottom: 0 !important; }
+  #academicReportModal .institutional-census-report .census-personnel-note {
+    margin-top: 4px !important;
+    padding: 4px 8px !important;
+    font-size: 8px !important;
+    line-height: 1.35 !important;
+    border-radius: 5px !important;
+  }
+
+  #academicReportModal .institutional-census-report .census-certification {
+    margin-top: 4px !important;
+    padding: 5px 9px !important;
+    font-size: 8px !important;
+    line-height: 1.35 !important;
+    border-radius: 5px !important;
+  }
+
+  #academicReportModal .institutional-census-report .report-signatures-grid {
+    margin-top: 6px !important;
+    padding-top: 3px !important;
+    gap: 16px !important;
+  }
+  #academicReportModal .institutional-census-report .signature-line { margin-bottom: 2px !important; }
+  #academicReportModal .institutional-census-report .signature-name { font-size: 9px !important; }
+  #academicReportModal .institutional-census-report .signature-title { font-size: 7.5px !important; }
+
+  #academicReportModal .institutional-census-report .report-document-footer {
+    margin-top: 5px !important;
+    padding-top: 4px !important;
+    font-size: 7.5px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    CLEAN & COMPACT MODAL BUTTON SIZING OVERRIDES
    ═══════════════════════════════════════════════════════════════ */
 
