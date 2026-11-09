@@ -129,6 +129,12 @@ function goToQuizStep(targetStep) {
 }
 
 function validateQuizStep(step) {
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedSections = getTeacherAllowedSections();
+  if (isTeacher && allowedSections.length === 0) {
+    showToast('You cannot create quizzes because you have no assigned class sections.', 'warning');
+    return false;
+  }
   if (step === 1) {
     if (!quizGen.type) {
       quizGen.type = 'standard';
@@ -136,6 +142,9 @@ function validateQuizStep(step) {
     return true;
   }
   if (step === 2) {
+    if (isTeacher && quizGen.sections.size === 0 && allowedSections.length > 0) {
+      allowedSections.forEach(s => quizGen.sections.add(s));
+    }
     if (!quizGen.title || !quizGen.title.trim()) {
       showToast('Please enter a Quiz Title to proceed', 'warning');
       const el = document.getElementById('quizGenTitleInput');
@@ -340,17 +349,34 @@ function getTeacherAllowedGradeLevels() {
 
 function getTeacherAllowedSections() {
   const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
-  if (isTeacher && CURRENT_PROFILE.section) {
-    const sections = CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean);
-    if (sections.length > 0) return sections;
+  if (isTeacher) {
+    if (!CURRENT_PROFILE.section) return [];
+    const sections = CURRENT_PROFILE.section.split(',')
+      .map(s => s.trim())
+      .filter(s => Boolean(s) && (typeof isSectionArchived === 'function' ? !isSectionArchived(s) : true));
+    return sections;
   }
-  return typeof SECTIONS !== 'undefined' ? SECTIONS : ['Section A', 'Section B', 'Section C', 'Section D'];
+  const allSecs = typeof managedSections !== 'undefined'
+    ? managedSections.filter(s => !s.isArchived).map(s => s.name)
+    : (typeof SECTIONS !== 'undefined' ? SECTIONS : []);
+  return allSecs.filter(s => (typeof isSectionArchived === 'function' ? !isSectionArchived(s) : true));
 }
 
 function openQuizModal() {
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedSections = getTeacherAllowedSections();
   const container = document.getElementById('quizMakerContainer');
   const modal = document.getElementById('quizModal');
-  
+
+  if (isTeacher && allowedSections.length === 0) {
+    if (!container && !modal) {
+      if (typeof showToast === 'function') {
+        showToast('You cannot create quizzes because you have no assigned class sections. Please contact an administrator.', 'warning');
+      }
+      return;
+    }
+  }
+
   if (!container && !modal) {
     window.location.href = 'quiz-maker.html';
     return;
@@ -2467,11 +2493,31 @@ function renderQuizModal() {
     return;
   }
 
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedSections = getTeacherAllowedSections();
+  if (isTeacher && allowedSections.length === 0) {
+    body.innerHTML = `
+      <div style="max-width:540px;margin:50px auto;background:#fff;border-radius:20px;padding:44px 32px;text-align:center;box-shadow:0 12px 36px rgba(15,23,42,0.08);border:1px solid #e2e8f0;">
+        <div style="width:64px;height:64px;border-radius:18px;background:#fef3c7;color:#d97706;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <h3 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 8px 0;">Quiz Creation Restricted</h3>
+        <p style="font-size:13.5px;color:#64748b;line-height:1.6;margin:0 0 24px 0;">
+          You currently have <strong>no assigned active class sections</strong>. Quizzes and interactive games cannot be created or distributed until an administrator assigns you to a class section in Section Management.
+        </p>
+        <a href="dashboard.html" style="display:inline-flex;align-items:center;gap:8px;padding:11px 22px;background:#0284c7;color:#fff;border-radius:10px;font-weight:700;font-size:13.5px;text-decoration:none;box-shadow:0 4px 14px rgba(2,132,199,0.3);">
+          &larr; Return to Dashboard
+        </a>
+      </div>
+    `;
+    if (foot) foot.innerHTML = '';
+    return;
+  }
+
   const isTeacherLocked = CURRENT_PROFILE && CURRENT_PROFILE.role === 'teacher' && CURRENT_PROFILE.section;
   const teacherStrands = (CURRENT_PROFILE && CURRENT_PROFILE.strand)
     ? CURRENT_PROFILE.strand.split(',').map(s => s.trim()).filter(Boolean)
     : [];
-  const isTeacher = CURRENT_PROFILE && CURRENT_PROFILE.role === 'teacher';
 
   const formatNames = { mc: 'Multiple Choice', tf: 'True / False', id: 'Identification', match: 'Matching Type' };
   const selectedFmtList = Array.from(quizGen.formats);
