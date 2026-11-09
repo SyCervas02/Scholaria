@@ -1140,10 +1140,11 @@ app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
   }
 
   const relativeUrl = `/uploads/chat/${req.file.filename}`;
-  let base64Data = null;
+  const supabaseBaseUrl = process.env.SUPABASE_URL || 'https://qxpsbewbgdwkermxeeso.supabase.co';
+  const cdnUrl = `${supabaseBaseUrl}/storage/v1/object/public/chat-attachments/${encodeURIComponent(req.file.filename)}`;
+
   try {
     const fileBuf = fs.readFileSync(req.file.path);
-    base64Data = `data:${req.file.mimetype};base64,${fileBuf.toString('base64')}`;
 
     // Upload immediately to permanent Supabase Storage 'chat-attachments' bucket
     if (supabaseAdmin && supabaseAdmin.storage) {
@@ -1164,11 +1165,11 @@ app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
   }
 
   res.json({
-    url: relativeUrl,
+    url: cdnUrl,
+    fallbackUrl: relativeUrl,
     name: req.file.originalname,
     size: req.file.size,
-    mime: req.file.mimetype,
-    data: base64Data
+    mime: req.file.mimetype
   });
 });
 
