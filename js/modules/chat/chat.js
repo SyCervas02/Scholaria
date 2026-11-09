@@ -464,10 +464,24 @@ window._chatAttachmentMap = window._chatAttachmentMap || {};
 
 function getChatAttachmentUrl(attach) {
   if (!attach) return '';
-  if (attach.data && typeof attach.data === 'string' && attach.data.startsWith('data:')) return attach.data;
-  if (!attach.url) return attach.data || '';
-  if (/^(https?:|data:|blob:)/i.test(attach.url)) return attach.url;
+  // 1. Direct absolute URL (e.g. Supabase Storage CDN URL or full https://)
+  if (/^https?:\/\//i.test(attach.url)) return attach.url;
 
+  // 2. Derive filename from attach.url or attach.name
+  let rawFilename = '';
+  if (attach.url && typeof attach.url === 'string') {
+    rawFilename = attach.url.split('/').pop() || '';
+  }
+  if (!rawFilename && attach.name) {
+    rawFilename = attach.name;
+  }
+
+  // 3. If filename has timestamp prefix (e.g. 17942..._photo.jpg), point directly to Supabase Storage CDN!
+  if (rawFilename && rawFilename.includes('-')) {
+    return `https://qxpsbewbgdwkermxeeso.supabase.co/storage/v1/object/public/chat-attachments/${encodeURIComponent(rawFilename)}`;
+  }
+
+  // 4. Fallback to API_BASE or window.location.origin
   let base = window.API_BASE;
   if (!base || base === 'null' || base.startsWith('file:')) {
     base = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file:'))
@@ -479,22 +493,42 @@ function getChatAttachmentUrl(attach) {
     }
   }
 
-  const cleanUrl = attach.url.startsWith('/') ? attach.url : `/${attach.url}`;
+  const cleanUrl = attach.url && attach.url.startsWith('/') ? attach.url : `/${attach.url || rawFilename}`;
   return `${base.replace(/\/+$/, '')}${cleanUrl}`;
 }
 
 function handleChatBubbleImgError(imgEl, msgId) {
   if (!imgEl) return;
   const entry = window._chatAttachmentMap?.[msgId];
-  if (entry?.attach?.data && imgEl.src !== entry.attach.data) {
-    imgEl.src = entry.attach.data;
-    return;
+  const attach = entry?.attach;
+  if (!attach) return;
+
+  // 1. Try server relative endpoint if current src was Supabase CDN
+  if (!imgEl._triedServerFallback) {
+    imgEl._triedServerFallback = true;
+    let base = window.API_BASE || window.location.origin;
+    const filename = attach.url ? attach.url.split('/').pop() : attach.name;
+    if (filename) {
+      imgEl.src = `${base.replace(/\/+$/, '')}/uploads/chat/${encodeURIComponent(filename)}`;
+      return;
+    }
   }
+
+  // 2. Try Supabase Storage CDN if current src was server endpoint
+  if (!imgEl._triedCdnFallback) {
+    imgEl._triedCdnFallback = true;
+    const filename = attach.url ? attach.url.split('/').pop() : attach.name;
+    if (filename) {
+      imgEl.src = `https://qxpsbewbgdwkermxeeso.supabase.co/storage/v1/object/public/chat-attachments/${encodeURIComponent(filename)}`;
+      return;
+    }
+  }
+
+  // 3. Fallback: hide the broken image element, but keep the nice file overview chip visible!
   const card = imgEl.closest('.chat-attachment-card');
   if (card) {
     card.classList.add('image-fallback-active');
   }
-  imgEl.style.display = 'none';
   const parent = imgEl.parentElement;
   if (parent && parent.classList.contains('chat-img-wrap')) {
     parent.style.display = 'none';
@@ -839,7 +873,7 @@ async function handleChatFileUpload(event) {
   }
 
   const messageDraft = document.getElementById('cwInput')?.value || '';
-  showToast(`Preparing ${file.name}…`, 'info');
+  showToast(`Uploading ${file.name} to cloud storage…`, 'info');
 
   let localPreviewUrl = null;
   if (file.type && file.type.startsWith('image/')) {
@@ -847,16 +881,6 @@ async function handleChatFileUpload(event) {
       localPreviewUrl = URL.createObjectURL(file);
     } catch (_) {}
   }
-
-  // Read file as Base64 data URI so it is permanently stored in the Supabase database
-  const readFileAsDataUrl = (fileObj) => new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target.result);
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(fileObj);
-  });
-
-  const base64Data = await readFileAsDataUrl(file);
 
   let serverBase = window.API_BASE;
   if (!serverBase || serverBase === 'null' || (typeof serverBase === 'string' && serverBase.startsWith('file:'))) {
@@ -875,8 +899,10 @@ async function handleChatFileUpload(event) {
     }
   } catch (_) {}
 
-  let serverUrl = '';
+  let cloudUrl = '';
+  let fallbackUrl = '';
 
+  // 1. Primary: Upload via server endpoint (stores on disk & mirrors to Supabase Storage)
   if (session && session.access_token) {
     try {
       const formData = new FormData();
@@ -892,30 +918,56 @@ async function handleChatFileUpload(event) {
 
       if (upRes.ok) {
         const upData = await upRes.json();
-        serverUrl = upData.url || '';
+        cloudUrl = upData.url || '';
+        fallbackUrl = upData.fallbackUrl || '';
       }
     } catch (upErr) {
-      console.warn('Chat server upload background sync note:', upErr);
+      console.warn('Chat server upload attempt note:', upErr);
     }
   }
 
-  // Persistent database attachment payload — data field ensures both sender and receiver can view it
-  const attachmentPayload = JSON.stringify({
+  // 2. Direct Supabase Storage client-side upload fallback if server upload didn't return cloudUrl
+  if (!cloudUrl && window.db && window.db.storage) {
+    try {
+      const cleanSafeName = `${Date.now()}-${Math.random().toString(16).slice(2, 10)}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const { data: stData, error: stErr } = await window.db.storage
+        .from('chat-attachments')
+        .upload(cleanSafeName, file, {
+          contentType: file.type || 'application/octet-stream',
+          upsert: true
+        });
+
+      if (!stErr && stData) {
+        cloudUrl = `https://qxpsbewbgdwkermxeeso.supabase.co/storage/v1/object/public/chat-attachments/${encodeURIComponent(cleanSafeName)}`;
+        fallbackUrl = `/uploads/chat/${encodeURIComponent(cleanSafeName)}`;
+      }
+    } catch (stClientErr) {
+      console.warn('Direct client Supabase Storage upload note:', stClientErr);
+    }
+  }
+
+  if (!cloudUrl) {
+    showToast('Failed to upload file to cloud storage. Please check your connection and try again.', 'error');
+    event.target.value = '';
+    return;
+  }
+
+  event.target.value = '';
+  // Lightweight metadata payload — NEVER put heavy base64 strings in the database payload!
+  pendingChatAttachment = {
     type: 'attachment',
     name: file.name,
     size: file.size,
     mime: file.type || 'application/octet-stream',
-    url: serverUrl,
-    data: base64Data || '',
-    previewUrl: localPreviewUrl || base64Data || ''
-  });
+    url: cloudUrl,
+    fallbackUrl: fallbackUrl || '',
+    previewUrl: localPreviewUrl || cloudUrl // Only used in sender draft input box
+  };
 
-  event.target.value = '';
-  pendingChatAttachment = JSON.parse(attachmentPayload);
   renderInputArea();
   const draftInput = document.getElementById('cwInput');
   if (draftInput) draftInput.value = messageDraft;
-  showToast('Attachment ready. Click preview to maximize or Send to send.', 'success');
+  showToast('Image uploaded & ready to send.', 'success');
 }
 
 // Profanity & severe content sanitizer for instant optimistic client rendering
@@ -1051,8 +1103,17 @@ async function sendChatMsg() {
   pendingChatAttachment = null;
   input.value = '';
   if (attachment) {
-    if (text) attachment.caption = text;
-    await sendChatRawMessage(JSON.stringify(attachment));
+    // Clean metadata payload for database storage: NO BASE64!
+    const payloadToSend = {
+      type: 'attachment',
+      name: attachment.name,
+      size: attachment.size,
+      mime: attachment.mime,
+      url: attachment.url,
+      fallbackUrl: attachment.fallbackUrl || '',
+      caption: text || ''
+    };
+    await sendChatRawMessage(JSON.stringify(payloadToSend));
   } else {
     await sendChatRawMessage(text);
   }
