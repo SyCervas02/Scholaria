@@ -51,8 +51,18 @@ function triggerPrintReport() {
     if (sheet && prevSheetZoom) {
       sheet.style.zoom = prevSheetZoom;
     }
+    if (activeReportType === 'student' && typeof fitStudentGradeSlipPreview === 'function') {
+      studentGradeSlipResizeHandler = fitStudentGradeSlipPreview;
+      window.addEventListener('resize', studentGradeSlipResizeHandler);
+      fitStudentGradeSlipPreview();
+    }
     window.removeEventListener('afterprint', cleanupPrintState);
   };
+
+  // Disarm modal window resize observer while print layout settles
+  if (studentGradeSlipResizeHandler) {
+    window.removeEventListener('resize', studentGradeSlipResizeHandler);
+  }
 
   document.body.classList.add('printing-academic-report');
   if (activeReportType === 'section') {
@@ -66,6 +76,9 @@ function triggerPrintReport() {
     const studentObj = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).find(u => u.dbId === activeReportStudent || u.id === activeReportStudent || u.name === activeReportStudent);
     const sName = studentObj?.name || activeReportStudent || 'Student';
     document.title = `Grade_Slip_${sName.replace(/\s+/g, '_')}`;
+    sectionPrintPageStyle = document.createElement('style');
+    sectionPrintPageStyle.textContent = '@page { size: A4 portrait; margin: 8mm; }';
+    document.head.appendChild(sectionPrintPageStyle);
   } else if (activeReportType === 'census') {
     document.title = 'Institutional_Census_SY2026_2027';
     sectionPrintPageStyle = document.createElement('style');
