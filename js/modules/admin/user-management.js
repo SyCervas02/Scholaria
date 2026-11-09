@@ -19,10 +19,10 @@ function saveUserSectionToStorage(userKey, sectionVal) {
   try {
     if (!userKey) return;
     const map = getUserSectionsMap();
-    if (sectionVal) {
-      map[userKey] = sectionVal;
+    if (sectionVal && String(sectionVal).trim()) {
+      map[userKey] = String(sectionVal).trim();
     } else {
-      map[userKey] = '';
+      delete map[userKey];
     }
     localStorage.setItem(USER_SECTIONS_STORAGE_KEY, JSON.stringify(map));
   } catch (_) {}
@@ -33,9 +33,18 @@ async function persistUserSectionChange(userOrId, sectionStr) {
   let schoolId = null;
   if (typeof userOrId === 'object' && userOrId !== null) {
     userId = userOrId.dbId || userOrId.id;
-    schoolId = userOrId.id || userOrId.school_id;
+    schoolId = userOrId.school_id || userOrId.id;
   } else {
-    userId = userOrId;
+    const found = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers))
+      ? registeredUsers.find(u => u.dbId === userOrId || u.id === userOrId || u.school_id === userOrId)
+      : null;
+    if (found) {
+      userId = found.dbId || found.id;
+      schoolId = found.school_id || found.id;
+    } else {
+      userId = userOrId;
+      schoolId = userOrId;
+    }
   }
 
   // 1. Immediately cache in localStorage for instant reload resilience (both ID and School ID)
@@ -1550,12 +1559,12 @@ function openAssignTeacherSectionsModal(teacherKey) {
         const isCompatible = isTeacherCompatibleWithSection(teacher, s);
         const isChecked = isTeacherAssignedToSection(teacher, s.name);
         return `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #f1f5f9;${!isCompatible ? 'background:#f8fafc;opacity:0.65;' : 'cursor:pointer;'}"
-               ${isCompatible ? `onclick="document.getElementById('ts_sec_${escHtml(s.id)}').click()"` : ''}>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #f1f5f9;${(!isCompatible && !isChecked) ? 'background:#f8fafc;opacity:0.65;' : 'cursor:pointer;'}"
+               ${(isCompatible || isChecked) ? `onclick="document.getElementById('ts_sec_${escHtml(s.id)}').click()"` : ''}>
             <div style="display:flex;align-items:center;gap:12px;">
               <input type="checkbox" id="ts_sec_${escHtml(s.id)}" value="${escHtml(s.name)}"
                      ${isChecked ? 'checked' : ''}
-                     ${!isCompatible ? 'disabled' : ''}
+                     ${(!isCompatible && !isChecked) ? 'disabled' : ''}
                      onclick="event.stopPropagation()">
               <div>
                 <div style="font-size:13.5px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px;">
@@ -1573,11 +1582,15 @@ function openAssignTeacherSectionsModal(teacherKey) {
                 isChecked
                   ? `<span class="sec-badge" style="background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;font-size:11px;font-weight:600;">✓ Assigned</span>`
                   : `<span style="font-size:11px;color:#0284c7;font-weight:600;">Eligible</span>`
-              ) : `
-                <span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:10.5px;font-weight:700;" title="Section strand (${s.strand}) differs from teacher specialization (${teacherStrands.join(', ')})">
-                  Strand Mismatch (${escHtml(s.strand || 'General')})
-                </span>
-              `}
+              ) : (
+                isChecked
+                  ? `<span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:10.5px;font-weight:700;" title="Assigned but incompatible with teacher strand specialization. Uncheck to unassign.">
+                      Incompatible (Click to Unassign)
+                    </span>`
+                  : `<span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:10.5px;font-weight:700;" title="Section strand (${s.strand}) differs from teacher specialization (${teacherStrands.join(', ')})">
+                      Strand Mismatch (${escHtml(s.strand || 'General')})
+                    </span>`
+              )}
             </div>
           </div>
         `;
@@ -1610,13 +1623,7 @@ async function clearAllTeacherSections(teacherKey) {
   const teacher = registeredUsers.find(u => u.dbId === teacherKey || u.id === teacherKey);
   if (!teacher) return;
   teacher.section = null;
-  if (teacher.dbId && typeof db !== 'undefined' && db?.from) {
-    try {
-      await db.from('users').update({ section: null }).eq('id', teacher.dbId);
-    } catch (e) {
-      console.warn('DB update failed:', e);
-    }
-  }
+  await persistUserSectionChange(teacher, null);
   if (typeof showToast === 'function') showToast(`Unassigned all sections for ${teacher.name}`, 'info');
   closeTeacherSectionModal();
   refreshSectionAndUserViews();
@@ -1629,7 +1636,7 @@ async function saveTeacherSectionAssignments(teacherKey) {
   const modal = document.getElementById('teacherSectionModal');
   if (!modal) return;
 
-  const checkedBoxes = modal.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)');
+  const checkedBoxes = modal.querySelectorAll('input[type="checkbox"]:checked');
   const selectedSections = Array.from(checkedBoxes).map(cb => cb.value.trim()).filter(Boolean);
 
   const newSectionStr = selectedSections.length > 0 ? selectedSections.join(', ') : null;
@@ -1872,19 +1879,27 @@ function openManageSectionModal(secName) {
           </tr>
         </thead>
         <tbody>
-          ${assignedTeachers.length > 0 ? assignedTeachers.map(t => `
+          ${assignedTeachers.length > 0 ? assignedTeachers.map(t => {
+            const curHandled = (t.section || '').split(',').map(s => s.trim()).filter(Boolean);
+            return `
             <tr>
               <td><strong>${escHtml(t.name)}</strong></td>
               <td><code style="font-size:12px;background:#fffbeb;padding:2px 6px;border-radius:4px;color:#d97706;">${escHtml(t.id)}</code></td>
               <td><span class="role-tag teacher">${escHtml(t.subjects || t.strand || 'General')}</span></td>
-              <td><span class="sec-badge grade" style="font-size:11px;">${escHtml(t.section || secName)}</span></td>
+              <td>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;max-width:260px;align-items:center;"
+                     onclick="openAssignTeacherSectionsModal('${escHtml(t.dbId || t.id)}')"
+                     title="Click to edit / reassign teacher sections">
+                  ${curHandled.length > 0 ? curHandled.map(s => `<span class="sec-badge grade" style="font-size:11px;cursor:pointer;">${escHtml(s)}</span>`).join('') : '<span style="font-size:11px;color:#94a3b8;">None</span>'}
+                </div>
+              </td>
               <td style="text-align:right;">
                 <button class="action-link" style="color:#dc2626;background:none;border:none;cursor:pointer;font-family:inherit;font-weight:600;" onclick="removeTeacherFromSection('${t.dbId || t.id}', '${escHtml(secName)}')">
                   Remove
                 </button>
               </td>
             </tr>
-          `).join('') : `
+          `;}).join('') : `
             <tr>
               <td colspan="5" style="text-align:center;padding:18px;color:var(--text-muted);font-size:13px;">
                 No subject teachers assigned to this section yet.<br>
