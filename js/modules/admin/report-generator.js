@@ -709,9 +709,9 @@ function openInstitutionalCensusReportModal() {
   const pctOf = n => totalStudents > 0 ? Math.round((n / totalStudents) * 100) : 0;
 
   const partHeading = (label, note) => `
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1.5px solid #cbd5e1;break-inside:avoid;">
-      <span style="font-size:12px;font-weight:800;letter-spacing:.06em;color:#1e293b;text-transform:uppercase;">${label}</span>
-      ${note ? `<span style="font-size:10.5px;color:#64748b;">${note}</span>` : ''}
+    <div class="census-part-heading" style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1.5px solid #cbd5e1;break-inside:avoid;">
+      <span class="census-part-label" style="font-size:12px;font-weight:800;letter-spacing:.06em;color:#1e293b;text-transform:uppercase;">${label}</span>
+      ${note ? `<span class="census-part-note" style="font-size:10.5px;color:#64748b;">${note}</span>` : ''}
     </div>`;
 
   const shareBar = (count, color) => `
@@ -855,7 +855,7 @@ function openInstitutionalCensusReportModal() {
       ` : ''}
 
       <!-- DEMOGRAPHIC BREAKDOWN: STRAND & GRADE LEVEL -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;break-inside:avoid;">
+      <div class="census-breakdown-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;break-inside:avoid;">
         <div>
           ${partHeading('Census by Academic Strand', 'S.Y. 2026–2027')}
           <div class="report-table-container" style="margin-bottom:0;">
@@ -914,14 +914,14 @@ function openInstitutionalCensusReportModal() {
               </tbody>
             </table>
           </div>
-          <div style="margin-top:12px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:11px;color:#475569;line-height:1.5;">
+          <div class="census-personnel-note" style="margin-top:12px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:11px;color:#475569;line-height:1.5;">
             <strong style="color:#1e293b;">Personnel complement:</strong> ${d.teachers.length} active faculty members and ${d.admins.length} administrative staff serving ${totalStudents} enrollees across ${d.activeSectionCount} active sections.
           </div>
         </div>
       </div>
 
-      <!-- PART II: SECTION CAPACITY REGISTER (own page) -->
-      <div style="page-break-before:always;break-before:page;"></div>
+      <!-- PART II: SECTION CAPACITY REGISTER (flows on the same sheet; compact
+           print styling keeps a typical census to a single A4 landscape page) -->
       ${partHeading('Part II — Section Capacity & Utilization Register', `Standard capacity: 45 seats per section`)}
       <div class="report-table-container">
         <table class="report-table">
@@ -1012,7 +1012,7 @@ function openInstitutionalCensusReportModal() {
       </div>
 
       <!-- CERTIFICATION -->
-      <div style="margin-top:6px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:11px;line-height:1.55;color:#475569;break-inside:avoid;">
+      <div class="census-certification" style="margin-top:6px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:11px;line-height:1.55;color:#475569;break-inside:avoid;">
         <strong style="color:#1e293b;">Certification.</strong> This institutional census certifies that the enrollment, faculty, and section capacity figures stated above are drawn from the official Scholaria academic records of Haven of Wisdom Academy, Inc. as of ${dateGenerated}, and reflect the active roster for S.Y. 2026–2027. Archived sections are excluded from active headcounts and listed separately for audit purposes.
       </div>
 
