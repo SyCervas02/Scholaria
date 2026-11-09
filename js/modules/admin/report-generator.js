@@ -18,6 +18,7 @@ function fitStudentGradeSlipPreview() {
 }
 
 function closeAcademicReportModal() {
+  document.body.classList.remove('printing-academic-report');
   const modal = document.getElementById('academicReportModal');
   if (modal) modal.classList.remove('active', 'student-grade-slip-fit');
   if (studentGradeSlipResizeHandler) {
@@ -30,17 +31,16 @@ function triggerPrintReport() {
   const prevTitle = document.title;
   let sectionPrintPageStyle = null;
   let cleaned = false;
-  const printMediaQuery = window.matchMedia('print');
   const cleanupPrintState = () => {
     if (cleaned) return;
     cleaned = true;
-    document.body.classList.remove('printing-academic-report');
-    if (sectionPrintPageStyle) { sectionPrintPageStyle.remove(); sectionPrintPageStyle = null; }
-    document.title = prevTitle;
-    window.removeEventListener('afterprint', cleanupPrintState);
-    printMediaQuery.removeEventListener('change', onPrintMediaChange);
+    setTimeout(() => {
+      document.body.classList.remove('printing-academic-report');
+      if (sectionPrintPageStyle) { sectionPrintPageStyle.remove(); sectionPrintPageStyle = null; }
+      document.title = prevTitle;
+      window.removeEventListener('afterprint', cleanupPrintState);
+    }, 1200);
   };
-  const onPrintMediaChange = (e) => { if (!e.matches) cleanupPrintState(); };
 
   document.body.classList.add('printing-academic-report');
   if (activeReportType === 'section') {
@@ -65,10 +65,8 @@ function triggerPrintReport() {
   if (body) body.scrollTop = 0;
   window.scrollTo(0, 0);
 
-  // Clean up only when printing actually finishes — never on a blind timer, which
-  // can strip the print state while Chromium's preview is still rendering (blank page).
+  // Clean up safely after print completes without stripping state during Edge preview generation
   window.addEventListener('afterprint', cleanupPrintState);
-  printMediaQuery.addEventListener('change', onPrintMediaChange);
 
   // Wait for the report DOM and print styles to settle before Chromium captures it.
   requestAnimationFrame(() => {
