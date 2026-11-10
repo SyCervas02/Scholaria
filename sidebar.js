@@ -1,0 +1,5713 @@
+/* ── SIDEBAR, NAVIGATION ROUTER & SHELL INIT ── */
+
+const SIDEBAR = {
+  student: [
+    { page: 'dashboard',  label: 'Dashboard',    icon: iconHome() },
+    { page: 'materials',  label: 'My Materials', icon: iconFolder() },
+    { page: 'quizzes',    label: 'Quizzes',      icon: iconQuiz() },
+    { page: 'progress',   label: 'My Progress',  icon: iconProgress() },
+    { page: 'notifications', label: 'Notifications', icon: iconNotif() },
+    { page: 'announcements', label: 'Announcements', icon: iconAnnouncement() },
+    { page: 'chats',      label: 'Chats',        icon: iconChat() },
+    { page: 'profile',    label: 'My Profile',   icon: iconProfile() },
+  ],
+  teacher: [
+    { page: 'dashboard',  label: 'Dashboard',       icon: iconHome() },
+    { page: 'materials',  label: 'Materials Manager',icon: iconFolder() },
+    { page: 'quiz',       label: 'Quiz Manager',     icon: iconQuiz() },
+    { page: 'analysis',   label: 'Item Analysis',    icon: iconChart() },
+    { page: 'classrec',   label: 'Class Record',     icon: iconRecord() },
+    { page: 'notifications', label: 'Notifications', icon: iconNotif() },
+    { page: 'announcements', label: 'Announcements', icon: iconAnnouncement() },
+    { page: 'chats',      label: 'Chats',            icon: iconChat() },
+    { page: 'profile',    label: 'My Profile',       icon: iconProfile() },
+  ],
+  admin: [
+    { page: 'dashboard',  label: 'Dashboard',       icon: iconHome() },
+    { page: 'materials',  label: 'Materials Manager',icon: iconFolder() },
+    { page: 'approval',   label: 'Content Approval', icon: iconApproval() },
+    { page: 'users',      label: 'User Management',  icon: iconUsers() },
+    { page: 'sections',   label: 'Sections',         icon: iconSections() },
+    { page: 'rooms',      label: 'Rooms',            icon: iconRooms() },
+    { page: 'reports',    label: 'Reports',          icon: iconChart() },
+    { page: 'notifications', label: 'Notifications', icon: iconNotif() },
+    { page: 'announcements', label: 'Announcements', icon: iconAnnouncement() },
+    { page: 'chats',      label: 'Chats',            icon: iconChat() },
+    { page: 'profile',    label: 'My Profile',       icon: iconProfile() },
+  ]
+};
+
+const ROLE_LABEL = { student: 'Student Portal', teacher: 'Teacher Portal', admin: 'Admin Portal' };
+
+function dismissDemoBanner() {
+  const b = document.querySelector('.demo-mode-banner');
+  if (b) b.remove();
+  document.body.classList.remove('has-demo-banner');
+  document.body.style.setProperty('--banner-h', '0px');
+}
+window.dismissDemoBanner = dismissDemoBanner;
+
+function initDashboardShell() {
+  const userNameEl = document.getElementById('userName');
+  if (userNameEl) userNameEl.textContent = CURRENT_PROFILE.full_name;
+  const userRoleEl = document.getElementById('userRoleTitle');
+  if (userRoleEl) {
+    userRoleEl.textContent = ROLE === 'admin' ? 'Administrator' : (ROLE === 'teacher' ? 'Faculty Teacher' : 'Senior High Student');
+  }
+  updateNavAvatarUI();
+
+  if (CURRENT_PROFILE.is_demo) {
+    document.body.classList.add('has-demo-banner');
+    document.body.style.setProperty('--banner-h', '38px');
+    let banner = document.querySelector('.demo-mode-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'demo-mode-banner';
+      banner.id = 'demoAdminBanner';
+      document.body.prepend(banner);
+    }
+    const msg = ROLE === 'admin'
+      ? "You're viewing a demo admin account \u2014 sample data only, nothing here is a real student or staff record."
+      : `You're viewing a demo ${ROLE} account \u2014 sample data only, nothing here is a real student's record.`;
+    banner.innerHTML = `<div class="demo-banner-content"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;color:#ea580c;flex-shrink:0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>${msg}</span></div><button type="button" class="demo-banner-close" onclick="dismissDemoBanner()" aria-label="Dismiss banner" title="Dismiss">&times;</button>`;
+  } else {
+    document.body.classList.remove('has-demo-banner');
+    document.body.style.setProperty('--banner-h', '0px');
+    const existingBanner = document.querySelector('.demo-mode-banner');
+    if (existingBanner) existingBanner.remove();
+  }
+
+  const sidebarMenu = document.getElementById('sidebarMenu');
+  sidebarMenu.innerHTML = '';
+  SIDEBAR[ROLE].forEach(item => {
+    const a = document.createElement('a');
+    a.href = '#';
+    a.className = 'menu-item' + (item.page === 'dashboard' ? ' active' : '');
+    a.dataset.page = item.page;
+    a.setAttribute('onclick', `event.preventDefault(); if('${item.page}'==='materials' && typeof setActiveSubjectMaterials==='function') { setActiveSubjectMaterials(null, null, false); } renderPage('${item.page}');`);
+    a.innerHTML = item.icon + `<span>${item.label}</span>` + (item.badge ? `<span class="menu-badge">${item.badge}</span>` : '');
+    sidebarMenu.appendChild(a);
+  });
+
+  const requestedPage = new URLSearchParams(window.location.search).get('page');
+  let attachmentReturn = null;
+  try {
+    const savedReturn = localStorage.getItem('scholaria_chat_attachment_return')
+      || sessionStorage.getItem('scholaria_chat_attachment_return');
+    attachmentReturn = savedReturn ? JSON.parse(savedReturn) : null;
+    localStorage.removeItem('scholaria_chat_attachment_return');
+    sessionStorage.removeItem('scholaria_chat_attachment_return');
+  } catch (_) {}
+  if (typeof resetChatState === 'function') resetChatState();
+  if (typeof seedLocalNotificationTestSamples === 'function') seedLocalNotificationTestSamples();
+  const initialPage = attachmentReturn?.conversationId
+    ? 'chats'
+    : (requestedPage === 'quiz' && (ROLE === 'teacher' || ROLE === 'admin') ? 'quiz' : 'dashboard');
+  renderPage(initialPage);
+  if (attachmentReturn?.conversationId) {
+    setTimeout(async () => {
+      if (currentPage !== 'chats') renderPage('chats');
+      if (typeof loadConversationsFromDB === 'function') await loadConversationsFromDB();
+      if (typeof openConversation === 'function') openConversation(attachmentReturn.conversationId);
+    }, 450);
+  }
+  refreshNotificationsUI();
+  if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
+  if (typeof showNewsAlertIfNeeded === 'function') showNewsAlertIfNeeded();
+  loadConversationsFromDB().then(ensureChatRealtimeSubscription);
+}
+
+function getPageContent(role, page) {
+  if (page === 'notifications') return typeof buildNotificationsPage === 'function' ? buildNotificationsPage() : '<p>Notifications unavailable</p>';
+  if (page === 'announcements') return typeof buildAnnouncementsPage === 'function' ? buildAnnouncementsPage() : '<p>Announcements unavailable</p>';
+  if (role === 'student') return studentPage(page);
+  if (role === 'teacher') return teacherPage(page);
+  if (role === 'admin')   return adminPage(page);
+  return '';
+}
+
+/* ── REAL DATA CLASS RECORD ENGINE ── */
+let classRecSectionFilter = '';
+let classRecStudentFilter = '';
+let classRecExpandedSection = ''; // '' (Section list view) or 'Section A' (Expanded section view)
+let classRecSubView = 'combined'; // 'combined' | 'matrix'
+let classRecAttemptsCache = [];
+let isFetchingClassRecAttempts = false;
+
+function setClassRecSectionFilter(sec) {
+  classRecSectionFilter = sec;
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function printClassRecordSection(section) {
+  const targetSection = section || classRecSectionFilter || classRecExpandedSection || (managedSections[0]?.name || 'Section A');
+  classRecSectionFilter = targetSection;
+  if (typeof openSectionReportModal === 'function') openSectionReportModal(targetSection);
+}
+
+function openExpandedSectionView(sec) {
+  classRecExpandedSection = sec;
+  classRecSectionFilter = sec;
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function closeExpandedSectionView() {
+  classRecExpandedSection = '';
+  classRecSectionFilter = '';
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function setClassRecStudentFilter(studKey) {
+  classRecStudentFilter = studKey;
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function setClassRecSubView(sub) {
+  classRecSubView = sub;
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+let selectedStudentForPanelKey = null;
+
+function openStudentGradePanel(studentKey) {
+  selectedStudentForPanelKey = studentKey;
+  const modal = document.getElementById('studentGradePanel');
+  if (!modal) return;
+
+  const entries = buildRealClassRecordEntries();
+  const studentData = entries.find(e => e.key === studentKey) || {
+    name: studentKey,
+    section: 'Unassigned',
+    strand: 'General',
+    avg: null,
+    quizScores: {},
+    quizzesTakenCount: 0
+  };
+
+  const nameEl = document.getElementById('sgpStudentName');
+  const metaEl = document.getElementById('sgpStudentMeta');
+  const takenEl = document.getElementById('sgpQuizzesTaken');
+  const gradeEl = document.getElementById('sgpOverallGrade');
+  const statusEl = document.getElementById('sgpStatusBadge');
+
+  if (nameEl) nameEl.textContent = studentData.name + "'s Academic Record";
+  if (metaEl) metaEl.textContent = `${studentData.strand} · ${studentData.section} · ${studentData.subject}`;
+
+  const allAttempts = getAllRecordedAttempts();
+  const registeredStud = registeredUsers.find(u => (u.dbId || u.id || u.name) === studentKey) || { name: studentData.name, id: studentKey };
+  const studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, registeredStud)));
+
+  if (takenEl) takenEl.textContent = `${studAttempts.length} quiz${studAttempts.length === 1 ? '' : 'zes'}`;
+  if (gradeEl) gradeEl.textContent = studentData.avg !== null ? `${studentData.avg.toFixed(2)}%` : '—';
+  if (statusEl) {
+    if (studentData.avg === null) {
+      statusEl.textContent = 'No Submissions';
+      statusEl.style.color = 'var(--text-muted)';
+    } else if (studentData.avg >= 88) {
+      statusEl.textContent = 'Excellent Standing';
+      statusEl.style.color = '#059669';
+    } else if (studentData.avg >= 75) {
+      statusEl.textContent = 'Satisfactory';
+      statusEl.style.color = '#2563eb';
+    } else {
+      statusEl.textContent = 'Needs Improvement';
+      statusEl.style.color = '#dc2626';
+    }
+  }
+
+  renderStudentGradePanelContent();
+  modal.classList.add('active');
+}
+
+function closeStudentGradePanel() {
+  const modal = document.getElementById('studentGradePanel');
+  if (modal) modal.classList.remove('active');
+}
+
+function renderStudentGradePanelContent() {
+  const listEl = document.getElementById('sgpQuizzesList');
+  const sortVal = document.getElementById('sgpSortSelect')?.value || 'newest';
+  if (!listEl || !selectedStudentForPanelKey) return;
+
+  const allAttempts = getAllRecordedAttempts();
+  const registeredStud = registeredUsers.find(u => (u.dbId || u.id || u.name) === selectedStudentForPanelKey) || { name: selectedStudentForPanelKey, id: selectedStudentForPanelKey };
+  let studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, registeredStud)));
+
+  if (!studAttempts.length) {
+    listEl.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:30px;font-size:13px;">No quiz submissions recorded yet for this student.</div>`;
+    return;
+  }
+
+  const customQList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+
+  let formatted = studAttempts.map(a => {
+    const qMatch = customQList.find(cq => String(cq.id).toLowerCase() === String(a.quiz_id).toLowerCase() || String(cq.title || '').toLowerCase() === String(a.quiz_title || '').toLowerCase());
+    const title = qMatch ? qMatch.title : (a.quiz_title || a.quiz_id || 'Quiz Assessment');
+    const score = a.score || 0;
+    const total = a.total_items || 10;
+    const pct = total ? Math.round((score / total) * 100) : 0;
+    const dateStr = a.submitted_at ? new Date(a.submitted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently submitted';
+    return { title, score, total, pct, dateStr, submittedAt: a.submitted_at ? new Date(a.submitted_at).getTime() : Date.now() };
+  });
+
+  if (sortVal === 'newest') {
+    formatted.sort((a, b) => b.submittedAt - a.submittedAt);
+  } else if (sortVal === 'highest') {
+    formatted.sort((a, b) => b.pct - a.pct);
+  } else if (sortVal === 'lowest') {
+    formatted.sort((a, b) => a.pct - b.pct);
+  } else if (sortVal === 'title') {
+    formatted.sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  listEl.innerHTML = formatted.map(item => `
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+      <div>
+        <div style="font-weight:700;font-size:14px;color:#0f172a;">${escHtml(item.title)}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Submitted: ${escHtml(item.dateStr)} · Score: <strong>${item.score}/${item.total}</strong></div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:16px;font-weight:800;color:${item.pct >= 88 ? '#059669' : item.pct < 75 ? '#dc2626' : '#2563eb'};">${item.pct}%</div>
+        <span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;background:${item.pct >= 75 ? '#dcfce7' : '#fee2e2'};color:${item.pct >= 75 ? '#15803d' : '#991b1b'};">${item.pct >= 75 ? 'PASSED' : 'NEEDS IMPROVEMENT'}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function isArtificialSeedAttempt(item) {
+  if (!item) return true;
+  const id = String(item.id || '').toLowerCase();
+  const sid = String(item.student_id || '').toLowerCase();
+  const qid = String(item.quiz_id || '').toLowerCase();
+
+  if (id === 'cr_seed_1' || id === 'cr_seed_2') return true;
+  if (sid === 'seed_stud_1') return true;
+  if (qid === 'quiz_testing_1' || qid === 'quiz_try_1') return true;
+  return false;
+}
+
+async function loadClassRecAttempts(force = true) {
+  if (isFetchingClassRecAttempts && !force) return;
+  isFetchingClassRecAttempts = true;
+  try {
+    // 1. Query dedicated class_records table from Supabase
+    let crData = [];
+    try {
+      const { data } = await db.from('class_records').select('*').order('submitted_at', { ascending: false });
+      if (data && data.length) crData = data.filter(item => !isArtificialSeedAttempt(item));
+    } catch(err) {}
+
+    // 2. Query quiz_attempts table from Supabase
+    let qaData = [];
+    try {
+      const { data } = await db.from('quiz_attempts').select('*').order('submitted_at', { ascending: false });
+      if (data && data.length) qaData = data.filter(item => !isArtificialSeedAttempt(item));
+    } catch(err) {}
+
+    // 3. Query per quiz ID for customQuizzes (same method as Item Analysis)
+    if (typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes)) {
+      for (const q of customQuizzes) {
+        try {
+          const { data: qData } = await db.from('quiz_attempts').select('*').eq('quiz_id', q.id);
+          if (qData && qData.length) {
+            qData.forEach(qa => {
+              if (!isArtificialSeedAttempt(qa) && !qaData.some(existing => existing.id === qa.id)) {
+                qaData.push(qa);
+              }
+            });
+          }
+        } catch(err) {}
+      }
+    }
+
+    // 4. Purge artificial seeds from local storage & merge authentic submissions
+    let localCR = [];
+    try {
+      const rawCR = localStorage.getItem('scholaria_class_records_v2');
+      if (rawCR) {
+        const parsed = JSON.parse(rawCR);
+        localCR = parsed.filter(item => !isArtificialSeedAttempt(item));
+        localStorage.setItem('scholaria_class_records_v2', JSON.stringify(localCR));
+      }
+    } catch(e) {}
+
+    let localAttempts = [];
+    try {
+      const raw = localStorage.getItem('scholaria_all_attempts_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        localAttempts = parsed.filter(item => !isArtificialSeedAttempt(item));
+        localStorage.setItem('scholaria_all_attempts_v1', JSON.stringify(localAttempts));
+      }
+    } catch(e) {}
+
+    // Combine authentic DB attempts and authentic local attempt submissions
+    const combined = [];
+    [...crData, ...qaData, ...localCR, ...localAttempts].forEach(item => {
+      if (!item || isArtificialSeedAttempt(item)) return;
+      const existingIdx = combined.findIndex(existing =>
+        (existing.id && item.id && existing.id === item.id) ||
+        (String(existing.quiz_id || '').toLowerCase() === String(item.quiz_id || '').toLowerCase() &&
+         String(existing.student_id || '').toLowerCase() === String(item.student_id || '').toLowerCase() &&
+         String(existing.submitted_at || '') === String(item.submitted_at || ''))
+      );
+      if (existingIdx === -1) {
+        combined.push(item);
+      } else {
+        const existing = combined[existingIdx];
+        if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
+          combined[existingIdx] = Object.assign({}, existing, item);
+        } else if (!existing.section && item.section) {
+          existing.section = item.section;
+        }
+      }
+    });
+
+    classRecAttemptsCache = combined;
+    if (typeof currentPage !== 'undefined' && currentPage === 'quiz') refreshQuizAttemptCountLabels();
+  } catch(e) {
+    console.error('Error loading class record attempts:', e);
+  } finally {
+    isFetchingClassRecAttempts = false;
+  }
+}
+
+function getCustomClassRecEntries() {
+  try {
+    const raw = localStorage.getItem('scholaria_classrec_custom_v1');
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) {
+    return {};
+  }
+}
+
+function saveCustomClassRecEntry(studentKey, data) {
+  const custom = getCustomClassRecEntries();
+  custom[studentKey] = Object.assign({}, custom[studentKey] || {}, data);
+  localStorage.setItem('scholaria_classrec_custom_v1', JSON.stringify(custom));
+  showToast('Class Record entry saved', 'success');
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function isStudentHandledByTeacher(student, teacherProfile) {
+  if (typeof ROLE !== 'undefined' && ROLE === 'admin') return true;
+  if (!teacherProfile || !student) return false;
+  const studentSection = (student.section || '').trim().toLowerCase();
+  if (!studentSection) return false;
+  if (typeof isSectionArchived === 'function' && isSectionArchived(studentSection)) return false;
+
+  const teacherSections = (teacherProfile.section || '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean)
+    .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+
+  if (!teacherSections.length) return false;
+  return teacherSections.includes(studentSection);
+}
+
+function deduplicateQuizAttempts(attemptsList) {
+  const result = [];
+  (attemptsList || []).forEach(item => {
+    if (!item || isArtificialSeedAttempt(item)) return;
+
+    const qKey = String(item.quiz_id || item.quiz_title || '').toLowerCase().trim();
+    const sKey = String(item.student_id || item.student_name || '').toLowerCase().trim();
+    const scoreVal = Number(item.score !== undefined ? item.score : item.score_percentage || 0);
+
+    const existingIdx = result.findIndex(existing => {
+      if (existing.id && item.id && existing.id === item.id) return true;
+
+      const exQKey = String(existing.quiz_id || existing.quiz_title || '').toLowerCase().trim();
+      const exSKey = String(existing.student_id || existing.student_name || '').toLowerCase().trim();
+      const exScore = Number(existing.score !== undefined ? existing.score : existing.score_percentage || 0);
+
+      if (qKey && exQKey && qKey === exQKey && sKey && exSKey && sKey === exSKey && scoreVal === exScore) {
+        return true;
+      }
+      return false;
+    });
+
+    if (existingIdx === -1) {
+      result.push(item);
+    } else {
+      const existing = result[existingIdx];
+      if ((!existing.answers || !existing.answers.length) && (item.answers && item.answers.length)) {
+        result[existingIdx] = Object.assign({}, existing, item);
+      } else if (!existing.section && item.section) {
+        existing.section = item.section;
+      }
+    }
+  });
+  return result;
+}
+
+function getAllRecordedAttempts() {
+  const pool = [...classRecAttemptsCache];
+
+  if (typeof analysisAttemptsCache !== 'undefined') {
+    Object.values(analysisAttemptsCache).forEach(arr => {
+      if (Array.isArray(arr)) {
+        arr.forEach(a => pool.push(a));
+      }
+    });
+  }
+
+  if (typeof myQuizAttempts !== 'undefined' && Array.isArray(myQuizAttempts)) {
+    myQuizAttempts.forEach(a => pool.push(a));
+  }
+
+  try {
+    const raw = localStorage.getItem('scholaria_all_attempts_v1');
+    if (raw) {
+      const local = JSON.parse(raw);
+      local.forEach(a => pool.push(a));
+    }
+  } catch(e) {}
+
+  return deduplicateQuizAttempts(pool);
+}
+
+function getTeacherAnalysisSections(selectedQuiz) {
+  const isTeacher = typeof ROLE !== 'undefined' && ROLE === 'teacher';
+  const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
+  const allManaged = typeof managedSections !== 'undefined' && Array.isArray(managedSections)
+    ? managedSections.filter(s => !s.isArchived)
+    : [];
+
+  let candidateSections = allManaged.length
+    ? allManaged
+    : (typeof SECTIONS !== 'undefined' ? SECTIONS.map(name => ({ name, strand: '' })) : []);
+
+  if (isTeacher) {
+    const teacherStrand = String(prof.strand || '').trim().toUpperCase();
+    const teacherSections = prof.section
+      ? prof.section.split(',').map(s => s.trim().toLowerCase()).filter(Boolean).filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec))
+      : [];
+
+    if (teacherSections.length === 0) {
+      return [];
+    }
+
+    candidateSections = candidateSections.filter(sec => {
+      const secName = (sec.name || sec).trim().toLowerCase();
+      const secStrand = String(sec.strand || '').trim().toUpperCase();
+
+      if (typeof isSectionArchived === 'function' && isSectionArchived(secName)) return false;
+      if (!teacherSections.includes(secName)) return false;
+      if (secStrand && teacherStrand && secStrand !== 'ALL' && teacherStrand !== 'ALL') {
+        if (secStrand !== teacherStrand) return false;
+      }
+      return true;
+    });
+  }
+
+  if (selectedQuiz && selectedQuiz.strand) {
+    const quizStrand = String(selectedQuiz.strand).trim().toUpperCase();
+    if (quizStrand && quizStrand !== 'ALL' && quizStrand !== 'ALL STRANDS') {
+      candidateSections = candidateSections.filter(sec => {
+        const secStrand = String(sec.strand || '').trim().toUpperCase();
+        return !secStrand || secStrand === 'ALL' || secStrand === quizStrand;
+      });
+    }
+  }
+
+  const names = candidateSections.map(s => s.name || s);
+  return typeof sortSectionsNaturally === 'function' ? sortSectionsNaturally(names) : [...new Set(names)].sort();
+}
+window.getTeacherAnalysisSections = getTeacherAnalysisSections;
+
+function getQuizUniqueStudentAttemptCount(quizId, quizTitle) {
+  const attempts = typeof getAllRecordedAttempts === 'function' ? getAllRecordedAttempts() : [];
+  const registered = typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : [];
+  const students = registered.filter(user => String(user.role || '').toLowerCase() === 'student');
+  const teachersAndAdmins = registered.filter(user => {
+    const r = String(user.role || '').toLowerCase();
+    return r === 'teacher' || r === 'admin' || r === 'faculty';
+  });
+
+  const studentKeys = new Set();
+  attempts.filter(attempt => {
+    const attemptQuizId = String(attempt.quiz_id || '').trim();
+    return attemptQuizId
+      ? attemptQuizId === String(quizId)
+      : String(attempt.quiz_title || '').trim().toLowerCase() === String(quizTitle || '').trim().toLowerCase();
+  }).forEach(attempt => {
+    if (attempt.is_preview || (typeof isArtificialSeedAttempt === 'function' && isArtificialSeedAttempt(attempt))) return;
+    const id = String(attempt.student_id || attempt.studentId || attempt.user_id || attempt.email || attempt.student_email || '').trim().toLowerCase();
+    if (!id) return;
+    const email = String(attempt.student_email || attempt.email || '').trim().toLowerCase();
+    const name = String(attempt.student_name || attempt.studentName || attempt.name || '').trim().toLowerCase();
+
+    // Skip attempts made by teachers or administrators
+    const isTeacherOrAdmin = teachersAndAdmins.some(u => {
+      const uIds = [u.id, u.dbId, u.school_id].filter(Boolean).map(uid => String(uid).trim().toLowerCase());
+      const uEmail = String(u.email || '').trim().toLowerCase();
+      const uName = String(u.name || u.full_name || '').trim().toLowerCase();
+      return (id && uIds.includes(id)) || (email && uEmail && email === uEmail) || (name && uName && name === uName);
+    });
+    if (isTeacherOrAdmin) return;
+
+    const student = students.find(user =>
+      [user.id, user.dbId, user.school_id].some(userId => userId && String(userId).trim().toLowerCase() === id) ||
+      (email && String(user.email || '').trim().toLowerCase() === email) ||
+      (name && String(user.name || user.full_name || '').trim().toLowerCase() === name)
+    );
+    if (!student) return;
+    studentKeys.add(String(student.dbId || student.id || student.school_id).trim().toLowerCase());
+  });
+  return studentKeys.size;
+}
+
+let quizManagerAttemptRealtimeChannel = null;
+let quizManagerAttemptRefreshTimer = null;
+function ensureQuizManagerAttemptRealtime() {
+  if (quizManagerAttemptRealtimeChannel || typeof db === 'undefined' || !db?.channel) return;
+  const scheduleRefresh = () => {
+    if (typeof currentPage !== 'undefined' && currentPage !== 'quiz') return;
+    clearTimeout(quizManagerAttemptRefreshTimer);
+    quizManagerAttemptRefreshTimer = setTimeout(() => loadClassRecAttempts(true), 500);
+  };
+  quizManagerAttemptRealtimeChannel = db.channel('quiz-manager-attempt-counts')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'quiz_attempts' }, scheduleRefresh)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_records' }, scheduleRefresh)
+    .subscribe();
+}
+
+function refreshQuizAttemptCountLabels() {
+  document.querySelectorAll('[data-quiz-attempt-count]').forEach(label => {
+    const count = getQuizUniqueStudentAttemptCount(label.dataset.quizAttemptCount, label.dataset.quizTitle || '');
+    const text = label.querySelector('.quiz-attempt-count-text');
+    if (text) text.textContent = `${count} student${count === 1 ? '' : 's'} took this quiz`;
+  });
+}
+
+function isAttemptBelongingToStudent(a, u) {
+  if (!a || !u) return false;
+  const sid = String(a.student_id || a.studentId || a.user_id || '').toLowerCase().trim();
+  const sname = String(a.student_name || a.studentName || '').toLowerCase().trim();
+
+  const uDbId = String(u.dbId || '').toLowerCase().trim();
+  const uId = String(u.id || '').toLowerCase().trim();
+  const uName = String(u.name || '').toLowerCase().trim();
+
+  if (uDbId && sid === uDbId) return true;
+  if (uId && sid === uId) return true;
+  if (uName && (sid === uName || sname === uName || sid.includes(uName) || uName.includes(sid))) return true;
+
+  const matchInRegistered = registeredUsers.find(ru =>
+    (ru.dbId && String(ru.dbId).toLowerCase().trim() === sid) ||
+    (ru.id && String(ru.id).toLowerCase().trim() === sid) ||
+    (ru.name && String(ru.name).toLowerCase().trim() === sid)
+  );
+  if (matchInRegistered && matchInRegistered.name.toLowerCase().trim() === uName) {
+    return true;
+  }
+
+  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) {
+    const myId = String(CURRENT_PROFILE.id || '').toLowerCase().trim();
+    const mySchoolId = String(CURRENT_PROFILE.school_id || '').toLowerCase().trim();
+    const myName = String(CURRENT_PROFILE.full_name || '').toLowerCase().trim();
+    if ((sid === myId || sid === mySchoolId) && uName === myName) {
+      return true;
+    }
+  }
+
+  if (uName.includes('john doe') && (sid.includes('john') || sid.includes('hwa-2026-002'))) {
+    return true;
+  }
+
+  return false;
+}
+
+function getClassRecordQuizzes() {
+  const attempts = getAllRecordedAttempts();
+  const custom = getCustomClassRecEntries();
+
+  const attemptedQuizIds = new Set();
+  attempts.forEach(a => {
+    if (a.quiz_id) attemptedQuizIds.add(String(a.quiz_id).toLowerCase());
+    if (a.quiz_title) attemptedQuizIds.add(String(a.quiz_title).toLowerCase());
+  });
+
+  Object.values(custom).forEach(studCustom => {
+    Object.keys(studCustom).forEach(k => {
+      if (k !== 'subject') attemptedQuizIds.add(String(k).toLowerCase());
+    });
+  });
+
+  const pool = typeof customQuizzes !== 'undefined' ? [...customQuizzes] : [];
+
+  attempts.forEach(a => {
+    const title = a.quiz_title || a.quiz_id;
+    const id = a.quiz_id || a.quiz_title;
+    if (id && !pool.some(q => String(q.id).toLowerCase() === String(id).toLowerCase() || String(q.title || '').toLowerCase() === String(title).toLowerCase())) {
+      pool.push({ id, title: title || 'Quiz' });
+    }
+  });
+
+  if (pool.length) {
+    const takenQuizzes = pool.filter(q =>
+      attemptedQuizIds.has(String(q.id).toLowerCase()) ||
+      attemptedQuizIds.has(String(q.title || '').toLowerCase()) ||
+      attempts.some(a => String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() || String(a.quiz_title || '').toLowerCase() === String(q.title || '').toLowerCase())
+    );
+    if (takenQuizzes.length) return takenQuizzes;
+  }
+
+  return [
+    { id: 'quiz_1', title: 'Quiz 1' },
+    { id: 'quiz_2', title: 'Quiz 2' }
+  ];
+}
+
+function openAddClassRecordModal() {
+  const modal = document.getElementById('classRecModal');
+  if (!modal) return;
+  const select = document.getElementById('crStudentSelect');
+  if (select) {
+    const students = registeredUsers.filter(u => u.role === 'student');
+    select.innerHTML = students.map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('');
+  }
+  const quizSelect = document.getElementById('crQuizSelect');
+  if (quizSelect) {
+    const quizzes = getClassRecordQuizzes();
+    quizSelect.innerHTML = quizzes.map(q => `<option value="${q.id}">${escHtml(q.title)}</option>`).join('');
+  }
+  modal.classList.add('active');
+}
+
+function closeAddClassRecordModal() {
+  const modal = document.getElementById('classRecModal');
+  if (modal) modal.classList.remove('active');
+}
+
+function submitAddClassRecord() {
+  const studentKey = document.getElementById('crStudentSelect')?.value;
+  const quizId = document.getElementById('crQuizSelect')?.value || 'quiz_1';
+  const score = Number(document.getElementById('crScoreInput')?.value || 85);
+  const subj = document.getElementById('crSubjInput')?.value || 'Web Systems';
+
+  if (!studentKey) { showToast('Please select a student', 'error'); return; }
+
+  const custom = getCustomClassRecEntries();
+  if (!custom[studentKey]) custom[studentKey] = {};
+  custom[studentKey][quizId] = score;
+  custom[studentKey].subject = subj;
+
+  localStorage.setItem('scholaria_classrec_custom_v1', JSON.stringify(custom));
+  showToast('Quiz grade updated in Class Record', 'success');
+  closeAddClassRecordModal();
+  if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function buildRealClassRecordEntries() {
+  if (!registeredUsers.length && typeof loadUsersFromDB === 'function') {
+    loadUsersFromDB();
+  }
+
+  let students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
+
+  // If viewing as a teacher, only include students handled by this teacher!
+  // Exclude unassigned students and students from unhandled or archived sections.
+  if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+    const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
+    const teacherSections = (prof.section || '')
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+      .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+
+    if (!teacherSections.length) {
+      return [];
+    }
+
+    students = students.filter(u => {
+      const studSec = (u.section || '').trim().toLowerCase();
+      return studSec && teacherSections.includes(studSec) && (typeof isSectionArchived !== 'function' || !isSectionArchived(studSec));
+    });
+  } else {
+    // For admin or other active views, also exclude students in archived sections
+    students = students.filter(u => {
+      const studSec = (u.section || '').trim().toLowerCase();
+      return !studSec || (typeof isSectionArchived !== 'function' || !isSectionArchived(studSec));
+    });
+  }
+
+  const custom = getCustomClassRecEntries();
+  const quizzes = getClassRecordQuizzes();
+  const allAttempts = getAllRecordedAttempts();
+
+  return students.filter(u => {
+    if (classRecSectionFilter && u.section !== classRecSectionFilter) return false;
+    if (classRecStudentFilter) {
+      const uKey = u.dbId || u.id || u.name;
+      if (uKey !== classRecStudentFilter) return false;
+    }
+    return true;
+  }).map(u => {
+    const key = u.dbId || u.id || u.name;
+    const customData = custom[key] || {};
+
+    const studAttempts = deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, u)));
+
+    const quizScores = {};
+    let validScoresSum = 0;
+    let validScoresCount = 0;
+    let hasRealData = false;
+
+    quizzes.forEach(q => {
+      let scorePct = null;
+      let isLive = false;
+
+      const attempt = studAttempts.find(a =>
+        String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() ||
+        (a.quiz_title && String(a.quiz_title).toLowerCase() === String(q.title || '').toLowerCase())
+      );
+
+      if (attempt) {
+        if (attempt.score_percentage !== undefined && attempt.score_percentage !== null) {
+          scorePct = Math.round(Number(attempt.score_percentage));
+        } else if (attempt.score !== undefined && attempt.total_items) {
+          scorePct = Math.round((Number(attempt.score) / Number(attempt.total_items)) * 100);
+        } else if (attempt.score !== undefined) {
+          scorePct = Math.round(Number(attempt.score));
+        }
+        isLive = true;
+        hasRealData = true;
+      } else if (customData[q.id] !== undefined) {
+        const parsed = Number(customData[q.id]);
+        if (!isNaN(parsed)) scorePct = parsed;
+        hasRealData = true;
+      }
+
+      if (scorePct !== null && !isNaN(scorePct) && isFinite(scorePct)) {
+        scorePct = Math.min(100, Math.max(0, scorePct));
+        validScoresSum += scorePct;
+        validScoresCount++;
+      } else {
+        scorePct = null;
+      }
+
+      quizScores[q.id] = { scorePct, isLive };
+    });
+
+    let avg = validScoresCount > 0 ? Math.min(100, Math.max(0, Number((validScoresSum / validScoresCount).toFixed(2)))) : null;
+
+    if (studAttempts.length > 0) {
+      hasRealData = true;
+      let attSum = 0;
+      let attCnt = 0;
+      studAttempts.forEach(sa => {
+        let p = null;
+        if (sa.score_percentage !== undefined && sa.score_percentage !== null) {
+          p = Number(sa.score_percentage);
+        } else if (sa.score !== undefined && sa.total_items) {
+          p = (Number(sa.score) / Number(sa.total_items)) * 100;
+        } else if (sa.score !== undefined) {
+          p = Number(sa.score);
+        }
+        if (p !== null && !isNaN(p) && isFinite(p)) {
+          p = Math.min(100, Math.max(0, p));
+          attSum += p;
+          attCnt++;
+        }
+      });
+      if (attCnt > 0) {
+        avg = Math.min(100, Math.max(0, Number((attSum / attCnt).toFixed(2))));
+      }
+    }
+
+    return {
+      key,
+      name: u.name,
+      section: u.section || 'Unassigned',
+      strand: u.strand || 'General',
+      subject: customData.subject || (ROLE === 'teacher' ? (CURRENT_PROFILE?.subjects || 'STEM, HUMSS') : 'STEM, HUMSS'),
+      quizScores,
+      quizzesTakenCount: studAttempts.length,
+      avg,
+      hasRealData
+    };
+  });
+}
+
+function buildSectionSummaryEntries() {
+  const allStudentEntries = buildRealClassRecordEntries();
+  const sectionMap = new Map();
+
+  allStudentEntries.forEach(st => {
+    const sec = (st.section || '').trim();
+    // Exclude Unassigned, empty, placeholder, or archived section labels
+    if (!sec || sec.toLowerCase() === 'unassigned' || sec.toLowerCase() === 'none') return;
+    if (typeof isSectionArchived === 'function' && isSectionArchived(sec)) return;
+    if (!sectionMap.has(sec)) {
+      sectionMap.set(sec, {
+        section: sec,
+        subject: st.subject,
+        studentsCount: 0,
+        scoresSum: 0,
+        scoresCount: 0,
+        passingCount: 0
+      });
+    }
+    const secData = sectionMap.get(sec);
+    secData.studentsCount++;
+    if (st.avg !== null && !isNaN(st.avg) && isFinite(st.avg)) {
+      const numAvg = Math.min(100, Math.max(0, Number(st.avg)));
+      secData.scoresSum += numAvg;
+      secData.scoresCount++;
+      if (numAvg >= 75) secData.passingCount++;
+    }
+  });
+
+  return Array.from(sectionMap.values()).map(sec => {
+    const classAvg = sec.scoresCount > 0 ? Math.min(100, Math.max(0, Number((sec.scoresSum / sec.scoresCount).toFixed(2)))) : null;
+    const passRate = sec.scoresCount > 0 ? Math.min(100, Math.max(0, Math.round((sec.passingCount / sec.scoresCount) * 100))) : null;
+    return {
+      ...sec,
+      classAvg,
+      passRate
+    };
+  });
+}
+
+function isQuizTargetedForStudent(q, studentProfile) {
+  if (!q) return false;
+  const statusStr = String(q.status || '').toLowerCase();
+  const isStatusValid = statusStr === 'active' || statusStr === 'approved' || statusStr === 'ongoing' || statusStr === 'pending' || q.isDemo;
+  if (!isStatusValid) return false;
+  if (!studentProfile) return true;
+
+  if (q.strand && studentProfile.strand) {
+    const qStrands = q.strand.split(',').map(s => s.trim().toLowerCase());
+    const studStrand = studentProfile.strand.trim().toLowerCase();
+    if (!qStrands.includes(studStrand) && !qStrands.includes('all')) return false;
+  }
+
+  const qGrade = q.gradeLevel || q.grade_level;
+  if (qGrade && studentProfile.grade_level) {
+    const qGrades = qGrade.split(',').map(g => g.trim().toLowerCase());
+    const studGrade = studentProfile.grade_level.trim().toLowerCase();
+    if (!qGrades.includes(studGrade) && !qGrades.includes('all')) return false;
+  }
+
+  if (q.sections && studentProfile.section) {
+    const qSections = q.sections.split(',').map(s => s.trim().toLowerCase());
+    const studSection = studentProfile.section.trim().toLowerCase();
+    if (!qSections.includes(studSection) && !qSections.includes('all')) return false;
+  }
+
+  return true;
+}
+
+/* ── PROFILE CUSTOMIZATION & ENHANCEMENT ENGINE ── */
+function formatJoinDate(dateStr) {
+  if (!dateStr) return 'August 2026';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'August 2026';
+    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  } catch (e) {
+    return 'August 2026';
+  }
+}
+
+function updateNavAvatarUI() {
+  const avatarEl = document.getElementById('userAvatar');
+  if (!avatarEl || !CURRENT_PROFILE) return;
+  if (CURRENT_PROFILE.avatar_url) {
+    avatarEl.innerHTML = `<img src="${CURRENT_PROFILE.avatar_url}" alt="${escHtml(CURRENT_PROFILE.full_name || '')}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" onerror="this.parentElement.textContent='${initialsFor(CURRENT_PROFILE.full_name || 'U')}';"/>`;
+    avatarEl.style.padding = '0';
+    avatarEl.style.overflow = 'hidden';
+  } else {
+    avatarEl.textContent = initialsFor(CURRENT_PROFILE.full_name || 'User');
+    avatarEl.style.padding = '';
+  }
+}
+
+function handleAvatarFileSelect(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    showToast('Please select a valid image file (PNG, JPG, WebP)', 'error');
+    return;
+  }
+
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('File is too large — maximum file size is 50MB only', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUrl = e.target.result;
+    
+    const heroImg = document.getElementById('pfHeroAvatarImg');
+    const heroInitials = document.getElementById('pfHeroAvatarInitials');
+    const dataUrlInput = document.getElementById('pfAvatarDataUrl');
+
+    if (heroImg) {
+      heroImg.src = dataUrl;
+      heroImg.style.display = 'block';
+      if (heroInitials) heroInitials.style.display = 'none';
+    }
+    if (dataUrlInput) {
+      dataUrlInput.value = dataUrl;
+    }
+    showToast('Profile picture preview updated! Click "Save Changes" to apply.', 'info');
+  };
+  reader.readAsDataURL(file);
+}
+
+function updateProfileNamePreview() {
+  const f = document.getElementById('pfFirstName')?.value || '';
+  const mi = document.getElementById('pfMiddleInitial')?.value || '';
+  const l = document.getElementById('pfLastName')?.value || '';
+  const preview = document.getElementById('pfFullNamePreview');
+  const heroName = document.getElementById('pfHeroNameTitle');
+  const assembled = typeof assembleFullName === 'function' ? assembleFullName(f, l, mi) : [f, mi, l].filter(Boolean).join(' ');
+  if (preview) preview.textContent = assembled || 'Your Full Name';
+  if (heroName) heroName.textContent = assembled || 'Your Full Name';
+}
+
+function toggleProfileCurrentPassword() {
+  const input = document.getElementById('pfCurrentPassword');
+  const toggle = document.getElementById('pfCurrentPasswordToggle');
+  if (!input || !toggle) return;
+  const isVisible = input.type === 'text';
+  input.type = isVisible ? 'password' : 'text';
+  toggle.setAttribute('aria-label', isVisible ? 'Show current password' : 'Hide current password');
+  toggle.setAttribute('aria-pressed', String(!isVisible));
+  toggle.title = isVisible ? 'Show password' : 'Hide password';
+  toggle.innerHTML = isVisible
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a15 15 0 0 1-3.1 3.8M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7a10 10 0 0 0 4-.8"/></svg>';
+}
+window.toggleProfileCurrentPassword = toggleProfileCurrentPassword;
+
+async function confirmPasswordChange() {
+  const button = document.getElementById('pfConfirmPasswordBtn');
+  const currentPassword = document.getElementById('pfCurrentPassword')?.value || '';
+  const newPassword = document.getElementById('pfNewPassword')?.value || '';
+  const confirmPassword = document.getElementById('pfConfirmPassword')?.value || '';
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    showToast('Enter your current password, new password, and confirmation to change your password.', 'error');
+    return;
+  }
+  if (newPassword.length < 6) {
+    showToast('New password must be at least 6 characters.', 'error');
+    document.getElementById('pfNewPassword')?.focus();
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    showToast('New password and confirmation do not match.', 'error');
+    document.getElementById('pfConfirmPassword')?.focus();
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Updating...';
+  }
+  try {
+    const { data: authData, error: authUserError } = await db.auth.getUser();
+    const authEmail = authData?.user?.email || CURRENT_PROFILE.email;
+    if (authUserError || !authEmail) throw new Error('Could not verify the signed-in account.');
+
+    const { error: reauthError } = await db.auth.signInWithPassword({ email: authEmail, password: currentPassword });
+    if (reauthError) throw new Error('Current password is incorrect.');
+
+    const { error: passwordError } = await db.auth.updateUser({ password: newPassword });
+    if (passwordError) throw passwordError;
+
+    showToast('Password updated successfully', 'success');
+    document.getElementById('pfCurrentPassword').value = '';
+    document.getElementById('pfNewPassword').value = '';
+    document.getElementById('pfConfirmPassword').value = '';
+  } catch (error) {
+    console.warn('Password update error:', error);
+    showToast(error.message || 'Could not update password.', 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Confirm Password';
+    }
+  }
+}
+window.confirmPasswordChange = confirmPasswordChange;
+
+async function saveUserProfile() {
+  const saveBtn = document.getElementById('pfSaveBtn');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = `Saving...`;
+  }
+
+  try {
+    // 1. Official Identity Details (Vital Information: Name is locked to official registered record)
+    const firstName = CURRENT_PROFILE.first_name || (document.getElementById('pfFirstName')?.value || '').trim();
+    const lastName = CURRENT_PROFILE.last_name || (document.getElementById('pfLastName')?.value || '').trim();
+    const middleInitial = CURRENT_PROFILE.middle_initial || (document.getElementById('pfMiddleInitial')?.value || '').trim().replace('.', '').toUpperCase();
+    const fullName = CURRENT_PROFILE.full_name || (typeof assembleFullName === 'function' 
+      ? assembleFullName(firstName, lastName, middleInitial) 
+      : `${firstName} ${middleInitial ? middleInitial + '. ' : ''}${lastName}`.trim() || 'Scholaria User');
+
+    const contactNumber = (document.getElementById('pfContact')?.value || '').trim();
+    const email = (document.getElementById('pfEmail')?.value || '').trim();
+    const emergencyName = (document.getElementById('pfEmergencyName')?.value || '').trim();
+    const emergencyRelation = (document.getElementById('pfEmergencyRelation')?.value || '').trim();
+    const emergencyPhone = (document.getElementById('pfEmergencyPhone')?.value || '').trim();
+    const address = (document.getElementById('pfAddress')?.value || '').trim();
+    const birthdate = document.getElementById('pfBirthDate')?.value || '';
+    const gender = document.getElementById('pfGender')?.value || '';
+    const bio = (document.getElementById('pfBio')?.value || '').trim();
+    const onlineStatus = document.getElementById('pfOnlineStatus')?.value || 'online';
+    const statusMessage = (document.getElementById('pfStatusMsg')?.value || '').trim();
+    const avatarUrl = document.getElementById('pfAvatarDataUrl')?.value || CURRENT_PROFILE.avatar_url || null;
+
+    // 2. Strict Philippine Mobile Validation (Exactly 11 digits starting with 09)
+    if (contactNumber) {
+      if (typeof isValidPhilippineMobile === 'function' && !isValidPhilippineMobile(contactNumber)) {
+        showToast('Phone number must be exactly 11 digits starting with 09 (e.g. 09123456789)', 'error');
+        document.getElementById('pfContact')?.focus();
+        if (typeof validatePhoneField === 'function') validatePhoneField(document.getElementById('pfContact'), 'pfContactErr');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = 'Save Changes'; }
+        return;
+      }
+    }
+
+    // 3. Strict Emergency Contact Validation
+    if (emergencyName && !/^[a-zA-Z\sñÑ\-.]+$/.test(emergencyName)) {
+      showToast('Emergency contact name must only contain letters', 'error');
+      document.getElementById('pfEmergencyName')?.focus();
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = 'Save Changes'; }
+      return;
+    }
+
+    if (emergencyPhone) {
+      if (typeof isValidPhilippineMobile === 'function' && !isValidPhilippineMobile(emergencyPhone)) {
+        showToast('Emergency contact number must be exactly 11 digits starting with 09', 'error');
+        document.getElementById('pfEmergencyPhone')?.focus();
+        if (typeof validatePhoneField === 'function') validatePhoneField(document.getElementById('pfEmergencyPhone'), 'pfEmergencyPhoneErr');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = 'Save Changes'; }
+        return;
+      }
+    }
+
+    // 4. Build comprehensive profile update payload
+    const updatePayload = {
+      full_name: fullName,
+      first_name: firstName,
+      last_name: lastName,
+      middle_initial: middleInitial,
+      email: email || CURRENT_PROFILE.email,
+      contact_number: contactNumber,
+      emergency_contact_name: emergencyName,
+      emergency_contact_relation: emergencyRelation,
+      emergency_contact_phone: emergencyPhone,
+      address: address,
+      birthdate: birthdate,
+      gender: gender,
+      bio: bio,
+      online_status: onlineStatus,
+      status_message: statusMessage,
+      avatar_url: avatarUrl,
+      last_active_at: new Date().toISOString()
+    };
+
+    // 6. Attempt DB update with fallback for missing schema columns
+    try {
+      const { error } = await db
+        .from('users')
+        .update(updatePayload)
+        .eq('id', CURRENT_PROFILE.id);
+
+      if (error) {
+        console.warn('Full profile update had error, attempting minimal fallback:', error);
+        await db
+          .from('users')
+          .update({
+            full_name: fullName,
+            email: email || CURRENT_PROFILE.email,
+            contact_number: contactNumber,
+            bio: bio,
+            online_status: onlineStatus,
+            status_message: statusMessage,
+            avatar_url: avatarUrl
+          })
+          .eq('id', CURRENT_PROFILE.id);
+      }
+    } catch (err) {
+      console.warn('DB update failed, saving locally:', err);
+    }
+
+    // 7. Persist in Supabase Auth user metadata
+    try {
+      await db.auth.updateUser({
+        data: {
+          first_name: firstName,
+          last_name: lastName,
+          middle_initial: middleInitial,
+          full_name: fullName,
+          contact_number: contactNumber,
+          emergency_contact_name: emergencyName,
+          emergency_contact_relation: emergencyRelation,
+          emergency_contact_phone: emergencyPhone,
+          address: address,
+          birthdate: birthdate,
+          gender: gender
+        }
+      });
+    } catch (_) {}
+
+    // 8. Update local CURRENT_PROFILE and localStorage
+    Object.assign(CURRENT_PROFILE, updatePayload);
+    try {
+      localStorage.setItem('scholaria_cached_profile', JSON.stringify(CURRENT_PROFILE));
+    } catch(e) {}
+
+    // 9. Update header user name and avatar UI
+    const navName = document.getElementById('userName');
+    if (navName) navName.textContent = CURRENT_PROFILE.full_name;
+    updateNavAvatarUI();
+
+    // 10. Refresh profile page to reflect newly saved data
+    renderPage('profile');
+    showToast('Profile updated successfully!', 'success');
+
+  } catch (err) {
+    console.error('Error saving profile:', err);
+    showToast('Error saving profile: ' + (err.message || 'Unknown error'), 'error');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = 'Save Changes';
+    }
+  }
+}
+
+function buildProfilePage(role) {
+  const p = CURRENT_PROFILE || {};
+  const status = p.online_status || 'online';
+  const statusLabels = {
+    online: 'Online',
+    away: 'Away',
+    busy: 'Busy / Do Not Disturb',
+    offline: 'Offline'
+  };
+
+  const roleTitle = role === 'student' ? 'Student' : role === 'teacher' ? 'Faculty Teacher' : 'Department Administrator';
+  const roleIcon = role === 'student' ? '🎓' : role === 'teacher' ? '👨‍🏫' : '🛡️';
+  const idLabel = role === 'student' ? 'Student ID / LRN' : role === 'teacher' ? 'Faculty Teacher ID' : 'Institutional Admin ID';
+  const schoolIdVal = p.school_id || (p.id ? p.id.slice(0, 8).toUpperCase() : 'HWA-2026');
+  const joinDateFormatted = formatJoinDate(p.created_at);
+
+  // Parse separated name components
+  const nameParts = typeof parseFullNameParts === 'function' ? parseFullNameParts(p.full_name || '') : { firstName: '', lastName: '', middleInitial: '' };
+  const firstNameVal = p.first_name || nameParts.firstName || '';
+  const lastNameVal = p.last_name || nameParts.lastName || '';
+  const middleInitialVal = p.middle_initial || nameParts.middleInitial || '';
+  const currentFullName = p.full_name || (typeof assembleFullName === 'function' ? assembleFullName(firstNameVal, lastNameVal, middleInitialVal) : 'User');
+
+  return `
+  <div style="display:flex;flex-direction:column;gap:20px;width:100%;">
+    <!-- PROFILE HERO BANNER -->
+    <div class="profile-hero-card">
+      <div class="profile-hero-avatar-wrap">
+        <div class="profile-hero-avatar" id="pfHeroAvatarContainer">
+          <img id="pfHeroAvatarImg" src="${p.avatar_url || ''}" alt="Avatar" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:${p.avatar_url ? 'block' : 'none'};" onerror="this.style.display='none';document.getElementById('pfHeroAvatarInitials').style.display='flex';" />
+          <div id="pfHeroAvatarInitials" style="width:100%;height:100%;display:${p.avatar_url ? 'none' : 'flex'};align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#fff;">
+            ${initialsFor(currentFullName)}
+          </div>
+        </div>
+        <label for="pfAvatarFileInput" class="profile-avatar-upload-btn" title="Change profile picture">
+          <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </label>
+        <input type="file" id="pfAvatarFileInput" accept="image/*" style="display:none;" onchange="handleAvatarFileSelect(event)" />
+        <input type="hidden" id="pfAvatarDataUrl" value="${p.avatar_url || ''}" />
+        <div style="font-size:10px;color:rgba(255,255,255,0.8);margin-top:4px;text-align:center;white-space:nowrap;">Max 50MB only</div>
+      </div>
+
+      <div class="profile-hero-info">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <h1 class="profile-hero-name" id="pfHeroNameTitle" style="margin:0;">${escHtml(currentFullName)}</h1>
+          <span class="presence-status-badge ${status}">
+            <span class="presence-dot pulse"></span>
+            ${statusLabels[status] || 'Online'}
+          </span>
+        </div>
+
+        <div class="profile-hero-tags" style="margin-top:8px;">
+          <span class="profile-tag-pill">${roleIcon} ${roleTitle}</span>
+          <span class="profile-tag-pill gold">🆔 ${escHtml(schoolIdVal)}</span>
+          ${p.strand ? `<span class="profile-tag-pill">📚 ${escHtml(p.strand)}</span>` : ''}
+          ${p.section ? `<span class="profile-tag-pill">🏫 ${escHtml(p.section)}</span>` : ''}
+        </div>
+
+        <div style="font-size:13px;color:rgba(255,255,255,0.9);margin-top:6px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <span style="display:inline-flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Member since <strong>${escHtml(joinDateFormatted)}</strong>
+          </span>
+          ${p.status_message ? `
+            <span style="display:inline-flex;align-items:center;gap:6px;font-style:italic;background:rgba(0,0,0,0.15);padding:3px 10px;border-radius:20px;">
+              💬 "${escHtml(p.status_message)}"
+            </span>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN PROFILE GRID -->
+    <div class="profile-grid-layout">
+      <!-- LEFT COLUMN: PERSONAL DETAILS, NAME BREAKDOWN & EMERGENCY CONTACT -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <!-- CARD 1: IDENTITY & NAME BREAKDOWN -->
+        <div class="profile-card">
+          <div class="profile-card-hdr">
+            <h3>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Personal Identity & Name
+            </h3>
+            <span style="font-size:11.5px;color:var(--text-muted);display:inline-flex;align-items:center;gap:4px;">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#f59e0b" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Official Record &middot; Locked
+            </span>
+          </div>
+
+          <!-- SEPARATED FULL NAME FIELDS (READONLY OFFICIAL RECORD) -->
+          <div style="display:grid;grid-template-columns:1fr 80px 1fr;gap:12px;">
+            <div class="pf-field">
+              <label>First Name <span style="font-size:10.5px;color:var(--text-muted);font-weight:400;">(Official)</span></label>
+              <input type="text" id="pfFirstName" value="${escHtml(firstNameVal)}" readonly title="Official School Record — Cannot be modified here" style="background:#f8fafc;color:#475569;cursor:not-allowed;border-color:#e2e8f0;" />
+            </div>
+
+            <div class="pf-field">
+              <label>M.I.</label>
+              <input type="text" id="pfMiddleInitial" value="${escHtml(middleInitialVal)}" readonly title="Official School Record — Cannot be modified here" style="text-align:center;text-transform:uppercase;background:#f8fafc;color:#475569;cursor:not-allowed;border-color:#e2e8f0;" />
+            </div>
+
+            <div class="pf-field">
+              <label>Last Name <span style="font-size:10.5px;color:var(--text-muted);font-weight:400;">(Official)</span></label>
+              <input type="text" id="pfLastName" value="${escHtml(lastNameVal)}" readonly title="Official School Record — Cannot be modified here" style="background:#f8fafc;color:#475569;cursor:not-allowed;border-color:#e2e8f0;" />
+            </div>
+          </div>
+
+          <div style="background:#f8fafc;padding:10px 14px;border-radius:10px;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;font-size:12.5px;">
+            <span style="color:var(--text-muted);display:inline-flex;align-items:center;gap:6px;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Official Registered Name:
+            </span>
+            <strong id="pfFullNamePreview" style="color:var(--blue);font-weight:700;">${escHtml(currentFullName)}</strong>
+          </div>
+
+          <div style="font-size:11.5px;color:#d97706;background:#fffbeb;padding:8px 12px;border-radius:8px;border:1px solid #fde68a;display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Names are strictly verified against school enrollment records and locked against unauthorized edits. Contact the registrar for legal name modifications.</span>
+          </div>
+
+          <div class="pf-field">
+            <label>About Me / Bio</label>
+            <textarea id="pfBio" placeholder="Share a few words about your academic goals, interests, or teaching focus...">${escHtml(p.bio || '')}</textarea>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;">
+            <div class="pf-field">
+              <label>Current Status</label>
+              <select id="pfOnlineStatus">
+                <option value="online" ${status === 'online' ? 'selected' : ''}>🟢 Online</option>
+                <option value="away" ${status === 'away' ? 'selected' : ''}>🟡 Away</option>
+                <option value="busy" ${status === 'busy' ? 'selected' : ''}>🔴 Busy</option>
+                <option value="offline" ${status === 'offline' ? 'selected' : ''}>⚫ Invisible</option>
+              </select>
+            </div>
+
+            <div class="pf-field">
+              <label>Status Message / Motto</label>
+              <input type="text" id="pfStatusMsg" value="${escHtml(p.status_message || '')}" placeholder="e.g. Studying for Finals 📚" />
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 2: CONTACT DETAILS & MOBILE NUMBERS -->
+        <div class="profile-card">
+          <div class="profile-card-hdr">
+            <h3>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Contact & Phone Details
+            </h3>
+            <span style="font-size:11.5px;color:var(--text-muted);">Strict Philippines 11-digit mobile format</span>
+          </div>
+
+          <div class="pf-field">
+            <label>Student / User Phone Number *</label>
+            <div style="position:relative;">
+              <input type="tel" id="pfContact" value="${escHtml(p.contact_number || '')}" placeholder="09XXXXXXXXX" maxlength="11" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); validatePhoneField(this, 'pfContactErr');" onblur="validatePhoneField(this, 'pfContactErr')" />
+            </div>
+            <div class="pf-error-hint" id="pfContactErr" style="display:none;color:#dc2626;font-size:11.5px;font-weight:600;margin-top:3px;"></div>
+            <span style="font-size:11px;color:var(--text-muted);">Philippines Mobile Format: Exactly 11 digits starting with <strong>09</strong> (Numbers only)</span>
+          </div>
+
+          <div class="pf-field">
+            <label>Gmail / Official Email Address *</label>
+            <input type="email" id="pfEmail" maxlength="100" value="${escHtml(p.email || '')}" placeholder="your.name@gmail.com" />
+          </div>
+
+          <div class="pf-field">
+            <label>Complete Residential / Home Address</label>
+            <input type="text" id="pfAddress" maxlength="150" value="${escHtml(p.address || '')}" placeholder="House No., Street, Barangay, City, Province" />
+          </div>
+        </div>
+
+        <!-- CARD 3: EMERGENCY CONTACT (ESSENTIAL SCHOOL PROFILE) -->
+        <div class="profile-card">
+          <div class="profile-card-hdr">
+            <h3>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#d97706" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Emergency Contact Information
+            </h3>
+            <span style="font-size:11.5px;color:#d97706;font-weight:600;">For institutional safety & school records</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:12px;">
+            <div class="pf-field">
+              <label>Emergency Contact Name</label>
+              <input type="text" id="pfEmergencyName" maxlength="60" value="${escHtml(p.emergency_contact_name || '')}" placeholder="e.g. Juanita Santos" onkeydown="allowLettersOnly(event)" oninput="sanitizeNameInput(this)" />
+            </div>
+
+            <div class="pf-field">
+              <label>Relationship</label>
+              <select id="pfEmergencyRelation">
+                <option value="Parent" ${p.emergency_contact_relation === 'Parent' ? 'selected' : ''}>Parent</option>
+                <option value="Guardian" ${p.emergency_contact_relation === 'Guardian' ? 'selected' : ''}>Guardian</option>
+                <option value="Sibling" ${p.emergency_contact_relation === 'Sibling' ? 'selected' : ''}>Sibling</option>
+                <option value="Spouse" ${p.emergency_contact_relation === 'Spouse' ? 'selected' : ''}>Spouse</option>
+                <option value="Relative" ${p.emergency_contact_relation === 'Relative' ? 'selected' : ''}>Relative</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="pf-field">
+            <label>Emergency Contact Mobile Number</label>
+            <input type="tel" id="pfEmergencyPhone" maxlength="11" value="${escHtml(p.emergency_contact_phone || '')}" placeholder="09XXXXXXXXX" onkeydown="allowDigitsOnly(event)" oninput="sanitizePhoneInput(this); validatePhoneField(this, 'pfEmergencyPhoneErr');" onblur="validatePhoneField(this, 'pfEmergencyPhoneErr')" />
+            <div class="pf-error-hint" id="pfEmergencyPhoneErr" style="display:none;color:#dc2626;font-size:11.5px;font-weight:600;margin-top:3px;"></div>
+            <span style="font-size:11px;color:var(--text-muted);">Format: Exactly 11 digits starting with <strong>09</strong></span>
+          </div>
+
+          <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+            <button type="button" class="add-btn" id="pfSaveBtn" style="padding:10px 24px;font-size:14px;border-radius:10px;font-weight:700;" onclick="saveUserProfile()">
+              <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: ACADEMIC DETAILS, ESSENTIAL SCHOOL FIELDS & SECURITY -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <!-- ESSENTIAL SCHOOL DEMOGRAPHICS CARD -->
+        <div class="profile-card">
+          <div class="profile-card-hdr">
+            <h3>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              School Profile Demographics
+            </h3>
+            <span style="font-size:11.5px;color:var(--text-muted);">DepEd Learner Record</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="pf-field">
+              <label>Date of Birth</label>
+              <input type="date" id="pfBirthDate" value="${escHtml(p.birthdate || '')}" />
+            </div>
+
+            <div class="pf-field">
+              <label>Gender / Sex</label>
+              <select id="pfGender">
+                <option value="Male" ${p.gender === 'Male' ? 'selected' : ''}>Male</option>
+                <option value="Female" ${p.gender === 'Female' ? 'selected' : ''}>Female</option>
+                <option value="Prefer not to say" ${p.gender === 'Prefer not to say' ? 'selected' : ''}>Prefer not to say</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- ACADEMIC RECORD CARD -->
+        <div class="profile-card">
+          <div class="profile-card-hdr">
+            <h3>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+              Academic Record & Credentials
+            </h3>
+            <span class="user-role-badge ${role}">${roleTitle}</span>
+          </div>
+
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">${idLabel}</span>
+            <span class="pf-meta-val"><span class="report-code">${escHtml(schoolIdVal)}</span></span>
+          </div>
+
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Institution</span>
+            <span class="pf-meta-val">Haven of Wisdom Academy</span>
+          </div>
+
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Department</span>
+            <span class="pf-meta-val">Senior High School (SHS)</span>
+          </div>
+
+          ${p.strand ? `
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">${role === 'teacher' ? 'Handled Strand(s)' : 'Academic Strand'}</span>
+            <span class="pf-meta-val" style="color:var(--blue);font-weight:700;">${escHtml(p.strand)}</span>
+          </div>` : ''}
+
+          ${p.grade_level ? `
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Grade Level</span>
+            <span class="pf-meta-val">${escHtml(p.grade_level)}</span>
+          </div>` : ''}
+
+          ${p.section ? `
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">${role === 'teacher' ? 'Advisory / Handled Section' : 'Assigned Section'}</span>
+            <span class="pf-meta-val">${escHtml(p.section)}</span>
+          </div>` : ''}
+
+          ${p.subjects ? `
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Handled Subjects</span>
+            <span class="pf-meta-val">${escHtml(p.subjects)}</span>
+          </div>` : ''}
+
+          <div class="pf-meta-row">
+            <span class="pf-meta-label">Account Standing</span>
+            <span class="pf-meta-val" style="color:#059669;display:inline-flex;align-items:center;gap:4px;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Active & Verified
+            </span>
+          </div>
+
+          <div class="pf-meta-row" style="border-bottom:none;">
+            <span class="pf-meta-label">Registration Date</span>
+            <span class="pf-meta-val">${escHtml(joinDateFormatted)}</span>
+          </div>
+        </div>
+
+        <!-- SECURITY & 2FA CARD -->
+        <div class="profile-card">
+          <div class="profile-card-hdr">
+            <h3>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Account Security & Access
+            </h3>
+          </div>
+
+          <div class="pf-field">
+            <label for="pfCurrentPassword">Current Password</label>
+            <div class="pf-password-wrap">
+              <input type="password" id="pfCurrentPassword" placeholder="Enter current password" autocomplete="current-password" />
+              <button type="button" class="pf-password-toggle" id="pfCurrentPasswordToggle" onclick="toggleProfileCurrentPassword()" aria-label="Show current password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
+          </div>
+          <div class="pf-field">
+            <label for="pfNewPassword">New Password</label>
+            <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
+          </div>
+          <div class="pf-field">
+            <label for="pfConfirmPassword">Confirm New Password</label>
+            <input type="password" id="pfConfirmPassword" placeholder="Confirm new password" autocomplete="new-password" />
+            <button type="button" id="pfConfirmPasswordBtn" class="add-btn" style="display:block;width:100%;height:36px;margin-top:10px;padding:0 14px;font-size:13px;border-radius:9px;font-weight:700;" onclick="confirmPasswordChange()">Confirm Password</button>
+            <span style="font-size:11px;color:var(--text-muted);display:block;margin-top:8px;">Enter your current password and matching new passwords, then confirm to apply the change.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ── STUDENT QUIZZES SORT & FILTER STATE ── */
+let studentQuizSortBy = 'pending'; // 'pending' | 'subject' | 'deadline' | 'newest' | 'title'
+let studentQuizFilterSubject = '';
+let studentQuizFilterStatus = ''; // '' | 'pending' | 'completed' | 'expired'
+let studentQuizSearchQuery = '';
+
+function setStudentQuizSort(sortBy) {
+  studentQuizSortBy = sortBy;
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+function setStudentQuizFilterSubject(subj) {
+  studentQuizFilterSubject = subj;
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+function setStudentQuizFilterStatus(st) {
+  studentQuizFilterStatus = st;
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+function setStudentQuizSearchQuery(q) {
+  studentQuizSearchQuery = (q || '').trim().toLowerCase();
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+function resetStudentQuizFilters() {
+  studentQuizSortBy = 'pending';
+  studentQuizFilterSubject = '';
+  studentQuizFilterStatus = '';
+  studentQuizSearchQuery = '';
+  if (typeof renderPage === 'function') renderPage('quizzes');
+}
+
+/* ── STUDENT MY PROGRESS ENGINE ── */
+let studentProgressTab = 'all'; // 'all' | 'completed' | 'pending' | 'overdue'
+let studentProgressSubject = 'all'; // 'all' | '<Subject Name>'
+let studentProgressSearch = '';
+let studentProgressSort = 'default'; // 'default' | 'deadline_asc' | 'deadline_desc' | 'score_desc' | 'score_asc' | 'title_asc'
+
+function setStudentProgressTab(tab) {
+  studentProgressTab = tab;
+  if (typeof renderPage === 'function') renderPage('progress');
+}
+
+function setStudentProgressSubject(subj) {
+  if (!subj || (subj || '').toLowerCase().trim() === 'all') {
+    studentProgressSubject = 'all';
+  } else if (studentProgressSubject.toLowerCase().trim() === (subj || '').toLowerCase().trim()) {
+    studentProgressSubject = 'all';
+  } else {
+    studentProgressSubject = subj;
+  }
+  if (typeof renderPage === 'function') renderPage('progress');
+}
+
+function setStudentProgressSort(sort) {
+  studentProgressSort = sort;
+  if (typeof renderPage === 'function') renderPage('progress');
+}
+
+function handleStudentProgressSearch(val) {
+  studentProgressSearch = (val || '').toLowerCase().trim();
+  const rows = document.querySelectorAll('.student-progress-table tbody tr[data-quiz-title]');
+  let visibleCount = 0;
+  rows.forEach(r => {
+    const title = (r.getAttribute('data-quiz-title') || '').toLowerCase();
+    const subject = (r.getAttribute('data-quiz-subject') || '').toLowerCase();
+    const match = !studentProgressSearch || title.includes(studentProgressSearch) || subject.includes(studentProgressSearch);
+    r.style.display = match ? '' : 'none';
+    if (match) visibleCount++;
+  });
+  const emptyRow = document.getElementById('studentProgressEmptyRow');
+  if (emptyRow) {
+    emptyRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+  }
+}
+
+function clearStudentProgressSearch() {
+  studentProgressSearch = '';
+  const input = document.getElementById('studentProgressSearchInput');
+  if (input) input.value = '';
+  handleStudentProgressSearch('');
+}
+
+function resetStudentProgressFilters() {
+  studentProgressTab = 'all';
+  studentProgressSubject = 'all';
+  studentProgressSearch = '';
+  studentProgressSort = 'default';
+  if (typeof renderPage === 'function') renderPage('progress');
+}
+
+/* ── STUDENT TASK & QUIZ DEADLINES STREAM ENGINE (NEWS DEADLINES) ── */
+let studentDeadlineTab = 'all'; // 'pending' | 'archive' | 'all' | 'overdue' | 'done' | 'completed'
+let studentDeadlineSubjectFilter = 'all';
+let studentDeadlineTypeFilter = 'all'; // 'all' | 'interactive' | 'normal'
+let studentDeadlineStatusFilter = 'all'; // 'all' | 'pending' | 'completed'
+let studentDeadlineMonthFilter = 'all';
+let studentDeadlineSort = 'deadline_desc'; // 'deadline_desc' | 'type_interactive' | 'type_standard'
+
+function setStudentDeadlineTab(tab) {
+  studentDeadlineTab = tab;
+  if (tab === 'pending') {
+    studentDeadlineStatusFilter = 'pending';
+  } else if (tab === 'all') {
+    studentDeadlineStatusFilter = 'all';
+  }
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineSubject(sub) {
+  studentDeadlineSubjectFilter = sub;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineType(type) {
+  studentDeadlineTypeFilter = type;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineStatus(status) {
+  studentDeadlineStatusFilter = status;
+  if (status === 'pending') {
+    studentDeadlineTab = 'pending';
+  } else if (status === 'all') {
+    studentDeadlineTab = 'all';
+  } else {
+    studentDeadlineTab = status;
+  }
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineMonth(m) {
+  studentDeadlineMonthFilter = m;
+  updateStudentDeadlinesWidget();
+}
+
+function setStudentDeadlineSort(s) {
+  studentDeadlineSort = s;
+  updateStudentDeadlinesWidget();
+}
+
+function updateStudentDeadlinesWidget() {
+  const container = document.getElementById('studentDeadlinesWidgetContainer');
+  if (container) {
+    container.innerHTML = renderStudentDeadlinesWidgetHTML();
+  }
+}
+
+window.setStudentDeadlineTab = setStudentDeadlineTab;
+window.setStudentDeadlineSubject = setStudentDeadlineSubject;
+window.setStudentDeadlineType = setStudentDeadlineType;
+window.setStudentDeadlineStatus = setStudentDeadlineStatus;
+window.setStudentDeadlineMonth = setStudentDeadlineMonth;
+window.setStudentDeadlineSort = setStudentDeadlineSort;
+window.updateStudentDeadlinesWidget = updateStudentDeadlinesWidget;
+
+// Presentation helpers: all dashboard links use the existing role navigation.
+function dashboardIcon(name) {
+  const paths = {
+    book: '<path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1Zm0 0v15"/>',
+    quiz: '<rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4V2h6v2M9 10l2 2 4-4M9 16h6"/>',
+    news: '<path d="m3 10 14-6v16L3 14v-4ZM7 15l2 7h3l-2-6M21 8v8"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 2v6M17 2v6M3 10h18M7 14h1m4 0h1m4 0h1M7 18h1m4 0h1"/>',
+    shield: '<path d="m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6l8-4Z M12 5v14M6 8h12"/>',
+    sum: '<path d="M18 4H6l8 8-8 8h12"/>',
+    leaf: '<path d="M19 3C6 2 2 9 6 16s15 0 13-13ZM4 21 16 7"/>',
+    chart: '<path d="M3 20h18M5 16l5-6 4 3 6-9"/>',
+    chat: '<path d="M21 11a9 9 0 0 1-13 8l-5 2 1-5a9 9 0 1 1 17-5Z"/>',
+    atom: '<ellipse cx="12" cy="12" rx="10" ry="4"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)"/><circle cx="12" cy="12" r="1"/>',
+    links: '<rect x="3" y="3" width="15" height="13" rx="3"/><path d="M7 20h14V8M7 7h7M7 11h4"/>'
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.book}</svg>`;
+}
+
+function dashboardSubjectIcon(subject) {
+  const value = String(subject).toLowerCase();
+  const name = value.includes('cyber') ? 'shield' : value.includes('math') ? 'sum' : value.includes('bio') ? 'leaf' : value.includes('calc') ? 'chart' : value.includes('oral') ? 'chat' : value.includes('stem') ? 'atom' : 'book';
+  return dashboardIcon(name);
+}
+
+function dashboardDeadlineLabel(deadline) {
+  const parts = String(deadline).match(/^(.*?)\s+(\d{1,2}:\d{2}\s*[AP]M)$/i);
+  return `<span class="dashboard-date">${dashboardIcon('calendar')}<span>${escHtml(parts ? parts[1] : deadline)}${parts ? `<small>${escHtml(parts[2])}</small>` : ''}</span></span>`;
+}
+
+function renderDashboardQuickLinks(role) {
+  const pages = role === 'teacher' ? ['materials', 'quiz', 'classrec', 'chats'] : ['materials', 'quizzes', 'progress', 'chats'];
+  return `<section class="dashboard-quick-links"><h3><span>${dashboardIcon('links')}</span>Quick Links</h3><div class="dashboard-shortcut-grid">${pages.map(page => {
+    const item = SIDEBAR[role].find(entry => entry.page === page);
+    return `<button type="button" class="dashboard-shortcut" onclick="${page === 'materials' ? "if(typeof setActiveSubjectMaterials==='function') setActiveSubjectMaterials(null); " : ''}renderPage('${page}')"><span class="dashboard-shortcut-icon">${item.icon}</span><span>${item.label}</span></button>`;
+  }).join('')}</div></section>`;
+}
+
+let studentSubjectShelfTab = 'enrolled';
+
+function getStudentDashboardSubjects(tab = 'enrolled') {
+  if (typeof COURSES_DATABASE === 'undefined' || typeof isCourseAssignedToStudent !== 'function') return [];
+  const gradeNumber = value => Number(String(value || '').match(/\d+/)?.[0]) || null;
+  const grade = gradeNumber(CURRENT_PROFILE?.grade_level || CURRENT_PROFILE?.gradeLevel);
+  return COURSES_DATABASE.filter(course => {
+    if (!isCourseAssignedToStudent(course, CURRENT_PROFILE)) return false;
+    const courseGrade = gradeNumber(course.gradeLevel);
+    const completed = course.status === 'completed' || (grade && courseGrade && courseGrade < grade);
+    if (tab === 'completed') return Boolean(completed);
+    return !completed && (!grade || !courseGrade || courseGrade === grade);
+  });
+}
+
+function setStudentSubjectShelfTab(tab) {
+  if (!['enrolled', 'completed'].includes(tab)) return;
+  studentSubjectShelfTab = tab;
+  const shelf = document.querySelector('.dashboard-subject-shelf');
+  if (!shelf) return;
+  shelf.outerHTML = renderStudentSubjectShelf();
+  document.querySelector('.subject-shelf-tabs [aria-pressed="true"]')?.focus({ preventScroll: true });
+}
+
+function renderStudentSubjectShelf() {
+  const courses = getStudentDashboardSubjects(studentSubjectShelfTab);
+  const completed = studentSubjectShelfTab === 'completed';
+  return `<section class="dashboard-subject-shelf" aria-labelledby="studentSubjectsTitle">
+    <header><div><h3 id="studentSubjectsTitle">${completed ? 'Completed Subjects' : 'My Enrolled Subjects'}</h3><p>${completed ? 'Previous-grade subjects and completed courses.' : 'Browse subjects for your current grade level.'}</p></div>
+      <div class="subject-shelf-controls"><button type="button" aria-label="Previous subjects" onclick="scrollStudentSubjectShelf(-1)">&#8592;</button><button type="button" aria-label="Next subjects" onclick="scrollStudentSubjectShelf(1)">&#8594;</button></div>
+    </header>
+    <div class="subject-shelf-tabs" role="group" aria-label="Subject status">
+      <button type="button" aria-pressed="${!completed}" onclick="setStudentSubjectShelfTab('enrolled')">Enrolled <span>${getStudentDashboardSubjects('enrolled').length}</span></button>
+      <button type="button" aria-pressed="${completed}" onclick="setStudentSubjectShelfTab('completed')">Completed <span>${getStudentDashboardSubjects('completed').length}</span></button>
+    </div>
+    <div class="subject-shelf-track" id="studentSubjectShelf" tabindex="0" role="region" aria-label="${completed ? 'Completed' : 'Enrolled'} subjects, scroll horizontally">
+      ${courses.length ? courses.map(course => `<button type="button" class="subject-shelf-card" onclick="handleCourseClick(${escHtml(JSON.stringify(course.id))})">
+        <img class="subject-shelf-cover" src="${escHtml(course.cover || 'assets/slide1.jpg')}" alt="" loading="lazy" onerror="this.onerror=null;this.src='assets/slide1.jpg'">
+        <span class="subject-shelf-top"><span class="subject-shelf-icon">${dashboardSubjectIcon(course.title)}</span><span>${escHtml(course.code || course.track || 'Subject')}</span></span>
+        <strong title="${escHtml(course.title)}">${escHtml(course.title)}</strong><span class="subject-shelf-meta">${escHtml(course.gradeLevel || '')}${course.semester ? ' · ' + escHtml(course.semester) : ''}</span>
+        <span class="subject-shelf-foot"><span>${escHtml(course.instructor || 'Faculty')}</span><span>Open subject &#8594;</span></span>
+      </button>`).join('') : `<p class="dashboard-widget-empty">${completed ? 'No previous-grade or completed subjects available yet.' : 'No enrolled subjects available for your grade level yet.'}</p>`}
+    </div>
+  </section>`;
+}
+
+function scrollStudentSubjectShelf(direction) {
+  const track = document.getElementById('studentSubjectShelf');
+  if (!track) return;
+  track.scrollBy({ left: direction * 272, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+
+function renderStudentEssentials() {
+  const attempted = new Set(myQuizAttempts.map(attempt => String(attempt.quiz_id)));
+  const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+  const upcoming = quizList.filter(quiz => isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !attempted.has(String(quiz.id)) && new Date(quiz.dueDate || quiz.due_date).getTime() >= Date.now())
+    .sort((a,b) => new Date(a.dueDate || a.due_date) - new Date(b.dueDate || b.due_date));
+  const next = upcoming[0];
+  const profile = CURRENT_PROFILE || {};
+  return `<section class="dashboard-essentials"><header><h3>${dashboardIcon('book')} Student Essentials</h3></header>
+    <div class="student-academic-details"><h4>Academic Details</h4><dl>
+      <div><dt>Strand</dt><dd>${escHtml(profile.strand || 'Not assigned')}</dd></div>
+      <div><dt>Grade level</dt><dd>${escHtml(profile.grade_level || profile.gradeLevel || 'Not assigned')}</dd></div>
+      <div><dt>Section</dt><dd>${escHtml(profile.section || 'Not assigned')}</dd></div>
+    </dl><button type="button" class="dashboard-text-link" onclick="renderPage('profile')">View my profile &#8594;</button></div>
+    <div class="student-next-deadline"><h4>Next Deadline</h4>${next ? `<strong>${escHtml(next.title || 'Quiz')}</strong><p>${escHtml(next.subject || 'Assessment')}</p><time datetime="${escHtml(next.dueDate || next.due_date)}">${escHtml(new Date(next.dueDate || next.due_date).toLocaleString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}))}</time>` : '<p>No upcoming quiz deadlines. Check your materials for other class tasks.</p>'}
+      <button type="button" class="dashboard-text-link" onclick="renderPage('quizzes')">View assessments &#8594;</button></div>
+  </section>`;
+}
+
+function renderStudentAssessmentOverview() {
+  const attempts = myQuizAttempts.slice().sort((a,b) => (Date.parse(b.submitted_at) || 0) - (Date.parse(a.submitted_at) || 0));
+  const completed = new Set(attempts.map(attempt => String(attempt.quiz_id)));
+  const now = Date.now();
+  const weekEnd = now + 7 * 24 * 60 * 60 * 1000;
+  const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+  const dueSoon = quizList.filter(quiz => {
+    const due = new Date(quiz.dueDate || quiz.due_date).getTime();
+    return isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !completed.has(String(quiz.id)) && due >= now && due <= weekEnd;
+  }).length;
+  return `<section class="dashboard-assessment-overview" aria-labelledby="assessmentOverviewTitle">
+    <header><h3 id="assessmentOverviewTitle">${dashboardIcon('chart')} Assessment Overview</h3><p>A quick look at your assessment activity.</p></header>
+    <dl class="assessment-overview-stats"><div><dt>Completed quizzes</dt><dd>${completed.size}</dd></div><div><dt>Due in the next 7 days</dt><dd>${dueSoon}</dd></div></dl>
+    <h4>Recent Results</h4><div class="assessment-recent-results">${attempts.length ? attempts.slice(0,3).map(attempt => {
+      const quiz = quizList.find(item => String(item.id) === String(attempt.quiz_id));
+      const score = Number(attempt.score);
+      const total = Number(attempt.total_items);
+      const result = attempt.score != null && Number.isFinite(score) && Number.isFinite(total) && total > 0 ? Math.round(score / total * 100) + '%' : 'Submitted';
+      const submitted = new Date(attempt.submitted_at || '');
+      return `<div class="assessment-result-row"><div><strong>${escHtml(quiz?.title || 'Completed assessment')}</strong><span>${escHtml(quiz?.subject || 'Assessment')}${Number.isNaN(submitted.getTime()) ? '' : ' ? ' + escHtml(submitted.toLocaleDateString('en-US',{month:'short',day:'numeric'}))}</span></div><span class="assessment-result-score">${result}</span></div>`;
+    }).join('') : '<p class="dashboard-widget-empty">Your results will appear here after you submit an assessment.</p>'}</div>
+    <button type="button" class="assessment-progress-link" onclick="renderPage('progress')">View my progress <span aria-hidden="true">&#8594;</span></button>
+  </section>`;
+}
+
+function renderStudentDashboardActivity() {
+  const activity = typeof getNotificationsForCurrentUser === 'function' ? getNotificationsForCurrentUser().slice().sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0,3) : [];
+  return `<section class="dashboard-recent-activity"><header><h4>Recent Activity</h4><button type="button" class="dashboard-text-link" onclick="renderPage('notifications')">View all &#8594;</button></header>${activity.length ? activity.map(item => `<button type="button" class="dashboard-activity-item" onclick="handleNotifItemClick(${escHtml(JSON.stringify(String(item.id)))})"><strong>${escHtml(item.title || 'Notification')}</strong><span>${escHtml(item.message || '')}</span></button>`).join('') : '<p class="dashboard-widget-empty">No recent activity yet.</p>'}</section>`;
+}
+
+function renderStudentDeadlinesWidgetHTML() {
+  const allQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []);
+  const attemptsByQuiz = new Map((typeof myQuizAttempts !== 'undefined' ? myQuizAttempts : []).map(a => [String(a.quiz_id), a]));
+  const visibleQuizzes = allQuizzes.filter(q => {
+    if (!q || q.isDemo) return false;
+    const status = String(q.status || '').toLowerCase();
+    const isAvailable = ['active', 'approved', 'ongoing'].includes(status);
+    const isCompletedClosedQuiz = status === 'closed' && attemptsByQuiz.has(String(q.id));
+    const due = new Date(q.dueDate || q.due_date || '').getTime();
+    const isOverdueClosedQuiz = status === 'closed' && Number.isFinite(due) && due < Date.now();
+    if (!isAvailable && !isCompletedClosedQuiz && !isOverdueClosedQuiz) return false;
+    return typeof isQuizTargetedForStudent !== 'function' ||
+      isQuizTargetedForStudent(isCompletedClosedQuiz || isOverdueClosedQuiz ? { ...q, status: 'active' } : q, CURRENT_PROFILE);
+  });
+
+  const now = Date.now();
+  const items = visibleQuizzes.map(q => {
+    let rawDue = q.dueDate || q.due_date;
+    let dateObj = rawDue ? new Date(rawDue) : null;
+    if (dateObj && Number.isNaN(dateObj.getTime())) dateObj = null;
+
+    const dueMs = dateObj ? dateObj.getTime() : null;
+    const isAttempted = attemptsByQuiz.has(String(q.id));
+    const attempt = attemptsByQuiz.get(String(q.id));
+    const isOverdue = !isAttempted && dueMs !== null && now > dueMs;
+    const isDueSoon = !isAttempted && dueMs !== null && !isOverdue;
+
+    // Time ago since the teacher posted it (for pending quizzes)
+    const createdAtRaw = q.createdAt || q.created_at;
+    let postTimeAgo = '';
+    if (createdAtRaw) {
+      const createdMs = new Date(createdAtRaw).getTime();
+      if (!isNaN(createdMs)) {
+        const diffMs = Math.max(0, now - createdMs);
+        const mins = Math.floor(diffMs / 60000);
+        const hrs = Math.floor(diffMs / 3600000);
+        const days = Math.floor(diffMs / 86400000);
+        if (days > 0) postTimeAgo = `${days} day${days > 1 ? 's' : ''} ago`;
+        else if (hrs > 0) postTimeAgo = `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+        else if (mins > 0) postTimeAgo = `${mins} min${mins > 1 ? 's' : ''} ago`;
+        else postTimeAgo = 'Just now';
+      }
+    }
+    const dayNum = dateObj ? dateObj.getDate() : null;
+    const dayName = dateObj ? dateObj.toLocaleDateString('en-US', { weekday: 'short' }) : '';
+    const monthShort = dateObj ? dateObj.toLocaleDateString('en-US', { month: 'short' }) : '';
+    const monthLong = dateObj ? dateObj.toLocaleDateString('en-US', { month: 'long' }) : '';
+    const monthNum = dateObj ? dateObj.getMonth() + 1 : null;
+    const time24 = dateObj ? dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+    const time12 = dateObj ? dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+
+    const status = isAttempted ? 'done' : (isOverdue ? 'overdue' : 'due');
+    const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+    const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
+
+    return {
+      quiz: q,
+      id: q.id,
+      title: q.title || 'Academic Assessment',
+      subject: q.subject || 'General Academic',
+      lesson: q.lesson || '',
+      itemCount: (q.questions || []).length,
+      isInter,
+      dueMs,
+      dateObj,
+      dayNum,
+      dayName,
+      monthShort,
+      monthLong,
+      monthNum,
+      time24,
+      time12,
+      dueTag: dateObj ? `(due ${dayNum} ${monthShort}, ${time24})` : '',
+      fullDateStr: dateObj ? `${dayName}, ${monthShort} ${dayNum} · ${time12}` : '',
+      postTimeAgo,
+      status,
+      isAttempted,
+      isOverdue,
+      isFailed: Boolean(isAttempted && pct !== null && pct < 75),
+      isDueSoon,
+      pct,
+      attempt
+    };
+  });
+
+  // Live quiz tasks from visible teacher quizzes
+  const liveQuizTasks = items.map(i => {
+    let icon = '📝';
+    let iconBg = '#2563eb';
+    const sLower = (i.subject || '').toLowerCase();
+    if (sLower.includes('bio')) { icon = '🌿'; iconBg = '#16a34a'; }
+    else if (sLower.includes('math') || sLower.includes('calc')) { icon = '∑'; iconBg = '#7c3aed'; }
+    else if (sLower.includes('phys')) { icon = '⚡'; iconBg = '#ea580c'; }
+    else if (sLower.includes('chem')) { icon = '🧪'; iconBg = '#16a34a'; }
+    else if (sLower.includes('tech') || sLower.includes('ict')) { icon = '💻'; iconBg = '#db2777'; }
+    else if (sLower.includes('earth')) { icon = '🌍'; iconBg = '#0284c7'; }
+
+    return {
+      id: `quiz-${i.id}`,
+      subject: i.subject,
+      icon,
+      iconBg,
+      title: i.title,
+      type: i.isInter ? 'Interactive Quiz' : 'Quiz',
+      typeClass: i.isInter ? 'interactive' : 'quiz',
+      isInter: i.isInter,
+      deadline: i.dateObj ? `${i.dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${i.time12}` : 'No due date',
+      status: i.isAttempted ? (i.isFailed ? 'Failed' : 'Completed') : (i.isOverdue ? 'Not Submitted' : 'Pending'),
+      quizId: i.id,
+      isCompleted: i.isAttempted,
+      isOverdue: i.isOverdue,
+      isFailed: i.isFailed,
+      pct: i.pct,
+      dateObj: i.dateObj,
+      monthNum: i.monthNum,
+      monthShort: i.monthShort,
+      monthLong: i.monthLong,
+      dueMs: i.dueMs
+    };
+  });
+
+  const allCombinedTasks = liveQuizTasks;
+  const pendingTasksCount = allCombinedTasks.filter(t => (t.status || '').toLowerCase() === 'pending').length;
+  const totalTasksCount = allCombinedTasks.length;
+
+  let displayTasks = allCombinedTasks;
+
+  // 1. Subject filter
+  if (studentDeadlineSubjectFilter && studentDeadlineSubjectFilter !== 'all') {
+    displayTasks = displayTasks.filter(t => (t.subject || '').trim().toLowerCase() === studentDeadlineSubjectFilter.trim().toLowerCase());
+  }
+
+  // 2. Types of Quiz filter (Interactive or Normal Quiz)
+  if (studentDeadlineTypeFilter && studentDeadlineTypeFilter !== 'all') {
+    if (studentDeadlineTypeFilter === 'interactive') {
+      displayTasks = displayTasks.filter(t => t.isInter === true || (t.type && t.type.toLowerCase().includes('interactive')));
+    } else if (studentDeadlineTypeFilter === 'normal') {
+      displayTasks = displayTasks.filter(t => !t.isInter && (t.type && (t.type.toLowerCase() === 'quiz' || t.type.toLowerCase().includes('normal') || t.type.toLowerCase().includes('standard'))));
+    }
+  }
+
+  // 3. Status filter (Pending or Completed)
+  if (studentDeadlineStatusFilter && studentDeadlineStatusFilter !== 'all') {
+    if (studentDeadlineStatusFilter.toLowerCase() === 'pending') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'pending');
+    } else if (studentDeadlineStatusFilter.toLowerCase() === 'completed') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'completed');
+    } else if (studentDeadlineStatusFilter.toLowerCase() === 'not_submitted') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'not submitted');
+    } else if (studentDeadlineStatusFilter.toLowerCase() === 'failed') {
+      displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'failed');
+    }
+  } else if (studentDeadlineTab === 'pending') {
+    displayTasks = displayTasks.filter(t => (t.status || '').toLowerCase() === 'pending');
+  }
+
+  // 4. Date / Month filter
+  if (studentDeadlineMonthFilter && studentDeadlineMonthFilter !== 'all') {
+    const filterMonth = String(studentDeadlineMonthFilter).toLowerCase();
+    displayTasks = displayTasks.filter(t => {
+      const mNum = t.monthNum != null ? String(t.monthNum) : (t.dateObj ? String(t.dateObj.getMonth() + 1) : null);
+      if (mNum && mNum === filterMonth) return true;
+      if (t.monthShort && t.monthShort.toLowerCase() === filterMonth) return true;
+      if (t.monthLong && t.monthLong.toLowerCase() === filterMonth) return true;
+      return false;
+    });
+  }
+
+  // Sort display tasks chronologically
+  displayTasks.sort((a, b) => {
+    const aMs = a.dueMs || (a.dateObj ? a.dateObj.getTime() : 0);
+    const bMs = b.dueMs || (b.dateObj ? b.dateObj.getTime() : 0);
+    return aMs - bMs;
+  });
+
+  // Unique Subject options
+  const subjectOptions = [];
+  allCombinedTasks.forEach(t => {
+    if (t.subject && !subjectOptions.some(s => s.toLowerCase() === t.subject.toLowerCase())) {
+      subjectOptions.push(t.subject);
+    }
+  });
+
+  // Month options
+  const monthOptions = [];
+  allCombinedTasks.forEach(t => {
+    if (t.monthNum && !monthOptions.some(m => m.val === String(t.monthNum))) {
+      monthOptions.push({
+        val: String(t.monthNum),
+        label: `${t.monthLong || t.monthShort} ${t.dateObj ? t.dateObj.getFullYear() : '2025'}`
+      });
+    }
+  });
+
+  return `
+  <div class="student-deadlines-container">
+    <!-- Header -->
+    <div class="student-deadlines-header">
+      <div class="deadlines-title-wrap">
+        <h3>
+          <span class="dashboard-heading-icon">${dashboardIcon('calendar')}</span> Your Tasks &amp; Quizzes
+          ${pendingTasksCount > 0 ? `
+          <span class="badge" style="background:#2563eb;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:20px;margin-left:6px;">
+            ${pendingTasksCount} Active Due
+          </span>` : ''}
+        </h3>
+        <p>Track upcoming quiz schedules, day/time deadlines, and types for every subject you take.</p>
+      </div>
+
+      <!-- Top Pills -->
+      <div class="deadlines-top-pills">
+        <button class="top-pill-btn ${studentDeadlineStatusFilter === 'pending' || (studentDeadlineStatusFilter === 'all' && studentDeadlineTab === 'pending') ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
+          Pending Quizzes <span style="font-weight:800;margin-left:2px;">${pendingTasksCount}</span>
+        </button>
+        <button class="top-pill-btn ${studentDeadlineStatusFilter === 'all' && studentDeadlineTab !== 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
+          All Tasks <span style="font-weight:800;margin-left:2px;">${totalTasksCount}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter Dropdowns Row -->
+    <div class="deadlines-filters-row">
+      <!-- 1. Subject Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)" title="Filter by Subject">
+        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (${subjectOptions.length})</option>
+        ${subjectOptions.map(s => `
+          <option value="${escHtml(s)}" ${studentDeadlineSubjectFilter === s ? 'selected' : ''}>${escHtml(s)}</option>
+        `).join('')}
+      </select>
+
+      <!-- 2. Types of Quiz Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineType(this.value)" title="Filter by Quiz Type">
+        <option value="all" ${studentDeadlineTypeFilter === 'all' ? 'selected' : ''}>📝 All Quiz Types</option>
+        <option value="interactive" ${studentDeadlineTypeFilter === 'interactive' ? 'selected' : ''}>🎮 Interactive Quiz</option>
+        <option value="normal" ${studentDeadlineTypeFilter === 'normal' ? 'selected' : ''}>📋 Normal Quiz</option>
+      </select>
+
+      <!-- 3. Status Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineStatus(this.value)" title="Filter by Status">
+        <option value="all" ${studentDeadlineStatusFilter === 'all' ? 'selected' : ''}>⚡ All Status</option>
+        <option value="pending" ${studentDeadlineStatusFilter === 'pending' ? 'selected' : ''}>⏳ Pending</option>
+        <option value="completed" ${studentDeadlineStatusFilter === 'completed' ? 'selected' : ''}>✅ Completed</option>
+        <option value="not_submitted" ${studentDeadlineStatusFilter === 'not_submitted' ? 'selected' : ''}>Not Submitted</option>
+        <option value="failed" ${studentDeadlineStatusFilter === 'failed' ? 'selected' : ''}>Failed</option>
+      </select>
+
+      <!-- 4. Month Filter -->
+      <select class="deadline-filter-select" onchange="setStudentDeadlineMonth(this.value)" title="Filter by Month/Date">
+        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
+        ${monthOptions.map(m => `
+          <option value="${escHtml(m.val)}" ${String(studentDeadlineMonthFilter) === String(m.val) ? 'selected' : ''}>${escHtml(m.label)}</option>
+        `).join('')}
+      </select>
+    </div>
+
+    <!-- Deadlines Table (Image 1) -->
+    <div class="student-deadlines-table-wrap">
+      <table class="student-deadlines-table">
+        <thead>
+          <tr>
+            <th style="width:26%;">Subject</th>
+            <th style="width:25%;">Task / Quiz</th>
+            <th style="width:16%;">Type</th>
+            <th style="width:18%;">Deadline</th>
+            <th style="width:15%;min-width:85px;text-align:right;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${displayTasks.length === 0 ? `
+            <tr>
+              <td colspan="5" style="text-align:center;padding:32px 16px;color:#64748b;font-size:13px;font-weight:600;">
+                No tasks or quizzes found matching your filters.
+              </td>
+            </tr>
+          ` : displayTasks.map(t => {
+            const clickHandler = t.quizId
+              ? (t.isCompleted ? `openReviewAttempt('${t.quizId}')` : `openTakeQuizModal('${t.quizId}')`)
+              : `showToast('Assessment details for ${escHtml(t.title)}', 'info')`;
+
+            return `
+            <tr onclick="${clickHandler}" style="cursor:pointer;" title="Click to view ${escHtml(t.title)}">
+              <!-- Subject -->
+              <td>
+                <div class="subject-badge-cell">
+                  <div class="subj-icon-box" style="background:${t.iconBg};">
+                    ${dashboardSubjectIcon(t.subject)}
+                  </div>
+                  <span style="font-weight:700;color:#0f172a;font-size:13px;">${escHtml(t.subject)}</span>
+                </div>
+              </td>
+
+              <!-- Task / Quiz -->
+              <td>
+                <span style="font-weight:600;color:#334155;font-size:13px;">${escHtml(t.title)}</span>
+              </td>
+
+              <!-- Type -->
+              <td>
+                <span class="type-pill ${t.typeClass || 'quiz'}">
+                  ${escHtml(t.type)}
+                </span>
+              </td>
+
+              <!-- Deadline -->
+              <td>
+                ${dashboardDeadlineLabel(t.deadline)}
+              </td>
+
+              <!-- Status -->
+              <td style="text-align:right;">
+                <span class="${t.status === 'Completed' ? 'type-pill performance' : t.status === 'Pending' ? 'status-pill-amber' : 'status-pill-overdue'}">
+                  ${escHtml(t.status)}
+                </span>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Footer View All Link -->
+    <div style="margin-top:14px;padding-top:10px;border-top:1px solid #f1f5f9;">
+      <a href="javascript:void(0)" onclick="renderPage('quizzes')" class="view-all-link" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;">
+        View All Tasks &amp; Quizzes →
+      </a>
+    </div>
+  </div>`;
+}
+
+/* ── STUDENT PAGES ── */
+function studentPage(page) {
+  switch(page) {
+    case 'dashboard': {
+      const mySubjects = [...new Set(materialsData.map(m => m.subject).filter(Boolean))];
+      const attemptedQuizIds = new Set(myQuizAttempts.map(a => a.quiz_id));
+      const now = Date.now();
+      const availableQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q =>
+        ['active', 'approved', 'ongoing'].includes(String(q.status || '').toLowerCase()) &&
+        !q.isDemo &&
+        !attemptedQuizIds.has(String(q.id)) &&
+        (!(q.dueDate || q.due_date) || !Number.isFinite(new Date(q.dueDate || q.due_date).getTime()) || new Date(q.dueDate || q.due_date).getTime() >= now) &&
+        (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
+      );
+      const latestAttempt = myQuizAttempts[0] || null;
+      const latestQuizTitle = latestAttempt ? ((typeof customQuizzes !== 'undefined' ? customQuizzes : []).find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
+      const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : 63;
+
+      const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function'
+        ? getStudentDashboardSubjects('enrolled').length
+        : 0;
+
+      const completedQuizzesCount = myQuizAttempts.length;
+      const pendingQuizzesCount = availableQuizzes.length;
+      const totalQuizzesTracked = completedQuizzesCount + pendingQuizzesCount;
+      const progressPct = totalQuizzesTracked > 0 ? Math.round((completedQuizzesCount / totalQuizzesTracked) * 100) : 44;
+      const C = 238.76;
+      const qCompLen = totalQuizzesTracked > 0 ? (completedQuizzesCount / totalQuizzesTracked) * C : 0;
+      const qPendLen = totalQuizzesTracked > 0 ? (pendingQuizzesCount / totalQuizzesTracked) * C : 0;
+      const qPendOffset = -qCompLen;
+
+      const allAnc = typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : [];
+      const readAnc = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
+      const activeAnnouncements = allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft && !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()));
+      const unreadCount = activeAnnouncements.filter(a => !readAnc.has(String(a.id))).length;
+
+      const studentName = (CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || 'Michael').trim();
+      const firstName = studentName.split(/\s+/)[0] || 'Michael';
+
+      // Greeting based on time of day
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? 'morning' : (hour < 18 ? 'afternoon' : 'evening');
+
+      return `
+      <!-- 1. HERO BANNER -->
+      <div class="student-hero-banner">
+        <div class="student-hero-left">
+          <div class="student-hero-icon-badge">🎓</div>
+          <div class="student-hero-text">
+            <h1>Good ${greeting}, ${escHtml(firstName)}!</h1>
+            <h2>Welcome back to Scholaria!</h2>
+            <p>Stay on track with your studies — check your deadlines, complete quizzes &amp; view announcements.</p>
+          </div>
+        </div>
+        <div class="student-hero-right">
+          <div class="student-hero-quote">
+            "Small steps every day lead to big results."
+          </div>
+          <div class="student-hero-art">
+            <svg width="84" height="68" viewBox="0 0 100 80" fill="none">
+              <path d="M15 55L45 70L85 50L55 35L15 55Z" fill="#1e40af"/>
+              <path d="M15 55L15 62L45 77L45 70L15 55Z" fill="#1d4ed8"/>
+              <path d="M45 70L45 77L85 57L85 50L45 70Z" fill="#3b82f6"/>
+              <path d="M20 42L50 57L88 38L58 23L20 42Z" fill="#d97706"/>
+              <path d="M20 42L20 49L50 64L50 57L20 42Z" fill="#b45309"/>
+              <path d="M50 57L50 64L88 45L88 38L50 57Z" fill="#f59e0b"/>
+              <path d="M25 28L55 43L92 25L62 10L25 28Z" fill="#2563eb"/>
+              <path d="M25 28L25 35L55 50L55 43L25 28Z" fill="#1d4ed8"/>
+              <path d="M55 43L55 50L92 32L92 25L55 43Z" fill="#60a5fa"/>
+              <path d="M30 31L53 42L85 27L62 15L30 31Z" fill="#93c5fd" opacity="0.4"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 4 STAT CARDS ROW (INTERACTIVE & POLISHED) -->
+      <div class="student-stat-cards-grid">
+        <div class="student-stat-card" onclick="if(typeof setActiveSubjectMaterials==='function') setActiveSubjectMaterials(null); renderPage('materials');" style="cursor:pointer;" title="View all enrolled subjects">
+          <div class="stat-card-icon blue">
+            ${dashboardIcon('book')}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Enrolled Subjects</div>
+            <div class="stat-card-num blue">${enrolledCoursesCount}</div>
+            <div class="stat-card-desc">Across all your courses</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
+        </div>
+
+        <div class="student-stat-card" onclick="renderPage('quizzes')" style="cursor:pointer;" title="View available quizzes">
+          <div class="stat-card-icon orange">
+            ${dashboardIcon('quiz')}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Available Quizzes</div>
+            <div class="stat-card-num orange">${availableQuizzes.length}</div>
+            <div class="stat-card-desc">New test material waiting</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
+        </div>
+
+        <div class="student-stat-card" onclick="renderPage('progress')" style="cursor:pointer;" title="View academic performance">
+          <div class="stat-card-icon green">
+            ${iconProgress()}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Latest Score</div>
+            <div class="stat-card-num green">${latestScorePct}%</div>
+            <div class="stat-card-desc">Your current average</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
+        </div>
+
+        <div class="student-stat-card" onclick="renderPage('announcements')" style="cursor:pointer;" title="View school bulletins">
+          <div class="stat-card-icon pink">
+            ${dashboardIcon('news')}
+          </div>
+          <div class="stat-card-info">
+            <div class="stat-card-label">Unread News</div>
+            <div class="stat-card-num pink">${unreadCount}</div>
+            <div class="stat-card-desc">School announcements &amp; events</div>
+          </div>
+          <span class="stat-card-arrow">›</span>
+        </div>
+      </div>
+
+      <!-- 3. SPLIT 2-COLUMN MAIN CONTENT -->
+      <div class="student-dashboard-split">
+        <!-- LEFT COLUMN: YOUR TASKS & QUIZZES -->
+        <div class="student-main-left">
+          ${renderStudentSubjectShelf()}
+          <div id="studentDeadlinesWidgetContainer">
+            ${renderStudentDeadlinesWidgetHTML()}
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: NEWS & BULLETINS + MY PROGRESS WIDGET -->
+        <div class="student-main-right">
+          <!-- WIDGET 1: RECENT NEWS & BULLETINS -->
+          <div class="news-bulletin-container">
+            <div class="news-bulletin-header">
+              <h3>
+                <span class="dashboard-heading-icon">${dashboardIcon('news')}</span> Recent News &amp; Activity
+              </h3>
+              <a href="javascript:void(0)" onclick="renderPage('announcements')" class="view-all-link">
+                View All →
+              </a>
+            </div>
+
+            <div class="news-bulletin-list">
+              ${(() => {
+                const activeNews = allAnc
+                  .filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft && !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()))
+                  .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                  .slice(0, 3);
+
+                if (!activeNews.length) {
+                  return `
+                    <div class="news-bulletin-item" onclick="renderPage('announcements')">
+                      <span class="dashboard-news-icon academic">${dashboardIcon('book')}</span>
+                      <div class="news-item-top">
+                        <span class="news-tag academic">ACADEMIC</span>
+                        <span class="news-time">Today</span>
+                      </div>
+                      <div class="news-item-title">Welcome to Scholaria Portal</div>
+                      <div class="news-item-snippet">Check back here for official school announcements, typhoon class suspensions, and department bulletins.</div>
+                    </div>
+                  `;
+                }
+
+                return activeNews.map(anc => {
+                  const isUnread = !readAnc.has(String(anc.id));
+                  const timeAgo = (() => {
+                    const diff = Date.now() - new Date(anc.timestamp).getTime();
+                    const mins = Math.floor(diff / 60000);
+                    const hrs  = Math.floor(diff / 3600000);
+                    const days = Math.floor(diff / 86400000);
+                    if (days > 0) return `${days}d ago`;
+                    if (hrs > 0)  return `${hrs}h ago`;
+                    if (mins > 0) return `${mins}m ago`;
+                    return 'Just now';
+                  })();
+
+                  const tagClass = anc.category === 'emergency' ? 'emergency' : anc.category === 'academic' ? 'academic' : 'event';
+                  const tagLabel = anc.category === 'emergency' ? 'SUSPENSION / EMERGENCY' : anc.category === 'academic' ? 'ACADEMIC' : anc.category === 'event' ? 'SCHOOL EVENTS' : 'ANNOUNCEMENT';
+
+                  return `
+                    <div class="news-bulletin-item" onclick="openAnnouncementDetailModal('${anc.id}')" style="cursor:pointer;" title="Click to read announcement">
+                      <span class="dashboard-news-icon ${tagClass}">${dashboardIcon(anc.category === 'academic' ? 'book' : 'news')}</span>
+                      <div class="news-item-top">
+                        <span class="news-tag ${tagClass}">${tagLabel}</span>
+                        ${isUnread ? '<span class="news-tag-new">NEW</span>' : ''}
+                        <span class="news-time">${timeAgo}</span>
+                      </div>
+                      <div class="news-item-title">${escHtml(anc.title)}</div>
+                      <div class="news-item-snippet">${escHtml((anc.message || '').replace(/\n/g, ' '))}</div>
+                    </div>
+                  `;
+                }).join('');
+              })()}
+            </div>
+            ${renderStudentDashboardActivity()}
+          </div>
+
+          ${renderStudentEssentials()}
+          ${renderStudentAssessmentOverview()}
+        </div>
+      </div>
+          <!-- WIDGET 2: MY PROGRESS SUMMARY WIDGET -->
+          <div class="student-progress-card dashboard-progress-detail">
+            <div class="student-progress-card-header">
+              <h3>
+                <span style="color:#0284c7;">📊</span> My Progress
+              </h3>
+              <a href="javascript:void(0)" onclick="renderPage('progress')" class="view-all-link">
+                View All →
+              </a>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:18px;">
+              <!-- Gauge on Left (Functional Multi-Colored Donut Chart) -->
+              <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">
+                <div class="sw-gauge-wrap" style="position:relative;width:96px;height:96px;margin:0 auto;">
+                  <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
+                    <!-- Base track -->
+                    <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" stroke-width="9"/>
+                    <!-- Completed Quizzes (Green) -->
+                    ${qCompLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" stroke-width="9" stroke-linecap="round" stroke-dasharray="${qCompLen.toFixed(2)} ${C}" stroke-dashoffset="0"/>` : ''}
+                    <!-- Pending Assessments (Orange) -->
+                    ${qPendLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#ea580c" stroke-width="9" stroke-linecap="round" stroke-dasharray="${qPendLen.toFixed(2)} ${C}" stroke-dashoffset="${qPendOffset.toFixed(2)}"/>` : ''}
+                  </svg>
+                  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+                    <span style="font-size:22px;font-weight:800;color:#0f172a;line-height:1;">${progressPct}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Metrics Breakdown on Right -->
+              <div class="progress-breakdown-list" style="flex:1;">
+                <div class="progress-breakdown-item">
+                  <span class="pbi-label"><span class="pbi-dot green"></span> Completed Quizzes</span>
+                  <strong>${completedQuizzesCount}</strong>
+                </div>
+                <div class="progress-breakdown-item">
+                  <span class="pbi-label"><span class="pbi-dot orange"></span> Pending Assessments</span>
+                  <strong>${pendingQuizzesCount}</strong>
+                </div>
+                <div class="progress-breakdown-item">
+                  <span class="pbi-label"><span class="pbi-dot blue"></span> Enrolled Subjects</span>
+                  <strong>${enrolledCoursesCount}</strong>
+                </div>
+                <div class="progress-breakdown-item total">
+                  <span class="pbi-label"><span class="pbi-dot purple"></span> Current Average</span>
+                  <strong style="color:#7c3aed;">${latestScorePct}%</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+      `;
+    }
+
+    case 'materials': return `
+      <div id="materialsListWrap">${renderMaterialsList('student')}</div>`;
+
+    case 'quizzes': {
+      const attemptsByQuiz = new Map(myQuizAttempts.map(a => [a.quiz_id, a]));
+      const visibleQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q =>
+        q.status === 'closed' || isQuizTargetedForStudent(q, CURRENT_PROFILE)
+      );
+      const nowMs = Date.now();
+
+      // Extract unique subjects across all visible quizzes
+      const availableSubjects = [...new Set(visibleQuizzes.map(q => q.subject).filter(Boolean))].sort();
+
+      // Calculate total metrics across all assigned quizzes
+      const totalCount = visibleQuizzes.length;
+      let completedCount = 0;
+      let pendingCount = 0;
+      let expiredCount = 0;
+
+      visibleQuizzes.forEach(q => {
+        const attempt = attemptsByQuiz.get(q.id);
+        const dueMs = (q.dueDate || q.due_date) ? new Date(q.dueDate || q.due_date).getTime() : null;
+        const isExpired = !attempt && dueMs && nowMs > dueMs;
+        if (attempt) completedCount++;
+        else if (isExpired) expiredCount++;
+        else pendingCount++;
+      });
+
+      // Filter quizzes
+      let filtered = visibleQuizzes.slice();
+
+      // 1. Search Query filter
+      if (studentQuizSearchQuery) {
+        filtered = filtered.filter(q => {
+          const t = (q.title || '').toLowerCase();
+          const s = (q.subject || '').toLowerCase();
+          const l = (q.lesson || '').toLowerCase();
+          return t.includes(studentQuizSearchQuery) || s.includes(studentQuizSearchQuery) || l.includes(studentQuizSearchQuery);
+        });
+      }
+
+      // 2. Subject filter
+      if (studentQuizFilterSubject) {
+        filtered = filtered.filter(q => String(q.subject || '').toLowerCase() === studentQuizFilterSubject.toLowerCase());
+      }
+
+      // 3. Status filter
+      if (studentQuizFilterStatus) {
+        filtered = filtered.filter(q => {
+          const attempt = attemptsByQuiz.get(q.id);
+          const dueMs = (q.dueDate || q.due_date) ? new Date(q.dueDate || q.due_date).getTime() : null;
+          const isExpired = !attempt && dueMs && nowMs > dueMs;
+          if (studentQuizFilterStatus === 'completed') return !!attempt;
+          if (studentQuizFilterStatus === 'pending') return !attempt && !isExpired;
+          if (studentQuizFilterStatus === 'expired') return isExpired;
+          return true;
+        });
+      }
+
+      // 4. Sort quizzes
+      filtered.sort((a, b) => {
+        const attemptA = attemptsByQuiz.get(a.id);
+        const attemptB = attemptsByQuiz.get(b.id);
+        const dueMsA = (a.dueDate || a.due_date) ? new Date(a.dueDate || a.due_date).getTime() : null;
+        const dueMsB = (b.dueDate || b.due_date) ? new Date(b.dueDate || b.due_date).getTime() : null;
+        const isExpiredA = !attemptA && dueMsA && nowMs > dueMsA;
+        const isExpiredB = !attemptB && dueMsB && nowMs > dueMsB;
+
+        if (studentQuizSortBy === 'subject') {
+          const subjA = (a.subject || 'General Academic').toLowerCase();
+          const subjB = (b.subject || 'General Academic').toLowerCase();
+          const subjCmp = subjA.localeCompare(subjB);
+          if (subjCmp !== 0) return subjCmp;
+          return (a.title || '').localeCompare(b.title || '');
+        }
+
+        if (studentQuizSortBy === 'deadline') {
+          if (!dueMsA && !dueMsB) return 0;
+          if (!dueMsA) return 1;
+          if (!dueMsB) return -1;
+          return dueMsA - dueMsB;
+        }
+
+        if (studentQuizSortBy === 'pending') {
+          const rankA = !attemptA ? (isExpiredA ? 2 : 1) : 3;
+          const rankB = !attemptB ? (isExpiredB ? 2 : 1) : 3;
+          if (rankA !== rankB) return rankA - rankB;
+          if (dueMsA && dueMsB) return dueMsA - dueMsB;
+          return 0;
+        }
+
+        if (studentQuizSortBy === 'newest') {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        }
+
+        if (studentQuizSortBy === 'title') {
+          return (a.title || '').localeCompare(b.title || '');
+        }
+
+        return 0;
+      });
+
+      const hasActiveFilters = Boolean(studentQuizSearchQuery || studentQuizFilterSubject || studentQuizFilterStatus || studentQuizSortBy !== 'pending');
+
+      return `
+      <div class="student-quizzes-container" style="max-width:none;width:100%;display:flex;flex-direction:column;gap:12px;">
+        <div class="section-hdr" style="margin-bottom:0;">
+          <div>
+            <h2 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 2px 0;">Quizzes</h2>
+            <span style="font-size:12px;color:var(--text-muted);">View, filter, sort, and complete your assigned subject assessments</span>
+          </div>
+        </div>
+
+        <!-- METRIC HIGHLIGHT CARDS -->
+        <div class="card-grid" style="gap:12px;margin-bottom:0;">
+          <div class="stat-filter-card ${studentQuizFilterStatus === '' ? 'active' : ''}" onclick="setStudentQuizFilterStatus('')" title="Click to view all assigned quizzes">
+            <div class="ic-icon">${iconQuiz()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Assigned Quizzes</div>
+              <div class="ic-num">${totalCount}</div>
+              <p>Total assessments for your grade & strand</p>
+            </div>
+          </div>
+          <div class="stat-filter-card ${studentQuizFilterStatus === 'pending' ? 'active' : ''}" onclick="setStudentQuizFilterStatus('pending')" title="Click to filter quizzes pending to take">
+            <div class="ic-icon gold">${iconClock()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Pending to Take</div>
+              <div class="ic-num gold">${pendingCount}</div>
+              <p>${pendingCount > 0 ? `${pendingCount} quiz${pendingCount === 1 ? '' : 'zes'} awaiting your submission` : 'All caught up! 🎉'}</p>
+            </div>
+          </div>
+          <div class="stat-filter-card ${studentQuizFilterStatus === 'completed' ? 'active' : ''}" onclick="setStudentQuizFilterStatus('completed')" title="Click to filter completed quizzes">
+            <div class="ic-icon green">${iconCheck()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Completed</div>
+              <div class="ic-num green">${completedCount}</div>
+              <p>${totalCount > 0 ? `${Math.round((completedCount / totalCount) * 100)}% completion rate` : 'No quizzes yet'}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- SEARCH, SORT & FILTER TOOLBAR -->
+        <div style="background:#f8fafc;padding:10px 14px;border-radius:12px;border:1.5px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;">
+          <div style="display:flex;gap:8px;flex:1;min-width:min(100%,220px);max-width:380px;align-items:center;">
+            <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:9px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(studentQuizSearchQuery)}" oninput="setStudentQuizSearchQuery(this.value)"/>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <!-- SORT SELECT -->
+            <div style="display:flex;align-items:center;gap:5px;">
+              <label style="font-size:11.5px;font-weight:700;color:#64748b;margin:0;">Sort:</label>
+              <select class="user-filter-select" style="font-weight:600;padding:6px 10px;font-size:12px;border-radius:8px;" onchange="setStudentQuizSort(this.value)">
+                <option value="pending" ${studentQuizSortBy === 'pending' ? 'selected' : ''}>⚡ Pending to Take First</option>
+                <option value="subject" ${studentQuizSortBy === 'subject' ? 'selected' : ''}>📚 Subject (A – Z)</option>
+                <option value="deadline" ${studentQuizSortBy === 'deadline' ? 'selected' : ''}>⏰ Due Date (Earliest First)</option>
+                <option value="newest" ${studentQuizSortBy === 'newest' ? 'selected' : ''}>🆕 Newest Added</option>
+                <option value="title" ${studentQuizSortBy === 'title' ? 'selected' : ''}>🔤 Title (A – Z)</option>
+              </select>
+            </div>
+
+            <!-- SUBJECT FILTER -->
+            <div style="display:flex;align-items:center;gap:5px;">
+              <label style="font-size:11.5px;font-weight:700;color:#64748b;margin:0;">Subject:</label>
+              <select class="user-filter-select" style="font-weight:600;padding:6px 10px;font-size:12px;border-radius:8px;" onchange="setStudentQuizFilterSubject(this.value)">
+                <option value="">All Subjects</option>
+                ${availableSubjects.map(s => `<option value="${escHtml(s)}" ${studentQuizFilterSubject.toLowerCase() === s.toLowerCase() ? 'selected' : ''}>${escHtml(s)}</option>`).join('')}
+              </select>
+            </div>
+
+            <!-- STATUS FILTER -->
+            <div style="display:flex;align-items:center;gap:5px;">
+              <label style="font-size:11.5px;font-weight:700;color:#64748b;margin:0;">Status:</label>
+              <select class="user-filter-select" style="font-weight:600;padding:6px 10px;font-size:12px;border-radius:8px;" onchange="setStudentQuizFilterStatus(this.value)">
+                <option value="">All Statuses</option>
+                <option value="pending" ${studentQuizFilterStatus === 'pending' ? 'selected' : ''}>Pending (To Take)</option>
+                <option value="completed" ${studentQuizFilterStatus === 'completed' ? 'selected' : ''}>Completed</option>
+                <option value="expired" ${studentQuizFilterStatus === 'expired' ? 'selected' : ''}>Expired</option>
+              </select>
+            </div>
+
+            ${hasActiveFilters ? `
+              <button onclick="resetStudentQuizFilters()" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;padding:6px 10px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s ease;" title="Reset all sorting and filtering">
+                ✕ Clear
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- QUIZ LIST -->
+        <div class="quiz-list" style="display:flex;flex-direction:column;gap:8px;">
+          ${filtered.length ? filtered.map(q => {
+            const attempt = attemptsByQuiz.get(q.id);
+            const pct = attempt && attempt.total_items ? Math.round((attempt.score / attempt.total_items) * 100) : null;
+            const dueMs = (q.dueDate || q.due_date) ? new Date(q.dueDate || q.due_date).getTime() : null;
+            const isExpired = !attempt && dueMs && nowMs > dueMs;
+            const dueFormatted = dueMs ? new Date(dueMs).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : null;
+            const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+            const itemsCount = (q.questions || []).length;
+            const isUrgent = !attempt && dueMs && (dueMs - nowMs < 86400000) && (dueMs > nowMs); // Due within 24h
+
+            return `<div class="quiz-row" style="${isExpired ? 'opacity:0.75;background:#fcfcfc;' : ''}display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;margin:0;gap:14px;flex-wrap:wrap;transition:all 0.2s ease;">
+              <div class="qz-info" style="flex:1;min-width:min(100%,220px);">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
+                  <span style="display:inline-block;padding:2px 8px;border-radius:6px;background:#eff6ff;color:#2563eb;font-size:11px;font-weight:700;">📚 ${escHtml(q.subject || 'General Academic')}</span>
+                  ${isInter ? '<span style="display:inline-block;padding:2px 7px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;">🎮 Interactive</span>' : '<span style="display:inline-block;padding:2px 7px;border-radius:50px;background:#f1f5f9;color:#475569;font-size:10px;font-weight:600;">📝 Standard</span>'}
+                  ${isUrgent ? '<span style="display:inline-block;padding:2px 7px;border-radius:50px;background:#fef2f2;color:#dc2626;font-size:10px;font-weight:700;">⚠️ Due Soon</span>' : ''}
+                </div>
+                <h4 style="font-size:14.5px;font-weight:700;color:#0f172a;margin:1px 0 4px;">${escHtml(q.title)}</h4>
+                <div style="font-size:12px;color:var(--text-muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                  <span>📋 ${itemsCount} Question${itemsCount === 1 ? '' : 's'}</span>
+                  ${attempt ? `<span style="font-weight:700;color:${pct >= 75 ? '#166534' : '#991b1b'};">🎯 Score: ${attempt.score}/${attempt.total_items} (${pct}%)</span>` : ''}
+                  ${dueFormatted ? `<span style="${isUrgent ? 'color:#dc2626;font-weight:700;' : ''}">🕒 Due: ${escHtml(dueFormatted)}</span>` : '<span style="color:#94a3b8;">📅 No Due Date</span>'}
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span class="status-pill ${attempt ? 'done' : isExpired ? 'low' : 'pending'}" style="${isExpired ? 'background:#fee2e2;color:#991b1b;' : ''}">${attempt ? 'Completed' : isExpired ? 'Expired' : 'Pending'}</span>
+                ${attempt ? `
+                  <button class="sw-btn outline" onclick="openReviewAttempt('${q.id}')" style="padding:6px 14px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;border-radius:8px;border:1.5px solid #0284c7;color:#0284c7;background:#fff;cursor:pointer;">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Review
+                  </button>
+                ` : isExpired ? `
+                  <button class="take-btn" disabled style="background:#94a3b8;cursor:not-allowed;opacity:0.65;padding:6px 14px;font-size:12px;">Expired</button>
+                ` : isInter ? `
+                  <button class="sw-btn" onclick="openInteractiveQuiz('${q.id}')" style="background:linear-gradient(135deg,#0284c7,#8b5cf6);color:#fff;border:none;padding:6px 14px;font-size:12px;display:inline-flex;align-items:center;gap:5px;border-radius:8px;font-weight:600;cursor:pointer;">🎮 Play Quiz</button>
+                ` : `
+                  <button class="take-btn" onclick="openTakeQuizModal('${q.id}')" style="padding:6px 14px;font-size:12px;">Take Quiz</button>
+                `}
+              </div>
+            </div>`;
+          }).join('')
+            : `
+            <div style="text-align:center;padding:32px 16px;background:#fff;border-radius:12px;border:1px dashed #cbd5e1;">
+              <div style="font-size:32px;margin-bottom:8px;">🔍</div>
+              <h3 style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px;">No Quizzes Found</h3>
+              <p style="color:var(--text-muted);font-size:12.5px;max-width:380px;margin:0 auto 12px;">
+                ${hasActiveFilters ? 'No quizzes match your active filters or search keyword. Try clearing filters.' : 'You have no quizzes assigned to your strand and section at this time.'}
+              </p>
+              ${hasActiveFilters ? `<button onclick="resetStudentQuizFilters()" class="add-btn" style="margin:0 auto;">Clear All Filters</button>` : ''}
+            </div>
+            `}
+        </div>
+      </div>`;
+    }
+
+    case 'progress': {
+      const allAttempts = typeof getAllRecordedAttempts === 'function' ? getAllRecordedAttempts() : myQuizAttempts;
+      const studentAttempts = typeof deduplicateQuizAttempts === 'function'
+        ? deduplicateQuizAttempts(allAttempts.filter(a => isAttemptBelongingToStudent(a, CURRENT_PROFILE)))
+        : myQuizAttempts;
+
+      // Filter quizzes targeted for this student
+      const targetedQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q =>
+        (q.status === 'active' || q.status === 'approved' || q.status === 'closed' || q.isDemo) &&
+        isQuizTargetedForStudent(q, CURRENT_PROFILE)
+      );
+
+      // Also ensure any quiz the student completed is included in the list
+      const quizList = [...targetedQuizzes];
+      studentAttempts.forEach(att => {
+        const alreadyInList = quizList.some(q =>
+          String(q.id).toLowerCase() === String(att.quiz_id || '').toLowerCase() ||
+          (q.title && att.quiz_title && String(q.title).toLowerCase().trim() === String(att.quiz_title).toLowerCase().trim())
+        );
+        if (!alreadyInList) {
+          quizList.push({
+            id: att.quiz_id,
+            title: att.quiz_title || 'Quiz Assessment',
+            subject: att.subject || 'General',
+            questions: new Array(att.total_items || 10)
+          });
+        }
+      });
+
+      const now = Date.now();
+      let completedCount = 0;
+      let pendingCount = 0;
+      let overdueCount = 0;
+      let scoreSum = 0;
+      let scoreCount = 0;
+
+      const allRows = quizList.map(q => {
+        const attempt = studentAttempts.find(a =>
+          String(a.quiz_id || '').toLowerCase() === String(q.id || '').toLowerCase() ||
+          (a.quiz_title && q.title && String(a.quiz_title).toLowerCase().trim() === String(q.title).toLowerCase().trim())
+        );
+
+        const totalItems = attempt?.total_items || (q.questions ? q.questions.length : 0);
+        const score = attempt ? (attempt.score !== undefined ? attempt.score : 0) : null;
+        let pct = null;
+
+        if (attempt) {
+          completedCount++;
+          if (attempt.score_percentage !== undefined && attempt.score_percentage !== null) {
+            pct = Math.round(Number(attempt.score_percentage));
+          } else if (totalItems > 0 && score !== null) {
+            pct = Math.round((score / totalItems) * 100);
+          }
+          if (pct !== null && !isNaN(pct)) {
+            scoreSum += pct;
+            scoreCount++;
+          }
+        }
+
+        const rawDue = q.dueDate || q.due_date;
+        const dueMs = rawDue ? new Date(rawDue).getTime() : null;
+        const hasDue = dueMs && !isNaN(dueMs);
+        const isPastDeadline = !attempt && hasDue && (now > dueMs);
+        const deadlineDate = hasDue
+          ? new Date(dueMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' · ' + new Date(dueMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+          : 'No Due Date';
+
+        const hasTaken = !!attempt;
+
+        let statusText = 'Not Taken';
+        let statusClass = 'not-taken';
+
+        if (hasTaken) {
+          statusText = 'Completed';
+          statusClass = 'done';
+        } else if (isPastDeadline) {
+          statusText = 'Expired';
+          statusClass = 'not-taken';
+          overdueCount++;
+        } else {
+          statusText = 'Pending';
+          statusClass = 'pending';
+          pendingCount++;
+        }
+
+        return {
+          quiz: q,
+          attempt,
+          score,
+          totalItems,
+          pct,
+          deadlineDate,
+          deadlineDateObj: hasDue ? new Date(dueMs) : null,
+          isPastDeadline,
+          hasTaken,
+          statusText,
+          statusClass
+        };
+      });
+
+      const overallAvg = scoreCount > 0 ? (scoreSum / scoreCount).toFixed(2) : null;
+      const uniqueSubjects = [...new Set(quizList.map(q => q.subject || 'General').filter(Boolean))].sort();
+
+      // Filter rows
+      let filteredRows = allRows.slice();
+
+      if (studentProgressTab === 'completed') {
+        filteredRows = filteredRows.filter(r => r.hasTaken);
+      } else if (studentProgressTab === 'pending') {
+        filteredRows = filteredRows.filter(r => !r.hasTaken && !r.isPastDeadline);
+      } else if (studentProgressTab === 'overdue') {
+        filteredRows = filteredRows.filter(r => !r.hasTaken && r.isPastDeadline);
+      }
+
+      if (studentProgressSubject !== 'all') {
+        filteredRows = filteredRows.filter(r => (r.quiz.subject || 'General').toLowerCase().trim() === studentProgressSubject.toLowerCase().trim());
+      }
+
+      if (studentProgressSearch) {
+        filteredRows = filteredRows.filter(r => {
+          const t = (r.quiz.title || '').toLowerCase();
+          const s = (r.quiz.subject || 'General').toLowerCase();
+          return t.includes(studentProgressSearch) || s.includes(studentProgressSearch);
+        });
+      }
+
+      // Sort rows
+      if (studentProgressSort === 'deadline_asc') {
+        filteredRows.sort((a, b) => {
+          if (!a.deadlineDateObj && !b.deadlineDateObj) return 0;
+          if (!a.deadlineDateObj) return 1;
+          if (!b.deadlineDateObj) return -1;
+          return a.deadlineDateObj.getTime() - b.deadlineDateObj.getTime();
+        });
+      } else if (studentProgressSort === 'deadline_desc') {
+        filteredRows.sort((a, b) => {
+          if (!a.deadlineDateObj && !b.deadlineDateObj) return 0;
+          if (!a.deadlineDateObj) return 1;
+          if (!b.deadlineDateObj) return -1;
+          return b.deadlineDateObj.getTime() - a.deadlineDateObj.getTime();
+        });
+      } else if (studentProgressSort === 'score_desc') {
+        filteredRows.sort((a, b) => (b.pct !== null ? b.pct : -1) - (a.pct !== null ? a.pct : -1));
+      } else if (studentProgressSort === 'score_asc') {
+        filteredRows.sort((a, b) => (a.pct !== null ? a.pct : 999) - (b.pct !== null ? b.pct : 999));
+      } else if (studentProgressSort === 'title_asc') {
+        filteredRows.sort((a, b) => (a.quiz.title || '').localeCompare(b.quiz.title || ''));
+      }
+
+      const hasActiveFilters = studentProgressTab !== 'all' || studentProgressSubject !== 'all' || studentProgressSearch || studentProgressSort !== 'default';
+
+      return `
+      <div class="section-hdr">
+        <div>
+          <h2>My Progress</h2>
+          <span style="font-size:12px;color:var(--text-muted);">Real-time tracking of your quiz assessments and academic scores</span>
+        </div>
+      </div>
+
+      <!-- SUMMARY HIGHLIGHT CARDS -->
+      <div class="card-grid" style="margin-bottom:20px;">
+        <div class="stat-filter-card ${studentProgressTab === 'all' ? 'active' : ''}" onclick="setStudentProgressTab('all')">
+          <div class="ic-icon">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Assigned Quizzes</div>
+            <div class="ic-num">${quizList.length}</div>
+            <p>Total quizzes for your strand</p>
+          </div>
+        </div>
+        <div class="stat-filter-card ${studentProgressTab === 'completed' ? 'active' : ''}" onclick="setStudentProgressTab('completed')">
+          <div class="ic-icon gold">${typeof iconApproval === 'function' ? iconApproval() : iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Completed</div>
+            <div class="ic-num gold">${completedCount}</div>
+            <p>${quizList.length ? `${Math.round((completedCount / quizList.length) * 100)}% completion rate` : 'No quizzes assigned'}</p>
+          </div>
+        </div>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Overall Average</div>
+            <div class="ic-num green">${overallAvg !== null ? overallAvg + '%' : '—'}</div>
+            <p>${overallAvg !== null ? (overallAvg >= 75 ? 'Passing Standing' : 'Needs Improvement') : 'Take quizzes to view average'}</p>
+          </div>
+        </div>
+        ${(() => {
+          if (studentProgressSubject !== 'all') {
+            const subName = studentProgressSubject;
+            const subQuizzes = allRows.filter(r => (r.quiz.subject || 'General').toLowerCase().trim() === subName.toLowerCase().trim());
+            const subTotal = subQuizzes.length;
+            const subDoneQuizzes = subQuizzes.filter(r => r.hasTaken);
+            const subCompleted = subDoneQuizzes.length;
+            let subScoreSum = 0;
+            let subScoreCount = 0;
+            subDoneQuizzes.forEach(r => {
+              if (r.pct !== null && !isNaN(r.pct)) {
+                subScoreSum += r.pct;
+                subScoreCount++;
+              }
+            });
+            const subAvg = subScoreCount > 0 ? (subScoreSum / subScoreCount).toFixed(2) : null;
+
+            return `
+            <div class="info-card horizontal-card" style="border: 1.5px solid #818cf8; background: linear-gradient(180deg, #ffffff 0%, #f5f7ff 100%);">
+              <div class="ic-icon" style="background:#e0e7ff;color:#4338ca;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              </div>
+              <div class="ic-content" style="min-width:0;flex:1;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div class="ic-sub" style="color:#4338ca;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(subName)}">${escHtml(subName.toUpperCase())} AVG</div>
+                  <button type="button" onclick="event.stopPropagation();setStudentProgressSubject('all');" style="background:#e0e7ff;border:none;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;color:#3730a3;cursor:pointer;transition:0.2s;" onmouseover="this.style.background='#c7d2fe'" onmouseout="this.style.background='#e0e7ff'" title="Return to all subjects">✕ All</button>
+                </div>
+                <div class="ic-num" style="color:#3730a3;">${subAvg !== null ? subAvg + '%' : '—'}</div>
+                <p>${subCompleted}/${subTotal} completed</p>
+              </div>
+            </div>`;
+          } else {
+            return `
+            <div class="stat-filter-card ${studentProgressTab === 'pending' ? 'active' : ''}" onclick="setStudentProgressTab('${pendingCount > 0 ? 'pending' : 'all'}')">
+              <div class="ic-icon" style="background:#fef3c7;color:#d97706;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div class="ic-content">
+                <div class="ic-sub">Pending Quizzes</div>
+                <div class="ic-num" style="color:#d97706;">${pendingCount}</div>
+                <p>${pendingCount > 0 ? `${pendingCount} awaiting completion` : 'All assigned quizzes done! 🎉'}</p>
+              </div>
+            </div>`;
+          }
+        })()}
+      </div>
+
+      <!-- FILTER & SEARCH TOOLBAR -->
+      <div class="progress-toolbar">
+        <div class="progress-tabs-wrap">
+          <button class="progress-tab-btn ${studentProgressTab === 'all' ? 'active' : ''}" onclick="setStudentProgressTab('all')">
+            All <span class="tab-badge">${quizList.length}</span>
+          </button>
+          <button class="progress-tab-btn ${studentProgressTab === 'completed' ? 'active' : ''}" onclick="setStudentProgressTab('completed')">
+            Completed <span class="tab-badge">${completedCount}</span>
+          </button>
+          <button class="progress-tab-btn ${studentProgressTab === 'pending' ? 'active' : ''}" onclick="setStudentProgressTab('pending')">
+            Pending <span class="tab-badge" style="background:#fef3c7;color:#b45309;">${pendingCount}</span>
+          </button>
+          <button class="progress-tab-btn ${studentProgressTab === 'overdue' ? 'active' : ''}" onclick="setStudentProgressTab('overdue')">
+            Expired <span class="tab-badge" style="background:#fee2e2;color:#b91c1c;">${overdueCount}</span>
+          </button>
+        </div>
+
+        <div class="progress-controls-wrap">
+          <div class="progress-search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--text-muted);"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="studentProgressSearchInput" placeholder="Search assessments..." value="${escHtml(studentProgressSearch)}" oninput="handleStudentProgressSearch(this.value)">
+            ${studentProgressSearch ? `<button class="search-clear-btn" onclick="clearStudentProgressSearch()" title="Clear search">✕</button>` : ''}
+          </div>
+
+          <select class="progress-select-pill" onchange="setStudentProgressSubject(this.value)">
+            <option value="all" ${studentProgressSubject === 'all' ? 'selected' : ''}>📚 All Subjects (${uniqueSubjects.length})</option>
+            ${uniqueSubjects.map(s => `
+              <option value="${escHtml(s)}" ${studentProgressSubject.toLowerCase().trim() === s.toLowerCase().trim() ? 'selected' : ''}>${escHtml(s)}</option>
+            `).join('')}
+          </select>
+
+          <select class="progress-select-pill" onchange="setStudentProgressSort(this.value)">
+            <option value="default" ${studentProgressSort === 'default' ? 'selected' : ''}>Sort: Default</option>
+            <option value="deadline_asc" ${studentProgressSort === 'deadline_asc' ? 'selected' : ''}>⏰ Deadline (Soonest)</option>
+            <option value="deadline_desc" ${studentProgressSort === 'deadline_desc' ? 'selected' : ''}>⏰ Deadline (Latest)</option>
+            <option value="score_desc" ${studentProgressSort === 'score_desc' ? 'selected' : ''}>🏆 Score (Highest)</option>
+            <option value="score_asc" ${studentProgressSort === 'score_asc' ? 'selected' : ''}>📉 Score (Lowest)</option>
+            <option value="title_asc" ${studentProgressSort === 'title_asc' ? 'selected' : ''}>🔤 Title (A–Z)</option>
+          </select>
+
+          ${hasActiveFilters ? `
+            <button class="progress-reset-btn" onclick="resetStudentProgressFilters()" title="Reset all filters">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              Reset
+            </button>
+          ` : ''}
+        </div>
+      </div>
+
+      <!-- QUIZ PROGRESS TABLE -->
+      <div class="score-table student-progress-table">
+        <table aria-label="Quiz assessment progress">
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th>Assessment</th>
+              <th>Deadline</th>
+              <th>Total Items</th>
+              <th>Status</th>
+              <th>Score</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredRows.length ? filteredRows.map(r => {
+              const q = r.quiz;
+              const hasTaken = r.hasTaken;
+              const isPastDeadline = r.isPastDeadline;
+              const scoreClass = r.pct !== null ? (r.pct >= 75 ? 'good' : 'low') : '';
+              const subj = q.subject || 'General';
+              const isCurrentSubj = studentProgressSubject.toLowerCase().trim() === subj.toLowerCase().trim();
+
+              let actionHtml = '';
+              if (hasTaken) {
+                actionHtml = `
+                  <button class="table-act-btn review" onclick="openReviewAttempt('${q.id}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    Review
+                  </button>`;
+              } else if (isPastDeadline) {
+                actionHtml = `
+                  <button class="table-act-btn closed" disabled style="opacity:0.6;cursor:not-allowed;" title="Deadline has passed. This assessment is closed for submissions.">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;margin-right:2px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Closed
+                  </button>`;
+              } else {
+                const clickHandler = (q.type === 'interactive' || q.quiz_type === 'interactive')
+                  ? `openInteractiveQuiz('${q.id}')`
+                  : `openTakeQuizModal('${q.id}')`;
+                const label = (q.type === 'interactive' || q.quiz_type === 'interactive') ? 'Play Quiz' : 'Take Quiz';
+                actionHtml = `
+                  <button class="table-act-btn take" onclick="${clickHandler}">
+                    <svg viewBox="0 0 24 24"><polygon points="6 4 18 12 6 20 6 4"/></svg>
+                    ${label}
+                  </button>`;
+              }
+
+              return `
+              <tr data-quiz-title="${escHtml(q.title || 'Quiz')}" data-quiz-subject="${escHtml(subj)}">
+                <td data-label="Subject"><div class="progress-cell-value">
+                  <button type="button" class="progress-subject-btn ${isCurrentSubj ? 'active' : ''}" onclick="setStudentProgressSubject('${escHtml(subj)}')" title="Click to filter by ${escHtml(subj)} and view subject average">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;flex-shrink:0;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    <strong>${escHtml(subj)}</strong>
+                  </button>
+                </div></td>
+                <td data-label="Assessment"><div class="progress-cell-value">
+                  ${escHtml(q.title || 'Quiz')}
+                  ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? '<span class="status-pill" style="margin-left:6px;font-size:10px;padding:2px 6px;background:#ede9fe;color:#7c3aed;font-weight:700;">🎮 Interactive</span>' : ''}
+                </div></td>
+                <td style="color:var(--text-secondary);font-size:12.5px;white-space:nowrap;" data-label="Deadline"><div class="progress-cell-value">
+                  <span style="display:inline-flex;align-items:center;gap:6px;${(!hasTaken && isPastDeadline) ? 'color:#dc2626;font-weight:600;' : ''}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;color:${(!hasTaken && isPastDeadline) ? '#dc2626' : 'var(--text-muted)'};flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    ${escHtml(r.deadlineDate)}
+                  </span>
+                </div></td>
+                <td data-label="Total Items"><div class="progress-cell-value">${r.totalItems ? `${r.totalItems} item${r.totalItems === 1 ? '' : 's'}` : '—'}</div></td>
+                <td data-label="Status"><div class="progress-cell-value">
+                  <span class="status-pill ${r.statusClass}">${r.statusText}</span>
+                </div></td>
+                <td class="score-val ${scoreClass}" data-label="Score"><div class="progress-cell-value">
+                  ${hasTaken
+                    ? `<strong>${r.score} / ${r.totalItems}</strong> <span style="font-size:11px;font-weight:700;margin-left:4px;">(${r.pct !== null ? r.pct + '%' : ''})</span>`
+                    : '<span style="color:var(--text-muted);">—</span>'}
+                </div></td>
+                <td data-label="Action"><div class="progress-cell-value">
+                  ${actionHtml}
+                </div></td>
+              </tr>`;
+            }).join('')
+            : `<tr id="studentProgressEmptyRow"><td colspan="7" style="text-align:center;color:var(--text-muted);padding:36px 16px;">
+                <div style="font-size:28px;margin-bottom:6px;">📋</div>
+                <div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px;">No assessments match your filters</div>
+                <p style="font-size:12.5px;color:#64748b;margin:0 0 12px;">Try switching tabs, clearing the search query, or resetting filters.</p>
+                <button type="button" class="progress-reset-btn" onclick="resetStudentProgressFilters()" style="margin:0 auto;display:inline-flex;">
+                  Reset Filters
+                </button>
+              </td></tr>`}
+          </tbody>
+        </table>
+      </div>`;
+    }
+
+    case 'chats': return buildChatPage('student');
+
+    case 'profile': return buildProfilePage('student');
+
+    case 'quiz': return studentPage('quizzes');
+    case 'analysis': return studentPage('progress');
+
+    default: return '<p>Page not found.</p>';
+  }
+}
+
+/* ── TEACHER PAGES ── */
+function teacherPage(page) {
+  switch(page) {
+    case 'dashboard': {
+      const demo = !!CURRENT_PROFILE?.is_demo;
+      const own = item => !item.uploaded_by || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(item.uploaded_by);
+      const materials = materialsData.filter(own);
+      const quizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => (!q.isDemo || demo) && (!q.createdBy || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(q.createdBy)));
+      const active = quizzes.filter(q => q.status === 'active');
+      const news = (typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : []).filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft);
+      const read = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
+      const attempts = classRecAttemptsCache.filter(a => quizzes.some(q => String(q.id) === String(a.quiz_id)));
+      const teacherAssignedSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim()).filter(Boolean);
+      const strands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
+      const go = page => `renderPage('${page}')`;
+      const icon = (svg, tone='blue') => `<span class="td-icon td-${tone}">${svg}</span>`;
+      const empty = text => `<p class="td-empty">${text}</p>`;
+      const row = (title, sub, side='', tone='purple', svg=iconQuiz(), action='quiz') => `<button type="button" class="td-row" onclick="${go(action)}">${icon(svg,tone)}<span class="td-row-copy"><strong>${escHtml(title)}</strong><small>${escHtml(sub)}</small></span><span class="td-row-side">${side}</span></button>`;
+      const panel = (title, svg, content, page, cls='') => `<section class="td-panel ${cls}"><header>${icon(svg)}<h3>${title}</h3><button type="button" class="td-link" onclick="${go(page)}">View All</button></header>${content}</section>`;
+      const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
+      const metrics = [
+        ['My Classes',demo?2:teacherAssignedSections.length,'Classes handled','classrec',iconUsers(),'blue'],
+        ['Total Students',demo?68:new Set(attempts.map(a=>a.student_id).filter(Boolean)).size,'Across all classes','classrec',iconUsers(),'green'],
+        ['Materials Uploaded',demo?12:materials.length,'This semester','materials',iconFolder(),'orange'],
+        ['Published Lessons',demo?8:materials.filter(m=>m.status==='approved').length,'Ready for students','materials',iconFolder(),'purple'],
+        ['Active Quizzes',demo?3:active.length,'Currently ongoing','quiz',iconQuiz(),'purple'],
+        ['Upcoming Deadlines',demo?5:active.filter(q=>{const t=new Date(q.dueDate||q.due_date).getTime()-Date.now();return t>=0&&t<=604800000;}).length,'Within 7 days','quiz',iconRecord(),'pink'],
+        ['Unread News',demo?2:news.filter(a=>!read.has(String(a.id))).length,'School announcements','announcements',iconAnnouncement(),'pink'],
+        ['Unread Messages',demo?7:'0','Students & parents','chats',iconChat(),'blue']
+      ];
+      const pending = demo ? [
+        ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
+        ['Reflection Paper','Komunikasyon at Pananaliksik - Grade 11 - HUMSS',5,'Feb 3, 2025'],
+        ['Group Project Report','Research in Daily Life - Grade 11 - STEM',2,'Feb 4, 2025'],
+        ['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM',4,'Feb 5, 2025']
+      ].map(r=>row(r[0],r[1],`<b>${r[2]}</b> submissions<small>Due: ${r[3]}</small>`)).join('') : empty('No submissions awaiting review.');
+      const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials')).join('') || empty('No materials uploaded yet.');
+      const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : news.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
+      const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : teacherAssignedSections).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned yet.');
+      const assessments = demo ? [['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM'],['Essay: Role of Media in Society','Komunikasyon at Pananaliksik - Grade 11 - HUMSS'],['Quiz 1 - 21st Century Literature','Research in Daily Life - Grade 11 - STEM']].map(q=>row(q[0],q[1],'<em>Ongoing</em>')).join('') : active.slice(0,3).map(q=>row(q.title,q.subject||q.meta||'','<em>Ongoing</em>')).join('') || empty('No active quizzes right now.');
+      const eventItems = demo ? [
+        {title:'Faculty Meeting',detail:'All Teachers',when:'8:00 AM - 10:00 AM',date:'2025-02-03'},
+        {title:'Submission of Quarter 3 Grades',detail:'Faculty',when:'All Day',date:'2025-02-07'},
+        {title:'Parent-Teacher Conference',detail:'Grade 11 Level',when:'1:00 PM - 4:00 PM',date:'2025-02-10'},
+        {title:'Foundation Day',detail:'Whole School',when:'All Day',date:'2025-02-14'}
+      ] : news.filter(n=>n.category==='event' && new Date(n.event_date||n.eventDate)>=new Date(new Date().setHours(0,0,0,0))).map(n=>({title:n.title,detail:n.message||'',when:n.event_time||'',date:n.event_date||n.eventDate})).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,4);
+      const events = eventItems.map(e=>{const d=new Date(/^\d{4}-\d{2}-\d{2}$/.test(e.date)?e.date+'T00:00:00':e.date);const valid=!Number.isNaN(d.getTime());return `<button type="button" class="td-event" onclick="${go('announcements')}"><span class="td-event-date"><small>${valid?d.toLocaleDateString('en-US',{month:'short'}):''}</small><strong>${valid?d.getDate():''}</strong></span><span><strong>${escHtml(e.title)}</strong><small>${escHtml(e.detail)}</small><small>${escHtml(e.when)}</small></span></button>`;}).join('') || empty('No upcoming school events scheduled.');
+      return `<div class="teacher-reference-dashboard">
+        <section class="td-hero"><div><h1>WELCOME BACK</h1><h2>Haven of Wisdom Academy - Teacher Portal</h2><p>Here's what needs your attention today.</p></div><img src="assets/dashboard-books.svg" alt=""/><blockquote>&ldquo; Teaching is a work of heart.<br>Thank you for making a difference<br>in every student's journey. &rdquo;</blockquote></section>
+        <div class="td-metrics">${metrics.map(m=>`<button type="button" class="td-metric td-${m[5]}" onclick="${go(m[3])}">${icon(m[4],m[5])}<span><span class="td-label">${m[0]}</span><strong${m[0] === 'Unread Messages' ? ' id="teacherUnreadMessageCount"' : ''}>${m[1]}</strong><small>${m[2]}</small></span></button>`).join('')}</div>
+        <div class="td-grid">
+          <section class="td-panel td-subjects"><div id="coursesWidgetContainer">${typeof renderCoursesWidgetHTML==='function'?renderCoursesWidgetHTML():empty('No subjects assigned.')}</div></section>
+          ${panel('Pending Submissions / To Review',iconRecord(),pending,'classrec','td-pending')}
+          ${panel('Upcoming School Events',iconCalendar(),events,'announcements','td-events')}
+          ${panel('My Class Sections',iconUsers(),sections,'classrec','td-sections')}
+          ${panel('Recently Added Materials',iconFolder(),recent,'materials','td-materials')}
+          ${panel('Latest Class Announcements',iconAnnouncement(),announcements,'announcements','td-announcements')}
+          ${panel('Active Quizzes & Assessments',iconQuiz(),`<button type="button" class="td-create" onclick="openQuizModal()">+ Create Quiz</button>${assessments}`,'quiz','td-assessments')}
+        </div></div>`;
+    }
+
+    case 'materials': return `
+      <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
+
+    case 'quiz': {
+      let filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).slice();
+      if (ROLE === 'teacher') {
+        const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        const teacherSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => {
+          const isCreator = (q.createdBy && (
+            q.createdBy === CURRENT_PROFILE?.id || 
+            q.createdBy === CURRENT_PROFILE?.dbId || 
+            q.createdBy === CURRENT_PROFILE?.school_id
+          ));
+          if (isCreator) return true;
+          if (q.strand && myStrands.length > 0 && teacherSections.length > 0) {
+            const qStrand = String(q.strand).toUpperCase();
+            return myStrands.some(st => qStrand.includes(st) || st === 'GENERAL' || qStrand === 'ALL');
+          }
+          return false;
+        });
+      }
+
+      const totalCount = filtered.length;
+      const activeCount = filtered.filter(q => q.status === 'active').length;
+      const pendingCount = filtered.filter(q => q.status === 'pending').length;
+      const interactiveCount = filtered.filter(q => q.type === 'interactive' || q.quiz_type === 'interactive').length;
+
+      // Extract unique subjects
+      const availableSubjects = [...new Set(filtered.map(q => q.subject).filter(Boolean))];
+
+      // Apply Search and Filters
+      if (typeof quizManagerSearchQuery !== 'undefined' && quizManagerSearchQuery) {
+        filtered = filtered.filter(q =>
+          (q.title || '').toLowerCase().includes(quizManagerSearchQuery) ||
+          (q.subject || '').toLowerCase().includes(quizManagerSearchQuery) ||
+          (q.lesson || '').toLowerCase().includes(quizManagerSearchQuery)
+        );
+      }
+      if (typeof quizManagerFilterStrand !== 'undefined' && quizManagerFilterStrand) {
+        filtered = filtered.filter(q => (q.strand || '').toLowerCase().includes(quizManagerFilterStrand.toLowerCase()));
+      }
+      if (typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus) {
+        filtered = filtered.filter(q => String(q.status || '').toLowerCase() === quizManagerFilterStatus.toLowerCase());
+      }
+      if (typeof quizManagerFilterType !== 'undefined' && quizManagerFilterType) {
+        if (quizManagerFilterType === 'interactive') {
+          filtered = filtered.filter(q => q.type === 'interactive' || q.quiz_type === 'interactive');
+        } else if (quizManagerFilterType === 'standard') {
+          filtered = filtered.filter(q => q.type !== 'interactive' && q.quiz_type !== 'interactive');
+        }
+      }
+      if (typeof quizManagerFilterSubject !== 'undefined' && quizManagerFilterSubject) {
+        filtered = filtered.filter(q => String(q.subject || '').toLowerCase() === quizManagerFilterSubject.toLowerCase());
+      }
+      if (typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview) {
+        if (quizManagerFilterReview === 'visible') {
+          filtered = filtered.filter(q => q.allowReviewAnswers !== false);
+        } else if (quizManagerFilterReview === 'hidden') {
+          filtered = filtered.filter(q => q.allowReviewAnswers === false);
+        }
+      }
+
+      return `
+      <div class="teacher-quizzes-container" style="width:100%;flex:1;min-width:0;display:flex;flex-direction:column;gap:12px;">
+        <div class="section-hdr" style="margin-bottom:0;">
+          <div>
+            <h2 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 2px 0;">Quiz Manager</h2>
+            <span style="font-size:12px;color:var(--text-muted);">Create, organize, test, and distribute assessments & interactive games</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="add-btn" style="background:var(--blue-light);color:var(--blue);padding:6px 12px;font-size:12px;" onclick="loadQuizzesFromDB()">${iconRefresh()} Refresh</button>
+            <button class="add-btn" style="padding:6px 12px;font-size:12px;" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
+          </div>
+        </div>
+
+        <!-- METRIC CARDS -->
+        <div class="card-grid" style="gap:12px;margin-bottom:0;">
+          <div class="stat-filter-card ${!quizManagerFilterStatus && !quizManagerFilterType ? 'active' : ''}" onclick="setQuizManagerFilterStatus(''); setQuizManagerFilterType('');">
+            <div class="ic-icon">${iconQuiz()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Total Quizzes</div>
+              <div class="ic-num">${totalCount}</div>
+              <p>Assigned to SHS students</p>
+            </div>
+          </div>
+          <div class="stat-filter-card ${quizManagerFilterStatus === 'active' && !quizManagerFilterType ? 'active' : ''}" onclick="setQuizManagerFilterStatus('active'); setQuizManagerFilterType('');">
+            <div class="ic-icon green">${iconCheck()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Active / Ongoing</div>
+              <div class="ic-num green">${activeCount}</div>
+              <p>Accepting student submissions</p>
+            </div>
+          </div>
+          <div class="stat-filter-card ${quizManagerFilterStatus === 'pending' && !quizManagerFilterType ? 'active' : ''}" onclick="setQuizManagerFilterStatus('pending'); setQuizManagerFilterType('');">
+            <div class="ic-icon gold">${iconClock()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Pending Approval</div>
+              <div class="ic-num gold">${pendingCount}</div>
+              <p>Awaiting Admin content review</p>
+            </div>
+          </div>
+          <div class="stat-filter-card ${quizManagerFilterType === 'interactive' ? 'active' : ''}" onclick="setQuizManagerFilterStatus(''); setQuizManagerFilterType('interactive');">
+            <div class="ic-icon" style="background:#e0f2fe;color:#0284c7;">${iconGamepad()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Interactive Games</div>
+              <div class="ic-num" style="color:#0284c7;">${interactiveCount}</div>
+              <p>Gamified student quizzes</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- SEARCH & FILTER TOOLBAR -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc;padding:10px 14px;border-radius:12px;border:1px solid #e2e8f0;">
+          <div style="display:flex;gap:8px;flex:1;min-width:min(100%,220px);max-width:360px;align-items:center;">
+            <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterStrand(this.value)">
+              <option value="">All Strands</option>
+              ${STRANDS.map(s => `<option value="${s}" ${typeof quizManagerFilterStrand !== 'undefined' && quizManagerFilterStrand === s ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+            <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterStatus(this.value)">
+              <option value="">All Statuses</option>
+              <option value="active" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'active' ? 'selected' : ''}>Active</option>
+              <option value="pending" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'pending' ? 'selected' : ''}>Pending</option>
+              <option value="closed" ${typeof quizManagerFilterStatus !== 'undefined' && quizManagerFilterStatus === 'closed' ? 'selected' : ''}>Closed</option>
+            </select>
+            <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterReview(this.value)">
+              <option value="">All Review Modes</option>
+              <option value="visible" ${typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview === 'visible' ? 'selected' : ''}>👁️ Answers Visible (Checked)</option>
+              <option value="hidden" ${typeof quizManagerFilterReview !== 'undefined' && quizManagerFilterReview === 'hidden' ? 'selected' : ''}>🔒 Answers Hidden (Unchecked)</option>
+            </select>
+            ${availableSubjects.length ? `
+            <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterSubject(this.value)">
+              <option value="">All Subjects</option>
+              ${availableSubjects.map(subj => `<option value="${escHtml(subj)}" ${typeof quizManagerFilterSubject !== 'undefined' && quizManagerFilterSubject === subj ? 'selected' : ''}>${escHtml(subj)}</option>`).join('')}
+            </select>` : ''}
+          </div>
+        </div>
+
+        <!-- QUIZ LIST -->
+        <div class="quiz-list" style="display:flex;flex:1;flex-direction:column;gap:8px;">
+        ${filtered.length ? filtered.map(q => {
+          const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
+          const itemsCount = (q.questions || []).length;
+          const statusClass = q.isDemo ? 'demo' : q.status === 'active' ? 'ongoing' : q.status === 'closed' ? 'done' : 'pending';
+          const statusLabel = q.isDemo ? 'Demo' : (q.status || 'Active').charAt(0).toUpperCase() + (q.status || 'Active').slice(1);
+          const timeText = isInter
+            ? (q.timerPerQuestion ? `⏱️ ${q.timerPerQuestion}s/item` : 'Untimed')
+            : (q.timeLimitMinutes ? `⏱️ ${q.timeLimitMinutes} mins` : 'Untimed');
+          const dueText = q.dueDate ? `📅 Due: ${new Date(q.dueDate).toLocaleDateString()}` : '📅 No Expiration';
+          const isReviewAllowed = q.allowReviewAnswers !== false && q.allow_review_answers !== false;
+          const takenStudentCount = getQuizUniqueStudentAttemptCount(q.id, q.title);
+
+          return `
+          <div class="quiz-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;gap:16px;flex-wrap:wrap;">
+            <div class="qz-info" style="min-width:min(100%,240px);flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+                <h4 style="font-size:15px;font-weight:700;color:#0f172a;margin:0;">${escHtml(q.title)}</h4>
+                <span class="status-pill ${statusClass}">${statusLabel}</span>
+                ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;">🎮 Interactive</span>' : '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#f1f5f9;color:#475569;font-size:10px;font-weight:600;">📝 Standard</span>'}
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+                <span>📚 <strong>${escHtml(q.subject || 'General')}</strong></span>
+                <span>🎓 ${escHtml(q.strand || 'All Strands')} · ${escHtml(q.gradeLevel || 'Grade 11')}</span>
+                <span>📋 ${itemsCount} Item${itemsCount === 1 ? '' : 's'}</span>
+                <span>${timeText}</span>
+                <span>${dueText}</span>
+              </div>
+            </div>
+
+            <!-- ACTION BUTTONS & REVIEW CHECKBOX (2 CLEAN STACKS) -->
+            <div class="quiz-row-actions">
+              <!-- TOP STACK: Attempts, Review toggle, Preview, Take/Play -->
+              <div class="quiz-actions-stack">
+                <div class="quiz-attempt-count" data-quiz-attempt-count="${escHtml(q.id)}" data-quiz-title="${escHtml(q.title || '')}">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
+                </div>
+                <!-- REVIEW ANSWERS CHECKBOX -->
+                <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
+                  <input type="checkbox" ${isReviewAllowed ? 'checked' : ''} onchange="toggleQuizReviewAnswers('${q.id}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
+                  <span>${isReviewAllowed ? '👁️ Show Answers on Review' : '🔒 Answers Hidden'}</span>
+                </label>
+                <button class="table-act-btn take" onclick="openQuizQuestionsPreview('${q.id}')" title="Preview Quiz Questions">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  Preview
+                </button>
+                ${isInter ? `
+                <button class="table-act-btn" style="background:linear-gradient(135deg,#0284c7,#8b5cf6);color:#fff;border:none;" onclick="openInteractiveQuiz('${q.id}')" title="Play Interactive Game Mode">
+                  🎮 Play Game
+                </button>` : `
+                <button class="table-act-btn take" onclick="takeQuizAsTeacher('${q.id}')" title="Take this standard quiz as a student">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
+                  Take Quiz
+                </button>`}
+              </div>
+
+              <!-- BOTTOM STACK: Item Analysis, Leaderboard, Close/Activate, Trash -->
+              <div class="quiz-actions-stack">
+                <button class="table-act-btn review" onclick="setAnalysisQuiz('${q.id}')" title="View Question Accuracy & Psychometrics">
+                  📊 Item Analysis
+                </button>
+                <button class="table-act-btn" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">
+                  🏆 Leaderboard
+                </button>
+
+                ${q.status === 'active' ? `
+                  <button class="table-act-btn" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;" onclick="toggleQuizStatus('${q.id}', 'closed')" title="Close Quiz submissions">
+                    Close
+                  </button>
+                ` : q.status === 'closed' ? `
+                  <button class="table-act-btn" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;" onclick="toggleQuizStatus('${q.id}', 'active')" title="Re-open Quiz submissions">
+                    Activate
+                  </button>
+                ` : ROLE === 'admin' ? `
+                  <button class="table-act-btn take" onclick="approveQuiz('${q.id}')">Approve</button>
+                  <button class="table-act-btn" style="color:#dc2626;" onclick="runApprovalAction('quiz','${q.id}',false)">Reject</button>
+                ` : ''}
+
+                <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 10px;" onclick="deleteQuiz('${q.id}')" title="Delete Quiz">
+                  ${iconTrash()}
+                </button>
+              </div>
+            </div>
+          </div>`;
+        }).join('')
+          : `
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:250px;text-align:center;padding:40px 20px;background:#fff;border-radius:14px;border:1px dashed #cbd5e1;">
+            <div style="font-size:36px;margin-bottom:12px;">📝</div>
+            <h3 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:6px;">No Quizzes Found</h3>
+            <p style="color:var(--text-muted);font-size:13px;max-width:420px;margin:0 auto 16px;">
+              ${(typeof quizManagerSearchQuery !== 'undefined' && quizManagerSearchQuery) ? 'No quizzes match your search criteria. Try clearing filters.' : 'You haven\'t created any quizzes yet. Click "Create Quiz" to generate one from your PDF or syllabus!'}
+            </p>
+            <button class="add-btn" style="margin:0 auto;" onclick="openQuizModal()">${iconPlus()} Create First Quiz</button>
+          </div>
+          `}
+        </div>
+      </div>`;
+    }
+
+    case 'analysis': {
+      if (ROLE === 'teacher') {
+        const teacherSections = (CURRENT_PROFILE?.section || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(s => Boolean(s) && (typeof isSectionArchived === 'function' ? !isSectionArchived(s) : true));
+
+        if (!teacherSections.length) {
+          return `
+          <div class="section-hdr">
+            <div>
+              <h2>Item Analysis Report</h2>
+              <span style="font-size:12px;color:var(--text-muted);">Question-level psychometrics and difficulty metrics</span>
+            </div>
+          </div>
+          <div style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:16px;padding:48px 24px;text-align:center;max-width:680px;margin:30px auto;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+            <div style="font-size:48px;margin-bottom:12px;">📊</div>
+            <h3 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">No Assigned Class Sections</h3>
+            <p style="font-size:13.5px;color:#64748b;line-height:1.5;margin:0 auto;max-width:480px;">
+              Your faculty account (<strong>${escHtml(CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || 'Teacher')}</strong>) is not assigned to handle any class sections yet. Student psychometrics and accuracy rates are calculated exclusively from sections you handle.
+            </p>
+          </div>`;
+        }
+      }
+
+      let myQuizzesForAnalysis = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).slice();
+      if (ROLE === 'teacher') {
+        const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        myQuizzesForAnalysis = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => {
+          const isCreator = (q.createdBy && (
+            q.createdBy === CURRENT_PROFILE?.id || 
+            q.createdBy === CURRENT_PROFILE?.dbId || 
+            q.createdBy === CURRENT_PROFILE?.school_id
+          ));
+          if (isCreator) return true;
+          if (q.strand && myStrands.length > 0) {
+            const qStrand = String(q.strand).toUpperCase();
+            return myStrands.some(st => qStrand.includes(st) || st === 'GENERAL' || qStrand === 'ALL');
+          }
+          return false;
+        });
+      }
+      const displayQuizzes = myQuizzesForAnalysis;
+
+      if (!displayQuizzes.length) {
+        return `
+        <div class="section-hdr">
+          <div>
+            <h2>Item Analysis Report</h2>
+            <span style="font-size:12px;color:var(--text-muted);">Question-level psychometrics and difficulty metrics</span>
+          </div>
+          <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
+        </div>
+        <div class="announcement-card" style="padding:48px 24px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:12px;">📝</div>
+          <h3 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">No Quizzes Found</h3>
+          <p style="color:var(--text-muted);font-size:13.5px;max-width:480px;margin:0 auto 16px;">You haven't created any quizzes for your handled sections yet. Create an assessment in Quiz Manager to begin tracking question psychometrics and difficulty metrics.</p>
+          <button class="add-btn" style="margin:0 auto;" onclick="openQuizModal()">${iconPlus()} Create First Quiz</button>
+        </div>`;
+      }
+
+      if (!analysisSelectedQuizId || !displayQuizzes.some(q => String(q.id) === String(analysisSelectedQuizId))) {
+        analysisSelectedQuizId = displayQuizzes[0].id;
+      }
+      const selectedQuiz = displayQuizzes.find(q => String(q.id) === String(analysisSelectedQuizId)) || displayQuizzes[0];
+      if (!selectedQuiz) {
+        return `<div class="section-hdr"><h2>Item Analysis Report</h2></div><p style="padding:20px;">No quiz selected.</p>`;
+      }
+
+      // Fetch attempts if not cached yet
+      if (!(analysisSelectedQuizId in analysisAttemptsCache)) {
+        loadAttemptsForAnalysis(analysisSelectedQuizId);
+      }
+
+      const attempts = (typeof getAttemptsForAnalysis === 'function')
+        ? getAttemptsForAnalysis(analysisSelectedQuizId, analysisSectionFilter)
+        : (analysisAttemptsCache[analysisSelectedQuizId] || []);
+
+      const rows = buildAnalysisRows(selectedQuiz, attempts);
+      const attemptCount = attempts.length;
+      const validScores = attempts.map(a => a.total_items ? (a.score / a.total_items) * 100 : (a.score_percentage || 0));
+      const avgScore = validScores.length
+        ? Math.round(validScores.reduce((sum, v) => sum + v, 0) / validScores.length)
+        : null;
+      const highestScore = validScores.length ? Math.round(Math.max(...validScores)) : null;
+      const lowestScore = validScores.length ? Math.round(Math.min(...validScores)) : null;
+      const passingCount = validScores.filter(s => s >= 75).length;
+      const passRate = validScores.length ? Math.round((passingCount / validScores.length) * 100) : null;
+      const showingStudentSubmissions = analysisActiveTab === 'students';
+      const quizStatus = String(selectedQuiz.status || 'Active').trim();
+      const quizStatusClass = /reject/i.test(quizStatus) ? 'not-taken' : /pending/i.test(quizStatus) ? 'pending' : /complete|done|closed/i.test(quizStatus) ? 'done' : 'ongoing';
+
+      const analysisFilteredSections = getTeacherAnalysisSections(selectedQuiz);
+      if (analysisSectionFilter && !analysisFilteredSections.includes(analysisSectionFilter)) {
+        analysisSectionFilter = '';
+      }
+
+      return `
+      <div class="section-hdr analysis-report-header">
+        <div class="analysis-report-heading">
+          <h2>Item Analysis Report</h2>
+          <span style="font-size:12px;color:var(--text-muted);">Psychometric item discrimination, accuracy rates, and question difficulty breakdown</span>
+        </div>
+      </div>
+
+      <!-- PERFORMANCE STAT CARDS -->
+      <div class="card-grid" style="margin-bottom:20px;">
+        <div class="info-card horizontal-card">
+          <div class="ic-icon">${iconUsers()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Submissions</div>
+            <div class="ic-num">${attemptCount}</div>
+            <p>${analysisSectionFilter ? `Filtered for ${escHtml(analysisSectionFilter)}` : 'Across all class sections'}</p>
+          </div>
+        </div>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Class Average</div>
+            <div class="ic-num green">${avgScore !== null ? avgScore + '%' : '—'}</div>
+            <p>${passRate !== null ? `${passRate}% passing rate (≥ 75%)` : 'No attempts recorded'}</p>
+          </div>
+        </div>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon gold">${iconChart()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Score Range</div>
+            <div class="ic-num gold compact">${highestScore !== null ? `${highestScore}% / ${lowestScore}%` : '—'}</div>
+            <p>Highest vs lowest student score</p>
+          </div>
+        </div>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Total Items</div>
+            <div class="ic-num">${rows.length}</div>
+            <p>${selectedQuiz.type === 'interactive' ? '🎮 Interactive Mode' : '📝 Standard Assessment'}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="analysis-filter-container">
+        <div class="analysis-tab-bar" role="tablist" aria-label="Item analysis views">
+          <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('questions')">
+            <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${rows.length}</span>
+          </button>
+          <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('students')">
+            <span class="analysis-tab-icon" aria-hidden="true">${iconUsers()}</span> Student Submissions <span class="analysis-tab-count">${attemptCount}</span>
+          </button>
+        </div>
+        <div class="analysis-filters-row">
+          <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)">
+            <option value="">All Handled Sections</option>
+            ${analysisFilteredSections.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+          </select>
+          <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)">
+            ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
+          </select>
+          <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
+        </div>
+      </div>
+
+      <!-- QUIZ OVERVIEW CARD -->
+      <div class="announcement-card" style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div>
+            <h3 style="margin-bottom:4px;">${escHtml(selectedQuiz.title)}</h3>
+            <p style="margin:0;font-size:13px;color:var(--text-muted);">
+              Subject: <strong>${escHtml(selectedQuiz.subject || 'General')}</strong> · Strand: <strong>${escHtml(selectedQuiz.strand || 'All')}</strong> · Target Grade: <strong>${escHtml(selectedQuiz.gradeLevel || 'Grade 11')}</strong>
+            </p>
+          </div>
+          <span class="status-pill ${quizStatusClass}" title="Quiz status">${escHtml(quizStatus)}</span>
+        </div>
+        <div class="ann-meta" style="margin-top:8px;">Live psychometric breakdown recomputed from submitted student attempts.</div>
+      </div>
+
+      ${showingStudentSubmissions ? `
+      <div class="score-table analysis-student-submissions">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:50px;">#</th>
+              <th>Student</th>
+              <th>Section</th>
+              <th style="text-align:center;">Score</th>
+              <th>Submitted</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${attempts.length ? attempts.map((attempt, index) => `
+              <tr>
+                <td style="font-weight:700;color:var(--blue);">${index + 1}</td>
+                <td style="font-weight:600;color:#0f172a;">${escHtml(attempt.student_name || attempt.studentName || attempt.name || '')}</td>
+                <td>${escHtml(attempt.section || attempt.section_name || '—')}</td>
+                <td style="text-align:center;font-weight:700;color:var(--blue);">${attempt.score != null ? escHtml(String(attempt.score)) : escHtml(String(attempt.score_percentage ?? '—'))}${attempt.total_items && attempt.score != null ? ` / ${escHtml(String(attempt.total_items))}` : ''}</td>
+                <td>${attempt.submitted_at ? escHtml(new Date(attempt.submitted_at).toLocaleDateString()) : '—'}</td>
+              </tr>`).join('')
+              : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:30px;">No student submissions found for this quiz and section.</td></tr>`}
+          </tbody>
+        </table>
+      </div>` : `
+      <!-- QUESTION ACCURACY TABLE -->
+      <div class="score-table analysis-question-table">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:5%;">#</th>
+              <th>Question & Type</th>
+              <th style="text-align:center;">Correct</th>
+              <th style="text-align:center;">Incorrect</th>
+              <th>Accuracy Rate</th>
+              <th style="text-align:center;">Difficulty</th>
+              <th>Correct Answer</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.length ? rows.map((r, i) => `
+              <tr>
+                <td style="font-weight:700;color:var(--blue);">${i + 1}</td>
+                <td>
+                  <div style="font-weight:600;color:#0f172a;margin-bottom:2px;">${escHtml(r.label)}</div>
+                  <span style="font-size:11px;color:var(--text-muted);text-transform:capitalize;">Type: ${escHtml(r.type.replace('_', ' '))}</span>
+                </td>
+                <td style="text-align:center;font-weight:700;color:#059669;">${r.correct}</td>
+                <td style="text-align:center;font-weight:700;color:#dc2626;">${r.incorrect}</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px;min-width:110px;">
+                    <span class="analysis-bar-wrap" style="display:block;flex:1;height:8px;background:#e2e8f0;border-radius:6px;overflow:hidden;min-width:70px;">
+                      <span class="analysis-bar ${r.pct >= 80 ? 'high' : r.pct < 50 ? 'low' : ''}" style="display:block;height:100%;width:${r.pct}%;background:${r.pct >= 80 ? '#10b981' : r.pct < 50 ? '#ef4444' : '#3b82f6'};border-radius:6px;transition:width 0.3s ease;"></span>
+                    </span>
+                    <span style="font-weight:700;font-size:12px;min-width:36px;color:#334155;">${r.pct}%</span>
+                  </div>
+                </td>
+                <td style="text-align:center;">
+                  <span class="status-pill ${r.diffBadge}" style="color:${r.diffColor};">${r.difficulty}</span>
+                </td>
+                <td style="font-size:12px;color:var(--text-secondary);font-weight:600;">
+                  ${escHtml(r.correctAnswer || '—')}
+                </td>
+              </tr>`).join('')
+              : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">No question items found in this quiz.</td></tr>`}
+          </tbody>
+        </table>
+      </div>`}`;
+    }
+
+
+
+
+    case 'classrec': {
+      if (ROLE === 'teacher') {
+        const teacherSections = (CURRENT_PROFILE?.section || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+          .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+
+        if (!teacherSections.length) {
+          return `
+          <div class="section-hdr">
+            <div>
+              <h2>Class Record Portal</h2>
+              <span style="font-size:12px;color:var(--text-muted);">Overview of handled class sections and combined section grade performance</span>
+            </div>
+          </div>
+          <div style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:16px;padding:48px 24px;text-align:center;max-width:680px;margin:30px auto;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+            <div style="font-size:48px;margin-bottom:12px;">📋</div>
+            <h3 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">No Active Handled Class Sections</h3>
+            <p style="font-size:13.5px;color:#64748b;line-height:1.5;margin:0 auto;max-width:480px;">
+              You do not have any active class sections assigned. Your previously handled section(s) may have been archived by the administration.
+            </p>
+          </div>`;
+        }
+      }
+
+      if (!classRecAttemptsCache.length) loadClassRecAttempts(true);
+      const quizzes = getClassRecordQuizzes();
+      const filteredEntries = buildRealClassRecordEntries();
+      const sectionSummaries = buildSectionSummaryEntries();
+      const allHandledStudents = registeredUsers.filter(u => u.role === 'student' && (ROLE !== 'teacher' || isStudentHandledByTeacher(u, CURRENT_PROFILE)));
+
+      const totalStudentsCount = allHandledStudents.length;
+      const quizzesCount = quizzes.length;
+      const validStudentAvgs = filteredEntries.map(e => (e.avg !== null && !isNaN(e.avg)) ? Math.min(100, Math.max(0, Number(e.avg))) : null).filter(a => a !== null);
+      const overallAvg = validStudentAvgs.length ? Math.min(100, Math.max(0, Number((validStudentAvgs.reduce((a, b) => Number(a) + Number(b), 0) / validStudentAvgs.length).toFixed(2)))) : null;
+      const passingStudentsCount = validStudentAvgs.filter(a => a >= 75).length;
+      const overallPassingRate = validStudentAvgs.length ? Math.min(100, Math.max(0, Math.round((passingStudentsCount / validStudentAvgs.length) * 100))) : null;
+
+      // MODE 1: MAIN CLASS RECORD PAGE (SECTIONS ONLY)
+      if (!classRecExpandedSection) {
+        const availableClassRecSections = (ROLE === 'teacher')
+          ? (typeof getTeacherAnalysisSections === 'function' ? getTeacherAnalysisSections() : (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim()).filter(Boolean))
+          : SECTIONS;
+        const targetPrintSec = classRecSectionFilter || (availableClassRecSections[0] || 'Section A');
+        return `
+        <div class="section-hdr">
+          <div>
+            <h2>Class Record Portal</h2>
+            <span style="font-size:12px;color:var(--text-muted);">Overview of handled class sections and combined section grade performance</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <select class="user-filter-select" onchange="setClassRecSectionFilter(this.value)">
+              <option value="">All Handled Sections</option>
+              ${availableClassRecSections.map(sec => `<option value="${sec}" ${classRecSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+            </select>
+            <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openAllSectionReportsModal()">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Print Grade Summary
+            </button>
+            <button class="add-btn" onclick="openAddClassRecordModal()">${typeof iconPlus === 'function' ? iconPlus() : ''} Add / Edit Entry</button>
+          </div>
+        </div>
+
+        <!-- SUMMARY HIGHLIGHT CARDS -->
+        <div class="card-grid" style="margin-bottom:20px;">
+          <div class="info-card horizontal-card">
+            <div class="ic-icon">${iconUsers()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Handled Sections</div>
+              <div class="ic-num">${sectionSummaries.length}</div>
+              <p>Active class sections</p>
+            </div>
+          </div>
+          <div class="info-card horizontal-card">
+            <div class="ic-icon gold">${iconQuiz()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Total Students</div>
+              <div class="ic-num gold">${totalStudentsCount}</div>
+              <p>Enrolled student roster</p>
+            </div>
+          </div>
+          <div class="info-card horizontal-card">
+            <div class="ic-icon green">${iconProgress()}</div>
+            <div class="ic-content">
+              <div class="ic-sub">Combined Class Average</div>
+              <div class="ic-num green">${overallAvg !== null ? overallAvg.toFixed(2) + '%' : '—'}</div>
+              <p>${overallPassingRate !== null ? overallPassingRate + '% passing rate' : 'No attempt scores recorded yet'}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION LEVEL MAIN TABLE -->
+        <div class="score-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Section Name</th>
+                <th>Subject / Strand</th>
+                <th>Enrolled Students</th>
+                <th>Passing Rate</th>
+                <th>Combined Section Average</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sectionSummaries.length ? sectionSummaries.map(s => `
+                <tr style="cursor:pointer;" onclick="openExpandedSectionView('${escHtml(s.section)}')">
+                  <td><strong><span class="user-role-badge student" style="font-size:13px;padding:4px 10px;">${escHtml(s.section)}</span></strong></td>
+                  <td>${escHtml(s.subject)}</td>
+                  <td><strong>${s.studentsCount}</strong> student${s.studentsCount === 1 ? '' : 's'}</td>
+                  <td><span class="analysis-bar-wrap"><span class="analysis-bar ${s.passRate >= 80 ? 'high' : s.passRate < 50 ? 'low' : ''}" style="width:${s.passRate || 0}%"></span></span> ${s.passRate !== null ? s.passRate + '%' : '—'}</td>
+                  <td class="score-val ${s.classAvg !== null && s.classAvg >= 85 ? 'good' : s.classAvg !== null && s.classAvg < 75 ? 'low' : ''}">${s.classAvg !== null ? s.classAvg.toFixed(2) + '%' : '—'}</td>
+                  <td>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                      <button class="table-act-btn take" onclick="event.stopPropagation(); openExpandedSectionView('${escHtml(s.section)}')">
+                        Expand Record
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
+                      </button>
+                      <button class="table-act-btn review" title="Print Master Sheet" onclick="event.stopPropagation(); printClassRecordSection('${escHtml(s.section)}')">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                        Print
+                      </button>
+                    </div>
+                  </td>
+                </tr>`).join('')
+                : `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;">No section summary records available.</td></tr>`}
+            </tbody>
+          </table>
+        </div>`;
+      }
+
+      // MODE 2: EXPANDED SECTION SITE / VIEW (SHOWING ALL STUDENTS IN THIS EXPANDED SECTION)
+      const currentSecData = sectionSummaries.find(s => s.section === classRecExpandedSection) || { section: classRecExpandedSection, subject: 'STEM, HUMSS', studentsCount: filteredEntries.length };
+
+      return `
+      <div class="section-hdr" style="background:#ffffff;padding:16px 20px;border-radius:16px;border:1px solid #e2e8f0;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <button class="add-btn" style="background:#1e293b;color:#ffffff;padding:8px 16px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-radius:10px;cursor:pointer;" onclick="closeExpandedSectionView()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            Back to All Sections
+          </button>
+          <div>
+            <h2 style="margin:0;font-size:20px;color:#0f172a;">Class Record — ${escHtml(classRecExpandedSection)}</h2>
+            <span style="font-size:12px;color:var(--text-muted);">${escHtml(currentSecData.subject)} · ${filteredEntries.length} Enrolled Students</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <div style="display:inline-flex;background:#e2e8f0;padding:3px;border-radius:10px;">
+            <button type="button" class="anc-archive-tab ${classRecSubView === 'combined' ? 'active' : ''}" style="padding:6px 12px;font-size:12px;" onclick="setClassRecSubView('combined')">📋 Combined Grade</button>
+            <button type="button" class="anc-archive-tab ${classRecSubView === 'matrix' ? 'active' : ''}" style="padding:6px 12px;font-size:12px;" onclick="setClassRecSubView('matrix')">📑 Quiz Matrix Columns</button>
+          </div>
+
+          <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="printClassRecordSection('${escHtml(classRecExpandedSection)}')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print Master Sheet
+          </button>
+
+          <button class="foot-btn-secondary" style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:12.5px;" onclick="exportSectionGradeCSV('${escHtml(classRecExpandedSection)}')">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export CSV
+          </button>
+
+          <select class="user-filter-select" onchange="setClassRecStudentFilter(this.value)">
+            <option value="">Specify Student: (All)</option>
+            ${allHandledStudents.map(u => {
+              const uKey = u.dbId || u.id || u.name;
+              return `<option value="${uKey}" ${classRecStudentFilter === uKey ? 'selected' : ''}>${escHtml(u.name)} (${escHtml(u.section || 'Unassigned')})</option>`;
+            }).join('')}
+          </select>
+
+          <button class="add-btn" onclick="openAddClassRecordModal()">${typeof iconPlus === 'function' ? iconPlus() : ''} Add / Edit Entry</button>
+        </div>
+      </div>
+
+      <!-- SECTION ROSTER CARDS -->
+      <div class="card-grid" style="margin-bottom:20px;">
+        <div class="info-card horizontal-card">
+          <div class="ic-icon">${iconUsers()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Section Roster</div>
+            <div class="ic-num">${filteredEntries.length}</div>
+            <p>Students in ${escHtml(classRecExpandedSection)}</p>
+          </div>
+        </div>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon gold">${iconQuiz()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Quizzes Evaluated</div>
+            <div class="ic-num gold">${quizzes.length}</div>
+            <p>Active quiz assessments</p>
+          </div>
+        </div>
+        <div class="info-card horizontal-card">
+          <div class="ic-icon green">${iconProgress()}</div>
+          <div class="ic-content">
+            <div class="ic-sub">Section Average</div>
+            <div class="ic-num green">${currentSecData.classAvg !== null && currentSecData.classAvg !== undefined ? Number(currentSecData.classAvg).toFixed(2) + '%' : (overallAvg !== null ? Number(overallAvg).toFixed(2) + '%' : '—')}</div>
+            <p>Combined section performance</p>
+          </div>
+        </div>
+      </div>
+
+      ${classRecSubView === 'combined' ? `
+        <!-- COMBINED SINGLE OVERALL PERCENTAGE GRADE VIEW -->
+        <div class="score-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Section</th>
+                <th>Subject</th>
+                <th>Quizzes Completed</th>
+                <th>Combined Overall Grade</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredEntries.length ? filteredEntries.map(e => `
+                <tr>
+                  <td><strong>${escHtml(e.name)}</strong> ${e.hasRealData ? '<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;">Live</span>' : ''}</td>
+                  <td><span class="user-role-badge student">${escHtml(e.section)}</span></td>
+                  <td>${escHtml(e.subject)}</td>
+                  <td><strong>${e.quizzesTakenCount}</strong> quiz${e.quizzesTakenCount === 1 ? '' : 'zes'} taken</td>
+                  <td class="score-val ${e.avg !== null && e.avg >= 85 ? 'good' : e.avg !== null && e.avg < 75 ? 'low' : ''}">
+                    ${e.avg !== null ? `<strong>${e.avg.toFixed(2)}%</strong> <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:${e.avg >= 75 ? '#dcfce7' : '#fee2e2'};color:${e.avg >= 75 ? '#15803d' : '#991b1b'};font-weight:700;">${e.avg >= 75 ? 'PASSING' : 'NEEDS IMP.'}</span>` : '<span style="color:var(--text-muted);">—</span>'}
+                  </td>
+                  <td>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                      <button class="table-act-btn take" onclick="openStudentGradePanel('${e.key}')">
+                        Grade Details
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
+                      </button>
+                      <button class="table-act-btn review" title="Print Student Grade Slip" onclick="openStudentReportModal('${e.key}')">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                        Slip
+                      </button>
+                    </div>
+                  </td>
+                </tr>`).join('')
+                : `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;">No student records found in ${escHtml(classRecExpandedSection)}.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      ` : `
+        <!-- FULL QUIZ MATRIX COLUMNS VIEW -->
+        <div class="score-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Section</th>
+                <th>Subject</th>
+                ${quizzes.map(q => `<th>${escHtml(q.title)}</th>`).join('')}
+                <th>Average</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredEntries.length ? filteredEntries.map(e => `
+                <tr>
+                  <td><strong>${escHtml(e.name)}</strong> ${e.hasRealData ? '<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;">Live</span>' : ''}</td>
+                  <td><span class="user-role-badge student">${escHtml(e.section)}</span></td>
+                  <td>${escHtml(e.subject)}</td>
+                  ${quizzes.map(q => {
+                    const qs = e.quizScores[q.id];
+                    if (!qs || qs.scorePct === null) {
+                      return `<td class="score-val" style="color:var(--text-muted);">—</td>`;
+                    }
+                    return `<td class="score-val ${qs.scorePct >= 88 ? 'good' : qs.scorePct < 75 ? 'low' : ''}">${qs.scorePct}%${qs.isLive ? ' <span style="font-size:9px;color:#059669;">✓</span>' : ''}</td>`;
+                  }).join('')}
+                  <td class="score-val ${e.avg !== null && e.avg >= 85 ? 'good' : e.avg !== null && e.avg < 75 ? 'low' : ''}">${e.avg !== null ? e.avg.toFixed(2) + '%' : '—'}</td>
+                </tr>`).join('')
+                : `<tr><td colspan="${4 + quizzes.length}" style="text-align:center;color:var(--text-muted);padding:20px;">No student records found in ${escHtml(classRecExpandedSection)}.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      `}`;
+    }
+
+    case 'chats': return buildChatPage('teacher');
+
+    case 'profile': return buildProfilePage('teacher');
+
+    default: return '<p>Page not found.</p>';
+  }
+}
+
+/* ── ADMIN PAGES ── */
+let adminReportsTab = 'census'; // 'census' | 'grades'
+function setAdminReportsTab(tab) {
+  adminReportsTab = tab;
+  if (typeof renderPage === 'function') renderPage('reports');
+}
+
+function switchCensusTab(tab) {
+  const showArchived = tab === 'archived';
+  const activeTable = document.getElementById('censusActiveTable');
+  const archivedTable = document.getElementById('censusArchivedTable');
+  const activeTab = document.getElementById('censusActiveTab');
+  const archivedTab = document.getElementById('censusArchivedTab');
+  if (activeTable) activeTable.style.display = showArchived ? 'none' : '';
+  if (archivedTable) archivedTable.style.display = showArchived ? '' : 'none';
+  if (activeTab) activeTab.classList.toggle('active', !showArchived);
+  if (archivedTab) archivedTab.classList.toggle('active', showArchived);
+}
+window.switchCensusTab = switchCensusTab;
+
+function adminPage(page) {
+  switch(page) {
+    case 'dashboard': {
+      const isDemo = !!CURRENT_PROFILE?.is_demo;
+      const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
+      const students = users.filter(u=>u.role==='student');
+      const teachers = users.filter(u=>u.role==='teacher');
+      const admins = users.filter(u=>u.role==='admin');
+      const activeStudents = students.filter(u=>u.isActive!==false && u.is_active!==false).length;
+      const inactiveStudents = students.length - activeStudents;
+      const activeTeachers = teachers.filter(u=>u.isActive!==false && u.is_active!==false).length;
+      const activeAdmins = admins.filter(u=>u.isActive!==false && u.is_active!==false).length;
+      const sections = typeof managedSections !== 'undefined' ? managedSections : [];
+      const entries = typeof approvalEntries==='function' ? approvalEntries().filter(e=>e.status==='pending') : [];
+      const pendingHandouts = entries.filter(e => !e.isQuiz && e.type !== 'quiz').length;
+      const pendingQuizzes = entries.filter(e => e.isQuiz || e.type === 'quiz').length;
+      // Real pending approvals that carry a deadline, sorted soonest-first so admins can
+      // approve them before the deadline is reached (replaces the old placeholder dates).
+      const quizzesRef = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+      const matsRef = typeof materialsData !== 'undefined' ? materialsData : [];
+      const pendingDeadlineItems = entries.map(item => {
+        const isQ = item.kind === 'quiz' || /quiz/i.test(item.type || '');
+        const src = isQ
+          ? quizzesRef.find(q => String(q.id) === String(item.id))
+          : matsRef.find(m => String(m.id) === String(item.id));
+        const dueRaw = src ? (src.dueDate || src.due_date || src.deadline || null) : null;
+        const dueTs = dueRaw ? new Date(dueRaw).getTime() : NaN;
+        return { id: item.id, title: item.title || (isQ ? 'Quiz submission' : 'Learning material'), isQuiz: isQ, dueTs: isNaN(dueTs) ? null : dueTs };
+      });
+      const upcomingDeadlineItems = pendingDeadlineItems.filter(d => d.dueTs).sort((a, b) => a.dueTs - b.dueTs);
+      const pendingNoDeadlineCount = pendingDeadlineItems.length - upcomingDeadlineItems.length;
+      const announcements = typeof getStoredAnnouncements==='function' ? getStoredAnnouncements() : [];
+      const oneWeekAgo = Date.now() - 7 * 86400000;
+      const live = announcements.filter(n=>!n.isArchived && n.status!=='draft' && !n.isDraft && !(n.expiresAt && new Date(n.expiresAt).getTime() <= Date.now()));
+      const announcementsThisWeek = live.filter(n => new Date(n.timestamp).getTime() >= oneWeekAgo);
+      const drafts = announcements.filter(n=>n.status==='draft'||n.isDraft);
+      const emergencies = live.filter(n=>n.category==='emergency');
+
+      // Dynamic User Management Stats
+      const adviserCount = sections.filter(s => s.adviser || s.adviser_id).length || teachers.filter(t => sections.some(s => s.adviser === t.name || s.adviser_id === t.id)).length;
+      const newThisWeekCount = users.filter(u => u.created_at && new Date(u.created_at).getTime() >= oneWeekAgo).length;
+      const deactivatedCount = users.filter(u => u.isActive === false || u.is_active === false).length;
+      const pendingIssuesCount = users.filter(u => (u.isActive === false || u.is_active === false) || u.must_reset_password).length;
+
+      const count = (sample, value) => (isDemo || typeof value === 'undefined' || value === null) ? sample : value;
+
+      const adSvg = {
+        shield: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z"/></svg>`,
+        user: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`,
+        users: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`,
+        approvalCheck: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="m8.5 12 2.5 2.5 5-5"/></svg>`,
+        doc: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+        folder: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`,
+        quiz: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+        megaphone: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>`,
+        siren: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="2" y1="8" x2="4" y2="8"/><line x1="20" y1="8" x2="22" y2="8"/><line x1="12" y1="2" x2="12" y2="4"/></svg>`,
+        clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+        calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+        bars: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 19h4v-7H4v7zm6 0h4V5h-4v14zm6 0h4v-9h-4v9z"/></svg>`,
+        lightning: `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+        temple: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 10v7h3v-7H4zm6 0v7h3v-7h-3zm8 0v7h3v-7h-3zM2 22h19v-3H2v3zm9.5-19L2 7v2h19V7l-9.5-4z"/></svg>`,
+        room: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="12" x2="12.01" y2="12"/></svg>`,
+        audit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><path d="m9 14 2 2 4-4"/></svg>`,
+        key: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-1.5 1.5L14 9l-2-2-4 4 2 2-6 6a3 3 0 1 0 4.24-4.24L10 13l2 2 3.5-3.5 1.5-1.5 4-4Z"/></svg>`,
+        gear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+        mortarboard: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3 1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>`,
+        dots: `<svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;"><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="12" r="2"/></svg>`,
+        checkCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+        alertCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+        infoCircle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
+        alertTriangle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+      };
+
+      const metricsData = [
+        { label: 'Pending Approvals', val: count(entries.length, entries.length), sub: `${pendingHandouts} handout${pendingHandouts!==1?'s':''} &bull; ${pendingQuizzes} quiz${pendingQuizzes!==1?'zes':''}<br>awaiting review`, icon: adSvg.approvalCheck, color: '#ea580c', bg: '#ffedd5', page: 'approval' },
+        { label: 'Total Students', val: count(students.length, students.length), sub: `<span style="color:#10b981;font-weight:700;">${activeStudents} active</span> &bull; <span style="color:#ef4444;font-weight:700;">${inactiveStudents} inactive</span>`, icon: adSvg.user, color: '#2563eb', bg: '#dbeafe', page: 'users' },
+        { label: 'Number of Teachers', val: count(teachers.length, teachers.length), sub: `<span style="color:#10b981;font-weight:700;">${activeTeachers} active</span>`, icon: adSvg.users, color: '#059669', bg: '#d1fae5', page: 'users' },
+        { label: 'System Admins', val: count(admins.length, admins.length), sub: `<span style="color:#7c3aed;font-weight:700;">${activeAdmins} active</span> admin account${activeAdmins!==1?'s':''}`, icon: adSvg.shield, color: '#7c3aed', bg: '#ede9fe', page: 'users' },
+        { label: 'Active Sections', val: count(sections.length, sections.length), sub: 'Across Grade 11 &amp; 12', icon: adSvg.doc, color: '#e11d48', bg: '#ffe4e6', page: 'sections' },
+        { label: 'Published Materials', val: (typeof materialsData !== 'undefined' ? materialsData.filter(m=>m.status==='approved').length : 0), sub: 'All approved resources', icon: adSvg.folder, color: '#0891b2', bg: '#cffafe', page: 'materials' },
+        { label: 'Active Quizzes', val: (typeof customQuizzes !== 'undefined' ? customQuizzes.filter(q=>q.status==='active').length : 0), sub: 'Running across all subjects', icon: adSvg.quiz, color: '#d97706', bg: '#fef3c7', page: 'approval' },
+        { label: 'Announcements<br>This Week', val: announcementsThisWeek.length, sub: 'School-wide updates<br>posted', icon: adSvg.megaphone, color: '#9333ea', bg: '#f3e8ff', page: 'announcements' }
+      ];
+
+      const queueItems = entries.length ? entries.slice(0, 4).map((item, idx) => {
+        const isQ = item.isQuiz || item.type === 'quiz';
+        return {
+          title: item.title || 'Instructional Material',
+          author: item.author || item.uploaded_by || 'Haven Faculty',
+          type: isQ ? 'Quiz' : 'Handout',
+          isQuiz: isQ,
+          time1: 'Submitted',
+          time2: item.created_at ? formatSentDate(item.created_at) : 'Awaiting Review',
+          iconColor: isQ ? '#db2777' : '#2563eb',
+          iconBg: isQ ? '#fdf2f8' : '#eff6ff',
+          icon: isQ ? adSvg.quiz : adSvg.doc,
+          id: item.id || `qm${idx}`
+        };
+      }) : [
+        { title: 'No pending approvals in queue', author: 'All submissions reviewed', type: 'Complete', isQuiz: false, time1: 'All caught up', time2: 'System up to date', iconColor: '#10b981', iconBg: '#ecfdf5', icon: adSvg.checkCircle, id: 'none' }
+      ];
+
+      const bulletins = live.length ? live.slice(0, 3).map(b => {
+        const dt = formatSentDate(b.timestamp);
+        return {
+          icon: b.category === 'emergency' ? adSvg.alertTriangle : adSvg.megaphone,
+          color: b.category === 'emergency' ? '#dc2626' : '#ea580c',
+          title: b.title,
+          desc: b.message ? (b.message.length > 90 ? b.message.slice(0, 90) + '…' : b.message) : 'Official advisory broadcasted.',
+          date: dt.split(',')[0] || 'Recently',
+          time: dt.split(',')[1] || ''
+        };
+      }) : [
+        { icon: adSvg.megaphone, color: '#64748b', title: 'No active broadcasts right now', desc: 'Create a new announcement to notify students and faculty.', date: 'Today', time: '' }
+      ];
+
+      const allMats = typeof materialsData !== 'undefined' ? materialsData : [];
+      const matRows = allMats.length ? allMats.slice(0, 5).map(m => {
+        const isQ = m.type === 'quiz';
+        const isPend = m.status === 'pending';
+        return {
+          subj: m.subject || m.title || 'General Subject',
+          user: m.uploaded_by || m.author || 'Haven Faculty',
+          type: isQ ? 'Quiz' : 'Handout',
+          isQuiz: isQ,
+          time: m.created_at ? formatSentDate(m.created_at) : 'Recently',
+          status: isPend ? 'Pending' : 'Approved',
+          isPending: isPend
+        };
+      }) : [
+        { subj: 'No instructional materials uploaded yet', user: 'System', type: 'Info', isQuiz: false, time: '—', status: 'None', isPending: false }
+      ];
+
+      // Dynamic real strand distribution
+      const strandKeys = ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL'];
+      const strandCounts = { STEM: 0, ABM: 0, HUMSS: 0, GAS: 0, TVL: 0 };
+      students.forEach(st => {
+        let strand = (st.strand || '').toUpperCase();
+        if (!strand && st.section) {
+          const sec = sections.find(s => s.name === st.section || s.id === st.section_id);
+          if (sec && sec.strand) strand = sec.strand.toUpperCase();
+        }
+        if (strand && strandCounts[strand] !== undefined) {
+          strandCounts[strand]++;
+        } else if (strand) {
+          for (const key of strandKeys) {
+            if (strand.includes(key)) { strandCounts[key]++; break; }
+          }
+        }
+      });
+      const maxStrandVal = Math.max(1, ...Object.values(strandCounts));
+      const strandList = strandKeys.map(key => ({
+        name: key,
+        count: strandCounts[key],
+        pct: Math.round((strandCounts[key] / maxStrandVal) * 100)
+      }));
+
+      // Dynamic activity logs
+      const activityList = [];
+      if (live.length) {
+        activityList.push({
+          icon: adSvg.megaphone,
+          color: '#f43f5e',
+          title: `Announcement posted: ${live[0].title}`,
+          desc: `Broadcast sent to ${Array.isArray(live[0].audience) ? live[0].audience.join(', ') : 'all users'}.`,
+          time: typeof formatTimeAgo === 'function' ? formatTimeAgo(live[0].timestamp) : 'Recently'
+        });
+      }
+      if (allMats.length) {
+        const firstApproved = allMats.find(m => m.status === 'approved') || allMats[0];
+        activityList.push({
+          icon: adSvg.checkCircle,
+          color: '#10b981',
+          title: `Material available: ${firstApproved.title || firstApproved.subject}`,
+          desc: 'Instructional content accessible in Materials Hub.',
+          time: typeof formatTimeAgo === 'function' ? formatTimeAgo(firstApproved.created_at) : 'Recently'
+        });
+      }
+      if (entries.length) {
+        activityList.push({
+          icon: adSvg.quiz,
+          color: '#f59e0b',
+          title: `Pending review: ${entries[0].title || 'Submission'}`,
+          desc: `Submitted for administrative approval.`,
+          time: 'Awaiting review'
+        });
+      }
+      if (activityList.length === 0) {
+        activityList.push(
+          { icon: adSvg.checkCircle, color: '#10b981', title: 'System status normal', desc: 'All academic modules running smoothly.', time: 'Just now' }
+        );
+      }
+
+      return `<div class="admin-reference-dashboard">
+        <!-- ── HERO BANNER ── -->
+        <section class="ad-hero">
+          <div class="ad-hero-left">
+            <div class="ad-hero-pill">
+              <span class="ad-hero-pill-icon">&#10022;</span>
+              <span>ADMINISTRATIVE CONTROL CENTER &bull; HAVEN OF WISDOM ACADEMY</span>
+            </div>
+            <h1>ADMIN OPERATIONS DASHBOARD</h1>
+            <h2>Senior High School Department &bull; Institutional Overview</h2>
+          </div>
+          <div class="ad-hero-right">
+            <div class="ad-hero-tagline">
+              Empowering Education.<br>Building Brighter Futures.
+            </div>
+            <div class="ad-hero-btns">
+              <button type="button" class="ad-hero-btn-notice" onclick="openCreateAnnouncementModal()">
+                <span style="display:inline-flex;width:15px;height:15px;">${adSvg.megaphone}</span>
+                <span>Post Notice</span>
+              </button>
+              <button type="button" class="ad-hero-btn-approvals" onclick="renderPage('approval')">
+                <span style="display:inline-flex;width:15px;height:15px;color:#ef4444;">${adSvg.siren}</span>
+                <span>Approvals (${count(4, entries.length)})</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── 8 METRIC CARDS ROW ── -->
+        <div class="ad-metrics">
+          ${metricsData.map(m => `
+            <div class="ad-m-card" onclick="renderPage('${m.page}')">
+              <div class="ad-m-card-top">
+                <div class="ad-m-icon" style="background:${m.bg};color:${m.color};">
+                  ${m.icon}
+                </div>
+                <div class="ad-m-info">
+                  <span class="ad-m-label">${m.label}</span>
+                  <strong class="ad-m-num" style="color:${m.color};">${m.val}</strong>
+                </div>
+              </div>
+              <div class="ad-m-foot">${m.sub}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- ── ROW 2: PRIMARY GRID ── -->
+        <div class="ad-primary-grid">
+          <!-- Pending Approval Queue -->
+          <div class="ad-panel ad-panel-queue">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#fee2e2;color:#dc2626;">
+                  ${adSvg.siren}
+                </div>
+                <div>
+                  <h3>Pending Approval Queue</h3>
+                  <p>${count(4, entries.length)} items awaiting administrative review</p>
+                </div>
+              </div>
+              <a href="#" class="ad-panel-link" onclick="renderPage('approval'); return false;">Open Queue &rarr;</a>
+            </div>
+            <div class="ad-queue-list">
+              ${queueItems.map(item => `
+                <div class="ad-queue-row">
+                  <div class="ad-queue-icon" style="background:${item.iconBg};color:${item.iconColor};">
+                    ${item.icon}
+                  </div>
+                  <div class="ad-queue-meta">
+                    <div class="ad-queue-title">${item.title}</div>
+                    <div class="ad-queue-author">${item.author}</div>
+                  </div>
+                  <span class="ad-queue-pill ${item.isQuiz ? 'quiz' : 'handout'}">${item.type}</span>
+                  <div class="ad-queue-time">
+                    <div>${item.time1}</div>
+                    <div>${item.time2}</div>
+                  </div>
+                  <div class="ad-queue-actions">
+                    <button type="button" class="ad-btn-review" onclick="renderPage('approval')">Review</button>
+                    <button type="button" class="ad-btn-approve" onclick="renderPage('approval')">Approve</button>
+                    <button type="button" class="ad-btn-dots" onclick="renderPage('approval')">${adSvg.dots}</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Institutional Bulletins Hub -->
+          <div class="ad-panel ad-panel-bulletins">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                  ${adSvg.megaphone}
+                </div>
+                <div>
+                  <h3>Institutional Bulletins Hub</h3>
+                  <p>Admin announcements and broadcast center</p>
+                </div>
+              </div>
+              <button type="button" class="ad-btn-primary" onclick="openCreateAnnouncementModal()">
+                + Post Notice
+              </button>
+            </div>
+            <div class="ad-bulletins-stats">
+              <div class="ad-bstat-box" style="background:#eff6ff;">
+                <div class="ad-bstat-num" style="color:#2563eb;">${count(6, live.length)}</div>
+                <div class="ad-bstat-lbl" style="color:#2563eb;">BROADCASTS</div>
+              </div>
+              <div class="ad-bstat-box" style="background:#fef2f2;">
+                <div class="ad-bstat-num" style="color:#ef4444;">${count(1, emergencies.length)}</div>
+                <div class="ad-bstat-lbl" style="color:#ef4444;">EMERGENCY</div>
+              </div>
+              <div class="ad-bstat-box" style="background:#fffbeb;">
+                <div class="ad-bstat-num" style="color:#d97706;">${count(2, drafts.length)}</div>
+                <div class="ad-bstat-lbl" style="color:#d97706;">DRAFTS</div>
+              </div>
+            </div>
+            <div class="ad-bulletins-list">
+              ${bulletins.map(b => `
+                <div class="ad-bulletin-item" onclick="renderPage('announcements')">
+                  <div class="ad-bulletin-icon" style="color:${b.color};">
+                    ${b.icon}
+                  </div>
+                  <div class="ad-bulletin-body">
+                    <div class="ad-bulletin-title">${b.title}</div>
+                    <div class="ad-bulletin-desc">${b.desc}</div>
+                  </div>
+                  <div class="ad-bulletin-time">
+                    <div>${b.date}</div>
+                    <div>${b.time}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <div class="ad-bulletins-footer">
+              <a href="#" class="ad-panel-link" onclick="renderPage('announcements'); return false;">View all announcements</a>
+              <a href="#" class="ad-panel-link" onclick="renderPage('announcements'); return false;">Broadcast Center &rarr;</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ROW 3: MIDDLE GRID ── -->
+        <div class="ad-middle-grid">
+          <!-- User Management Snapshot -->
+          <div class="ad-panel ad-panel-users">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                  ${adSvg.users}
+                </div>
+                <div>
+                  <h3>User Management Snapshot</h3>
+                  <p>View and manage user accounts across the institution</p>
+                </div>
+              </div>
+            </div>
+            <div class="ad-user-roles">
+              <div class="ad-urole-box" style="background:#eff6ff;" onclick="renderPage('users')">
+                <div class="ad-urole-icon" style="color:#2563eb;">${adSvg.user}</div>
+                <div>
+                  <div class="ad-urole-num" style="color:#2563eb;">${count(125, students.length)}</div>
+                  <div class="ad-urole-lbl">Students</div>
+                </div>
+              </div>
+              <div class="ad-urole-box" style="background:#f0fdf4;" onclick="renderPage('users')">
+                <div class="ad-urole-icon" style="color:#10b981;">${adSvg.users}</div>
+                <div>
+                  <div class="ad-urole-num" style="color:#10b981;">${count(10, teachers.length)}</div>
+                  <div class="ad-urole-lbl">Teachers</div>
+                </div>
+              </div>
+              <div class="ad-urole-box" style="background:#faf5ff;" onclick="renderPage('users')">
+                <div class="ad-urole-icon" style="color:#7c3aed;">${adSvg.shield}</div>
+                <div>
+                  <div class="ad-urole-num" style="color:#7c3aed;">${count(2, admins.length)}</div>
+                  <div class="ad-urole-lbl">Admins</div>
+                </div>
+              </div>
+              <div class="ad-urole-box" style="background:#fff7ed;" onclick="renderPage('users')">
+                <div class="ad-urole-icon" style="color:#ea580c;">${adSvg.mortarboard}</div>
+                <div>
+                  <div class="ad-urole-num" style="color:#ea580c;">${adviserCount}</div>
+                  <div class="ad-urole-lbl">Advisers</div>
+                </div>
+              </div>
+            </div>
+            <div class="ad-user-status-bar">
+              <div class="ad-ustatus-item">
+                <span style="color:#10b981;display:inline-flex;width:14px;height:14px;">${adSvg.checkCircle}</span>
+                <span>New this week</span>
+                <strong style="color:#10b981;">${newThisWeekCount}</strong>
+              </div>
+              <div class="ad-ustatus-item">
+                <span style="color:#ef4444;display:inline-flex;width:14px;height:14px;">${adSvg.alertCircle}</span>
+                <span>Pending account issues</span>
+                <strong style="color:#ef4444;">${pendingIssuesCount}</strong>
+              </div>
+              <div class="ad-ustatus-item">
+                <span style="color:#64748b;display:inline-flex;width:14px;height:14px;">${adSvg.infoCircle}</span>
+                <span>Deactivated accounts</span>
+                <strong style="color:#64748b;">${deactivatedCount}</strong>
+              </div>
+            </div>
+            <div class="ad-user-actions-row">
+              <button type="button" class="ad-btn-user-main" onclick="openAddUserModal()">
+                <span style="display:inline-flex;width:14px;height:14px;">${adSvg.user}</span>
+                <span>Create User</span>
+              </button>
+              <button type="button" class="ad-btn-user-sub" onclick="renderPage('users')">
+                <span style="display:inline-flex;width:14px;height:14px;color:#2563eb;">${adSvg.key}</span>
+                <span>Reset Access</span>
+              </button>
+              <button type="button" class="ad-btn-user-sub" onclick="renderPage('users')">
+                <span style="display:inline-flex;width:14px;height:14px;color:#2563eb;">${adSvg.gear}</span>
+                <span>Manage Roles</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Course / Materials Activity -->
+          <div class="ad-panel ad-panel-materials">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#fffbeb;color:#d97706;">
+                  ${adSvg.folder}
+                </div>
+                <div>
+                  <h3>Course / Materials Activity</h3>
+                  <p>Recently uploaded and published instructional materials</p>
+                </div>
+              </div>
+              <a href="#" class="ad-panel-link" onclick="renderPage('materials'); return false;">Materials Hub &rarr;</a>
+            </div>
+            <div class="ad-mat-table-wrap">
+              <table class="ad-mat-table">
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th>Uploaded by</th>
+                    <th>Type</th>
+                    <th>Timestamp</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${matRows.map(m => `
+                    <tr>
+                      <td style="font-weight:600;">${m.subj}</td>
+                      <td style="color:#64748b;">${m.user}</td>
+                      <td>
+                        <span class="ad-tbl-pill ${m.isQuiz ? 'pink' : 'blue'}">${m.type}</span>
+                      </td>
+                      <td style="color:#64748b;">${m.time}</td>
+                      <td>
+                        <span class="ad-tbl-pill ${m.isPending ? 'orange' : 'green'}">${m.status}</span>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Administrative Shortcuts -->
+          <div class="ad-panel ad-panel-shortcuts">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#f3e8ff;color:#9333ea;">
+                  ${adSvg.lightning}
+                </div>
+                <div>
+                  <h3>Administrative Shortcuts</h3>
+                  <p>Quick access to common administrative tasks</p>
+                </div>
+              </div>
+            </div>
+            <div class="ad-shortcuts-grid">
+              <button type="button" class="ad-shortcut-btn" onclick="openAddUserModal()">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.users}</span>
+                  <span>Create User</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('sections')">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.doc}</span>
+                  <span>Manage Sections</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('reports'); if(typeof setAdminReportsTab==='function') setAdminReportsTab('census');">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.temple}</span>
+                  <span>School Census</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('reports'); if(typeof setAdminReportsTab==='function') setAdminReportsTab('grades');">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.doc}</span>
+                  <span>Grade Reports</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('rooms')">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.room}</span>
+                  <span>Manage Rooms</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+              <button type="button" class="ad-shortcut-btn" onclick="renderPage('reports'); if(typeof setAdminReportsTab==='function') setAdminReportsTab('census');">
+                <div class="ad-sc-left">
+                  <span class="ad-sc-icon">${adSvg.audit}</span>
+                  <span>Open Audit Logs</span>
+                </div>
+                <span class="ad-sc-arrow">&rsaquo;</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ROW 4: BOTTOM GRID ── -->
+        <div class="ad-bottom-grid">
+          <!-- Students per Strand -->
+          <div class="ad-panel ad-panel-strands">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                  ${adSvg.bars}
+                </div>
+                <div>
+                  <h3>Students per Strand</h3>
+                  <p>Student distribution across SHS strands</p>
+                </div>
+              </div>
+            </div>
+            <div class="ad-strand-list">
+              ${strandList.map(s => `
+                <div class="ad-strand-row">
+                  <strong>${s.name}</strong>
+                  <div class="ad-strand-track">
+                    <div class="ad-strand-fill" style="width:${s.pct}%;"></div>
+                  </div>
+                  <b>${s.count}</b>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Recent Administrative Activity -->
+          <div class="ad-panel ad-panel-activity">
+            <div class="ad-panel-header">
+              <div class="ad-panel-title-wrap">
+                <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                  ${adSvg.clock}
+                </div>
+                <div>
+                  <h3>Recent Administrative Activity</h3>
+                </div>
+              </div>
+              <a href="#" class="ad-panel-link" onclick="renderPage('reports'); return false;">View All Logs &rarr;</a>
+            </div>
+            <div class="ad-activity-list">
+              ${activityList.map(a => `
+                <div class="ad-activity-item">
+                  <div class="ad-activity-icon" style="background:${a.color};color:#fff;">
+                    ${a.icon}
+                  </div>
+                  <div class="ad-activity-content">
+                    <div class="ad-activity-title">${a.title}</div>
+                    <div class="ad-activity-desc">${a.desc}</div>
+                  </div>
+                  <div class="ad-activity-time">${a.time}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Upcoming Deadlines & Account Summary (Stacked) -->
+          <div class="ad-side-stack">
+            <!-- Upcoming Deadlines -->
+            <div class="ad-panel ad-panel-deadlines">
+              <div class="ad-panel-header" style="margin-bottom:8px;">
+                <div class="ad-panel-title-wrap">
+                  <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                    ${adSvg.calendar}
+                  </div>
+                  <div>
+                    <h3>Upcoming Deadlines</h3>
+                    <p>Pending approvals &middot; approve before the deadline</p>
+                  </div>
+                </div>
+              </div>
+              <div class="ad-deadline-list">
+                ${upcomingDeadlineItems.length ? upcomingDeadlineItems.slice(0, 5).map(d => {
+                  const now = Date.now();
+                  const overdue = d.dueTs < now;
+                  const soon = !overdue && (d.dueTs - now) <= 3 * 86400000;
+                  const pillStyle = overdue ? 'background:#fee2e2;color:#b91c1c;' : (soon ? 'background:#fef3c7;color:#b45309;' : '');
+                  const pillLabel = overdue ? 'Overdue' : new Date(d.dueTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  return `<div class="ad-deadline-item" style="cursor:pointer;" onclick="renderPage('approval')" title="Open Content Approval to review this submission">
+                    <div class="ad-dl-left" style="min-width:0;flex:1;">
+                      <span class="ad-dl-icon" style="color:${d.isQuiz ? '#db2777' : '#2563eb'};flex-shrink:0;">${d.isQuiz ? adSvg.quiz : adSvg.doc}</span>
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escHtml(d.title)}</span>
+                    </div>
+                    <span class="ad-dl-pill" style="${pillStyle}">${pillLabel}</span>
+                  </div>`;
+                }).join('') : `<div style="padding:16px 8px;text-align:center;color:#8798b2;font-size:11px;line-height:1.5;">${pendingDeadlineItems.length ? 'No pending approvals have a deadline set.' : 'No pending approvals right now.'}</div>`}
+                ${pendingNoDeadlineCount > 0 ? `<div style="padding:4px 8px;text-align:center;color:#0879b7;font-size:10px;font-weight:700;cursor:pointer;" onclick="renderPage('approval')">+${pendingNoDeadlineCount} pending without a deadline &rarr; Review</div>` : ''}
+                ${upcomingDeadlineItems.length > 5 ? `<div style="padding:4px 8px;text-align:center;color:#0879b7;font-size:10px;font-weight:700;cursor:pointer;" onclick="renderPage('approval')">View all ${upcomingDeadlineItems.length} deadlines &rarr;</div>` : ''}
+              </div>
+            </div>
+
+            <!-- Account Summary -->
+            <div class="ad-panel ad-panel-accounts">
+              <div class="ad-panel-header" style="margin-bottom:8px;">
+                <div class="ad-panel-title-wrap">
+                  <div class="ad-panel-icon" style="background:#eff6ff;color:#2563eb;">
+                    ${adSvg.user}
+                  </div>
+                  <div>
+                    <h3>Account Summary</h3>
+                    <p>Student account status</p>
+                  </div>
+                </div>
+              </div>
+              <div class="ad-acc-summary-grid">
+                <div class="ad-acc-tile active">
+                  <div class="ad-acc-icon-badge">
+                    <span style="display:inline-flex;width:16px;height:16px;">${adSvg.user}</span>
+                  </div>
+                  <div>
+                    <div class="ad-acc-num">${activeStudents}</div>
+                    <div class="ad-acc-lbl">Active</div>
+                  </div>
+                </div>
+                <div class="ad-acc-tile inactive">
+                  <div class="ad-acc-icon-badge">
+                    <span style="display:inline-flex;width:16px;height:16px;">${adSvg.user}</span>
+                  </div>
+                  <div>
+                    <div class="ad-acc-num">${inactiveStudents}</div>
+                    <div class="ad-acc-lbl">Inactive</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    case 'materials': return `
+      <div id="materialsListWrap">${renderMaterialsList('admin')}</div>`;
+
+    case 'approval': return `<div class="ca-page" id="approvalListWrap">${renderApprovalMaterialRows()}</div>`;
+
+    case 'users': return `
+      <div class="section-hdr"><h2>User Management</h2>
+        <button class="add-btn" onclick="openAddUserModal()">${iconPlus()} Add User</button>
+      </div>
+      <div id="userManagementContentWrap">
+        ${typeof renderUserManagementContent === 'function' ? renderUserManagementContent() : ''}
+      </div>`;
+
+    case 'sections': return `
+      <div class="section-hdr">
+        <div>
+          <h2>Section Management</h2>
+          <span style="font-size:12px;color:var(--text-muted);">Manage senior high sections, assign class advisers, and add students</span>
+        </div>
+        <button class="add-btn" onclick="openCreateSectionModal()">${iconPlus()} Create Section</button>
+      </div>
+      <div id="sectionManagementContentWrap">
+        ${typeof renderSectionsTabContent === 'function' ? renderSectionsTabContent() : ''}
+      </div>`;
+
+    case 'rooms': return `
+      <div class="section-hdr">
+        <div>
+          <h2>Room Management & Scheduling</h2>
+          <span style="font-size:12px;color:var(--text-muted);">Manage campus classrooms, assign section time slots, and prevent schedule conflicts</span>
+        </div>
+        <button class="add-btn" onclick="openCreateRoomModal()">${iconPlus()} Add New Room</button>
+      </div>
+      <div id="roomsManagementContentWrap">
+        ${typeof renderRoomsTabContent === 'function' ? renderRoomsTabContent() : ''}
+      </div>`;
+
+    case 'reports': {
+      return `
+      <!-- ADMIN REPORTS & CENSUS TOP NAVIGATION TABS -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <div style="display:inline-flex;background:#f1f5f9;padding:4px;border-radius:12px;gap:6px;border:1px solid #e2e8f0;">
+          <button type="button" class="anc-archive-tab ${adminReportsTab === 'census' ? 'active' : ''}" style="padding:8px 18px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;" onclick="setAdminReportsTab('census')">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 10h18M5 10v11M19 10v11M9 10v11M15 10v11M12 2L2 7h20L12 2z"/></svg>
+            Institutional Census
+          </button>
+          <button type="button" class="anc-archive-tab ${adminReportsTab === 'grades' ? 'active' : ''}" style="padding:8px 18px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;" onclick="setAdminReportsTab('grades')">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Academic Grade Reports
+          </button>
+        </div>
+        <span style="font-size:12px;color:var(--text-muted);display:inline-flex;align-items:center;gap:6px;background:#f8fafc;padding:6px 14px;border-radius:8px;border:1px solid #e2e8f0;font-weight:600;">
+          🔒 Strictly Restricted to Administrators
+        </span>
+      </div>
+
+      ${adminReportsTab === 'census' ? renderAdminClassRecordCensus() : renderAdminAcademicReportsContent()}
+      `;
+    }
+
+    case 'chats': return buildChatPage('admin');
+
+    case 'profile': return buildProfilePage('admin');
+
+    case 'classrec': return renderAdminClassRecordCensus();
+
+    case 'quiz': return teacherPage('quiz');
+    case 'quizzes': return teacherPage('quiz');
+    case 'analysis': return teacherPage('analysis');
+
+    default: return '<p>Page not found.</p>';
+  }
+}
+
+function renderAdminAcademicReportsContent() {
+  const allEntries = typeof buildRealClassRecordEntries === 'function' ? buildRealClassRecordEntries() : [];
+  const students = registeredUsers.filter(u => u.role === 'student');
+  const validAvgs = allEntries.map(e => e.avg).filter(a => a !== null && !isNaN(a));
+  const overallAvg = validAvgs.length ? (validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length).toFixed(2) : '82.50';
+  const passingCount = validAvgs.filter(a => a >= 75).length;
+  const passRate = validAvgs.length ? Math.round((passingCount / validAvgs.length) * 100) : 88;
+
+  const secSummaries = (managedSections || []).map(sec => {
+    const secStudents = allEntries.filter(e => (e.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase());
+    const secAvgs = secStudents.map(e => e.avg).filter(a => a !== null && !isNaN(a));
+    const avg = secAvgs.length ? (secAvgs.reduce((a, b) => a + b, 0) / secAvgs.length).toFixed(2) : null;
+    const pRate = secAvgs.length ? Math.round((secAvgs.filter(a => a >= 75).length / secAvgs.length) * 100) : null;
+    return {
+      ...sec,
+      count: secStudents.length,
+      avg,
+      pRate
+    };
+  });
+
+  return `
+  <div class="section-hdr">
+    <div>
+      <h2>Academic Reports & Document Generation</h2>
+      <span style="font-size:12px;color:var(--text-muted);">Institutional grade sheets, official evaluation slips (Form 138-A), and spreadsheet exports</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openSectionReportModal('${escHtml(managedSections[0]?.name || 'Section A')}')">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print Master Sheet
+      </button>
+      <button class="foot-btn-secondary" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;font-size:13px;" onclick="exportSectionGradeCSV('${escHtml(managedSections[0]?.name || 'Section A')}')">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export CSV
+      </button>
+    </div>
+  </div>
+
+  <!-- SUMMARY KPI METRICS -->
+  <div class="card-grid" style="margin-bottom:24px;">
+    <div class="info-card">
+      <div class="ic-head"><div class="ic-icon">${iconProfile()}</div><div><div class="ic-sub">Enrolled Students</div><div class="ic-num">${students.length}</div></div></div>
+      <p>Total active student body</p>
+    </div>
+    <div class="info-card">
+      <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Institutional Average</div><div class="ic-num green">${overallAvg}%</div></div></div>
+      <p>Combined academic grade average</p>
+    </div>
+    <div class="info-card">
+      <div class="ic-head"><div class="ic-icon gold">${iconChart()}</div><div><div class="ic-sub">Passing Rate</div><div class="ic-num gold">${passRate}%</div></div></div>
+      <p>Achieving 75% or higher</p>
+    </div>
+    <div class="info-card">
+      <div class="ic-head"><div class="ic-icon">${iconFolder()}</div><div><div class="ic-sub">Active Sections</div><div class="ic-num">${typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived).length : 0}</div></div></div>
+      <p>Managed senior high sections</p>
+    </div>
+  </div>
+
+  <!-- REPORT GENERATOR TOOLS -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(min(100%, 340px), 1fr));gap:18px;margin-bottom:28px;">
+    <!-- TOOL 1: SECTION MASTER GRADE SHEET -->
+    <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:16px;padding:22px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="width:36px;height:36px;border-radius:10px;background:#eff6ff;color:var(--blue);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </div>
+          <div>
+            <h3 style="font-size:15.5px;font-weight:700;color:var(--text-primary);margin:0;">Section Master Grade Sheet</h3>
+            <span style="font-size:11.5px;color:var(--text-muted);">DepEd-format grade sheet with student matrix & signatures</span>
+          </div>
+        </div>
+        <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;margin:10px 0 16px;">
+          Generate and print official section summaries including pass rates, assessment breakdown, and principal certification blocks.
+        </p>
+        <div class="gen-field" style="margin-bottom:16px;">
+          <label style="font-size:11.5px;text-transform:uppercase;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">Select Class Section</label>
+          <select id="adminReportSecSelect" class="user-filter-select" style="width:100%;padding:9px 12px;font-size:13px;border-radius:10px;">
+            ${(managedSections || []).map(s => `<option value="${escHtml(s.name)}">${escHtml(s.name)} (${escHtml(s.gradeLevel || 'Grade 11')} · ${escHtml(s.strand || 'STEM')})</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid #f1f5f9;">
+        <button class="gen-btn" style="flex:1;background:#1e293b;color:#fff;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;" onclick="openSectionReportModal(document.getElementById('adminReportSecSelect').value)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print Master Sheet
+        </button>
+        <button class="foot-btn-secondary" style="display:inline-flex;align-items:center;gap:6px;padding:9px 14px;" onclick="exportSectionGradeCSV(document.getElementById('adminReportSecSelect').value)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- TOOL 2: STUDENT GRADE SLIP -->
+    <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:16px;padding:22px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="width:36px;height:36px;border-radius:10px;background:#f0fdf4;color:#15803d;display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div>
+            <h3 style="font-size:15.5px;font-weight:700;color:var(--text-primary);margin:0;">Student Grade Slip (Form 138-A)</h3>
+            <span style="font-size:11.5px;color:var(--text-muted);">Individual student evaluation and parent acknowledgment card</span>
+          </div>
+        </div>
+        <p style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;margin:10px 0 16px;">
+          Print official term grade slips for parent-teacher conferences, student records, and formal academic evaluation.
+        </p>
+        <div class="gen-field" style="margin-bottom:16px;">
+          <label style="font-size:11.5px;text-transform:uppercase;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">Select Student</label>
+          <select id="adminReportStudentSelect" class="user-filter-select" style="width:100%;padding:9px 12px;font-size:13px;border-radius:10px;">
+            ${students.map(u => {
+              const uKey = u.dbId || u.id || u.name;
+              return `<option value="${escHtml(uKey)}">${escHtml(u.name)} — ${escHtml(u.section || 'Unassigned')} (${escHtml(u.strand || 'STEM')})</option>`;
+            }).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid #f1f5f9;">
+        <button class="gen-btn" style="flex:1;background:var(--blue);color:#fff;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;" onclick="openStudentReportModal(document.getElementById('adminReportStudentSelect').value)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print Student Grade Slip
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION REPORTS SUMMARY TABLE -->
+  <div>
+    <div class="section-hdr">
+      <div>
+        <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0 0 2px 0;">Official Class Section Grade Reports</h3>
+        <span style="font-size:12px;color:var(--text-muted);">Quick access to print or export any active section record</span>
+      </div>
+    </div>
+    <div class="score-table score-table-responsive" style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+      <table style="min-width:850px;width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="white-space:nowrap;">Section Name</th>
+            <th>Grade Level & Strand</th>
+            <th>Class Adviser</th>
+            <th>Enrolled</th>
+            <th>Class Average</th>
+            <th>Passing Rate</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${secSummaries.length ? secSummaries.map(s => `
+            <tr>
+              <td><strong><span class="user-role-badge student" style="font-size:13px;padding:4px 10px;">${escHtml(s.name)}</span></strong></td>
+              <td>${escHtml(s.gradeLevel || 'Grade 11')} · <span class="role-tag student">${escHtml(s.strand || 'STEM')}</span></td>
+              <td>${escHtml(s.adviser || 'Department Adviser')}</td>
+              <td><strong>${s.count}</strong> students</td>
+              <td class="score-val ${s.avg !== null && s.avg >= 85 ? 'good' : s.avg !== null && s.avg < 75 ? 'low' : ''}">
+                ${s.avg !== null ? s.avg + '%' : '—'}
+              </td>
+              <td>
+                ${s.pRate !== null ? `
+                  <span class="analysis-bar-wrap" style="vertical-align:middle;"><span class="analysis-bar ${s.pRate >= 80 ? 'high' : s.pRate < 50 ? 'low' : ''}" style="width:${s.pRate}%"></span></span> ${s.pRate}%
+                ` : '—'}
+              </td>
+              <td>
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <button class="table-act-btn take" onclick="openSectionReportModal('${escHtml(s.name)}')">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    Print Master Sheet
+                  </button>
+                  <button class="table-act-btn review" title="Export CSV" onclick="exportSectionGradeCSV('${escHtml(s.name)}')">
+                    CSV
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `).join('') : `
+            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted);">No sections configured yet.</td></tr>
+          `}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  `;
+}
+
+/* ── ADMIN INSTITUTIONAL CENSUS & CLASS RECORD ENGINE ── */
+
+function exportAdminCensusCSV() {
+  const allUsers = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
+  const activeStudents = allUsers.filter(u => u.role === 'student');
+  const activeTeachers = allUsers.filter(u => u.role === 'teacher');
+  const totalStudents = activeStudents.length;
+  const totalTeachers = activeTeachers.length;
+  const ratio = totalTeachers > 0 ? `1:${Math.round(totalStudents / totalTeachers)}` : '1:24';
+
+  const stemCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('STEM')).length;
+  const humssCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('HUMSS')).length;
+  const abmCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('ABM')).length;
+  const tvlCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('TVL') || (s.strand || '').toUpperCase().includes('ICT')).length;
+  const secCount = typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived).length : 12;
+
+  let csv = 'HAVEN OF WISDOM ACADEMY - INSTITUTIONAL CENSUS & CLASS RECORD DASHBOARD\n';
+  csv += 'Generated Date: ' + new Date().toLocaleString() + '\n';
+  csv += 'Current Academic Year: S.Y. 2026-2027\n\n';
+
+  csv += '--- LONGITUDINAL ENROLLMENT & FACULTY COMPARATIVE CENSUS ---\n';
+  csv += 'Academic Year,Status,Total Students,Active Teachers,Student-Teacher Ratio,Sections,STEM,HUMSS,ABM,TVL/ICT,Passing Rate,YoY Growth\n';
+  let savedHistoricalArchives = [];
+  try {
+    const raw = localStorage.getItem('scholaria_historical_census_archives');
+    if (raw) savedHistoricalArchives = JSON.parse(raw);
+  } catch (_) {}
+  savedHistoricalArchives.forEach(h => {
+    csv += `"${h.year}","${h.status || 'Finalized'}",${h.students},${h.teachers},"${h.ratio}",${h.sections},${h.stem},${h.humss},${h.abm},${h.tvl},"${h.passingRate}","${h.growth}"\n`;
+  });
+  csv += `S.Y. 2026-2027 (Current),Active Current,${totalStudents},${totalTeachers},${ratio},${secCount},${stemCount},${humssCount},${abmCount},${tvlCount},${typeof overallPassingRate !== 'undefined' ? overallPassingRate : 'N/A'},Active\n\n`;
+
+  csv += '--- CURRENT ACADEMIC YEAR SECTION ROSTER CENSUS ---\n';
+  csv += 'Section Name,Grade Level,Strand,Class Adviser,Enrolled Students,Capacity Limit,Utilization\n';
+  (typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived) : []).forEach(sec => {
+    const enrolled = activeStudents.filter(s => (s.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()).length;
+    csv += `"${sec.name}","${sec.gradeLevel || 'Grade 11'}","${sec.strand || 'STEM'}","${sec.adviser || 'Department Faculty'}",${enrolled},45,${Math.round((enrolled / 45) * 100)}%\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Scholaria_Admin_Census_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  if (typeof showToast === 'function') showToast('Institutional Census exported to CSV', 'success');
+}
+
+function printAdminCensus() {
+  openInstitutionalCensusReportModal();
+}
+
+function renderAdminClassRecordCensus() {
+  if (typeof ROLE !== 'undefined' && ROLE !== 'admin') {
+    return `
+      <div style="padding:60px 20px;text-align:center;">
+        <div style="width:58px;height:58px;border-radius:14px;background:#fee2e2;color:#dc2626;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <h3 style="font-size:18px;font-weight:700;color:#1e293b;">Access Restricted</h3>
+        <p style="font-size:13.5px;color:#64748b;max-width:440px;margin:8px auto 0;">The Institutional Census is restricted strictly to Administrators.</p>
+      </div>
+    `;
+  }
+
+  const allUsers = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
+  const activeStudents = allUsers.filter(u => u.role === 'student');
+  const activeTeachers = allUsers.filter(u => u.role === 'teacher');
+  const activeAdmins = allUsers.filter(u => u.role === 'admin');
+
+  const currentYearTotalStudents = activeStudents.length;
+  const currentYearTotalTeachers = activeTeachers.length;
+  const currentYearRatio = currentYearTotalTeachers > 0
+    ? `1 : ${Math.max(1, Math.round(currentYearTotalStudents / currentYearTotalTeachers))}`
+    : '—';
+
+  // Strand breakdown for current year
+  const strandCounts = { STEM: 0, HUMSS: 0, ABM: 0, TVL: 0, GAS: 0 };
+  activeStudents.forEach(s => {
+    const raw = (s.strand || '').toUpperCase();
+    if (raw.includes('STEM')) strandCounts.STEM++;
+    else if (raw.includes('HUMSS')) strandCounts.HUMSS++;
+    else if (raw.includes('ABM')) strandCounts.ABM++;
+    else if (raw.includes('TVL') || raw.includes('ICT')) strandCounts.TVL++;
+    else strandCounts.GAS++;
+  });
+
+  // Grade level breakdown
+  const gr11Count = activeStudents.filter(s => (s.grade_level || s.grade || '').includes('11')).length;
+  const gr12Count = activeStudents.filter(s => (s.grade_level || s.grade || '').includes('12')).length;
+  const otherGradeCount = Math.max(0, activeStudents.length - (gr11Count + gr12Count));
+
+  // Real Passing Rate calculated from student performance
+  const allEntries = typeof buildRealClassRecordEntries === 'function' ? buildRealClassRecordEntries() : [];
+  const validAvgs = allEntries.map(e => e.avg).filter(a => a !== null && !isNaN(a));
+  const passingStudentsCount = validAvgs.filter(a => a >= 75).length;
+  const overallPassingRate = validAvgs.length ? `${Math.round((passingStudentsCount / validAvgs.length) * 100)}%` : '—';
+
+  // Real Archived Historical Census (if previously archived in the system)
+  let savedHistoricalArchives = [];
+  try {
+    const raw = localStorage.getItem('scholaria_historical_census_archives');
+    if (raw) savedHistoricalArchives = JSON.parse(raw);
+  } catch (_) {}
+
+  const currentYearEntry = {
+    year: 'S.Y. 2026–2027',
+    isCurrent: true,
+    students: currentYearTotalStudents,
+    teachers: currentYearTotalTeachers,
+    ratio: currentYearRatio,
+    sections: (typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived).length : 0),
+    stem: strandCounts.STEM,
+    humss: strandCounts.HUMSS,
+    abm: strandCounts.ABM,
+    tvl: strandCounts.TVL,
+    passingRate: overallPassingRate,
+    growth: 'Active S.Y.',
+    growthClass: 'high',
+    status: 'Current Active'
+  };
+
+  const historicalCensus = [...savedHistoricalArchives, currentYearEntry];
+  const maxYearStudents = Math.max(...historicalCensus.map(h => h.students), 10);
+
+  // Section summary metrics
+  const sectionsList = typeof managedSections !== 'undefined' ? managedSections : [];
+  const activeSections = sectionsList.filter(s => !s.isArchived);
+  const archivedSections = sectionsList.filter(s => s.isArchived);
+  const secCensusRows = activeSections.map(sec => {
+    const enrolled = activeStudents.filter(s => (s.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()).length;
+    const capacity = 45;
+    const utilPct = Math.min(100, Math.round((enrolled / capacity) * 100));
+    return {
+      name: sec.name,
+      gradeLevel: sec.gradeLevel || 'Grade 11',
+      strand: sec.strand || 'STEM',
+      adviser: sec.adviser || 'Department Adviser',
+      enrolled,
+      capacity,
+      utilPct
+    };
+  });
+  const archivedCensusRows = archivedSections.map(sec => {
+    const enrolled = activeStudents.filter(s => (s.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()).length;
+    return {
+      name: sec.name,
+      gradeLevel: sec.gradeLevel || 'Grade 11',
+      strand: sec.strand || 'STEM',
+      adviser: sec.adviser || 'Department Adviser',
+      enrolled,
+      archivedAt: sec.archivedAt
+    };
+  });
+
+  return `
+    <div class="admin-census-page" style="display:flex;flex-direction:column;gap:22px;">
+      <!-- EXECUTIVE HEADER & ACTION BAR -->
+      <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 65%,#0284c7 100%);padding:26px 30px;border-radius:20px;color:#ffffff;box-shadow:0 8px 30px rgba(15,23,42,0.18);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="background:rgba(217,119,6,0.22);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);padding:3px 10px;border-radius:50px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+              ADMIN RESTRICTED · INSTITUTIONAL CENSUS
+            </span>
+            <span style="background:rgba(16,185,129,0.22);color:#34d399;border:1px solid rgba(16,185,129,0.35);padding:3px 10px;border-radius:50px;font-size:11px;font-weight:700;">
+              S.Y. 2026–2027 Active
+            </span>
+          </div>
+          <h2 style="font-size:24px;font-weight:800;margin:0 0 4px 0;letter-spacing:-0.02em;color:#ffffff;">
+            Overall Institutional Census
+          </h2>
+          <p style="font-size:13px;color:#94a3b8;margin:0;max-width:620px;line-height:1.5;">
+            Official senior high school institutional census, longitudinal student enrollment trends across all academic years, active faculty counts, and section allocations.
+          </p>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button type="button" class="foot-btn-secondary" style="background:rgba(255,255,255,0.1);color:#fff;border-color:rgba(255,255,255,0.2);display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;font-weight:600;font-size:13px;backdrop-filter:blur(6px);" onclick="exportAdminCensusCSV()">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Census CSV
+          </button>
+          <button type="button" class="add-btn" style="background:#0284c7;color:#fff;border:none;display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:10px;font-weight:700;font-size:13px;box-shadow:0 4px 14px rgba(2,132,199,0.35);" onclick="printAdminCensus()">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print Institutional Census
+          </button>
+        </div>
+      </div>
+
+      <!-- CURRENT ACADEMIC YEAR (S.Y. 2026-2027) KEY METRIC TILES -->
+      <div class="card-grid">
+        <div class="info-card">
+          <div class="ic-head">
+            <div class="ic-icon" style="background:#0284c7;">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div>
+              <div class="ic-sub">Current S.Y. Students</div>
+              <div class="ic-num" style="color:#0284c7;">${currentYearTotalStudents}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-top:2px;">
+            <span style="color:var(--text-muted);">S.Y. 2026–2027 Enrolled</span>
+            <span style="color:#059669;background:#dcfce7;font-weight:700;padding:2px 7px;border-radius:6px;font-size:11px;">Active Headcount</span>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="ic-head">
+            <div class="ic-icon gold">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            </div>
+            <div>
+              <div class="ic-sub">Active Faculty Members</div>
+              <div class="ic-num gold">${currentYearTotalTeachers}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-top:2px;">
+            <span style="color:var(--text-muted);">Senior High Instructors</span>
+            <span style="color:#b45309;background:#fef3c7;font-weight:700;padding:2px 7px;border-radius:6px;font-size:11px;">Ratio ${currentYearRatio}</span>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="ic-head">
+            <div class="ic-icon green">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            </div>
+            <div>
+              <div class="ic-sub">Active Class Sections</div>
+              <div class="ic-num green">${sectionsList.length}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-top:2px;">
+            <span style="color:var(--text-muted);">Grade 11 & Grade 12</span>
+            <span style="color:#047857;background:#ecfdf5;font-weight:700;padding:2px 7px;border-radius:6px;font-size:11px;">100% Assigned</span>
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="ic-head">
+            <div class="ic-icon purple">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </div>
+            <div>
+              <div class="ic-sub">Passing & Retention</div>
+              <div class="ic-num" style="color:#7c3aed;">${overallPassingRate}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-top:2px;">
+            <span style="color:var(--text-muted);">Academic Performance</span>
+            <span style="color:#6d28d9;background:#f5f3ff;font-weight:700;padding:2px 7px;border-radius:6px;font-size:11px;">DepEd Standard</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LONGITUDINAL COMPARATIVE BREAKDOWN OF PREVIOUS YEARS -->
+      <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:24px;box-shadow:var(--shadow);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="color:#0284c7;font-size:18px;">📈</span>
+              <h3 style="font-size:17px;font-weight:800;color:var(--text-primary);margin:0;">
+                Comparative Longitudinal Enrollment Breakdown
+              </h3>
+            </div>
+            <p style="font-size:12.5px;color:var(--text-secondary);margin:4px 0 0 0;">
+              Longitudinal institutional audit comparing enrollment records, faculty counts, and academic metrics across academic years.
+            </p>
+          </div>
+          <span style="font-size:12px;color:var(--text-muted);font-weight:600;background:#f8fafc;padding:5px 12px;border-radius:8px;border:1px solid #e2e8f0;">
+            ${savedHistoricalArchives.length > 0 ? `${historicalCensus.length}-Year Comparative Range` : 'Current Academic Year'}
+          </span>
+        </div>
+
+        ${savedHistoricalArchives.length === 0 ? `
+          <div style="background:#f8fafc;border-radius:14px;padding:22px;border:1.5px dashed #cbd5e1;margin-bottom:20px;text-align:center;color:var(--text-muted);">
+            <div style="font-size:24px;margin-bottom:6px;">📊</div>
+            <strong style="font-size:13.5px;color:var(--text-primary);display:block;margin-bottom:4px;">Current Academic Year (S.Y. 2026–2027) Active</strong>
+            <p style="font-size:12px;max-width:540px;margin:0 auto;">Longitudinal year-over-year comparisons will automatically generate as each subsequent academic year concludes and is archived.</p>
+          </div>
+        ` : `
+          <!-- VISUAL GROWTH BAR PROGRESSION -->
+          <div style="background:#f8fafc;border-radius:14px;padding:16px 20px;border:1px solid #e2e8f0;margin-bottom:20px;display:flex;flex-direction:column;gap:12px;">
+            ${historicalCensus.map(h => {
+              const pct = Math.round((h.students / maxYearStudents) * 100);
+              return `
+                <div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;margin-bottom:5px;">
+                    <span style="font-weight:700;color:${h.isCurrent ? '#0284c7' : '#1e293b'};display:inline-flex;align-items:center;gap:6px;">
+                      ${escHtml(h.year)}
+                      ${h.isCurrent ? '<span style="font-size:10px;background:#0284c7;color:#fff;padding:1px 6px;border-radius:4px;font-weight:700;">CURRENT</span>' : ''}
+                    </span>
+                    <span style="font-weight:700;color:#0f172a;">
+                      ${h.students} Students <span style="font-weight:500;color:var(--text-muted);">(${h.growth})</span>
+                    </span>
+                  </div>
+                  <div style="height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden;position:relative;">
+                    <div style="height:100%;width:${pct}%;background:${h.isCurrent ? 'linear-gradient(90deg,#0284c7,#38bdf8)' : '#94a3b8'};border-radius:6px;transition:width 0.4s ease;"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `}
+
+        <!-- FULL COMPARATIVE AUDIT TABLE -->
+        <div class="score-table score-table-responsive" style="box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+          <table style="min-width:1180px;width:100%;border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="white-space:nowrap;">Academic Year</th>
+                <th style="white-space:nowrap;">Total Enrollment</th>
+                <th style="white-space:nowrap;">YoY Trend</th>
+                <th style="white-space:nowrap;">Faculty</th>
+                <th style="white-space:nowrap;">Student-Teacher Ratio</th>
+                <th style="white-space:nowrap;">Sections</th>
+                <th style="white-space:nowrap;">STEM</th>
+                <th style="white-space:nowrap;">HUMSS</th>
+                <th style="white-space:nowrap;">ABM</th>
+                <th style="white-space:nowrap;">TVL/ICT</th>
+                <th style="white-space:nowrap;">Passing Rate</th>
+                <th style="white-space:nowrap;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${historicalCensus.map(h => `
+                <tr style="${h.isCurrent ? 'background:#f0f9ff;font-weight:600;' : ''}">
+                  <td style="white-space:nowrap;">
+                    <strong style="color:${h.isCurrent ? '#0284c7' : '#0f172a'};">${escHtml(h.year)}</strong>
+                    ${h.isCurrent ? ' <span style="font-size:10.5px;color:#0284c7;font-weight:700;">(Active)</span>' : ''}
+                  </td>
+                  <td style="white-space:nowrap;"><strong style="font-size:14px;color:#0f172a;">${h.students}</strong></td>
+                  <td style="white-space:nowrap;">
+                    <span style="font-size:11.5px;font-weight:700;color:${h.isCurrent || h.growth.startsWith('+') ? '#059669' : '#64748b'};background:${h.isCurrent || h.growth.startsWith('+') ? '#dcfce7' : '#f1f5f9'};padding:2px 7px;border-radius:6px;white-space:nowrap;">
+                      ${h.growth}
+                    </span>
+                  </td>
+                  <td style="white-space:nowrap;"><strong>${h.teachers}</strong> faculty</td>
+                  <td style="white-space:nowrap;">${h.ratio}</td>
+                  <td style="white-space:nowrap;"><strong>${h.sections}</strong></td>
+                  <td style="white-space:nowrap;">${h.stem}</td>
+                  <td style="white-space:nowrap;">${h.humss}</td>
+                  <td style="white-space:nowrap;">${h.abm}</td>
+                  <td style="white-space:nowrap;">${h.tvl}</td>
+                  <td class="score-val good" style="white-space:nowrap;">${h.passingRate}</td>
+                  <td style="white-space:nowrap;">
+                    <span class="status-pill ${h.isCurrent ? 'active' : 'done'}" style="font-size:11px;white-space:nowrap;">
+                      ${escHtml(h.status)}
+                    </span>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TWO-COLUMN INSTITUTIONAL DEMOGRAPHICS & CENSUS BREAKDOWN -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <!-- CARD 1: CENSUS BY ACADEMIC STRAND -->
+        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="color:#d97706;font-size:18px;">🏛️</span>
+              <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Current Census by Academic Strand</h3>
+            </div>
+            <span style="font-size:11.5px;color:var(--text-muted);font-weight:600;">S.Y. 2026–2027</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            ${[
+              { name: 'STEM', label: 'Science, Technology, Engineering & Math', count: strandCounts.STEM, color: '#0284c7' },
+              { name: 'HUMSS', label: 'Humanities & Social Sciences', count: strandCounts.HUMSS, color: '#8b5cf6' },
+              { name: 'ABM', label: 'Accountancy, Business & Management', count: strandCounts.ABM, color: '#f59e0b' },
+              { name: 'TVL/ICT', label: 'Technical-Vocational-Livelihood (ICT)', count: strandCounts.TVL, color: '#10b981' },
+              { name: 'GAS', label: 'General Academic Strand / Other', count: strandCounts.GAS, color: '#64748b' }
+            ].map(st => {
+              const pct = currentYearTotalStudents > 0 ? Math.round((st.count / currentYearTotalStudents) * 100) : 0;
+              return `
+                <div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;font-size:12.5px;margin-bottom:4px;">
+                    <div>
+                      <strong style="color:#0f172a;">${escHtml(st.name)}</strong>
+                      <span style="color:var(--text-muted);font-size:11.5px;margin-left:6px;">${escHtml(st.label)}</span>
+                    </div>
+                    <span style="font-weight:700;color:${st.color};">${st.count} students (${pct}%)</span>
+                  </div>
+                  <div style="height:8px;background:#f1f5f9;border-radius:6px;overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:${st.color};border-radius:6px;"></div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- CARD 2: GRADE LEVEL & FACULTY DISTRIBUTION -->
+        <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:22px;box-shadow:var(--shadow);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="color:#059669;font-size:18px;">🎓</span>
+              <h3 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:0;">Grade Level Headcount & Faculty Density</h3>
+            </div>
+            <span style="font-size:11.5px;color:var(--text-muted);font-weight:600;">DepEd SHS Division</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div style="background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 11 Enrollment</div>
+              <div style="font-size:24px;font-weight:800;color:#0284c7;margin:4px 0;">${gr11Count}</div>
+              <span style="font-size:11px;color:var(--text-muted);">${currentYearTotalStudents > 0 ? Math.round((gr11Count / currentYearTotalStudents) * 100) : 0}% of institutional total</span>
+            </div>
+
+            <div style="background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 12 Enrollment</div>
+              <div style="font-size:24px;font-weight:800;color:#059669;margin:4px 0;">${gr12Count}</div>
+              <span style="font-size:11px;color:var(--text-muted);">${currentYearTotalStudents > 0 ? Math.round((gr12Count / currentYearTotalStudents) * 100) : 0}% of institutional total</span>
+            </div>
+          </div>
+
+          <div style="border-top:1px solid #f1f5f9;padding-top:14px;">
+            <h4 style="font-size:13px;font-weight:700;color:var(--text-primary);margin:0 0 8px 0;">Active Teaching Faculty Deployment:</h4>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--text-secondary);">
+              <div style="display:flex;justify-content:space-between;">
+                <span>Total Active Teachers:</span>
+                <strong style="color:#0f172a;">${currentYearTotalTeachers} Full-time Faculty</strong>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span>Institutional Student-to-Teacher Ratio:</span>
+                <strong style="color:#0284c7;">${currentYearRatio}</strong>
+              </div>
+              <div style="display:flex;justify-content:space-between;">
+                <span>System Administrators:</span>
+                <strong style="color:#b45309;">${activeAdmins.length} Super Admins</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLASS SECTION CENSUS & CAPACITY UTILIZATION TABLE -->
+      <div style="background:#ffffff;border:1.5px solid var(--blue-light);border-radius:18px;padding:24px;box-shadow:var(--shadow);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+          <div>
+            <h3 style="font-size:16.5px;font-weight:800;color:var(--text-primary);margin:0 0 2px 0;">
+              Class Section Enrollment & Capacity Census
+            </h3>
+            <span style="font-size:12px;color:var(--text-muted);">
+              Official distribution of learners per section against DepEd maximum capacity of 45 students
+            </span>
+          </div>
+          <div style="display:inline-flex;background:#f1f5f9;padding:4px;border-radius:12px;gap:6px;border:1px solid #e2e8f0;">
+            <button type="button" class="anc-archive-tab active" id="censusActiveTab" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="switchCensusTab('active')">
+              🏫 Active (${secCensusRows.length})
+            </button>
+            <button type="button" class="anc-archive-tab" id="censusArchivedTab" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="switchCensusTab('archived')">
+              📦 Archived (${archivedCensusRows.length})
+            </button>
+          </div>
+        </div>
+
+        <div id="censusActiveTable" class="score-table score-table-responsive" style="box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+          <table style="min-width:920px;width:100%;border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="white-space:nowrap;">Section</th>
+                <th style="white-space:nowrap;">Grade Level & Strand</th>
+                <th style="white-space:nowrap;">Class Adviser</th>
+                <th style="white-space:nowrap;">Enrolled Headcount</th>
+                <th style="white-space:nowrap;">Capacity Utilization (Max: 45)</th>
+                <th style="white-space:nowrap;">Official Master Sheet</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${secCensusRows.length ? secCensusRows.map(s => `
+                <tr>
+                  <td style="white-space:nowrap;">
+                    <strong><span class="user-role-badge student" style="font-size:12.5px;padding:3px 9px;white-space:nowrap;">${escHtml(s.name)}</span></strong>
+                  </td>
+                  <td style="white-space:nowrap;">${escHtml(s.gradeLevel)} · <span class="role-tag student" style="white-space:nowrap;">${escHtml(s.strand)}</span></td>
+                  <td style="white-space:nowrap;">${escHtml(s.adviser)}</td>
+                  <td style="white-space:nowrap;"><strong>${s.enrolled}</strong> students</td>
+                  <td style="white-space:nowrap;">
+                    <div style="display:flex;align-items:center;gap:8px;white-space:nowrap;">
+                      <div style="flex:1;height:7px;background:#e2e8f0;border-radius:4px;overflow:hidden;min-width:80px;max-width:140px;">
+                        <div style="height:100%;width:${s.utilPct}%;background:${s.utilPct > 90 ? '#dc2626' : s.utilPct > 75 ? '#0284c7' : '#059669'};border-radius:4px;"></div>
+                      </div>
+                      <span style="font-size:11.5px;font-weight:700;color:${s.utilPct > 90 ? '#dc2626' : '#475569'};white-space:nowrap;">${s.utilPct}% (${s.enrolled}/45)</span>
+                    </div>
+                  </td>
+                  <td style="white-space:nowrap;">
+                    <button class="table-act-btn take" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;font-size:12px;white-space:nowrap;" onclick="openSectionReportModal('${escHtml(s.name)}')">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                      Print Master Sheet
+                    </button>
+                  </td>
+                </tr>
+              `).join('') : `
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);white-space:nowrap;">No sections configured in the census yet.</td></tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+
+        <div id="censusArchivedTable" class="score-table score-table-responsive" style="display:none;box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+          <table style="min-width:920px;width:100%;border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="white-space:nowrap;">Section</th>
+                <th style="white-space:nowrap;">Grade Level & Strand</th>
+                <th style="white-space:nowrap;">Class Adviser</th>
+                <th style="white-space:nowrap;">Enrolled Headcount</th>
+                <th style="white-space:nowrap;">Archived Date</th>
+                <th style="white-space:nowrap;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${archivedCensusRows.length ? archivedCensusRows.map(s => `
+                <tr style="opacity:0.85;background:#fffdfa;">
+                  <td style="white-space:nowrap;">
+                    <strong><span class="user-role-badge student" style="font-size:12.5px;padding:3px 9px;white-space:nowrap;">${escHtml(s.name)}</span></strong>
+                  </td>
+                  <td style="white-space:nowrap;">${escHtml(s.gradeLevel)} · <span class="role-tag student" style="white-space:nowrap;">${escHtml(s.strand)}</span></td>
+                  <td style="white-space:nowrap;">${escHtml(s.adviser)}</td>
+                  <td style="white-space:nowrap;"><strong>${s.enrolled}</strong> students</td>
+                  <td style="white-space:nowrap;">${s.archivedAt ? new Date(s.archivedAt).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : 'N/A'}</td>
+                  <td style="white-space:nowrap;">
+                    <span style="background:#fef3c7;color:#b45309;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:6px;display:inline-block;">📦 Archived</span>
+                  </td>
+                </tr>
+              `).join('') : `
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);white-space:nowrap;">No archived sections.</td></tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ── SHARED CHAT PAGE LAYOUT ── */
+function buildChatPage(role) {
+  return `
+    <section class="scholaria-chat">
+    <div class="chat-page-heading">
+      <div><h2>Chats</h2><p>Connect with your ${role === 'teacher' ? 'students and fellow teachers' : 'teachers and classmates'}.</p></div>
+      <button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button>
+    </div>
+    <div class="chat-layout">
+      <div class="chat-contacts">
+        <div class="chat-contacts-hdr">
+          <span>Conversations</span>
+          <button class="new-chat-btn" title="New conversation" aria-label="New conversation" onclick="openNewChatModal()">${iconPlus()}</button>
+        </div>
+        <label class="chat-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/></svg><input type="search" aria-label="Search conversations" placeholder="Search conversations..." oninput="filterChatConversations(this.value)"></label>
+        <div class="chat-filters" aria-label="Filter conversations">
+          <button class="active" aria-pressed="true" data-chat-filter="all" onclick="setChatFilter('all')">All</button>
+          <button aria-pressed="false" data-chat-filter="teacher" onclick="setChatFilter('teacher')">Teachers</button>
+          ${role === 'student' ? '' : '<button aria-pressed="false" data-chat-filter="student" onclick="setChatFilter(\'student\')">Students</button>'}
+        </div>
+        <div class="contact-list" id="chatContactList">
+          <div class="contact-empty">Loading conversations…</div>
+        </div>
+      </div>
+      <div class="chat-window">
+        <div class="cw-header">
+          <button class="cw-back-btn" id="cwBackBtn" title="Back to conversations" aria-label="Back to conversations" onclick="closeConversation()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+          <div class="contact-avatar cw-placeholder-avatar" id="cwAvatar">${chatOutlineIcon()}</div>
+          <div>
+            <div class="cw-name" id="cwName">Your conversations</div>
+            <div class="cw-role" id="cwRole">Stay connected, keep learning.</div>
+          </div>
+        </div>
+        <div class="cw-messages" id="cwMessages">
+          <div class="cw-empty chat-welcome">${chatEmptyIllustration()}<h3>Start a conversation</h3><p>${role === 'teacher' ? 'Message a student, connect with fellow teachers,<br>or create a class group.' : 'Message a teacher, connect with classmates,<br>or create a study group.'}</p><button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button></div>
+        </div>
+        <div class="cw-input-area" id="cwInputArea"></div>
+      </div>
+    </div>
+    </section>`;
+}
+
+/* ── PAGE ROUTER & POLL TIMER ── */
+let currentPage = 'dashboard';
+window.currentPage = 'dashboard';
+let materialsPollTimer = null;
+
+function renderPage(page) {
+  currentPage = page;
+  window.currentPage = page;
+  if (page === 'materials') {
+    if (typeof setActiveSubjectMaterials === 'function') {
+      setActiveSubjectMaterials(null, null, false);
+    } else {
+      window.activeSubjectFilter = null;
+      window.activeSubjectSection = null;
+    }
+  }
+  document.querySelectorAll('.menu-item').forEach(i => {
+    if (i.dataset.page === page) i.classList.add('active');
+    else i.classList.remove('active');
+  });
+  const mainContent = document.getElementById('mainContent');
+  if (!mainContent) return;
+  mainContent.dataset.page = page;
+  mainContent.dataset.role = ROLE || '';
+  mainContent.innerHTML = getPageContent(ROLE, page);
+  if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
+  const fab = document.getElementById('chatFab');
+  if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
+  window.scrollTo(0, 0);
+
+  if (page === 'users' || page === 'classrec') loadUsersFromDB();
+  if (page === 'classrec') loadClassRecAttempts();
+  if (page === 'quiz') {
+    loadQuizzesFromDB();
+    if (ROLE === 'teacher') {
+      loadClassRecAttempts();
+      if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
+      ensureQuizManagerAttemptRealtime();
+    }
+  }
+  if (page === 'quizzes' || page === 'progress') { loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
+  if (page === 'analysis') {
+    loadQuizzesFromDB();
+    if (typeof ensureAnalysisAttemptsRealtime === 'function') ensureAnalysisAttemptsRealtime();
+    if (ROLE === 'teacher') {
+      Promise.resolve(typeof loadUsersFromDB === 'function' ? loadUsersFromDB() : null)
+        .then(() => typeof loadClassRecAttempts === 'function' ? loadClassRecAttempts(true) : null)
+        .then(() => {
+          if (analysisSelectedQuizId && typeof loadAttemptsForAnalysis === 'function') loadAttemptsForAnalysis(analysisSelectedQuizId, true);
+        });
+    }
+  }
+  if (page === 'chats') loadChatsPage();
+  if (page === 'dashboard') {
+    if (ROLE === 'teacher' || ROLE === 'admin') {
+      loadMaterialsFromDB();
+      loadQuizzesFromDB();
+      if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
+      if (ROLE === 'teacher' && typeof refreshTeacherUnreadMessageCount === 'function') refreshTeacherUnreadMessageCount();
+      if (ROLE === 'teacher' && typeof ensureChatRealtimeSubscription === 'function') ensureChatRealtimeSubscription();
+    }
+    if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
+    if (ROLE === 'student') { loadMaterialsFromDB(); loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
+  }
+
+  clearInterval(materialsPollTimer);
+  materialsPollTimer = null;
+  if (page === 'materials' || page === 'approval') {
+    loadMaterialsFromDB();
+    if (page === 'approval') {
+      if (typeof loadQuizzesFromDB === 'function') loadQuizzesFromDB();
+      if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
+    }
+    materialsPollTimer = setInterval(() => {
+      loadMaterialsFromDB();
+      if (currentPage === 'approval' && typeof loadQuizzesFromDB === 'function') {
+        loadQuizzesFromDB();
+      }
+    }, 15000);
+  }
+}
+
+// Background loaders (quizzes, materials) re-render the active page when fresh
+// data arrives. Raw innerHTML swaps would reset derived widgets — teacher
+// unread-message counter, student calendar banner — so route those re-renders
+// through here instead.
+function rerenderCurrentPage() {
+  const mainContent = document.getElementById('mainContent');
+  if (!mainContent || typeof getPageContent !== 'function') return;
+  mainContent.innerHTML = getPageContent(ROLE, currentPage);
+  if (currentPage !== 'dashboard') return;
+  if (ROLE === 'student' && typeof renderDashboardCalendarBanner === 'function') {
+    mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
+  }
+  if (ROLE === 'teacher' && typeof refreshTeacherUnreadMessageCount === 'function') {
+    refreshTeacherUnreadMessageCount();
+  }
+}
+
+/* ── NAVIGATION LISTENERS ── */
+document.addEventListener('DOMContentLoaded', () => {
+  // Wrapped banner text must reserve its actual height above the navigation.
+  const bannerSelectors = ['.demo-mode-banner', '.emergency-top-banner'];
+  const bannerProperties = ['--banner-h', '--anc-banner-h'];
+  const observedBanners = new Set();
+  const bannerResizeObserver = new ResizeObserver(syncBannerHeights);
+  function syncBannerHeights() {
+    const banners = bannerSelectors.map(selector => document.querySelector(selector));
+    for (const banner of observedBanners) {
+      if (!banners.includes(banner)) {
+        bannerResizeObserver.unobserve(banner);
+        observedBanners.delete(banner);
+      }
+    }
+    banners.forEach((banner, index) => {
+      if (banner && !observedBanners.has(banner)) {
+        bannerResizeObserver.observe(banner);
+        observedBanners.add(banner);
+      }
+      const height = banner ? Math.ceil(banner.getBoundingClientRect().height) : 0;
+      document.body.style.setProperty(bannerProperties[index], `${height}px`);
+    });
+  }
+  const bannerMutationObserver = new MutationObserver(syncBannerHeights);
+  bannerMutationObserver.observe(document.body, { childList: true });
+  const bannerContainer = document.getElementById('emergencyBannerContainer');
+  if (bannerContainer) bannerMutationObserver.observe(bannerContainer, { childList: true, subtree: true });
+  syncBannerHeights();
+
+  const sidebarMenu = document.getElementById('sidebarMenu');
+  const toggleBtn = document.getElementById('hamburger-toggle');
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+
+  function openMobileSidebar() {
+    if (sidebar) sidebar.classList.add('open');
+    if (backdrop) backdrop.classList.add('active');
+    document.body.classList.add('mobile-menu-open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeMobileSidebar() {
+    if (sidebar) sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('active');
+    document.body.classList.remove('mobile-menu-open');
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', String(window.innerWidth > 900 && !sidebar?.classList.contains('closed')));
+  }
+
+  const mobileLayout = window.matchMedia('(max-width: 900px)');
+  mobileLayout.addEventListener('change', closeMobileSidebar);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && sidebar?.classList.contains('open')) {
+      closeMobileSidebar();
+      toggleBtn?.focus();
+    }
+  });
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-controls', 'sidebar');
+    toggleBtn.setAttribute('aria-expanded', String(window.innerWidth > 900 && !sidebar?.classList.contains('closed')));
+    toggleBtn.setAttribute('aria-label', 'Toggle navigation');
+  }
+
+  if (toggleBtn && sidebar) {
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (window.innerWidth <= 900) {
+        if (sidebar.classList.contains('open')) {
+          closeMobileSidebar();
+        } else {
+          openMobileSidebar();
+        }
+      } else {
+        sidebar.classList.toggle('closed');
+        toggleBtn.setAttribute('aria-expanded', String(!sidebar.classList.contains('closed')));
+      }
+    });
+  }
+
+  if (backdrop) {
+    backdrop.addEventListener('click', closeMobileSidebar);
+  }
+
+  if (sidebarMenu) {
+    sidebarMenu.addEventListener('click', e => {
+      const item = e.target.closest('.menu-item[data-page]');
+      if (!item) return;
+      e.preventDefault();
+      document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      if (item.dataset.page === 'materials') {
+        if (typeof setActiveSubjectMaterials === 'function') {
+          setActiveSubjectMaterials(null, null, false);
+        } else {
+          window.activeSubjectFilter = null;
+          window.activeSubjectSection = null;
+        }
+      }
+      renderPage(item.dataset.page);
+      if (window.innerWidth <= 900) {
+        closeMobileSidebar();
+      }
+    });
+  }
+});
+
+function goToChat() {
+  const chatItem = document.querySelector('.menu-item[data-page="chats"]');
+  if (chatItem) chatItem.click();
+}
+
+function sizeBrandUnderlines() {
+  const schol = document.getElementById('wm-schol');
+  const aria = document.getElementById('wm-aria');
+  const ulSchol = document.getElementById('ul-schol');
+  const ulAria = document.getElementById('ul-aria');
+  if (!schol || !aria || !ulSchol || !ulAria) return;
+  try {
+    const b1 = schol.getBBox();
+    const b2 = aria.getBBox();
+    ulSchol.setAttribute('x', b1.x);
+    ulSchol.setAttribute('width', b1.width);
+    ulAria.setAttribute('x', b2.x);
+    ulAria.setAttribute('width', b2.width);
+  } catch(e) {}
+}
+
+window.addEventListener('load', sizeBrandUnderlines);
+window.addEventListener('resize', sizeBrandUnderlines);
+
+/* ── TWO-FACTOR AUTHENTICATION (2FA) HELPERS ── */
+let currentEnrollmentFactorId = null;
+
+async function openTwoFactorModal() {
+  const modal = document.getElementById('twoFactorModal');
+  const loading = document.getElementById('twoFactorLoading');
+  const content = document.getElementById('twoFactorContent');
+  const qrWrap = document.getElementById('twoFactorQrWrap');
+  const secretCode = document.getElementById('twoFactorSecretCode');
+  const confirmInput = document.getElementById('twoFactorConfirmCode');
+
+  if (!modal) return;
+  modal.classList.add('active');
+  loading.style.display = 'block';
+  content.style.display = 'none';
+  if (confirmInput) confirmInput.value = '';
+
+  try {
+    const { data, error } = await db.auth.mfa.enroll({
+      factorType: 'totp',
+      issuer: 'Scholaria'
+    });
+
+    if (error) {
+      loading.innerHTML = `<p style="color:#dc2626;font-size:13px;">${escHtml(error.message || 'Could not initiate 2FA setup')}</p>`;
+      return;
+    }
+
+    currentEnrollmentFactorId = data.id;
+    if (qrWrap) {
+      qrWrap.innerHTML = data.totp?.qr_code
+        ? (data.totp.qr_code.startsWith('<svg') ? data.totp.qr_code : `<img src="${data.totp.qr_code}" alt="2FA QR Code" style="width:180px;height:180px;"/>`)
+        : `<p style="font-size:12px;color:var(--text-muted);">QR Code not available, use the manual code below</p>`;
+    }
+    if (secretCode) secretCode.textContent = data.totp?.secret || '—';
+
+    loading.style.display = 'none';
+    content.style.display = 'flex';
+  } catch (err) {
+    loading.innerHTML = `<p style="color:#dc2626;font-size:13px;">Failed to connect to authentication server</p>`;
+  }
+}
+
+function closeTwoFactorModal() {
+  const modal = document.getElementById('twoFactorModal');
+  if (modal) modal.classList.remove('active');
+  currentEnrollmentFactorId = null;
+}
+
+async function confirmTwoFactorEnrollment() {
+  const code = (document.getElementById('twoFactorConfirmCode')?.value || '').trim();
+  if (!code || code.length < 6) {
+    showToast('Please enter the 6-digit code from your app', 'error');
+    return;
+  }
+  if (!currentEnrollmentFactorId) {
+    showToast('No active 2FA enrollment session', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('twoFactorActivateBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Verifying…'; }
+
+  try {
+    const { data, error } = await db.auth.mfa.challengeAndVerify({
+      factorId: currentEnrollmentFactorId,
+      code: code
+    });
+
+    if (error) {
+      showToast('Invalid verification code. Check your app and try again.', 'error');
+      return;
+    }
+
+    showToast('2FA successfully enabled!', 'success');
+    closeTwoFactorModal();
+  } catch (err) {
+    showToast('Verification failed', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Activate 2FA'; }
+  }
+}
+
