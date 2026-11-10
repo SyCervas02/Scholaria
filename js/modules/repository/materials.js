@@ -1022,7 +1022,8 @@ function renderMaterialsList(role) {
 
       const quizProgressPct = subjectQuizzes.length > 0
         ? Math.round((completedQuizzesCount / subjectQuizzes.length) * 100)
-        : 100;
+        : 0;
+      const subjectIsEmpty = subjectQuizzes.length === 0 && totalSubjectMat === 0;
 
       const sC = 238.76;
       const sCompLen = (quizProgressPct / 100) * sC;
@@ -1396,16 +1397,16 @@ function renderMaterialsList(role) {
               </div>
               <div class="sw-gauge-wrap" style="position:relative;width:120px;height:120px;margin:0 auto 16px auto;">
                 <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
-                  <!-- Base track -->
-                  <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" stroke-width="9"/>
+                  <!-- Base track (dashed when the subject has no content at all) -->
+                  <circle cx="50" cy="50" r="38" fill="none" stroke="${subjectIsEmpty ? '#cbd5e1' : '#f1f5f9'}" stroke-width="9" ${subjectIsEmpty ? 'stroke-dasharray="2 6" stroke-linecap="round"' : ''}/>
                   <!-- Completed (Green) -->
                   ${sCompLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sCompLen.toFixed(2)} ${sC}" stroke-dashoffset="0"/>` : ''}
                   <!-- Pending (Amber) -->
                   ${(pendingQuizzesCount > 0 && sPendLen > 0) ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#d97706" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sPendLen.toFixed(2)} ${sC}" stroke-dashoffset="-${sCompLen.toFixed(2)}"/>` : ''}
                 </svg>
                 <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-                  <span style="font-size:24px;font-weight:800;color:#0f172a;line-height:1;">${quizProgressPct}%</span>
-                  <span style="font-size:9px;font-weight:700;color:#64748b;margin-top:2px;">${pendingQuizzesCount === 0 ? 'COMPLETE' : 'PROGRESS'}</span>
+                  <span style="font-size:24px;font-weight:800;color:${subjectQuizzes.length === 0 ? '#94a3b8' : '#0f172a'};line-height:1;">${quizProgressPct}%</span>
+                  <span style="font-size:9px;font-weight:700;color:#64748b;margin-top:2px;">${subjectQuizzes.length === 0 ? (subjectIsEmpty ? 'EMPTY' : 'NO QUIZZES') : (pendingQuizzesCount === 0 ? 'COMPLETE' : 'PROGRESS')}</span>
                 </div>
               </div>
               <span style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:0.6px;text-transform:uppercase;text-align:center;display:block;margin-top:6px;margin-bottom:12px;">ACADEMIC OVERVIEW</span>
@@ -1415,8 +1416,8 @@ function renderMaterialsList(role) {
                   <strong style="color:#0f172a;">${completedQuizzesCount} / ${subjectQuizzes.length}</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:${pendingQuizzesCount > 0 ? '#d97706' : '#16a34a'};"></span> Quizzes Pending</span>
-                  <strong style="color:${pendingQuizzesCount > 0 ? '#d97706' : '#16a34a'};">${pendingQuizzesCount}</strong>
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:${subjectQuizzes.length === 0 ? '#cbd5e1' : (pendingQuizzesCount > 0 ? '#d97706' : '#16a34a')};"></span> Quizzes Pending</span>
+                  <strong style="color:${subjectQuizzes.length === 0 ? '#94a3b8' : (pendingQuizzesCount > 0 ? '#d97706' : '#16a34a')};">${pendingQuizzesCount}</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                   <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#0284c7;"></span> Teacher Handouts</span>
@@ -1424,7 +1425,7 @@ function renderMaterialsList(role) {
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                   <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#8b5cf6;"></span> Modules Available</span>
-                  <strong style="color:#0f172a;">${lessons.length}</strong>
+                  <strong style="color:#0f172a;">${activeLessonsCount}</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;padding-top:6px;border-top:1px solid #f1f5f9;">
                   <span style="display:inline-flex;align-items:center;gap:6px;color:#0284c7;font-weight:700;"><span style="width:8px;height:8px;border-radius:50%;background:#0284c7;"></span> Total Learning Files</span>
@@ -2631,13 +2632,37 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
       ${enrolledCourses.map(course => {
         const courseLessons = getSubjectLessons(course);
         const activeCourseModulesCount = courseLessons.filter(l => l.items && l.items.length > 0).length;
-        const courseUploads = materialsData.filter(m => isMaterialMatchingCourse(m, course));
+        // Card counts must mirror the workspace filters (section, teacher status,
+        // student targeting) — otherwise cards advertise content the student
+        // cannot open ("ghost" quizzes/files from other sections).
+        const cardSection = CURRENT_PROFILE?.section || 'Section A';
+        const courseUploads = materialsData.filter(m => {
+          if (!isMaterialMatchingCourse(m, course)) return false;
+          if (typeof isTeacherMaterial === 'function' && !isTeacherMaterial(m)) return false;
+          const mSec = (m.section || m.target_section || '').toLowerCase();
+          const aSec = cardSection.toLowerCase();
+          if (mSec && mSec !== 'all' && !mSec.includes(aSec) && !aSec.includes(mSec)) return false;
+          return m.status === 'approved' || (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
+        });
         const courseQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
-          if (!q.subject) return false;
-          const s = q.subject.toLowerCase();
-          const t = course.title.toLowerCase();
-          return s.includes(t) || t.includes(s);
+          if (!q) return false;
+          const normalizeSubject = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+          const qSubject = normalizeSubject(q.subject || q.subject_name);
+          const courseTitle = normalizeSubject(course.title);
+          const courseCode = normalizeSubject(course.code);
+          const qCourseId = String(q.course_id || q.courseId || '').toLowerCase().trim();
+          const matchesCourse = qCourseId === String(course.id || '').toLowerCase().trim() ||
+            (!!qSubject && ((courseTitle && (qSubject.includes(courseTitle) || courseTitle.includes(qSubject))) ||
+              (courseCode && (qSubject.includes(courseCode) || courseCode.includes(qSubject)))));
+          if (!matchesCourse) return false;
+          const qSec = [q.sections, q.section, q.target_section].flat().filter(Boolean).join(',').toLowerCase();
+          const aSec = cardSection.toLowerCase();
+          if (qSec && qSec !== 'all' && !qSec.includes(aSec) && !aSec.includes(qSec)) return false;
+          if (typeof isQuizTargetedForStudent === 'function' &&
+            String(q.status || '').toLowerCase() !== 'closed' && !isQuizTargetedForStudent(q, CURRENT_PROFILE)) return false;
+          return true;
         }) : [];
+        const cardIsEmpty = activeCourseModulesCount === 0 && courseUploads.length === 0 && courseQuizzes.length === 0;
 
         const searchKeywords = `${course.title} ${course.code || ''} ${course.instructor || ''} ${course.description || ''} ${course.track || ''}`.toLowerCase();
 
@@ -2651,6 +2676,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
             <div class="sfc-thumb" style="height:125px;background-image:url('${course.cover || 'assets/slide1.jpg'}');">
               <span class="sfc-code" style="background:#ffffff;color:#0284c7;font-weight:800;border-radius:8px;padding:4px 10px;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,0.18);">${escHtml(course.code || 'STEM-1101')}</span>
               <span class="sfc-strand" style="background:#0284c7;">${escHtml(course.track || 'Specialized')}</span>
+              ${cardIsEmpty ? `<span style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:2;background:rgba(255,255,255,0.94);color:#64748b;font-size:10px;font-weight:800;letter-spacing:0.8px;padding:4px 12px;border-radius:999px;border:1.5px dashed #94a3b8;white-space:nowrap;">NO CONTENT YET</span>` : ''}
             </div>
             <div class="sfc-body" style="padding:18px;">
               <h4 class="sfc-title" style="font-size:16px;margin-bottom:6px;">${escHtml(course.title)}</h4>
