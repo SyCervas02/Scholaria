@@ -917,10 +917,7 @@ async function loadMaterialsFromDB() {
   if (currentPage === 'materials' || currentPage === 'approval') {
     renderMaterialsContainer();
   } else if (currentPage === 'dashboard') {
-    const mainContent = document.getElementById('mainContent');
-    if (mainContent && typeof getPageContent === 'function') {
-      mainContent.innerHTML = getPageContent(ROLE, 'dashboard');
-    }
+    if (typeof rerenderCurrentPage === 'function') rerenderCurrentPage();
   }
 }
 
