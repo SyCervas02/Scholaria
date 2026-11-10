@@ -3074,7 +3074,7 @@ function teacherPage(page) {
         ['Active Quizzes',demo?3:active.length,'Currently ongoing','quiz',iconQuiz(),'purple'],
         ['Upcoming Deadlines',demo?5:active.filter(q=>{const t=new Date(q.dueDate||q.due_date).getTime()-Date.now();return t>=0&&t<=604800000;}).length,'Within 7 days','quiz',iconRecord(),'pink'],
         ['Unread News',demo?2:news.filter(a=>!read.has(String(a.id))).length,'School announcements','announcements',iconAnnouncement(),'pink'],
-        ['Unread Messages',demo?7:'0','Students & parents','chats',iconChat(),'blue']
+        ['Unread Messages',demo?7:(typeof lastTeacherUnreadMessageCount === 'number' ? String(lastTeacherUnreadMessageCount) : '0'),'Students & parents','chats',iconChat(),'blue']
       ];
       const pending = demo ? [
         ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
@@ -5427,6 +5427,7 @@ function renderPage(page) {
   if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
+  window.scrollTo(0, 0);
 
   if (page === 'users' || page === 'classrec') loadUsersFromDB();
   if (page === 'classrec') loadClassRecAttempts();
@@ -5477,6 +5478,23 @@ function renderPage(page) {
         loadQuizzesFromDB();
       }
     }, 15000);
+  }
+}
+
+// Background loaders (quizzes, materials) re-render the active page when fresh
+// data arrives. Raw innerHTML swaps would reset derived widgets — teacher
+// unread-message counter, student calendar banner — so route those re-renders
+// through here instead.
+function rerenderCurrentPage() {
+  const mainContent = document.getElementById('mainContent');
+  if (!mainContent || typeof getPageContent !== 'function') return;
+  mainContent.innerHTML = getPageContent(ROLE, currentPage);
+  if (currentPage !== 'dashboard') return;
+  if (ROLE === 'student' && typeof renderDashboardCalendarBanner === 'function') {
+    mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
+  }
+  if (ROLE === 'teacher' && typeof refreshTeacherUnreadMessageCount === 'function') {
+    refreshTeacherUnreadMessageCount();
   }
 }
 
