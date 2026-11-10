@@ -7,18 +7,38 @@ let chatRealtimeChannel = null;
 let pendingChatAttachment = null;
 const newChatState = { selected: new Set(), search: '', loaded: false, directory: [] };
 const chatListState = { search: '', role: 'all' };
+// Last computed dashboard unread total, so teacher dashboard re-renders can
+// paint the known value instead of the '0' placeholder while recounting.
+let lastTeacherUnreadMessageCount = null;
 
-function chatReadMarkerKey(conversationId) {
-  return `scholaria_chat_read_${CURRENT_PROFILE?.id || 'guest'}_${conversationId}`;
-}
+// Read markers live in Supabase (conversation_participants.last_read_at) and are
+// hydrated into this cache on load. Never localStorage: browser tracking
+// prevention (Edge/Brave) blocks site storage, silently breaking unread state.
+const chatReadMarkers = {};
 
 function getChatReadMarker(conversationId) {
-  try { return localStorage.getItem(chatReadMarkerKey(conversationId)) || ''; } catch (e) { return ''; }
+  return chatReadMarkers[conversationId] || '';
 }
 
-function setChatReadMarker(conversationId, timestamp) {
+async function setChatReadMarker(conversationId, timestamp) {
   if (!conversationId || !timestamp) return;
-  try { localStorage.setItem(chatReadMarkerKey(conversationId), timestamp); } catch (e) {}
+  const prev = chatReadMarkers[conversationId] || '';
+  if (prev && new Date(prev).getTime() >= new Date(timestamp).getTime()) return;
+  chatReadMarkers[conversationId] = timestamp;
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) return;
+    await fetch(`${API_BASE}/api/chat/read-marker`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({ conversation_id: conversationId, last_read_at: timestamp })
+    });
+  } catch (e) {
+    console.warn('Could not persist chat read marker:', e.message);
+  }
 }
 
 async function refreshTeacherUnreadMessageCount() {
@@ -26,10 +46,11 @@ async function refreshTeacherUnreadMessageCount() {
   if (!badge || !CURRENT_PROFILE || !db) return;
   if (CURRENT_PROFILE.is_demo) return;
   const { data: rows, error } = await db.from('conversation_participants')
-    .select('conversation_id').eq('user_id', CURRENT_PROFILE.id);
+    .select('conversation_id, last_read_at').eq('user_id', CURRENT_PROFILE.id);
   if (error) { console.error('Could not load unread chat count:', error.message); return; }
+  (rows || []).forEach(r => { chatReadMarkers[r.conversation_id] = r.last_read_at || ''; });
   const conversationIds = [...new Set((rows || []).map(row => row.conversation_id).filter(Boolean))];
-  if (!conversationIds.length) { badge.textContent = '0'; return; }
+  if (!conversationIds.length) { badge.textContent = '0'; lastTeacherUnreadMessageCount = 0; return; }
   const { data: messages, error: messageError } = await db.from('messages')
     .select('conversation_id,sender_id,created_at').in('conversation_id', conversationIds);
   if (messageError) { console.error('Could not load unread chat messages:', messageError.message); return; }
@@ -38,6 +59,9 @@ async function refreshTeacherUnreadMessageCount() {
     const marker = getChatReadMarker(message.conversation_id);
     return !marker || new Date(message.created_at).getTime() > new Date(marker).getTime();
   }).length;
+  // Remember the count so dashboard re-renders can show it synchronously
+  // instead of flashing the placeholder '0' while the async recount runs.
+  lastTeacherUnreadMessageCount = unreadCount;
   if (badge.isConnected) badge.textContent = String(unreadCount);
 }
 
@@ -46,6 +70,8 @@ function resetChatState() {
   activeConversationId = null;
   pendingChatAttachment = null;
   seenMessageIds = new Set();
+  lastTeacherUnreadMessageCount = null;
+  Object.keys(chatReadMarkers).forEach(k => { delete chatReadMarkers[k]; });
   newChatState.selected = new Set();
   newChatState.search = '';
   newChatState.loaded = false;
@@ -108,13 +134,16 @@ async function loadConversationsFromDB() {
   if (!CURRENT_PROFILE) { chatConversations = []; return; }
   const { data: partRows, error } = await db
     .from('conversation_participants')
-    .select('conversation_id, conversations(id, is_group, title, created_by, created_at)')
+    .select('conversation_id, last_read_at, conversations(id, is_group, title, created_by, created_at)')
     .eq('user_id', CURRENT_PROFILE.id);
   if (error) {
     console.error('Failed to load conversations:', error.message);
     chatConversations = [];
     return;
   }
+
+  // Hydrate read-marker cache from Supabase before unread counts are computed.
+  (partRows || []).forEach(r => { chatReadMarkers[r.conversation_id] = r.last_read_at || ''; });
 
   const validPartRows = (partRows || []).filter(r => r && r.conversation_id && r.conversations);
   const convIds = validPartRows.map(r => r.conversation_id);
