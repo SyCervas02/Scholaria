@@ -1173,6 +1173,32 @@ app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
   });
 });
 
+// Persist per-user read position for a conversation. Client-side markers are
+// kept in conversation_participants.last_read_at (never localStorage — browser
+// tracking prevention blocks site storage and silently breaks unread state).
+app.post('/api/chat/read-marker', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const { conversation_id, last_read_at } = req.body || {};
+  const ts = new Date(last_read_at || Date.now());
+  if (!conversation_id || Number.isNaN(ts.getTime())) {
+    return res.status(400).json({ error: 'Invalid conversation or timestamp' });
+  }
+
+  const { error } = await supabaseAdmin
+    .from('conversation_participants')
+    .update({ last_read_at: ts.toISOString() })
+    .eq('conversation_id', conversation_id)
+    .eq('user_id', profile.id);
+
+  if (error) {
+    console.error('[ChatReadMarker] update failed:', error.message);
+    return res.status(500).json({ error: 'Failed to save read marker' });
+  }
+  res.json({ ok: true });
+});
+
 app.post('/api/chat/send', async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
