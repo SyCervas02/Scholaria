@@ -1729,7 +1729,14 @@ app.get('/api/users', async (req, res) => {
   res.json({ users: data || [] });
 });
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'];
+// Key pool: GEMINI_API_KEY plus optional GEMINI_API_KEY_2..5. Rotation happens
+// per model attempt; a 429 (quota exhausted) moves to the next key, so the quiz
+// maker keeps working when one free key's RPM/RPD budget runs out.
+const GEMINI_KEY_POOL = [process.env.GEMINI_API_KEY, process.env.GEMINI_API_KEY_2, process.env.GEMINI_API_KEY_3, process.env.GEMINI_API_KEY_4, process.env.GEMINI_API_KEY_5]
+  .filter(k => k && typeof k === 'string' && k.trim() && k !== 'dummy_gemini_key')
+  .map(k => k.trim());
+let geminiKeyCursor = 0;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ALLOWED_FORMATS = ['mc', 'id', 'match', 'tf', 'true_false', 'multiple_choice', 'identification', 'matching'];
 const MAX_TEXT_LENGTH = 35000;
@@ -2512,86 +2519,80 @@ app.post('/api/quiz/extract-image', quizLimiter, async (req, res) => {
     const { imageBase64, mimeType, fileName } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'Missing imageBase64' });
 
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'dummy_gemini_key') {
+    if (!GEMINI_KEY_POOL.length) {
       return res.status(503).json({ error: 'Gemini API not configured' });
     }
 
     const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
     const actualMime = mimeType || 'image/jpeg';
-
-    const candidateModels = [
-      'gemini-3.5-flash',
-      'gemini-3.5-flash-lite',
-      'gemini-3.6-flash'
-    ];
-
-    for (const model of candidateModels) {
-      try {
-        let response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+    const extractBody = JSON.stringify({
+      contents: [{
+        parts: [
           {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(25000),
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  {
-                    text: "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part' (for example: 'Mitochondrion: Organelle that generates chemical energy (ATP) to power the cell; the powerhouse of the cell', 'Ribosomes: Molecular machines responsible for protein synthesis', 'Nucleus: The membrane-enclosed organelle that contains genetic material and coordinates cellular activities', 'Golgi apparatus: Cellular organelle that packages and sorts proteins for secretion').\n\nDo not add conversational commentary or meta-text. Just output clean, line-separated academic terms and definitions."
-                  },
-                  {
-                    inlineData: {
-                      mimeType: actualMime,
-                      data: cleanBase64
-                    }
-                  }
-                ]
-              }]
-            })
+            text: "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part' (for example: 'Mitochondrion: Organelle that generates chemical energy (ATP) to power the cell; the powerhouse of the cell', 'Ribosomes: Molecular machines responsible for protein synthesis', 'Nucleus: The membrane-enclosed organelle that contains genetic material and coordinates cellular activities', 'Golgi apparatus: Cellular organelle that packages and sorts proteins for secretion').\n\nDo not add conversational commentary or meta-text. Just output clean, line-separated academic terms and definitions."
+          },
+          {
+            inlineData: {
+              mimeType: actualMime,
+              data: cleanBase64
+            }
           }
-        );
+        ]
+      }]
+    });
 
-        if (response.status === 503) {
-          console.warn(`[ImageExtract] Gemini ${model} 503 spike, retrying after 1s...`);
-          await new Promise(r => setTimeout(r, 1000));
-          try {
-            response = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(25000),
-                body: JSON.stringify({
-                  contents: [{
-                    parts: [
-                      {
-                        text: "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part'."
-                      },
-                      {
-                        inlineData: {
-                          mimeType: actualMime,
-                          data: cleanBase64
-                        }
-                      }
-                    ]
-                  }]
-                })
-              }
-            );
-          } catch (rErr) {}
-        }
+    for (const model of GEMINI_MODELS) {
+      for (let ki = 0; ki < GEMINI_KEY_POOL.length; ki++) {
+        const keyIndex = (geminiKeyCursor++) % GEMINI_KEY_POOL.length;
+        const key = GEMINI_KEY_POOL[keyIndex];
+        try {
+          let response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.timeout(25000),
+              body: extractBody
+            }
+          );
 
-        if (response.ok) {
-          const data = await response.json();
-          let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          if (text && text.trim()) {
-            text = text.trim();
-            console.log(`[ImageExtract] Successfully extracted via vision model ${model} (${text.length} chars)`);
-            return res.json({ text, source: 'gemini-vision', model });
+          if (response.status === 503) {
+            console.warn(`[ImageExtract] Gemini ${model} key#${keyIndex + 1} 503 spike, retrying after 1s...`);
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+              response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  signal: AbortSignal.timeout(25000),
+                  body: extractBody
+                }
+              );
+            } catch (rErr) { continue; }
           }
+
+          if (response.ok) {
+            const data = await response.json();
+            let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            if (text && text.trim()) {
+              text = text.trim();
+              console.log(`[ImageExtract] Successfully extracted via vision model ${model} key#${keyIndex + 1} (${text.length} chars)`);
+              return res.json({ text, source: 'gemini-vision', model });
+            }
+            break;
+          } else if (response.status === 429) {
+            console.warn(`[ImageExtract] Gemini key#${keyIndex + 1} quota exhausted (429), rotating to next key...`);
+            continue;
+          } else {
+            const errText = await response.text().catch(() => '');
+            console.warn(`[ImageExtract] Gemini ${model} key#${keyIndex + 1} failed HTTP ${response.status}:`, errText.slice(0, 180));
+            break;
+          }
+        } catch (mErr) {
+          console.warn(`[ImageExtract] Model ${model} key#${keyIndex + 1} failed:`, mErr.message);
+          break;
         }
-      } catch (mErr) {
-        console.warn(`[ImageExtract] Model ${model} failed:`, mErr.message);
       }
     }
 
@@ -2616,7 +2617,7 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
   }
 
   // 1. Try Gemini AI if API key is provided
-  if (prompt && GEMINI_API_KEY && GEMINI_API_KEY !== 'dummy_gemini_key') {
+  if (prompt && GEMINI_KEY_POOL.length) {
     const fileCount = Math.max(1, Array.isArray(req.body.files) && req.body.files.length > 0 
       ? req.body.files.length 
       : (req.body.fileName ? req.body.fileName.split(',').length : 1));
@@ -2627,65 +2628,71 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
     const dynamicTimeoutMs = 12000;
     console.log(`[QuizGen] Responsive AI timeout set to ${(dynamicTimeoutMs / 1000).toFixed(0)}s`);
 
-    const candidateModels = [
-      'gemini-3.5-flash',
-      'gemini-3.5-flash-lite',
-      'gemini-3.6-flash'
-    ];
+    const candidateModels = GEMINI_MODELS;
     for (const model of candidateModels) {
-      try {
-        console.log(`[QuizGen] Calling Gemini model ${model} (timeout ${(dynamicTimeoutMs / 1000).toFixed(0)}s)...`);
-        let aiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(dynamicTimeoutMs),
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { responseMimeType: 'application/json' }
-            })
-          }
-        );
+      for (let ki = 0; ki < GEMINI_KEY_POOL.length; ki++) {
+        const keyIndex = (geminiKeyCursor++) % GEMINI_KEY_POOL.length;
+        const key = GEMINI_KEY_POOL[keyIndex];
+        try {
+          console.log(`[QuizGen] Calling Gemini model ${model} key#${keyIndex + 1} (timeout ${(dynamicTimeoutMs / 1000).toFixed(0)}s)...`);
+          let aiResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.timeout(dynamicTimeoutMs),
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: 'application/json' }
+              })
+            }
+          );
 
-        if (aiResponse.status === 503) {
-          console.warn(`[QuizGen] Gemini ${model} 503 spike, retrying after 1s...`);
-          await new Promise(r => setTimeout(r, 1000));
-          try {
-            aiResponse = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(dynamicTimeoutMs),
-                body: JSON.stringify({
-                  contents: [{ parts: [{ text: prompt }] }],
-                  generationConfig: { responseMimeType: 'application/json' }
-                })
-              }
-            );
-          } catch (rErr) {}
-        }
+          if (aiResponse.status === 503) {
+            console.warn(`[QuizGen] Gemini ${model} key#${keyIndex + 1} 503 spike, retrying after 1s...`);
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+              aiResponse = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  signal: AbortSignal.timeout(dynamicTimeoutMs),
+                  body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: 'application/json' }
+                  })
+                }
+              );
+            } catch (rErr) { continue; }
+          }
 
-        if (aiResponse.ok) {
-          const data = await aiResponse.json();
-          let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-          text = text.trim();
-          if (text.startsWith('```')) {
-            text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+          if (aiResponse.ok) {
+            const data = await aiResponse.json();
+            let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+            text = text.trim();
+            if (text.startsWith('```')) {
+              text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+            }
+            const parsed = JSON.parse(text);
+            const questions = sanitizeQuestions(parsed.questions, req.body.files, req.body.fileName);
+            if (questions.length > 0) {
+              console.log(`[QuizGen] Gemini (${model}) key#${keyIndex + 1} returned ${questions.length} questions`);
+              return res.json({ questions, _source: `gemini:${model}` });
+            }
+            break;
+          } else if (aiResponse.status === 429) {
+            console.warn(`[QuizGen] Gemini key#${keyIndex + 1} quota exhausted (429), rotating to next key...`);
+            continue;
+          } else {
+            const errText = await aiResponse.text().catch(() => '');
+            console.warn(`[QuizGen] Gemini ${model} key#${keyIndex + 1} failed HTTP ${aiResponse.status}:`, errText.slice(0, 180));
+            break;
           }
-          const parsed = JSON.parse(text);
-          const questions = sanitizeQuestions(parsed.questions, req.body.files, req.body.fileName);
-          if (questions.length > 0) {
-            console.log(`[QuizGen] Gemini (${model}) returned ${questions.length} questions`);
-            return res.json({ questions, _source: `gemini:${model}` });
-          }
-        } else {
-          const errText = await aiResponse.text();
-          console.warn(`[QuizGen] Gemini ${model} failed HTTP ${aiResponse.status}:`, errText.slice(0, 180));
+        } catch (err) {
+          console.warn(`Gemini model ${model} key#${keyIndex + 1} attempt error:`, err.message);
+          break;
         }
-      } catch (err) {
-        console.warn(`Gemini model ${model} attempt error:`, err.message);
       }
     }
   }
