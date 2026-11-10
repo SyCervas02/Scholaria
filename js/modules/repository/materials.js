@@ -589,7 +589,7 @@ function getSubjectLessons(course) {
             submitted: u.date_formatted || "Oct 16, 2026",
             due: u.date_formatted || "Official Handout",
             status: "Completed",
-            file_url: u.file_url || "SURVEY FORMS - Scholaria.pdf"
+            file_url: u.file_url || null
           });
         }
       });
@@ -1179,7 +1179,7 @@ function renderMaterialsList(role) {
                                                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                                 Preview
                                               </button>
-                                              <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
+                                              <a href="javascript:void(0)" onclick="event.stopPropagation(); downloadMaterial('${it.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;cursor:pointer;" title="Download Handout">
                                                 <span>⬇</span> Download
                                               </a>
                                               ${(role === 'admin') ? `
@@ -2777,7 +2777,7 @@ function getStudentFilteredMaterials() {
       dateAdded: m.date_formatted ? `${m.date_formatted} ${m.time_formatted || ''}` : 'Recent',
       status: 'Completed',
       cover: m.cover || 'assets/slide1.jpg',
-      file_url: m.file_url || 'SURVEY FORMS - Scholaria.pdf'
+      file_url: m.file_url || null
     };
   });
 
@@ -3871,8 +3871,41 @@ function downloadSubjectPdf(courseId, docId) {
   downloadMaterial(docId);
 }
 
+// Resolve a real, browser-loadable URL for a material. DB records are signed via
+// the authenticated download endpoint; raw Supabase storage paths are signed
+// directly. Never returns a relative/demo filename — that produced "Cannot GET"
+// preview iframes. Returns { url, fileType } (url null when nothing resolves).
+async function resolveMaterialFileUrl(m) {
+  let fileType = String(m?.file_type || m?.type || '').toLowerCase();
+  if (!m) return { url: null, fileType };
+  const raw = m.file_url || m.url || '';
+  if (/^(https?:|blob:|data:)/i.test(raw)) return { url: raw, fileType };
+  try {
+    const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+    if (session && session.access_token && m.id) {
+      const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(m.id)}/download`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          if (data.file_type) fileType = String(data.file_type).toLowerCase();
+          return { url: data.url, fileType };
+        }
+      }
+    }
+  } catch (e) {}
+  if (raw) {
+    try {
+      const { data, error } = await db.storage.from('learning-materials').createSignedUrl(raw, 60 * 15);
+      if (!error && data?.signedUrl) return { url: data.signedUrl, fileType };
+    } catch (e) {}
+  }
+  return { url: null, fileType };
+}
+
 async function previewSubjectUploadedMaterial(id) {
-  let m = materialsData.find(mat => String(mat.id) === String(id)) || 
+  let m = materialsData.find(mat => String(mat.id) === String(id)) ||
             getCustomMaterialsFromStorage().find(mat => String(mat.id) === String(id)) ||
             (typeof STUDENT_DEFAULT_MATERIALS !== 'undefined' ? STUDENT_DEFAULT_MATERIALS.find(mat => String(mat.id) === String(id)) : null);
 
@@ -3887,7 +3920,7 @@ async function previewSubjectUploadedMaterial(id) {
             title: item.title,
             fileName: item.fileName || item.title,
             subject: c.title,
-            file_url: item.file_url || 'SURVEY FORMS - Scholaria.pdf',
+            file_url: item.file_url || null,
             file_type: 'application/pdf',
             type: item.type || 'PDF',
             date_formatted: item.due || item.submitted || 'Recent',
@@ -3930,50 +3963,12 @@ async function previewSubjectUploadedMaterial(id) {
     </div>
   `;
 
-  let fileUrl = null;
-  let fileType = (m.file_type || m.type || '').toLowerCase();
-
-  try {
-    const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-    if (session && session.access_token) {
-      const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(m.id)}/download`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          fileUrl = data.url;
-          if (data.file_type) fileType = data.file_type.toLowerCase();
-        }
-      }
-    }
-
-    if (!fileUrl && m.file_url) {
-      if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
-        fileUrl = m.file_url;
-      } else {
-        const { data, error } = await db.storage
-          .from('learning-materials')
-          .createSignedUrl(m.file_url, 60 * 15);
-        if (!error && data?.signedUrl) {
-          fileUrl = data.signedUrl;
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error fetching file URL for preview:', err);
-  }
+  const resolved = await resolveMaterialFileUrl(m);
+  const fileUrl = resolved.url;
+  const fileType = resolved.fileType;
 
   const isPdf = fileType.includes('pdf') || (m.fileName && m.fileName.toLowerCase().endsWith('.pdf')) || (m.title && m.title.toLowerCase().endsWith('.pdf')) || m.type === 'PDF';
   const isImage = fileType.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(m.fileName || m.title || '');
-
-  if (!fileUrl) {
-    if (m.file_url || m.url) {
-      fileUrl = m.file_url || m.url;
-    } else if (isPdf) {
-      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
-    }
-  }
 
   if (!fileUrl) {
     bodyEl.innerHTML = `
@@ -4619,46 +4614,7 @@ async function downloadMaterial(id) {
 
   showToast(`Preparing download for "${m?.title || 'document'}"…`, 'info');
 
-  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-  let fileUrl = null;
-
-  if (session && session.access_token) {
-    try {
-      const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) fileUrl = data.url;
-      }
-    } catch (e) {
-      console.warn('API download call failed, checking direct storage:', e);
-    }
-  }
-
-  // Fallback to direct Supabase storage signed URL
-  if (!fileUrl && m?.file_url) {
-    if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
-      fileUrl = m.file_url;
-    } else {
-      try {
-        const { data, error } = await db.storage
-          .from('learning-materials')
-          .createSignedUrl(m.file_url, 60 * 10);
-        if (!error && data?.signedUrl) {
-          fileUrl = data.signedUrl;
-        }
-      } catch (e) {}
-    }
-  }
-
-  if (!fileUrl) {
-    if (m?.file_url || m?.url) {
-      fileUrl = m.file_url || m.url;
-    } else {
-      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
-    }
-  }
+  const { url: fileUrl } = await resolveMaterialFileUrl(m);
 
   if (!fileUrl) {
     showToast('Download failed: File not found in storage.', 'error');
@@ -5224,7 +5180,8 @@ async function submitMaterialUpload() {
       approved_by: ROLE === 'admin' ? (CURRENT_PROFILE?.id || 'admin') : null,
       approved_by_name: ROLE === 'admin' ? uploaderName : null,
       is_curriculum: ROLE === 'admin',
-      file_type: f.type || 'application/pdf',
+      file_url: srv ? srv.file_url : null,
+      file_type: (srv && srv.file_type) || f.type || 'application/pdf',
       type: typeLabel,
       status: targetStatus,
       created_at: now.toISOString(),
