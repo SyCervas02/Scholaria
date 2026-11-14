@@ -39,3 +39,5 @@ Display integrity changes:
 Persist per-student lesson completion, last lesson/page position, and last-opened timestamps to support cross-device Continue Learning and actual lesson progress. Weekly goals and durable achievement awards need explicit records and rules. Reliable unread-message totals require read receipts. Live schedules and assignments should be added only when those data models exist. The existing static course catalog needs an authoritative enrollment/catalog source if schools want to manage it from the server.
 
 The current local resource history is keyed by account ID, stores only a resource ID and opening timestamp, and is described as device-local in the UI.
+
+## Commit October 23

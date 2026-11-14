@@ -25,9 +25,9 @@
 }
 
 .cw-title {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.3px;
   line-height: 1.2;
@@ -150,8 +150,7 @@
   display: none; /* Chrome, Safari, Edge */
 }
 
-.cw-card, .cw-subject-card {
-  min-width: 280px;
+.cw-card {
   width: 290px;
   flex-shrink: 0;
   background: #ffffff;

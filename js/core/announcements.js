@@ -30,6 +30,10 @@ function isAnnouncementExpired(anc) {
   if (!anc) return false;
   if (anc.isArchived) return true;
   if (anc.expiresAt && new Date(anc.expiresAt).getTime() <= Date.now()) return true;
+  if (anc.isPermanent) return false;
+  if (anc.timestamp && (Date.now() - new Date(anc.timestamp).getTime() > 7 * 24 * 60 * 60 * 1000)) {
+    return true;
+  }
   return false;
 }
 
@@ -260,6 +264,24 @@ function openAnnouncementDetailModal(id) {
     } else {
       hotlinesWrap.style.display = 'none';
       hotlinesList.innerHTML = '';
+    }
+  }
+
+  const adminActionsEl = document.getElementById('ancDetailModalAdminActions');
+  if (adminActionsEl) {
+    const canManage = (typeof ROLE !== 'undefined') && (ROLE === 'admin' || (ROLE === 'teacher' && anc.authorRole === 'Teacher'));
+    if (canManage) {
+      const isArch = isAnnouncementExpired(anc);
+      adminActionsEl.innerHTML = `
+        <button type="button" class="anc-preset-btn" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="toggleArchiveAnnouncement('${anc.id}'); closeAnnouncementDetailModal();">
+          ${typeof iconArchive === 'function' ? iconArchive() : ''} ${isArch ? 'Restore to Active' : 'Move to Archive'}
+        </button>
+        <button type="button" class="anc-preset-btn" style="padding:6px 12px;font-size:12px;color:#dc2626;border-color:#fca5a5;background:#fef2f2;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="deleteAnnouncement('${anc.id}'); closeAnnouncementDetailModal();">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete
+        </button>
+      `;
+    } else {
+      adminActionsEl.innerHTML = '';
     }
   }
 

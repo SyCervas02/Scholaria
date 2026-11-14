@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
 :root {
     --light-blue: #A8C8E8;
     --white: #FFFFFF;
@@ -25,7 +27,7 @@ html::-webkit-scrollbar-thumb { background: var(--light-blue); border-radius: 10
 html::-webkit-scrollbar-thumb:hover { background: var(--blue); }
 
 body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     background: var(--bg);
     min-height: 100vh;
     display: flex;
@@ -144,11 +146,11 @@ body {
 }
 
 .logo-text h1 {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     font-size: 18px;
     font-weight: 700;
     line-height: 1.2;
-    letter-spacing: 0.01em;
+    letter-spacing: -0.2px;
 }
 
 .logo-text span {
@@ -170,7 +172,7 @@ body {
     cursor: pointer;
     transition: all 0.25s;
     white-space: nowrap;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -189,11 +191,12 @@ body {
 }
 
 .header-title .tab-label {
-    font-family: 'Playfair Display', serif;
-    font-size: 26px;
-    font-weight: 700;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
     color: white;
-    line-height: 1;
+    line-height: 1.1;
     margin-bottom: 6px;
 }
 
@@ -242,7 +245,7 @@ body {
     cursor: pointer;
     transition: all 0.25s;
     text-align: left;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
 .role-card:hover {
@@ -322,7 +325,7 @@ body {
     border: 1.5px solid var(--border);
     border-radius: 12px;
     font-size: 15px;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     color: var(--text);
     background: #F7FAFD;
     transition: all 0.25s;
@@ -404,7 +407,7 @@ body {
     border-radius: 12px;
     font-size: 15px;
     font-weight: 600;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     cursor: pointer;
     letter-spacing: 0.03em;
     transition: all 0.25s;
