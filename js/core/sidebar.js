@@ -942,7 +942,7 @@ function updateNavAvatarUI() {
   const avatarEl = document.getElementById('userAvatar');
   if (!avatarEl || !CURRENT_PROFILE) return;
   if (CURRENT_PROFILE.avatar_url) {
-    avatarEl.innerHTML = `<img src="${CURRENT_PROFILE.avatar_url}" alt="${escHtml(CURRENT_PROFILE.full_name || '')}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" onerror="this.parentElement.textContent='${initialsFor(CURRENT_PROFILE.full_name || 'U')}';"/>`;
+    avatarEl.innerHTML = `<img src="${escHtml(CURRENT_PROFILE.avatar_url)}" alt="${escHtml(CURRENT_PROFILE.full_name || '')}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" onerror="this.parentElement.textContent='${initialsFor(CURRENT_PROFILE.full_name || 'U')}';"/>`;
     avatarEl.style.padding = '0';
     avatarEl.style.overflow = 'hidden';
   } else {
@@ -951,7 +951,58 @@ function updateNavAvatarUI() {
   }
 }
 
-function handleAvatarFileSelect(event) {
+// Phone photos are multi-megabyte, which makes saving slow and bloats every
+// profile fetch. Downscale to a small square-friendly JPEG before storing.
+function compressAvatarImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the selected image.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That image format could not be processed. Please use a JPG or PNG.'));
+      img.onload = () => {
+        try {
+          const MAX = 512;
+          const scale = Math.min(1, MAX / Math.max(img.width || 1, img.height || 1));
+          const width = Math.max(1, Math.round((img.width || 1) * scale));
+          const height = Math.max(1, Math.round((img.height || 1) * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function persistProfileAvatar(dataUrl) {
+  if (!CURRENT_PROFILE || !CURRENT_PROFILE.id || typeof db === 'undefined') return false;
+  try {
+    const { error } = await db.from('users').update({ avatar_url: dataUrl }).eq('id', CURRENT_PROFILE.id);
+    if (error) {
+      console.warn('Avatar save failed:', error);
+      showToast('Could not save your profile picture: ' + (error.message || 'please try again.'), 'error');
+      return false;
+    }
+    try { localStorage.setItem('scholaria_cached_profile', JSON.stringify(CURRENT_PROFILE)); } catch (_) {}
+    return true;
+  } catch (err) {
+    console.warn('Avatar save error:', err);
+    showToast('Could not save your profile picture. Please try again.', 'error');
+    return false;
+  }
+}
+
+async function handleAvatarFileSelect(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
 
@@ -965,29 +1016,35 @@ function handleAvatarFileSelect(event) {
     return;
   }
 
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const dataUrl = e.target.result;
-    
-    const heroImg = document.getElementById('pfHeroAvatarImg');
-    const heroInitials = document.getElementById('pfHeroAvatarInitials');
-    const dataUrlInput = document.getElementById('pfAvatarDataUrl');
+  let dataUrl = '';
+  try {
+    dataUrl = await compressAvatarImage(file);
+  } catch (err) {
+    showToast(err.message || 'Could not process that image.', 'error');
+    return;
+  }
 
-    if (heroImg) {
-      heroImg.src = dataUrl;
-      heroImg.style.display = 'block';
-      if (heroInitials) heroInitials.style.display = 'none';
-    }
-    if (dataUrlInput) {
-      dataUrlInput.value = dataUrl;
-    }
-    if (CURRENT_PROFILE) {
-      CURRENT_PROFILE.avatar_url = dataUrl;
-      updateNavAvatarUI();
-    }
-    showToast('Profile picture updated! Click "Save Changes" to apply.', 'info');
-  };
-  reader.readAsDataURL(file);
+  const heroImg = document.getElementById('pfHeroAvatarImg');
+  const heroInitials = document.getElementById('pfHeroAvatarInitials');
+  const dataUrlInput = document.getElementById('pfAvatarDataUrl');
+
+  if (heroImg) {
+    heroImg.src = dataUrl;
+    heroImg.style.display = 'block';
+    if (heroInitials) heroInitials.style.display = 'none';
+  }
+  if (dataUrlInput) {
+    dataUrlInput.value = dataUrl;
+  }
+  if (CURRENT_PROFILE) {
+    CURRENT_PROFILE.avatar_url = dataUrl;
+    updateNavAvatarUI();
+  }
+
+  showToast('Saving profile picture…', 'info');
+  if (await persistProfileAvatar(dataUrl)) {
+    showToast('Profile picture saved!', 'success');
+  }
 }
 
 function updateProfileNamePreview() {
@@ -1154,8 +1211,21 @@ async function saveUserProfile() {
       }
     }
 
-    // 4. Build comprehensive profile update payload
+    // 4. Build the DB payload using only columns that exist on public.users;
+    // the extra identity fields are kept in Supabase Auth metadata below.
     const updatePayload = {
+      full_name: fullName,
+      email: email || CURRENT_PROFILE.email,
+      contact_number: contactNumber,
+      bio: bio,
+      online_status: onlineStatus,
+      status_message: statusMessage,
+      avatar_url: avatarUrl,
+      last_active_at: new Date().toISOString()
+    };
+
+    // Session-only copy for fields that have no matching users table column.
+    const localProfileUpdate = {
       full_name: fullName,
       first_name: firstName,
       last_name: lastName,
@@ -1171,34 +1241,25 @@ async function saveUserProfile() {
       bio: bio,
       online_status: onlineStatus,
       status_message: statusMessage,
-      avatar_url: avatarUrl,
-      last_active_at: new Date().toISOString()
+      avatar_url: avatarUrl
     };
 
-    // 6. Attempt DB update with fallback for missing schema columns
+    // 5. Save to the DB and stop on failure instead of reporting a false success
+    let saveError = null;
     try {
       const { error } = await db
         .from('users')
         .update(updatePayload)
         .eq('id', CURRENT_PROFILE.id);
-
-      if (error) {
-        console.warn('Full profile update had error, attempting minimal fallback:', error);
-        await db
-          .from('users')
-          .update({
-            full_name: fullName,
-            email: email || CURRENT_PROFILE.email,
-            contact_number: contactNumber,
-            bio: bio,
-            online_status: onlineStatus,
-            status_message: statusMessage,
-            avatar_url: avatarUrl
-          })
-          .eq('id', CURRENT_PROFILE.id);
-      }
+      if (error) saveError = error;
     } catch (err) {
-      console.warn('DB update failed, saving locally:', err);
+      saveError = err;
+    }
+    if (saveError) {
+      console.warn('Profile update failed:', saveError);
+      showToast('Could not save your profile: ' + (saveError.message || 'please try again.'), 'error');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = 'Save Changes'; }
+      return;
     }
 
     // 7. Persist in Supabase Auth user metadata
@@ -1221,7 +1282,7 @@ async function saveUserProfile() {
     } catch (_) {}
 
     // 8. Update local CURRENT_PROFILE and localStorage
-    Object.assign(CURRENT_PROFILE, updatePayload);
+    Object.assign(CURRENT_PROFILE, localProfileUpdate);
     try {
       localStorage.setItem('scholaria_cached_profile', JSON.stringify(CURRENT_PROFILE));
     } catch(e) {}
@@ -1275,7 +1336,7 @@ function buildProfilePage(role) {
     <div class="profile-hero-card">
       <div class="profile-hero-avatar-wrap">
         <div class="profile-hero-avatar" id="pfHeroAvatarContainer">
-          <img id="pfHeroAvatarImg" src="${p.avatar_url || ''}" alt="Avatar" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:${p.avatar_url ? 'block' : 'none'};" onerror="this.style.display='none';document.getElementById('pfHeroAvatarInitials').style.display='flex';" />
+          <img id="pfHeroAvatarImg" src="${escHtml(p.avatar_url || '')}" alt="Avatar" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:${p.avatar_url ? 'block' : 'none'};" onerror="this.style.display='none';document.getElementById('pfHeroAvatarInitials').style.display='flex';" />
           <div id="pfHeroAvatarInitials" style="width:100%;height:100%;display:${p.avatar_url ? 'none' : 'flex'};align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#fff;">
             ${initialsFor(currentFullName)}
           </div>
@@ -1284,7 +1345,7 @@ function buildProfilePage(role) {
           <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </label>
         <input type="file" id="pfAvatarFileInput" accept="image/*" style="display:none;" onchange="handleAvatarFileSelect(event)" />
-        <input type="hidden" id="pfAvatarDataUrl" value="${p.avatar_url || ''}" />
+        <input type="hidden" id="pfAvatarDataUrl" value="${escHtml(p.avatar_url || '')}" />
         <div style="font-size:10px;color:rgba(255,255,255,0.8);margin-top:4px;text-align:center;white-space:nowrap;">Max 50MB only</div>
       </div>
 

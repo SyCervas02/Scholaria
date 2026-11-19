@@ -57,6 +57,23 @@ async function guardSessionAndInit() {
 
   ROLE = profile.role;
   CURRENT_PROFILE = profile;
+
+  // Restore an avatar that was only kept locally when an earlier save failed,
+  // then push it back to the database so it survives the next sign-out.
+  if (!profile.avatar_url) {
+    try {
+      const cached = JSON.parse(localStorage.getItem('scholaria_cached_profile') || 'null');
+      const cachedAvatar = cached && cached.id === profile.id ? cached.avatar_url : '';
+      if (cachedAvatar && cachedAvatar.length <= 500000) {
+        profile.avatar_url = cachedAvatar;
+        db.from('users').update({ avatar_url: cachedAvatar }).eq('id', profile.id).then(({ error }) => {
+          if (error) console.warn('Avatar sync failed:', error.message);
+          else localStorage.setItem('scholaria_cached_profile', JSON.stringify(profile));
+        });
+      }
+    } catch (_) {}
+  }
+
   if (typeof loadSharedCurriculumSubjects === 'function') {
     await loadSharedCurriculumSubjects().catch(err => console.warn('Shared curriculum subjects could not be loaded:', err.message));
   }
