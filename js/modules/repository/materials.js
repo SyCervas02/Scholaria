@@ -585,7 +585,14 @@ function getSubjectLessons(course) {
             id: u.id,
             title: u.title || u.fileName || "Curriculum Handout",
             type: u.type || (u.file_type && u.file_type.includes("word") ? "DOCX" : (u.file_type && u.file_type.includes("presentation") ? "PPTX" : "PDF")),
-            score: (u.uploader_name && !u.uploader_name.toLowerCase().includes('admin')) ? u.uploader_name : "Official Admin Handout",
+            score: (() => {
+              let name = u.uploaded_by_name || u.uploader_name || '';
+              if (!name && typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers)) {
+                const owner = registeredUsers.find(x => x && (x.dbId === u.uploaded_by || x.id === u.uploaded_by));
+                name = owner?.name || owner?.full_name || '';
+              }
+              return (name && !name.toLowerCase().includes('admin')) ? name : 'Official Admin Handout';
+            })(),
             submitted: u.date_formatted || "Oct 16, 2026",
             due: u.date_formatted || "Official Handout",
             status: "Completed",
@@ -873,11 +880,15 @@ async function loadMaterialsFromDB() {
     } catch (e) {}
   }
 
-  // Merge with locally stored custom uploads so uploads are never lost
+  // Merge with locally stored custom uploads so uploads are never lost.
+  // Server rows are authoritative for the same id (e.g. approval status changes).
   const localList = getCustomMaterialsFromStorage();
   const merged = [...localList];
   fetchedData.forEach(d => {
-    if (!merged.some(m => String(m.id) === String(d.id))) {
+    const idx = merged.findIndex(m => String(m.id) === String(d.id));
+    if (idx >= 0) {
+      merged[idx] = { ...merged[idx], ...d, fileName: merged[idx].fileName || d.fileName };
+    } else {
       merged.push(d);
     }
   });
@@ -886,6 +897,8 @@ async function loadMaterialsFromDB() {
   const filteredMerged = merged.filter(m => {
     if (!m) return false;
     if (String(m.id).startsWith('mat_')) return false;
+    // Local-only fallback rows have no server record, so they cannot be reviewed or approved.
+    if (String(m.id).startsWith('local_')) return false;
     const t = String(m.title || m.fileName || '').trim().toLowerCase();
     if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber') return false;
     return true;
@@ -1156,7 +1169,7 @@ function renderMaterialsList(role) {
                                       <tr style="border-bottom:1.5px solid #e2e8f0;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;background:#ffffff;">
                                         <th style="padding:9px 12px;font-weight:700;">Section / Handout</th>
                                         <th style="padding:9px 12px;font-weight:700;">Submitted</th>
-                                        <th style="padding:9px 12px;font-weight:700;">Score</th>
+                                        <th style="padding:9px 12px;font-weight:700;">Uploaded By</th>
                                         <th style="padding:9px 12px;font-weight:700;">Due</th>
                                         <th style="padding:9px 12px;font-weight:700;">Status</th>
                                         <th style="padding:9px 12px;font-weight:700;text-align:right;">Action</th>
@@ -1223,7 +1236,7 @@ function renderMaterialsList(role) {
                       <div style="width:48px;height:48px;border-radius:12px;background:#f0f9ff;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:24px;">📖</div>
                       <h4 style="margin:0;font-size:15px;font-weight:700;color:#0f172a;">No official curriculum modules uploaded yet</h4>
                       <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;line-height:1.5;">Curriculum modules and syllabus handouts for ${escHtml(course.title)} will appear here once published.</p>
-                      ${(role === 'teacher' || role === 'admin') ? `
+                      ${(role === 'admin') ? `
                         <button class="sw-btn primary" onclick="openMaterialModal('${course.id}')" style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-weight:700;">
                           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                           Upload Handout for this Subject
@@ -4149,7 +4162,7 @@ function approvalEntries() {
   const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
   const revisionKeys = getRevisionItems();
 
-  const allMaterials = Array.isArray(materialsData) ? materialsData.filter(Boolean) : [];
+  const allMaterials = Array.isArray(materialsData) ? materialsData.filter(Boolean).filter(m => !String(m.id).startsWith('local_')) : [];
   const allQuizzes = Array.isArray(quizzes) ? quizzes.filter(Boolean) : [];
 
   return [
@@ -4476,6 +4489,36 @@ async function rejectQuiz(id, reason) {
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
 }
 
+function quizReviewQuestionHTML(q, index) {
+  const type = String(q.type || q.question_type || '').toLowerCase();
+  const prompt = q.question || q.text || q.prompt || '';
+  const pairs = Array.isArray(q.pairs) ? q.pairs.filter(Boolean) : [];
+  const options = Array.isArray(q.options) ? q.options.filter(o => o != null) : (Array.isArray(q.choices) ? q.choices.filter(o => o != null) : []);
+  const optionLabel = option => (typeof option === 'object' && option) ? (option.text || option.label || option.value || '') : String(option);
+  const rawAnswer = q.answer ?? q.correctAnswer ?? q.correct_answer ?? q.correct ?? null;
+
+  let body = '';
+  if (pairs.length) {
+    body = `<ul>${pairs.map(p => `<li><strong>${escHtml(p.left ?? p.term ?? '')}</strong> → ${escHtml(p.right ?? p.match ?? p.definition ?? '')}</li>`).join('')}</ul>`;
+  } else if (options.length) {
+    const answerValue = String(Array.isArray(rawAnswer) ? rawAnswer[0] ?? '' : rawAnswer ?? '').toLowerCase();
+    body = `<ul>${options.map((option, idx) => {
+      const label = optionLabel(option);
+      const isCorrect = (typeof option === 'object' && option && (option.isCorrect || option.correct === true))
+        || (answerValue !== '' && label.toLowerCase() === answerValue)
+        || (typeof rawAnswer === 'number' && rawAnswer === idx);
+      return `<li${isCorrect ? ' style="font-weight:700;color:#15803d;"' : ''}>${escHtml(label)}${isCorrect ? ' ✓' : ''}</li>`;
+    }).join('')}</ul>`;
+  } else if (rawAnswer !== null && rawAnswer !== undefined && rawAnswer !== '') {
+    body = `<p>Answer: ${escHtml(Array.isArray(rawAnswer) ? rawAnswer.join(', ') : String(rawAnswer))}</p>`;
+  } else {
+    body = '<p>Answer: Not provided</p>';
+  }
+
+  const heading = prompt || (pairs.length ? 'Match each item with its correct pair' : 'Question');
+  return `<section><h3>${index + 1}. ${escHtml(heading)}</h3>${body}${type ? `<p style="text-transform:capitalize;color:#64748b;font-size:12px;">Type: ${escHtml(type.replace(/[_-]+/g, ' '))}</p>` : ''}</section>`;
+}
+
 async function reviewApprovalEntry(kind, id) {
   if (kind === 'material') {
     const material = materialsData.find(m => String(m.id) === id);
@@ -4505,7 +4548,7 @@ async function reviewApprovalEntry(kind, id) {
   const dialog = document.createElement('dialog');
   dialog.className = 'ca-review-dialog';
   dialog.setAttribute('aria-labelledby', 'caReviewTitle');
-  dialog.innerHTML = `<form method="dialog"><button class="ca-dialog-close" aria-label="Close review">&times;</button></form><h2 id="caReviewTitle">${escHtml(quiz.title)}</h2><p>${escHtml(quiz.subject || 'General')}</p>${(quiz.questions || []).map((q, i) => `<section><h3>${i + 1}. ${escHtml(q.question || q.text || q.prompt || 'Question')}</h3>${Array.isArray(q.options) ? `<ul>${q.options.map(option => `<li>${escHtml(typeof option === 'object' && option ? option.text || option.label : option)}</li>`).join('')}</ul>` : ''}<p>Answer: ${escHtml(q.answer ?? q.correctAnswer ?? q.correct_answer ?? 'Not provided')}</p></section>`).join('') || '<p>No questions available.</p>'}`;
+  dialog.innerHTML = `<form method="dialog"><button class="ca-dialog-close" aria-label="Close review">&times;</button></form><h2 id="caReviewTitle">${escHtml(quiz.title)}</h2><p>${escHtml(quiz.subject || 'General')}</p>${(quiz.questions || []).map((q, i) => quizReviewQuestionHTML(q, i)).join('') || '<p>No questions available.</p>'}`;
   dialog.addEventListener('close', () => dialog.remove());
   document.body.appendChild(dialog);
   dialog.showModal();
@@ -4800,7 +4843,7 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
     : (teacherSections.length ? new Set(teacherSections) : (ROLE === 'teacher' ? new Set(['Section A', 'Section B']) : new Set()));
 
   const courseLessons = targetCourse ? getSubjectLessons(targetCourse) : [];
-  let initialLessonId = targetLessonId || null;
+  let initialLessonId = ROLE === 'teacher' ? null : (targetLessonId || null);
   if (!initialLessonId && ROLE === 'admin' && courseLessons.length > 0) {
     initialLessonId = courseLessons[0]?.id || courseLessons[0]?.num || null;
   }
@@ -5068,19 +5111,21 @@ function renderMaterialModal() {
       const availableLessons = courseObj ? getSubjectLessons(courseObj) : [];
       return `
         <div class="gen-field" style="margin-top:4px;">
-          <label>Target Lesson / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${ROLE === 'admin' ? '(Admin curriculum handouts appear inside the module box under Modules & Handouts)' : '(Select a specific lesson or general supplementary)'}</span></label>
-          <select onchange="muUpdateField('lesson_id', this.value)">
-            ${ROLE === 'admin' ? `
+          <label>Target Lesson / Placement <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${ROLE === 'admin' ? '(Admin curriculum handouts appear inside the module box under Modules & Handouts)' : '(Teacher uploads are always posted as general supplementary handouts)'}</span></label>
+          ${ROLE === 'teacher' ? `
+            <select disabled style="background:#f8fafc;cursor:not-allowed;">
+              <option selected>📁 General Supplementary (Appears in Teacher Uploads Tab)</option>
+            </select>
+          ` : `
+            <select onchange="muUpdateField('lesson_id', this.value)">
               <option value="" ${!s.lesson_id ? 'selected' : ''}>📖 Auto-detect from file (e.g. 01_Handout → Lesson 01)</option>
-            ` : `
-              <option value="" ${!s.lesson_id ? 'selected' : ''}>📁 General Supplementary (Appears in Teacher Uploads Tab)</option>
-            `}
-            ${availableLessons.map(l => `
-              <option value="${escHtml(l.id || l.num)}" ${s.lesson_id === (l.id || l.num) ? 'selected' : ''}>
-                📖 ${escHtml(l.title)}
-              </option>
-            `).join('')}
-          </select>
+              ${availableLessons.map(l => `
+                <option value="${escHtml(l.id || l.num)}" ${s.lesson_id === (l.id || l.num) ? 'selected' : ''}>
+                  📖 ${escHtml(l.title)}
+                </option>
+              `).join('')}
+            </select>
+          `}
         </div>
       `;
     })()}
@@ -5134,6 +5179,12 @@ function renderMaterialModal() {
   `;
 }
 
+function normalizeMaterialStrand(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  if (['STEM', 'HUMSS', 'ABM', 'TVL'].includes(raw)) return raw;
+  return null; // "Both STEM & HUMSS" / "All Strands" persist as all-strands (NULL)
+}
+
 async function submitMaterialUpload() {
   const s = materialUploadState;
   if (!s.files.length || !s.title.trim() || !s.strand || !s.subject || s.submitting) return;
@@ -5143,6 +5194,7 @@ async function submitMaterialUpload() {
   renderMaterialModal();
 
   const targetSection = s.sections.size ? Array.from(s.sections).join(', ') : '';
+  const uploadStrand = normalizeMaterialStrand(s.strand);
   const now = new Date();
   const dateFormatted = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const timeFormatted = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -5153,7 +5205,7 @@ async function submitMaterialUpload() {
   });
   formData.append('title', s.title.trim());
   formData.append('subject', s.subject.trim());
-  formData.append('strand', s.strand.trim());
+  formData.append('strand', uploadStrand || '');
   formData.append('grade_level', s.grade_level.trim());
   formData.append('section', targetSection);
 
@@ -5195,12 +5247,13 @@ async function submitMaterialUpload() {
     const ext = f.name.split('.').pop() || 'pdf';
     const typeLabel = ext.toUpperCase();
 
-    // Determine lesson assignment for the handout
-    let assignedLessonId = s.lesson_id || null;
+    // Determine lesson assignment for the handout (teacher uploads always stay supplementary)
+    const isTeacherUpload = ROLE === 'teacher';
+    let assignedLessonId = isTeacherUpload ? null : (s.lesson_id || null);
     let assignedLessonNum = null;
     let assignedLessonTitle = null;
 
-    if (!assignedLessonId) {
+    if (!assignedLessonId && !isTeacherUpload) {
       const detectedNum = extractMaterialLessonNum({ title: itemTitle, fileName: f.name });
       if (detectedNum !== null && cLessons.length > 0) {
         const foundL = cLessons.find(l => parseInt(l.num, 10) === detectedNum);
@@ -5239,7 +5292,7 @@ async function submitMaterialUpload() {
       lesson_id: assignedLessonId,
       lesson_num: assignedLessonNum,
       lesson_title: assignedLessonTitle,
-      strand: s.strand.trim(),
+      strand: uploadStrand || 'All Strands',
       grade_level: s.grade_level.trim(),
       section: targetSection,
       uploader_name: uploaderName,
@@ -5260,11 +5313,14 @@ async function submitMaterialUpload() {
 
     saveCustomMaterialToStorage(localRecord);
 
-    const existingIdx = materialsData.findIndex(m => String(m.id) === String(localRecord.id));
-    if (existingIdx >= 0) {
-      materialsData[existingIdx] = localRecord;
-    } else {
-      materialsData.unshift(localRecord);
+    // Only surface rows that actually reached the server; local-only rows cannot be reviewed.
+    if (srv) {
+      const existingIdx = materialsData.findIndex(m => String(m.id) === String(localRecord.id));
+      if (existingIdx >= 0) {
+        materialsData[existingIdx] = localRecord;
+      } else {
+        materialsData.unshift(localRecord);
+      }
     }
 
     if (ROLE === 'admin' && assignedLessonId) {
@@ -5273,12 +5329,15 @@ async function submitMaterialUpload() {
   });
 
   const uploadCount = s.files.length;
-  if (ROLE === 'admin') {
+  const uploadFailed = !!session?.access_token && serverRecords.length === 0;
+  if (uploadFailed) {
+    showToast('Upload failed to reach the server. Please try again.', 'error');
+  } else if (ROLE === 'admin') {
     showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
   } else {
     showToast(uploadCount > 1 ? `${uploadCount} handouts submitted for admin approval.` : 'Handout submitted for admin approval.', 'info');
   }
-  if (ROLE !== 'admin' && typeof addNotification === 'function') {
+  if (!uploadFailed && ROLE !== 'admin' && typeof addNotification === 'function') {
     addNotification({
       targetRole: 'admin',
       title: 'New Material Published',

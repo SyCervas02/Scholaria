@@ -3122,12 +3122,22 @@ function teacherPage(page) {
         ['Unread News',demo?2:news.filter(a=>!read.has(String(a.id))).length,'School announcements','announcements',iconAnnouncement(),'pink'],
         ['Unread Messages',unreadChatCount,'Chats','chats',iconChat(),'blue']
       ];
+      const pendingEntries = demo ? [] : [
+        ...(typeof customQuizzes !== 'undefined' ? customQuizzes : [])
+          .filter(q => q && String(q.status || '').toLowerCase() === 'pending' && q.createdBy && [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId, CURRENT_PROFILE?.school_id].includes(q.createdBy))
+          .map(q => ({ title: q.title, sub: `${q.subject || 'General'} · Quiz`, date: q.createdAt, page: 'quiz', svg: iconQuiz() })),
+        ...(Array.isArray(materialsData) ? materialsData : [])
+          .filter(m => m && String(m.status || '').toLowerCase() === 'pending' && !String(m.id).startsWith('local_') && (!m.uploaded_by || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(m.uploaded_by)))
+          .map(m => ({ title: m.title, sub: `${m.subject || 'General'} · Handout`, date: m.created_at, page: 'materials', svg: iconRecord() }))
+      ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 4);
       const pending = demo ? [
         ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
         ['Reflection Paper','Komunikasyon at Pananaliksik - Grade 11 - HUMSS',5,'Feb 3, 2025'],
         ['Group Project Report','Research in Daily Life - Grade 11 - STEM',2,'Feb 4, 2025'],
         ['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM',4,'Feb 5, 2025']
-      ].map(r=>row(r[0],r[1],`<b>${r[2]}</b> submissions<small>Due: ${r[3]}</small>`)).join('') : empty('No submissions awaiting review.');
+      ].map(r=>row(r[0],r[1],`<b>${r[2]}</b> submissions<small>Due: ${r[3]}</small>`)).join('') : (pendingEntries.length
+        ? pendingEntries.map(p => row(p.title, p.sub, '<em>Pending</em>', 'orange', p.svg, p.page)).join('')
+        : empty('No submissions awaiting review.'));
       const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials')).join('') || empty('No materials uploaded yet.');
       const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : news.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
       const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : teacherAssignedSections).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned yet.');

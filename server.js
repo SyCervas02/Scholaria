@@ -1681,6 +1681,12 @@ app.post('/api/curriculum-subjects', async (req, res) => {
   res.status(201).json(data);
 });
 
+const MATERIAL_STRANDS = new Set(['STEM', 'HUMSS', 'ABM', 'TVL']);
+function normalizeMaterialStrand(value) {
+  const raw = String(value || '').trim().toUpperCase();
+  return MATERIAL_STRANDS.has(raw) ? raw : null;
+}
+
 app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
@@ -1717,7 +1723,7 @@ app.post('/api/materials/upload', materialUpload.any(), async (req, res) => {
       .insert({
         title: itemTitle,
         subject: subject || null,
-        strand: strand || null,
+        strand: normalizeMaterialStrand(strand),
         grade_level: grade_level || null,
         section: targetSection,
         file_url: storagePath,
@@ -1752,11 +1758,14 @@ app.get('/api/materials', async (req, res) => {
 
   if (profile.role === 'student') {
     query = query.eq('status', 'approved');
+    const studentStrand = normalizeMaterialStrand(profile.strand) || normalizeMaterialStrand(strand);
+    if (studentStrand) query = query.or(`strand.eq.${studentStrand},strand.is.null`);
   } else if (profile.role === 'teacher') {
     query = query.or(`status.eq.approved,uploaded_by.eq.${profile.id}`);
   }
 
-  if (strand) query = query.eq('strand', strand);
+  const strandFilter = normalizeMaterialStrand(strand);
+  if (strandFilter && profile.role !== 'student') query = query.eq('strand', strandFilter);
   if (grade_level) query = query.eq('grade_level', grade_level);
   if (subject) query = query.eq('subject', subject);
 
