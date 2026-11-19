@@ -2252,8 +2252,17 @@ function setQuizManagerFilterType(t) {
 }
 
 function setQuizManagerFilterReview(val) {
-  quizManagerFilterReview = val;
-  if (typeof renderPage === 'function') renderPage('quiz');
+  quizManagerFilterReview = val || '';
+  applyQuizReviewFilterToRows();
+}
+
+function applyQuizReviewFilterToRows() {
+  const mode = typeof quizManagerFilterReview !== 'undefined' ? quizManagerFilterReview : '';
+  document.querySelectorAll('[data-quiz-review-mode]').forEach(row => {
+    const allow = row.getAttribute('data-quiz-review-mode') === 'visible';
+    const show = !mode || (mode === 'visible' ? allow : !allow);
+    row.style.display = show ? 'flex' : 'none';
+  });
 }
 
 function refreshQuizReviewAnswerToggle(quizId, allowed) {
@@ -2266,7 +2275,10 @@ function refreshQuizReviewAnswerToggle(quizId, allowed) {
     if (textEl) textEl.textContent = `${allowed ? '👁️' : '🔒'} Show Answers on Review`;
     const checkbox = label.querySelector('input[type="checkbox"]');
     if (checkbox) checkbox.checked = allowed;
+    const row = label.closest('[data-quiz-review-mode]');
+    if (row) row.setAttribute('data-quiz-review-mode', allowed ? 'visible' : 'hidden');
   });
+  applyQuizReviewFilterToRows();
 }
 
 async function toggleQuizReviewAnswers(quizId, isChecked) {

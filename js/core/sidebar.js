@@ -3283,7 +3283,7 @@ function teacherPage(page) {
           const takenStudentCount = getQuizUniqueStudentAttemptCount(q.id, q.title);
 
           return `
-          <div class="quiz-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;gap:16px;flex-wrap:wrap;">
+          <div class="quiz-row" data-quiz-review-mode="${isReviewAllowed ? 'visible' : 'hidden'}" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;gap:16px;flex-wrap:wrap;">
             <div class="qz-info" style="min-width:min(100%,240px);flex:1;">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
                 <h4 style="font-size:15px;font-weight:700;color:#0f172a;margin:0;">${escHtml(q.title)}</h4>
