@@ -160,6 +160,48 @@ const SUBJECTS_BY_STRAND_AND_GRADE = {
   }
 };
 
+/* ── CURRICULUM SUBJECT ARCHIVE SYSTEM ── */
+const ARCHIVED_SUBJECTS_STORAGE_KEY = 'scholaria_archived_subjects_v1';
+
+function getArchivedSubjectsList() {
+  try {
+    const raw = localStorage.getItem(ARCHIVED_SUBJECTS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveArchivedSubjectsList(list) {
+  try {
+    localStorage.setItem(ARCHIVED_SUBJECTS_STORAGE_KEY, JSON.stringify(list));
+  } catch (e) {}
+}
+
+function isSubjectArchived(title, strand, gradeLevel) {
+  if (!title) return false;
+  const list = getArchivedSubjectsList();
+  if (!list.length) return false;
+  const tNorm = String(title).trim().toLowerCase();
+  const sNorm = strand ? String(strand).trim().toUpperCase() : '';
+  const gNorm = gradeLevel ? String(gradeLevel).trim() : '';
+
+  return list.some(item => {
+    if (typeof item === 'string') {
+      const iNorm = item.trim().toLowerCase();
+      if (iNorm === tNorm) return true;
+      if (sNorm && gNorm && iNorm === `${sNorm}::${gNorm}::${tNorm}`.toLowerCase()) return true;
+      return false;
+    }
+    const itemTitle = String(item.title || '').trim().toLowerCase();
+    if (itemTitle !== tNorm) return false;
+    if (sNorm && item.strand && item.strand !== 'all' && item.strand.toUpperCase() !== sNorm) return false;
+    if (gNorm && item.gradeLevel && item.gradeLevel !== 'all' && item.gradeLevel !== gNorm) return false;
+    return true;
+  });
+}
+window.isSubjectArchived = isSubjectArchived;
+
 function getFilteredSubjects(strand, gradeLevel) {
   let targetStrands = [];
   if (strand) {
@@ -183,14 +225,14 @@ function getFilteredSubjects(strand, gradeLevel) {
       const strandObj = SUBJECTS_BY_STRAND_AND_GRADE[st] || {};
       if (gradeLevel) {
         (strandObj[gradeLevel] || []).forEach(sub => {
-          if (!list.includes(sub)) list.push(sub);
+          if (!list.includes(sub) && !isSubjectArchived(sub, st, gradeLevel)) list.push(sub);
         });
       } else {
         (strandObj['Grade 11'] || []).forEach(sub => {
-          if (!list.includes(sub)) list.push(sub);
+          if (!list.includes(sub) && !isSubjectArchived(sub, st, 'Grade 11')) list.push(sub);
         });
         (strandObj['Grade 12'] || []).forEach(sub => {
-          if (!list.includes(sub)) list.push(sub);
+          if (!list.includes(sub) && !isSubjectArchived(sub, st, 'Grade 12')) list.push(sub);
         });
       }
     });
@@ -199,18 +241,18 @@ function getFilteredSubjects(strand, gradeLevel) {
 
   if (gradeLevel) {
     const list = [];
-    Object.values(SUBJECTS_BY_STRAND_AND_GRADE).forEach(grades => {
+    Object.entries(SUBJECTS_BY_STRAND_AND_GRADE).forEach(([st, grades]) => {
       (grades[gradeLevel] || []).forEach(sub => {
-        if (!list.includes(sub)) list.push(sub);
+        if (!list.includes(sub) && !isSubjectArchived(sub, st, gradeLevel)) list.push(sub);
       });
     });
     return list;
   }
   const all = [];
-  Object.values(SUBJECTS_BY_STRAND_AND_GRADE).forEach(grades => {
-    Object.values(grades).forEach(subList => {
+  Object.entries(SUBJECTS_BY_STRAND_AND_GRADE).forEach(([st, grades]) => {
+    Object.entries(grades).forEach(([gr, subList]) => {
       subList.forEach(sub => {
-        if (!all.includes(sub)) all.push(sub);
+        if (!all.includes(sub) && !isSubjectArchived(sub, st, gr)) all.push(sub);
       });
     });
   });
@@ -238,8 +280,8 @@ function cleanupLegacyDummyStorage() {
           if (t === 'lesson' || t === 'multiple handouts testing' || t === 'cyber' || String(m.id).startsWith('mat_')) return false;
           return true;
         }).map(m => ({
-          ...m,
-          status: 'approved' // Auto-approve teacher uploads so they reflect immediately for students
+          ...m
+          // Preserve existing status — do NOT force 'approved', teachers need admin review
         }));
         localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(cleaned));
       }
@@ -277,7 +319,7 @@ function getCustomMaterialsFromStorage() {
       return true;
     }).map(m => ({
       ...m,
-      status: m.status || 'approved'
+      status: m.status || 'pending' // Default to pending so materials without a status go through approval
     }));
   } catch (e) {
     return [];
@@ -978,7 +1020,8 @@ function renderMaterialsList(role) {
       }).length;
 
       const pendingQuizzesCount = Math.max(0, subjectQuizzes.length - completedQuizzesCount);
-      const totalSubjectMat = lessons.length + subjectUploads.length;
+      const activeLessonsCount = lessons.filter(l => l.items && l.items.length > 0).length;
+      const totalSubjectMat = activeLessonsCount + subjectUploads.length;
 
       const quizProgressPct = subjectQuizzes.length > 0
         ? Math.round((completedQuizzesCount / subjectQuizzes.length) * 100)
@@ -1022,7 +1065,7 @@ function renderMaterialsList(role) {
 
         <div class="sw-tabs-bar">
           <button class="sw-tab ${activeSubjectSubTab === 'modules' ? 'active' : ''}" onclick="setSubjectSubTab('modules')">
-            Modules &amp; Handouts <span class="sw-tab-badge">${lessons.length}</span>
+            Modules &amp; Handouts <span class="sw-tab-badge">${activeLessonsCount}</span>
           </button>
           <button class="sw-tab ${activeSubjectSubTab === 'quizzes' ? 'active' : ''}" onclick="setSubjectSubTab('quizzes')">
             Quizzes &amp; Assessments <span class="sw-tab-badge">${subjectQuizzes.length}</span>
@@ -1455,7 +1498,7 @@ window.getSectionStrand = getSectionStrand;
 function getSectionGradeLevel(secName) {
   if (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) {
     const found = managedSections.find(s => (s.name || '').toLowerCase().trim() === (secName || '').toLowerCase().trim());
-    if (found && found.gradeLevel) return found.gradeLevel.trim();
+    if (found && (found.gradeLevel || found.grade_level)) return (found.gradeLevel || found.grade_level).trim();
   }
   const sLow = (secName || '').toLowerCase().trim();
   if (sLow.includes('grade 12') || sLow.includes('gr12') || sLow.includes('g12')) return 'Grade 12';
@@ -1484,6 +1527,9 @@ window.teacherGradeFilter = 'all';
 function setTeacherGradeFilter(gradeVal) {
   teacherGradeFilter = gradeVal || 'all';
   window.teacherGradeFilter = teacherGradeFilter;
+  const strandSelect = document.getElementById('teacherStrandSelect');
+  const activeStrand = strandSelect ? (window.teacherStrandFilter || 'all').toLowerCase() : 'all';
+  updateSectionDropdownOptions(activeStrand, teacherGradeFilter);
   applyTeacherClassFilter();
 }
 window.setTeacherGradeFilter = setTeacherGradeFilter;
@@ -1582,7 +1628,7 @@ function clearTeacherClassSearch() {
 }
 window.clearTeacherClassSearch = clearTeacherClassSearch;
 
-function updateSectionDropdownOptions(activeStrand) {
+function updateSectionDropdownOptions(activeStrand, activeGrade) {
   const select = document.getElementById('teacherSectionSelect');
   if (!select) return;
 
@@ -1590,21 +1636,32 @@ function updateSectionDropdownOptions(activeStrand) {
   const options = select.querySelectorAll('option[data-section-strand]');
   let isCurrentStillValid = (currentVal === 'all');
 
+  const strandNorm = (activeStrand !== undefined ? activeStrand : (window.teacherStrandFilter || 'all')).toLowerCase();
+  const gradeNorm = (activeGrade !== undefined ? activeGrade : (window.teacherGradeFilter || 'all')).toLowerCase().replace(/\s+/g, '');
+
   options.forEach(opt => {
     const optStrand = (opt.dataset.sectionStrand || '').toLowerCase();
-    if (activeStrand === 'all' || optStrand === activeStrand || optStrand === 'all') {
+    const optGrade = (opt.dataset.sectionGrade || '').toLowerCase().replace(/\s+/g, '');
+
+    const strandMatch = (strandNorm === 'all' || optStrand === strandNorm || optStrand === 'all');
+    const gradeMatch = (gradeNorm === 'all' || optGrade === gradeNorm || optGrade === 'all');
+
+    if (strandMatch && gradeMatch) {
       opt.style.display = '';
       opt.disabled = false;
+      opt.hidden = false;
       if (opt.value.toLowerCase() === currentVal) isCurrentStillValid = true;
     } else {
       opt.style.display = 'none';
       opt.disabled = true;
+      opt.hidden = true;
     }
   });
 
   if (!isCurrentStillValid) {
     select.value = 'all';
     window.teacherSectionFilter = 'all';
+    if (typeof teacherSectionFilter !== 'undefined') teacherSectionFilter = 'all';
   } else {
     select.value = window.teacherSectionFilter;
   }
@@ -1673,7 +1730,7 @@ function applyTeacherClassFilter() {
   });
 
   // Dynamically update section dropdown to hide non-matching sections
-  updateSectionDropdownOptions(activeStrand);
+  updateSectionDropdownOptions(activeStrand, activeGrade);
 
   // Live count badge
   const countBadge = document.getElementById('activeClassesCountBadge');
@@ -1707,11 +1764,13 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
     const secStrand = getSectionStrand(sec);
     const secGrade = getSectionGradeLevel(sec);
 
-    // Official curriculum list matching the Senior High School Curriculum Guide
+    // Official curriculum list matching the Senior High School Curriculum Guide (excluding archived subjects)
     const officialTitles = (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined' && SUBJECTS_BY_STRAND_AND_GRADE[secStrand]?.[secGrade])
-      ? SUBJECTS_BY_STRAND_AND_GRADE[secStrand][secGrade]
+      ? SUBJECTS_BY_STRAND_AND_GRADE[secStrand][secGrade].filter(title => !isSubjectArchived(title, secStrand, secGrade))
       : [];
-    const customSubjects = currentRole === 'admin' ? getCustomMaterialsSubjects().filter(c => c.strand === secStrand && c.gradeLevel === secGrade && c.section === sec) : [];
+    const customSubjects = currentRole === 'admin' 
+      ? getCustomMaterialsSubjects().filter(c => c.strand === secStrand && c.gradeLevel === secGrade && c.section === sec && !isSubjectArchived(c.title, c.strand, c.gradeLevel)) 
+      : [];
     const subjectTitles = [...officialTitles, ...customSubjects.map(c => c.title).filter(title => !officialTitles.some(t => t.toLowerCase() === title.toLowerCase()))];
 
     if (subjectTitles.length > 0) {
@@ -1864,6 +1923,315 @@ window.openAddSubjectModal = openAddSubjectModal;
 window.closeAddSubjectModal = closeAddSubjectModal;
 window.saveCustomMaterialsSubject = saveCustomMaterialsSubject;
 
+/* ── CURRICULUM SUBJECT ARCHIVE MODAL & FILTERING ── */
+const archiveSubjectModalState = {
+  strand: 'all',
+  grade: 'all',
+  tab: 'all',
+  search: ''
+};
+
+function getAllCurriculumSubjectsList() {
+  const subjects = [];
+  const seen = new Set();
+
+  if (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined') {
+    ['STEM', 'HUMSS', 'ABM', 'TVL'].forEach(st => {
+      const grades = SUBJECTS_BY_STRAND_AND_GRADE[st] || {};
+      ['Grade 11', 'Grade 12'].forEach(gr => {
+        (grades[gr] || []).forEach(title => {
+          const key = `${st}::${gr}::${title.toLowerCase().trim()}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            const isArch = isSubjectArchived(title, st, gr);
+            const track = (typeof getTrackForSubjectTitle === 'function') ? getTrackForSubjectTitle(title, st) : 'Core';
+            subjects.push({
+              title,
+              strand: st,
+              gradeLevel: gr,
+              track,
+              isOfficial: true,
+              isArchived: isArch
+            });
+          }
+        });
+      });
+    });
+  }
+
+  const custom = (typeof getCustomMaterialsSubjects === 'function') ? getCustomMaterialsSubjects() : [];
+  custom.forEach(c => {
+    const st = c.strand || 'General';
+    const gr = c.gradeLevel || c.grade_level || 'Grade 11';
+    const key = `${st}::${gr}::${(c.title || '').toLowerCase().trim()}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      const isArch = isSubjectArchived(c.title, st, gr);
+      subjects.push({
+        id: c.id,
+        title: c.title,
+        code: c.code,
+        strand: st,
+        gradeLevel: gr,
+        track: c.track || 'Specialized',
+        section: c.section,
+        isOfficial: false,
+        isArchived: isArch
+      });
+    }
+  });
+
+  return subjects;
+}
+
+function openArchiveSubjectModal() {
+  if (ROLE !== 'admin') return;
+  closeArchiveSubjectModal();
+
+  const modalHtml = `
+    <div class="modal-overlay active" id="archiveSubjectModal" onclick="if(event.target===this)closeArchiveSubjectModal()" style="display:flex;align-items:center;justify-content:center;position:fixed;inset:0;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);z-index:9999;padding:20px;">
+      <div class="modal-card" style="max-width:840px;width:100%;max-height:90vh;display:flex;flex-direction:column;background:#ffffff;border-radius:18px;box-shadow:0 20px 45px rgba(0,0,0,0.22);overflow:hidden;" onclick="event.stopPropagation()">
+        <!-- HEAD -->
+        <div class="modal-head" style="padding:18px 24px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:40px;height:40px;border-radius:10px;background:#fee2e2;color:#be123c;display:flex;align-items:center;justify-content:center;font-size:20px;">📦</div>
+            <div>
+              <h3 style="margin:0;font-size:17px;font-weight:800;color:#0f172a;">Archive Curriculum Subject</h3>
+              <span style="font-size:12.5px;color:#64748b;">Filter by strand &amp; grade to archive subjects or restore previously archived ones.</span>
+            </div>
+          </div>
+          <button type="button" class="modal-x" aria-label="Close" onclick="closeArchiveSubjectModal()" style="background:none;border:none;font-size:24px;color:#94a3b8;cursor:pointer;line-height:1;">&times;</button>
+        </div>
+
+        <!-- BODY WITH REALTIME FILTERS -->
+        <div class="modal-body" id="archiveSubjectModalBody" style="padding:20px 24px;overflow-y:auto;flex:1;">
+        </div>
+
+        <!-- FOOT -->
+        <div class="modal-foot" style="padding:14px 24px;border-top:1px solid #e2e8f0;background:#f8fafc;display:flex;justify-content:flex-end;">
+          <button type="button" class="foot-btn-secondary" onclick="closeArchiveSubjectModal()" style="padding:8px 18px;border-radius:9px;font-weight:700;cursor:pointer;">Done</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  renderArchiveSubjectModalContent();
+}
+
+function closeArchiveSubjectModal() {
+  document.getElementById('archiveSubjectModal')?.remove();
+}
+
+function setArchiveSubjectFilterStrand(val) {
+  archiveSubjectModalState.strand = val;
+  renderArchiveSubjectModalContent();
+}
+
+function setArchiveSubjectFilterGrade(val) {
+  archiveSubjectModalState.grade = val;
+  renderArchiveSubjectModalContent();
+}
+
+function setArchiveSubjectFilterTab(tab) {
+  archiveSubjectModalState.tab = tab;
+  renderArchiveSubjectModalContent();
+}
+
+function setArchiveSubjectSearch(val) {
+  archiveSubjectModalState.search = (val || '').toLowerCase().trim();
+  renderArchiveSubjectModalContent();
+}
+
+function toggleArchiveSubject(title, strand, gradeLevel, shouldArchive) {
+  let list = getArchivedSubjectsList();
+  const tNorm = String(title).trim().toLowerCase();
+  const sNorm = strand ? String(strand).trim().toUpperCase() : '';
+  const gNorm = gradeLevel ? String(gradeLevel).trim() : '';
+  const fullKey = `${sNorm}::${gNorm}::${tNorm}`;
+
+  if (shouldArchive) {
+    const exists = list.some(item => {
+      if (typeof item === 'string') return item.toLowerCase() === fullKey.toLowerCase() || item.toLowerCase() === tNorm;
+      return (item.title || '').toLowerCase() === tNorm && (!item.strand || item.strand === sNorm) && (!item.gradeLevel || item.gradeLevel === gNorm);
+    });
+    if (!exists) {
+      list.push({
+        key: fullKey,
+        title,
+        strand: sNorm,
+        gradeLevel: gNorm,
+        archived_at: new Date().toISOString()
+      });
+      saveArchivedSubjectsList(list);
+    }
+    if (typeof showToast === 'function') showToast(`"${title}" (${sNorm} · ${gNorm}) archived. It will no longer appear in future assignments.`, 'info');
+  } else {
+    list = list.filter(item => {
+      if (typeof item === 'string') return item.toLowerCase() !== fullKey.toLowerCase() && item.toLowerCase() !== tNorm;
+      const matchTitle = (item.title || '').toLowerCase() === tNorm;
+      const matchStrand = !item.strand || item.strand === 'all' || item.strand.toUpperCase() === sNorm;
+      const matchGrade = !item.gradeLevel || item.gradeLevel === 'all' || item.gradeLevel === gNorm;
+      return !(matchTitle && matchStrand && matchGrade);
+    });
+    saveArchivedSubjectsList(list);
+    if (typeof showToast === 'function') showToast(`"${title}" (${sNorm} · ${gNorm}) restored to active curriculum.`, 'success');
+  }
+
+  renderArchiveSubjectModalContent();
+
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+  if (typeof applyTeacherClassFilter === 'function') applyTeacherClassFilter();
+}
+
+function renderArchiveSubjectModalContent() {
+  const body = document.getElementById('archiveSubjectModalBody');
+  if (!body) return;
+
+  const allSubjects = getAllCurriculumSubjectsList();
+  const activeCount = allSubjects.filter(s => !s.isArchived).length;
+  const archivedCount = allSubjects.filter(s => s.isArchived).length;
+
+  const currentStrand = archiveSubjectModalState.strand;
+  const currentGrade = archiveSubjectModalState.grade;
+  const currentTab = archiveSubjectModalState.tab;
+  const q = archiveSubjectModalState.search;
+
+  let filtered = allSubjects.filter(s => {
+    if (currentStrand !== 'all' && s.strand !== currentStrand) return false;
+    if (currentGrade !== 'all' && s.gradeLevel !== currentGrade) return false;
+    if (currentTab === 'active' && s.isArchived) return false;
+    if (currentTab === 'archived' && !s.isArchived) return false;
+    if (q) {
+      const haystack = `${s.title} ${s.code || ''} ${s.strand} ${s.gradeLevel} ${s.track || ''}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+
+  filtered.sort((a, b) => a.title.localeCompare(b.title));
+
+  body.innerHTML = `
+    <!-- NOTICE BANNER -->
+    <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+      <span style="font-size:18px;">🛡️</span>
+      <div style="font-size:12.5px;color:#92400e;line-height:1.45;">
+        Archived subjects are automatically <strong>hidden from student &amp; teacher subject rosters</strong>, removed from class curriculum cards, and excluded from assignment dropdowns across the platform. You can restore them anytime here.
+      </div>
+    </div>
+
+    <!-- FILTER TOOLBAR -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:220px;position:relative;">
+        <input type="text" id="archiveSubjSearchInp" placeholder="Search subjects by name or code..." value="${escHtml(archiveSubjectModalState.search)}" oninput="setArchiveSubjectSearch(this.value)" style="width:100%;padding:9px 12px;padding-right:28px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:13px;box-sizing:border-box;">
+        ${archiveSubjectModalState.search ? `<button onclick="setArchiveSubjectSearch('')" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:14px;color:#94a3b8;cursor:pointer;">&times;</button>` : ''}
+      </div>
+
+      <select onchange="setArchiveSubjectFilterStrand(this.value)" style="padding:9px 12px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:13px;font-weight:600;background:#fff;cursor:pointer;">
+        <option value="all" ${currentStrand === 'all' ? 'selected' : ''}>All Strands</option>
+        <option value="STEM" ${currentStrand === 'STEM' ? 'selected' : ''}>STEM</option>
+        <option value="HUMSS" ${currentStrand === 'HUMSS' ? 'selected' : ''}>HUMSS</option>
+        <option value="ABM" ${currentStrand === 'ABM' ? 'selected' : ''}>ABM</option>
+        <option value="TVL" ${currentStrand === 'TVL' ? 'selected' : ''}>TVL</option>
+      </select>
+
+      <select onchange="setArchiveSubjectFilterGrade(this.value)" style="padding:9px 12px;border:1.5px solid #cbd5e1;border-radius:9px;font-size:13px;font-weight:600;background:#fff;cursor:pointer;">
+        <option value="all" ${currentGrade === 'all' ? 'selected' : ''}>All Grade Levels</option>
+        <option value="Grade 11" ${currentGrade === 'Grade 11' ? 'selected' : ''}>Grade 11</option>
+        <option value="Grade 12" ${currentGrade === 'Grade 12' ? 'selected' : ''}>Grade 12</option>
+      </select>
+    </div>
+
+    <!-- TABS -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
+      <button type="button" class="sw-btn" onclick="setArchiveSubjectFilterTab('all')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:${currentTab === 'all' ? '#4338ca;color:#fff' : '#f1f5f9;color:#475569'};">
+        All Subjects (${allSubjects.length})
+      </button>
+      <button type="button" class="sw-btn" onclick="setArchiveSubjectFilterTab('active')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:${currentTab === 'active' ? '#16a34a;color:#fff' : '#f1f5f9;color:#475569'};">
+        Active Only (${activeCount})
+      </button>
+      <button type="button" class="sw-btn" onclick="setArchiveSubjectFilterTab('archived')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:700;border:none;cursor:pointer;background:${currentTab === 'archived' ? '#be123c;color:#fff' : '#f1f5f9;color:#475569'};">
+        Archived Only (${archivedCount})
+      </button>
+      <span style="margin-left:auto;font-size:12px;color:#64748b;font-weight:600;">Showing ${filtered.length} of ${allSubjects.length}</span>
+    </div>
+
+    <!-- TABLE -->
+    <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#fff;max-height:420px;overflow-y:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left;">
+        <thead>
+          <tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11.5px;text-transform:uppercase;letter-spacing:0.5px;">
+            <th style="padding:10px 14px;font-weight:700;">Subject Title</th>
+            <th style="padding:10px 14px;font-weight:700;">Strand</th>
+            <th style="padding:10px 14px;font-weight:700;">Grade</th>
+            <th style="padding:10px 14px;font-weight:700;">Track</th>
+            <th style="padding:10px 14px;font-weight:700;">Status</th>
+            <th style="padding:10px 14px;font-weight:700;text-align:right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtered.length > 0 ? filtered.map(s => {
+            return `
+              <tr style="border-bottom:1px solid #f1f5f9;${s.isArchived ? 'background:#fffafa;' : ''}">
+                <td style="padding:10px 14px;">
+                  <div style="font-weight:700;color:${s.isArchived ? '#94a3b8' : '#0f172a'};">${escHtml(s.title)}</div>
+                  ${s.code ? `<div style="font-size:11px;color:#94a3b8;font-family:monospace;">${escHtml(s.code)}</div>` : ''}
+                </td>
+                <td style="padding:10px 14px;">
+                  <span style="background:#e0f2fe;color:#0369a1;font-weight:700;font-size:11px;padding:2px 8px;border-radius:6px;">${escHtml(s.strand)}</span>
+                </td>
+                <td style="padding:10px 14px;font-weight:600;color:#334155;">${escHtml(s.gradeLevel)}</td>
+                <td style="padding:10px 14px;">
+                  <span style="font-size:11.5px;color:#64748b;background:#f1f5f9;padding:2px 6px;border-radius:4px;">${escHtml(s.track || 'Core')}</span>
+                </td>
+                <td style="padding:10px 14px;">
+                  ${s.isArchived ? `
+                    <span style="background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+                      <span>📦</span> Archived
+                    </span>
+                  ` : `
+                    <span style="background:#dcfce7;color:#15803d;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:4px;">
+                      <span>✓</span> Active
+                    </span>
+                  `}
+                </td>
+                <td style="padding:10px 14px;text-align:right;">
+                  ${s.isArchived ? `
+                    <button type="button" onclick="toggleArchiveSubject('${escHtml(s.title)}', '${escHtml(s.strand)}', '${escHtml(s.gradeLevel)}', false)" style="background:#ecfdf5;color:#047857;border:1.5px solid #a7f3d0;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                      ↺ Restore
+                    </button>
+                  ` : `
+                    <button type="button" onclick="toggleArchiveSubject('${escHtml(s.title)}', '${escHtml(s.strand)}', '${escHtml(s.gradeLevel)}', true)" style="background:#fff1f2;color:#be123c;border:1.5px solid #fecdd3;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                      📦 Archive
+                    </button>
+                  `}
+                </td>
+              </tr>
+            `;
+          }).join('') : `
+            <tr>
+              <td colspan="6" style="padding:36px;text-align:center;color:#64748b;">
+                <div style="font-size:24px;margin-bottom:6px;">🔍</div>
+                <strong>No subjects found</strong>
+                <div style="font-size:12px;margin-top:2px;">Try adjusting your strand, grade level, or search query.</div>
+              </td>
+            </tr>
+          `}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+window.openArchiveSubjectModal = openArchiveSubjectModal;
+window.closeArchiveSubjectModal = closeArchiveSubjectModal;
+window.setArchiveSubjectFilterStrand = setArchiveSubjectFilterStrand;
+window.setArchiveSubjectFilterGrade = setArchiveSubjectFilterGrade;
+window.setArchiveSubjectFilterTab = setArchiveSubjectFilterTab;
+window.setArchiveSubjectSearch = setArchiveSubjectSearch;
+window.toggleArchiveSubject = toggleArchiveSubject;
+window.renderArchiveSubjectModalContent = renderArchiveSubjectModalContent;
+
 
 function getMaterialFormatBadge(type, fileName) {
   const t = (type || (fileName ? fileName.split('.').pop() : 'PDF')).toUpperCase();
@@ -1878,12 +2246,39 @@ function getMaterialFormatBadge(type, fileName) {
 }
 
 function renderAdminApprovedHandoutRow(m) {
-  const isTeacher = (m.uploader_role || '').toLowerCase().includes('teacher') || 
-                    (m.uploaded_by_name || '').toLowerCase().includes('teacher') || 
-                    (m.uploader_name || '').toLowerCase().includes('teacher');
-  const uploaderRole = isTeacher ? 'Teacher' : 'Admin';
-  const uploaderName = m.uploaded_by_name || m.uploader_name || (isTeacher ? 'Faculty Instructor' : 'Administrator');
-  const approverName = m.approved_by_name || (isTeacher ? 'Academic Admin' : uploaderName);
+  const users = typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : [];
+  const findUser = id => id == null ? null : users.find(user =>
+    [user.dbId, user.id, user.school_id].some(userId => userId != null && String(userId) === String(id))
+  );
+  const uploader = findUser(m.uploaded_by);
+  const uploaderRoleValue = String(uploader?.role || m.uploader_role || m.uploaded_by_role || '').toLowerCase();
+  const isTeacher = uploaderRoleValue.includes('teacher') || uploaderRoleValue === 'faculty' ||
+                    (!uploaderRoleValue && ((m.uploaded_by_name || '').toLowerCase().includes('teacher') ||
+                    (m.uploader_name || '').toLowerCase().includes('teacher')));
+  const uploaderRole = isTeacher ? 'Teacher' : uploaderRoleValue.includes('admin') ? 'Admin' : 'Uploader';
+  const uploaderName = uploader?.name || uploader?.full_name || m.uploaded_by_name || m.uploader_name || 'Unknown uploader';
+  const approver = findUser(m.approved_by);
+  const namedApprover = users.find(user =>
+    String(user.role || '').toLowerCase() === 'admin' &&
+    String(user.name || user.full_name || '').trim().toLowerCase() === String(m.approved_by_name || '').trim().toLowerCase()
+  );
+  const namedApproverAccount = users.find(user =>
+    String(user.name || user.full_name || '').trim().toLowerCase() === String(m.approved_by_name || '').trim().toLowerCase()
+  );
+  const knownApprover = approver && String(approver.role || '').toLowerCase() === 'admin' ? approver : namedApprover;
+  const activeAdmin = String(ROLE || CURRENT_PROFILE?.role || '').toLowerCase() === 'admin'
+    ? users.find(user =>
+        String(user.role || '').toLowerCase() === 'admin' &&
+        [user.dbId, user.id, user.school_id].some(userId =>
+          userId != null && [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].some(profileId =>
+            profileId != null && String(userId) === String(profileId)
+          )
+        )
+      ) || CURRENT_PROFILE
+    : null;
+  const approverName = knownApprover?.name || knownApprover?.full_name ||
+    activeAdmin?.full_name || activeAdmin?.name ||
+    (m.approved_by_name && !approver && !namedApproverAccount ? m.approved_by_name : 'Not recorded');
 
   const title = m.title || m.fileName || 'Curriculum Handout';
   const formatBadge = getMaterialFormatBadge(m.type, m.fileName);
@@ -1895,53 +2290,43 @@ function renderAdminApprovedHandoutRow(m) {
 
   return '<tr data-material-id="' + escHtml(m.id) + '" data-origin="' + uploaderRole.toLowerCase() + '" data-section="' + escHtml(section.toLowerCase()) + '" data-search="' + escHtml((title + ' ' + (m.fileName || '') + ' ' + subject + ' ' + section + ' ' + uploaderName + ' ' + approverName).toLowerCase()) + '">' +
     '<td>' +
-      '<div style="display:flex;align-items:flex-start;gap:10px;">' +
-        '<div style="margin-top:2px;">' + formatBadge + '</div>' +
-        '<div style="min-width:0;">' +
-          '<div style="font-weight:700;color:var(--text-primary);font-size:13.5px;margin-bottom:2px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escHtml(title) + '">' + escHtml(title) + '</div>' +
-          '<div style="font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">' +
-            '<span style="max-width:200px;overflow:hidden;text-overflow:ellipsis;" title="' + escHtml(m.fileName || title) + '">' + escHtml(m.fileName || title) + '</span>' +
-            '<span>&middot;</span>' +
-            '<span>' + escHtml(size) + '</span>' +
-            '<span>&middot;</span>' +
-            '<span>' + escHtml(date) + '</span>' +
-          '</div>' +
+      '<div class="repo-cell-flex">' +
+        '<span class="repo-format">' + formatBadge + '</span>' +
+        '<div class="repo-min">' +
+          '<div class="repo-clip repo-title" title="' + escHtml(title + (m.fileName ? ' — ' + m.fileName : '')) + '">' + escHtml(title) + '</div>' +
+          '<div class="repo-clip repo-sub" title="' + escHtml(m.fileName || '') + '">' + escHtml(size) + ' &middot; ' + escHtml(date) + '</div>' +
         '</div>' +
       '</div>' +
     '</td>' +
     '<td>' +
-      '<div style="font-weight:600;color:var(--text-primary);font-size:13px;">' + escHtml(subject) + '</div>' +
-      '<div style="font-size:11.5px;color:var(--text-muted);">' + escHtml(strandGrade) + '</div>' +
+      '<div class="repo-clip repo-subject" title="' + escHtml(subject) + '">' + escHtml(subject) + '</div>' +
+      '<div class="repo-clip repo-sub" title="' + escHtml(strandGrade) + '">' + escHtml(strandGrade) + '</div>' +
     '</td>' +
+    '<td><span class="repo-section" title="' + escHtml(section) + '">' + escHtml(section) + '</span></td>' +
     '<td>' +
-      '<span style="background:#f1f5f9;color:#334155;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:6px;display:inline-block;">' +
-        escHtml(section) +
-      '</span>' +
-    '</td>' +
-    '<td>' +
-      '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<div class="repo-person">' +
         '<span class="role-tag ' + uploaderRole.toLowerCase() + '">' + uploaderRole + '</span>' +
-        '<span style="font-weight:600;color:var(--text-primary);font-size:13px;">' + escHtml(uploaderName) + '</span>' +
+        '<div class="repo-clip repo-name" title="' + escHtml(uploaderName) + '">' + escHtml(uploaderName) + '</div>' +
       '</div>' +
     '</td>' +
     '<td>' +
-      '<div style="display:inline-flex;align-items:center;gap:6px;color:#15803d;font-weight:600;font-size:12.5px;">' +
-        '<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#dcfce7;color:#16a34a;font-size:11px;flex-shrink:0;">✓</span>' +
-        '<span>' + escHtml(approverName) + '</span>' +
+      '<div class="repo-cell-flex">' +
+        '<span class="repo-check">✓</span>' +
+        '<div class="repo-min"><div class="repo-clip repo-approve" title="' + escHtml(approverName) + '">' + escHtml(approverName) + '</div></div>' +
       '</div>' +
     '</td>' +
     '<td>' +
-      '<div style="display:inline-flex;align-items:center;gap:8px;">' +
-        '<button class="table-act-btn preview" onclick="previewSubjectUploadedMaterial(\'' + escHtml(m.id) + '\')" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" title="Instant Handout Preview">' +
-          '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' +
+      '<div class="repo-actions">' +
+        '<button class="repo-act preview" onclick="previewSubjectUploadedMaterial(\'' + escHtml(m.id) + '\')" title="Instant Handout Preview">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' +
           'Preview' +
         '</button>' +
-        '<button class="table-act-btn download" onclick="downloadMaterial(\'' + escHtml(m.id) + '\')" style="background:#f8fafc;color:#334155;border:1px solid #cbd5e1;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;cursor:pointer;" title="Download Handout">' +
-          '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
+        '<button class="repo-act download" onclick="downloadMaterial(\'' + escHtml(m.id) + '\')" title="Download Handout">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
           'Download' +
         '</button>' +
-        '<button class="table-act-btn delete" onclick="deleteMaterial(\'' + escHtml(m.id) + '\')" style="background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:7px;padding:6px 9px;font-size:12px;font-weight:700;cursor:pointer;" title="Delete Handout">' +
-          '🗑️' +
+        '<button class="repo-act delete" onclick="deleteMaterial(\'' + escHtml(m.id) + '\')" title="Delete Handout">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>' +
         '</button>' +
       '</div>' +
     '</td>' +
@@ -1988,8 +2373,16 @@ function renderAdminApprovedHandoutsTableHTML() {
         '<option value="az">Title (A-Z)</option>' +
       '</select>' +
     '</div>' +
-    '<div class="user-table" id="adminApprovedTableWrap">' +
-      '<table style="width:100%;border-collapse:collapse;min-width:980px;">' +
+    '<div class="repo-table-wrap" id="adminApprovedTableWrap">' +
+      '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">' +
+        '<colgroup>' +
+          '<col style="width:18%;">' +
+          '<col style="width:14%;">' +
+          '<col style="width:12%;">' +
+          '<col style="width:18%;">' +
+          '<col style="width:18%;">' +
+          '<col style="width:20%;">' +
+        '</colgroup>' +
         '<thead>' +
           '<tr>' +
             '<th>Handout &amp; Document</th>' +
@@ -2123,8 +2516,15 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
             <p style="color:rgba(255,255,255,0.9);margin:0;font-size:13px;max-width:680px;line-height:1.45;">${isAdmin ? 'Master curriculum manager across all sections and strands. Upload official module handouts, manage class resources, and review student progress.' : 'Subjects are separated by handled section (Section A and Section B). Open any class to view curriculum modules, manage quizzes, or upload supplemental handouts.'}</p>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-left:auto;justify-content:flex-end;">
-          ${isAdmin ? `<button class="add-btn" onclick="openAddSubjectModal()" style="background:#ffffff;color:#4338ca;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap;"><span aria-hidden="true" style="font-size:19px;line-height:12px;font-weight:500">+</span> Add Subject</button>` : `<button class="add-btn" onclick="openMaterialModal()" style="background:#ffffff;color:#0284c7;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">${typeof iconPlus === 'function' ? iconPlus() : '+'} Upload Handout</button>`}
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;margin-left:auto;justify-content:center;">
+          ${isAdmin ? `
+            <button class="add-btn" onclick="openAddSubjectModal()" style="background:#ffffff;color:#4338ca;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:8px 18px;font-size:12.5px;display:inline-flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap;border-radius:8px;">
+              <span aria-hidden="true" style="font-size:18px;line-height:12px;font-weight:600">+</span> Add Subject
+            </button>
+            <button class="add-btn" onclick="openArchiveSubjectModal()" style="background:rgba(255,255,255,0.18);color:#ffffff;border:1.5px solid rgba(255,255,255,0.38);box-shadow:0 2px 8px rgba(0,0,0,0.12);font-weight:700;padding:7px 15px;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;border-radius:8px;backdrop-filter:blur(4px);transition:all 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.28)'" onmouseout="this.style.background='rgba(255,255,255,0.18)'">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg> Archive Subject
+            </button>
+          ` : `<button class="add-btn" onclick="openMaterialModal()" style="background:#ffffff;color:#0284c7;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;"><span aria-hidden="true" style="font-size:19px;line-height:12px;font-weight:500;">+</span> Upload Handout</button>`}
           ${!isAdmin ? `
             <button class="add-btn" onclick="typeof openQuizModal === 'function' ? openQuizModal() : window.location.href='quiz-maker.html'" style="background:#38bdf8;color:#082f49;border:none;box-shadow:0 4px 12px rgba(56,189,248,0.25);font-weight:700;padding:9px 18px;font-size:13px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;">
               ${typeof iconPlus === 'function' ? iconPlus() : '+'} AI Quiz Maker
@@ -2169,7 +2569,14 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
         ${distinctSections.map(sec => {
           const secStrand = getSectionStrand(sec);
           const secGrade = getSectionGradeLevel(sec);
-          return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" data-section-grade="${escHtml(secGrade)}" ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand} · ${secGrade})</option>`;
+          const curGradeNorm = (teacherGradeFilter || 'all').toLowerCase().replace(/\s+/g, '');
+          const curStrandNorm = (teacherStrandFilter || 'all').toLowerCase();
+          const optGradeNorm = (secGrade || '').toLowerCase().replace(/\s+/g, '');
+          const optStrandNorm = (secStrand || '').toLowerCase();
+          const isGradeHidden = curGradeNorm !== 'all' && optGradeNorm !== 'all' && optGradeNorm !== curGradeNorm;
+          const isStrandHidden = curStrandNorm !== 'all' && optStrandNorm !== 'all' && optStrandNorm !== curStrandNorm;
+          const isHidden = isGradeHidden || isStrandHidden;
+          return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" data-section-grade="${escHtml(secGrade)}" ${isHidden ? 'style="display:none;" hidden disabled' : ''} ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand} · ${secGrade})</option>`;
         }).join('')}
       </select>
 
@@ -2199,6 +2606,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
       
       ${classCards.map(card => {
         const lessons = getSubjectLessons(card);
+        const activeModulesCount = lessons.filter(l => l.items && l.items.length > 0).length;
         const uploadsForClass = materialsData.filter(m => {
           if (!isMaterialMatchingCourse(m, card)) return false;
           if (m.section && m.section !== 'All' && !m.section.toLowerCase().includes(card.assignedSection.toLowerCase())) return false;
@@ -2247,7 +2655,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
                 ${escHtml(card.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
               </p>
               <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:nowrap;overflow:hidden;">
-                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${lessons.length} Modules</span>
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${activeModulesCount} ${activeModulesCount === 1 ? 'Module' : 'Modules'}</span>
                 <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📁 ${uploadsForClass.length} Files</span>
                 <span style="background:#fef3c7;color:#b45309;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📝 ${quizzesForClass.length} Quizzes</span>
               </div>
@@ -2273,6 +2681,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
     <div class="subjects-folder-grid" id="studentSubjectsFolderGrid" style="grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));gap:20px;">
       ${enrolledCourses.map(course => {
         const courseLessons = getSubjectLessons(course);
+        const activeCourseModulesCount = courseLessons.filter(l => l.items && l.items.length > 0).length;
         const courseUploads = materialsData.filter(m => isMaterialMatchingCourse(m, course));
         const courseQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
           if (!q.subject) return false;
@@ -2302,7 +2711,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
               <p class="sfc-instructor" style="margin-bottom:12px;">👤 <span>Instructor: <strong>${escHtml(course.instructor || 'Faculty')}</strong></span></p>
 
               <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:nowrap;overflow:hidden;">
-                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${courseLessons.length} Modules</span>
+                <span style="background:#f1f5f9;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📄 ${activeCourseModulesCount} ${activeCourseModulesCount === 1 ? 'Module' : 'Modules'}</span>
                 <span style="background:#e0f2fe;color:#0369a1;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📁 ${courseUploads.length} Files</span>
                 <span style="background:#fef3c7;color:#b45309;padding:4px 8px;border-radius:6px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;flex-shrink:0;">📝 ${courseQuizzes.length} Quizzes</span>
               </div>
@@ -3368,7 +3777,7 @@ function renderMaterialsManagerPage(role) {
                                   <div class="mm-ad-item" onclick="approveMaterial('${m.id}')">
                                     <span>✓</span> Approve
                                   </div>
-                                  <div class="mm-ad-item reject" onclick="rejectMaterial('${m.id}')">
+                                  <div class="mm-ad-item reject" onclick="runApprovalAction('material','${m.id}',false)">
                                     <span>✕</span> Reject
                                   </div>
                                 ` : ''}
@@ -3731,9 +4140,14 @@ function approvalIcon(name) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.file}</svg>`;
 }
 
+function getRevisionItems() {
+  try { return JSON.parse(localStorage.getItem('scholaria_revision_items_v1') || '[]'); } catch (e) { return []; }
+}
+
 function approvalEntries() {
   const quizzes = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
   const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
+  const revisionKeys = getRevisionItems();
 
   const allMaterials = Array.isArray(materialsData) ? materialsData.filter(Boolean) : [];
   const allQuizzes = Array.isArray(quizzes) ? quizzes.filter(Boolean) : [];
@@ -3741,8 +4155,9 @@ function approvalEntries() {
   return [
     ...allMaterials.map(m => {
       const isArchived = isEntryArchived('material', m.id, m.status);
-      let status = isArchived ? 'archived' : (m.status || 'pending');
-      if (!isArchived && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
+      const isRevision = revisionKeys.includes(`material:${String(m.id)}`);
+      let status = isArchived ? 'archived' : (isRevision ? 'revision' : (m.status || 'pending'));
+      if (!isArchived && !isRevision && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
       return {
         id: m.id,
         kind: 'material',
@@ -3757,8 +4172,9 @@ function approvalEntries() {
     }),
     ...allQuizzes.map(q => {
       const isArchived = isEntryArchived('quiz', q.id, q.status);
-      let status = isArchived ? 'archived' : (q.status === 'active' ? 'approved' : (q.status || 'pending'));
-      if (!isArchived && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
+      const isRevisionQ = revisionKeys.includes(`quiz:${String(q.id)}`);
+      let status = isArchived ? 'archived' : (isRevisionQ ? 'revision' : (q.status === 'active' ? 'approved' : (q.status || 'pending')));
+      if (!isArchived && !isRevisionQ && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
       const authorUser = users.find(u => u.dbId === q.createdBy || u.id === q.createdBy || (q.createdBy && String(u.dbId).toLowerCase() === String(q.createdBy).toLowerCase()));
       const uploaderName = q.createdByName || q.author || q.uploaded_by_name || authorUser?.name || authorUser?.full_name || 'Teacher';
       const isInteractive = q.quiz_type === 'interactive' || q.type === 'interactive';
@@ -3819,7 +4235,7 @@ function renderApprovalMaterialRows() {
       <td>
         <div class="ca-actions">
           <button class="ca-review" onclick="reviewApprovalEntry(${args})">${approvalIcon('eye')} Review</button>
-          ${e.status === 'pending' ? `<button class="ca-approve" title="Approve" aria-label="Approve ${escHtml(e.title)}" onclick="runApprovalAction(${args},true)">${approvalIcon('check')}</button><button class="ca-reject" title="Deny" aria-label="Deny ${escHtml(e.title)}" onclick="runApprovalAction(${args},false)">${approvalIcon('close')}</button>` : ''}
+          ${e.status === 'pending' ? `<button class="ca-approve" title="Approve" aria-label="Approve ${escHtml(e.title)}" onclick="runApprovalAction(${args},true)">${approvalIcon('check')}</button><button class="ca-reject" title="Deny" aria-label="Deny ${escHtml(e.title)}" onclick="runApprovalAction(${args},false)">${approvalIcon('close')}</button><button class="ca-revision-btn" title="Needs Revision" aria-label="Mark needs revision ${escHtml(e.title)}" onclick="markNeedsRevision(${args})" style="background:#fff7ed;border:1.5px solid #f97316;color:#ea580c;border-radius:7px;padding:5px 9px;cursor:pointer;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;" title="Needs Revision"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>Revision</button>` : ''}
           ${(e.status === 'archived' || approvalView.tab === 'archived') ? `<button class="ca-unarchive-btn" title="Unarchive" aria-label="Unarchive ${escHtml(e.title)}" onclick="toggleArchiveApprovalEntry('${e.kind}', '${escHtml(String(e.id))}')">${approvalIcon('archive')} Unarchive</button>` : ''}
           <div class="ca-more-wrap">
             <button class="ca-more-btn" title="More options" aria-label="More options" onclick="toggleApprovalMenu(event)">${approvalIcon('dots')}</button>
@@ -3841,7 +4257,223 @@ function renderApprovalMaterialRows() {
 }
 
 function runApprovalAction(kind, id, approve) {
-  return kind === 'quiz' ? (approve ? approveQuiz(id) : rejectQuiz(id)) : (approve ? approveMaterial(id) : rejectMaterial(id));
+  try {
+    if (approve) {
+      return kind === 'quiz' ? approveQuiz(id) : approveMaterial(id);
+    }
+    // Show deny reason panel before actually rejecting
+    showDenyReasonPanel(kind, id, 'reject');
+  } catch (e) {
+    console.error('runApprovalAction error:', e);
+    showToast('An error occurred while processing. Please try again.', 'error');
+  }
+}
+
+async function markNeedsRevision(kind, id) {
+  // Show reason panel before marking as needs revision
+  showDenyReasonPanel(kind, id, 'revision');
+}
+
+function showDenyReasonPanel(kind, id, action) {
+  // Remove any existing panel first
+  const existingDialog = document.getElementById('denyReasonDialog');
+  if (existingDialog) existingDialog.remove();
+
+  const isRevision = action === 'revision';
+  const title = isRevision ? 'Request Revision' : 'Deny Submission';
+  const btnLabel = isRevision ? 'Mark as Needs Revision' : 'Deny Submission';
+  const btnClass = isRevision ? 'ca-revision-confirm-btn' : 'ca-deny-confirm-btn';
+  const btnColor = isRevision ? '#ea580c' : '#dc2626';
+
+  const dialog = document.createElement('dialog');
+  dialog.id = 'denyReasonDialog';
+  dialog.style.cssText = 'border:none;border-radius:12px;padding:0;max-width:480px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,0.3);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;';
+  dialog.innerHTML = `
+    <div style="padding:28px 28px 24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h3 style="margin:0;font-size:18px;font-weight:700;color:#111827;">${title}</h3>
+        <button onclick="document.getElementById('denyReasonDialog').close()" style="background:none;border:none;cursor:pointer;font-size:22px;color:#6b7280;line-height:1;">&times;</button>
+      </div>
+      <p style="margin:0 0 14px;font-size:14px;color:#4b5563;">
+        ${isRevision
+          ? 'Describe what changes the teacher needs to make before resubmitting.'
+          : 'Explain why this submission is being denied. The teacher will be notified.'}
+      </p>
+      <textarea id="denyReasonText" placeholder="${isRevision ? 'e.g. Please fix the formatting and add proper references...' : 'e.g. This content does not align with the curriculum...'}"
+        style="width:100%;box-sizing:border-box;min-height:110px;border:1.5px solid #d1d5db;border-radius:8px;padding:10px 12px;font-size:14px;resize:vertical;font-family:inherit;color:#111827;outline:none;"
+        oninput="this.style.borderColor=this.value.trim()?'#6366f1':'#d1d5db'"></textarea>
+      <p style="margin:6px 0 20px;font-size:12px;color:#9ca3af;">Optional — leave blank to send without a reason.</p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="document.getElementById('denyReasonDialog').close()" style="padding:9px 18px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;color:#374151;">Cancel</button>
+        <button class="${btnClass}" onclick="_confirmDenyAction('${kind}','${id}','${action}')" style="padding:9px 18px;background:${btnColor};border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;color:#fff;">${btnLabel}</button>
+      </div>
+    </div>`;
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  setTimeout(() => { const ta = document.getElementById('denyReasonText'); if (ta) ta.focus(); }, 50);
+}
+window.showDenyReasonPanel = showDenyReasonPanel;
+
+async function _confirmDenyAction(kind, id, action) {
+  const reasonEl = document.getElementById('denyReasonText');
+  const reason = reasonEl ? reasonEl.value.trim() : '';
+  const dialog = document.getElementById('denyReasonDialog');
+  if (dialog) dialog.close();
+
+  const REVISION_KEY = 'scholaria_revision_items_v1';
+
+  if (action === 'revision') {
+    let revisionList = [];
+    try { revisionList = JSON.parse(localStorage.getItem(REVISION_KEY) || '[]'); } catch (e) {}
+    const key = `${kind}:${String(id)}`;
+    if (!revisionList.includes(key)) revisionList.push(key);
+    localStorage.setItem(REVISION_KEY, JSON.stringify(revisionList));
+
+    if (kind === 'material') {
+      const idx = materialsData.findIndex(m => String(m.id) === String(id));
+      if (idx >= 0) materialsData[idx].status = 'revision';
+      const localList = getCustomMaterialsFromStorage();
+      const lIdx = localList.findIndex(m => String(m.id) === String(id));
+      if (lIdx >= 0) {
+        localList[lIdx].status = 'revision';
+        localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(localList));
+      }
+      const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+      if (session && session.access_token) {
+        try {
+          await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+            body: JSON.stringify({ status: 'rejected', reason })
+          });
+        } catch (err) { console.warn('markNeedsRevision backend notice:', err); }
+      }
+      if (typeof addNotification === 'function') {
+        const mat = materialsData.find(m => String(m.id) === String(id));
+        if (mat && mat.uploaded_by) {
+          addNotification({
+            targetUserId: mat.uploaded_by,
+            targetRole: 'teacher',
+            title: 'Revision Requested',
+            message: `Your material "${mat.title || 'Material'}" needs revision.${reason ? ' Reason: ' + reason : ''}`,
+            type: 'material'
+          });
+        }
+      }
+    } else if (kind === 'quiz') {
+      const qIdx = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).findIndex(q => String(q.id) === String(id));
+      if (qIdx >= 0 && typeof customQuizzes !== 'undefined') customQuizzes[qIdx].status = 'revision';
+      const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+      if (session && session.access_token) {
+        try {
+          await fetch(`${API_BASE}/api/quizzes/${encodeURIComponent(id)}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+            body: JSON.stringify({ status: 'rejected', reason })
+          });
+        } catch (err) { console.warn('markNeedsRevision quiz backend notice:', err); }
+      }
+    }
+
+    showToast('Marked as needs revision', 'info');
+  } else {
+    // reject / deny
+    if (kind === 'material') {
+      await rejectMaterial(id, reason);
+    } else {
+      await rejectQuiz(id, reason);
+    }
+    return; // rejectMaterial/rejectQuiz already show toast and re-render
+  }
+
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
+}
+window._confirmDenyAction = _confirmDenyAction;
+
+async function approveQuiz(id) {
+  // 1. Update in-memory customQuizzes
+  const quiz = customQuizzes.find(q => String(q.id) === String(id));
+  if (quiz) {
+    quiz.status = 'active';
+  }
+
+  // 2. Try backend
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  if (session && session.access_token) {
+    try {
+      const res = await fetch(`${API_BASE}/api/quizzes/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ status: 'approved' })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.warn('Quiz approve backend notice:', data.error || res.status);
+      }
+    } catch (err) {
+      console.warn('Quiz approve backend error:', err);
+    }
+  }
+
+  showToast('Quiz approved and published to students!', 'success');
+
+  if (typeof addNotification === 'function' && quiz) {
+    if (quiz.createdBy) {
+      addNotification({
+        targetUserId: quiz.createdBy,
+        targetRole: 'teacher',
+        title: 'Quiz Approved',
+        message: `Your quiz "${quiz.title || 'Quiz'}" has been approved by the Admin and is now live.`,
+        type: 'quiz'
+      });
+    }
+    addNotification({
+      targetRole: 'student',
+      title: 'New Quiz Available',
+      message: `A new quiz "${quiz?.title || 'Quiz'}" is now available.`,
+      type: 'quiz'
+    });
+  }
+
+  if (typeof loadQuizzesFromDB === 'function') loadQuizzesFromDB().catch(() => {});
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
+}
+
+async function rejectQuiz(id, reason) {
+  // 1. Remove from in-memory customQuizzes
+  const quizIdx = customQuizzes.findIndex(q => String(q.id) === String(id));
+  if (quizIdx >= 0) customQuizzes.splice(quizIdx, 1);
+
+  // 2. Try backend
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  if (session && session.access_token) {
+    try {
+      await fetch(`${API_BASE}/api/quizzes/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ status: 'rejected', reason: reason || '' })
+      });
+    } catch (err) {
+      console.warn('Quiz reject backend error:', err);
+    }
+  }
+
+  showToast('Quiz denied and removed', 'success');
+  const wrap = document.getElementById('approvalListWrap');
+  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
 }
 
 async function reviewApprovalEntry(kind, id) {
@@ -3949,8 +4581,10 @@ async function approveMaterial(id) {
   loadMaterialsFromDB().catch(() => {});
 }
 
-async function rejectMaterial(id) {
-  if (!confirm('Deny and delete this material? It will be removed from the approval queue.')) return;
+async function rejectMaterial(id, reason) {
+  // Capture the uploader before removal so the denial reason can reach them.
+  const deniedMat = materialsData.find(m => String(m.id) === String(id))
+    || getCustomMaterialsFromStorage().find(m => String(m.id) === String(id));
 
   // 1. Remove from localStorage
   try {
@@ -3970,11 +4604,21 @@ async function rejectMaterial(id) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ status: 'rejected' })
+        body: JSON.stringify({ status: 'rejected', reason: reason || '' })
       });
     } catch (err) {
       console.warn('Backend reject notice:', err);
     }
+  }
+
+  if (typeof addNotification === 'function' && deniedMat && deniedMat.uploaded_by) {
+    addNotification({
+      targetUserId: deniedMat.uploaded_by,
+      targetRole: 'teacher',
+      title: 'Submission Denied',
+      message: `Your material "${deniedMat.title || 'Material'}" was denied.${reason ? ' Reason: ' + reason : ''}`,
+      type: 'material'
+    });
   }
 
   showToast('Material denied and removed', 'success');
@@ -4214,7 +4858,7 @@ function getAllSubjects() {
       if (!all.includes(sub)) all.push(sub);
     });
   });
-  return all;
+  return all.filter(sub => !isSubjectArchived(sub));
 }
 
 function muUpdateStrand(value) {
@@ -4536,7 +5180,7 @@ async function submitMaterialUpload() {
   // Persist each file in scholaria_custom_materials_v1 in localStorage so materials are NEVER lost
   const uploaderName = CURRENT_PROFILE?.full_name || (ROLE === 'admin' ? 'Administrator' : 'Teacher');
   const uploaderRole = ROLE === 'admin' ? 'Admin' : 'Teacher';
-  const targetStatus = 'approved'; // Instantly approved so uploads reflect immediately for students
+  const targetStatus = ROLE === 'admin' ? 'approved' : 'pending'; // Admins auto-approve; teachers go through approval queue
 
   // Determine course lessons for auto-assignment if needed
   let courseForLessons = null;
@@ -4602,8 +5246,8 @@ async function submitMaterialUpload() {
       uploaded_by_name: uploaderName,
       uploader_role: uploaderRole,
       uploaded_by: CURRENT_PROFILE?.id || 'local_user',
-      approved_by: CURRENT_PROFILE?.id || 'admin',
-      approved_by_name: ROLE === 'admin' ? uploaderName : 'System Administrator',
+      approved_by: ROLE === 'admin' ? (CURRENT_PROFILE?.id || 'admin') : null,
+      approved_by_name: ROLE === 'admin' ? uploaderName : null,
       is_curriculum: ROLE === 'admin',
       file_type: f.type || 'application/pdf',
       type: typeLabel,
@@ -4629,7 +5273,11 @@ async function submitMaterialUpload() {
   });
 
   const uploadCount = s.files.length;
-  showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
+  if (ROLE === 'admin') {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts uploaded and published to students!` : 'Handout uploaded and published to students!', 'success');
+  } else {
+    showToast(uploadCount > 1 ? `${uploadCount} handouts submitted for admin approval.` : 'Handout submitted for admin approval.', 'info');
+  }
   if (ROLE !== 'admin' && typeof addNotification === 'function') {
     addNotification({
       targetRole: 'admin',

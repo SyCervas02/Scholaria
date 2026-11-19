@@ -214,8 +214,9 @@ create policy "Admins read all rows"
 -- bypasses RLS). If you later want admins to edit an existing profile
 -- (name, section, deactivate) directly from the browser instead of
 -- through a backend route, the matching policy would be:
---   create policy "Admins update users" on public.users
---     for update using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Admins update users" on public.users;
+create policy "Admins update users" on public.users
+  for update using (public.is_admin()) with check (public.is_admin());
 
 -- ============================================================
 -- DEMO ACCOUNT

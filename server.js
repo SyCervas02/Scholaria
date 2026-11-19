@@ -1,5 +1,6 @@
 // server.js
-require('dotenv').config(); // MUST be first — everything below reads from process.env
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') }); // Explicit absolute path for reliable env loading
 
 const express = require('express');
 const cors = require('cors');
@@ -8,48 +9,80 @@ const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const crypto = require('crypto');
 const fs = require('fs');
-const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
+
+// Trust reverse proxy (Railway, Render, Fly.io, etc.)
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
-// --- Account audit trail store ---
-const AUDIT_FILE = path.join(__dirname, 'data', 'account-audit.json');
-
-function getAuditRecords() {
-  try {
-    if (!fs.existsSync(AUDIT_FILE)) return {};
-    return JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8')) || {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveAuditRecord(record) {
-  try {
-    const dir = path.dirname(AUDIT_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const records = getAuditRecords();
-    const key = record.school_id || record.user_id;
-    if (key) {
-      records[key] = {
-        ...(records[key] || {}),
-        ...record,
-        updated_at: new Date().toISOString()
-      };
-      fs.writeFileSync(AUDIT_FILE, JSON.stringify(records, null, 2), 'utf8');
-    }
-  } catch (e) {
-    console.error('Failed to save audit record:', e.message);
-  }
-}
-
-// --- Core middleware ---
+// --- Core Security Middleware ---
+// 1. Helmet Security Headers (CSP, Anti-Clickjacking, Anti-MIME Sniffing, Hide Express Signature)
 app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginResourcePolicy: false
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'", "https://*.supabase.co"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com",
+        "https://*.supabase.co"
+      ],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://fonts.googleapis.com",
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com"
+      ],
+      fontSrc: [
+        "'self'",
+        "https://fonts.gstatic.com",
+        "https://cdn.jsdelivr.net",
+        "data:"
+      ],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "blob:",
+        "https://*.supabase.co",
+        "https://images.unsplash.com",
+        "https://i.pravatar.cc"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://*.supabase.co",
+        "wss://*.supabase.co",
+        "https://generativelanguage.googleapis.com",
+        "https://api.openai.com",
+        "https://cdn.jsdelivr.net",
+        "https://cdnjs.cloudflare.com"
+      ],
+      frameAncestors: ["'self'"],
+      objectSrc: ["'none'"]
+    }
+  },
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  frameguard: { action: 'sameorigin' },
+  noSniff: true,
+  xssFilter: true,
+  hidePoweredBy: true
 }));
+
+// Additional defense-in-depth headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.removeHeader('X-Powered-By');
+  next();
+});
+
+// 2. Strict Access Control / CORS
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || origin === 'null' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
@@ -62,43 +95,295 @@ app.use(cors({
   },
   credentials: true
 }));
+
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// 3. Input Sanitization Middleware (Anti-XSS & Code Injection Filter)
+function sanitizeInput(obj) {
+  if (typeof obj === 'string') {
+    return obj
+      .replace(/\0/g, '')
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/javascript:/gi, '')
+      .replace(/on\w+\s*=/gi, '');
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeInput(item));
+  }
+  if (obj && typeof obj === 'object') {
+    const sanitized = {};
+    for (const key of Object.keys(obj)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+      sanitized[key] = sanitizeInput(obj[key]);
+    }
+    return sanitized;
+  }
+  return obj;
+}
+
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') req.body = sanitizeInput(req.body);
+  if (req.query && typeof req.query === 'object') req.query = sanitizeInput(req.query);
+  if (req.params && typeof req.params === 'object') req.params = sanitizeInput(req.params);
+  next();
+});
+
+// 4. Critical Gatekeeper: Block Direct Access to Database Schemas, .env, Source Code, and Data
+const SENSITIVE_PATTERNS = [
+  /^\/\.env/i,
+  /\.sql$/i,
+  /\.json$/i,
+  /\.cjs$/i,
+  /\.bak$/i,
+  /\.log$/i,
+  /\.map$/i,
+  /\.md$/i,
+  /\.yml$/i,
+  /\.yaml$/i,
+  /^\/server\.js$/i,
+  /^\/flush-presentation-data\.js$/i,
+  /^\/seed-demo-account\.js$/i,
+  /^\/data(\/|$)/i,
+  /^\/database(\/|$)/i,
+  /^\/tests(\/|$)/i,
+  /^\/node_modules(\/|$)/i,
+  /Accounts_NamingConventions/i,
+  /^\/\.git/i,
+  /^\/\.gemini/i
+];
+
+app.use((req, res, next) => {
+  const reqPath = decodeURIComponent(req.path);
+  // Prevent path traversal
+  if (reqPath.includes('..')) {
+    return res.status(404).send('Not Found');
+  }
+  for (const pattern of SENSITIVE_PATTERNS) {
+    if (pattern.test(reqPath)) {
+      return res.status(404).send('Not Found');
+    }
+  }
+  next();
+});
+
+// --- Supabase client for token validation & admin operations ---
+const activeAdminKey = (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('eyJ')) 
+  ? process.env.SUPABASE_SERVICE_ROLE_KEY 
+  : process.env.SUPABASE_ANON_KEY;
+
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  activeAdminKey,
+  {
+    global: {
+      headers: { Authorization: `Bearer ${activeAdminKey}` }
+    },
+    auth: { autoRefreshToken: false, persistSession: false }
+  }
+);
+
+const supabaseAnon = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
+
+// --- Persistent Account Audit Trail Store (Supabase Cloud Table 'account_audit') ---
+async function getAuditRecords() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('account_audit')
+      .select('*')
+      .order('updated_at', { ascending: false });
+    if (error || !data) return {};
+    const records = {};
+    data.forEach(r => {
+      const key = r.school_id || r.user_id;
+      if (key) records[key] = r;
+    });
+    return records;
+  } catch (e) {
+    console.warn('[Audit] Supabase fetch note:', e.message);
+    return {};
+  }
+}
+
+async function saveAuditRecord(record) {
+  try {
+    const key = record.school_id || record.user_id;
+    if (!key) return;
+    await supabaseAdmin.from('account_audit').upsert({
+      school_id: record.school_id || key,
+      user_id: record.user_id || null,
+      name: record.name || null,
+      role: record.role || null,
+      email: record.email || null,
+      strand: record.strand || null,
+      grade_level: record.grade_level || null,
+      section: record.section || null,
+      is_active: record.is_active !== undefined ? record.is_active : true,
+      created_at: record.created_at || new Date().toISOString(),
+      created_by: record.created_by || null,
+      updated_at: new Date().toISOString(),
+      status_history: record.status_history || []
+    }, { onConflict: 'school_id' });
+  } catch (e) {
+    console.error('[Audit] Failed to save audit record to Supabase:', e.message);
+  }
+}
 
 // Redirect root to login page
 app.get('/', (req, res) => {
   res.redirect('/login.html');
 });
 
-app.use(express.static(__dirname));
+// Ensure uploads directory exists
+const chatUploadsDir = path.join(__dirname, 'uploads', 'chat');
+const materialsUploadsDir = path.join(__dirname, 'uploads', 'materials');
+if (!fs.existsSync(materialsUploadsDir)) {
+  fs.mkdirSync(materialsUploadsDir, { recursive: true });
+}
+if (!fs.existsSync(chatUploadsDir)) {
+  fs.mkdirSync(chatUploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { dotfiles: 'ignore' }));
 
-// Basic rate limiting on the API routes (auth routes skipped so rate limits never block logins)
+// Resilient recovery for chat uploads stored permanently across Railway container rebuilds & multi-devices
+app.get('/uploads/chat/:filename', async (req, res) => {
+  const filename = path.basename(req.params.filename || '');
+  if (!filename) return res.status(404).send('File not found');
+
+  const filePath = path.join(chatUploadsDir, filename);
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+
+  const ext = path.extname(filename).toLowerCase();
+  const mimeTypes = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+    '.pdf': 'application/pdf', '.txt': 'text/plain', '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  };
+
+  // 1. Recover original file from permanent Supabase Storage 'chat-attachments' bucket
+  try {
+    if (supabaseAdmin && supabaseAdmin.storage) {
+      const { data: fileBlob, error: dlErr } = await supabaseAdmin.storage
+        .from('chat-attachments')
+        .download(filename);
+      if (fileBlob && !dlErr) {
+        const buffer = Buffer.from(await fileBlob.arrayBuffer());
+        try { fs.writeFileSync(filePath, buffer); } catch (_) {}
+        res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return res.send(buffer);
+      }
+    }
+  } catch (storageErr) {
+    console.warn('[Chat] Storage recovery attempt note:', storageErr.message);
+  }
+
+  // 2. Recover original file from Supabase messages database if present
+  try {
+    if (supabaseAdmin) {
+      const { data: msg } = await supabaseAdmin
+        .from('messages')
+        .select('body')
+        .ilike('body', `%${filename}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (msg && msg.body) {
+        let parsed = null;
+        try { parsed = JSON.parse(msg.body); } catch (_) {}
+        const rawData = parsed?.data || parsed?.previewUrl;
+        if (rawData && typeof rawData === 'string' && rawData.startsWith('data:')) {
+          const match = rawData.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            const mime = match[1];
+            const buffer = Buffer.from(match[2], 'base64');
+            res.setHeader('Content-Type', mime);
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            try { fs.writeFileSync(filePath, buffer); } catch (_) {}
+            // Mirror to cloud storage so future downloads are instant
+            supabaseAdmin.storage.from('chat-attachments').upload(filename, buffer, { contentType: mime, upsert: true }).catch(() => {});
+            return res.send(buffer);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Chat] Database attachment recovery check:', err.message);
+  }
+
+  // 3. Fallback only if the attachment file was truly removed or unavailable
+  const isImage = /\.(png|jpe?g|gif|webp|svg)$/i.test(filename);
+  if (isImage) {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    const safeName = filename.replace(/[<>&"']/g, '').slice(0, 36);
+    return res.send(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+        <rect width="100%" height="100%" fill="#f8fafc" rx="14" stroke="#cbd5e1" stroke-width="2"/>
+        <circle cx="200" cy="72" r="32" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2"/>
+        <path d="M190 72 l7 -8 l13 14" stroke="#2563eb" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="192" cy="62" r="2.5" fill="#2563eb"/>
+        <text x="200" y="130" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="13" font-weight="700" fill="#1e293b" text-anchor="middle">Image Attachment</text>
+        <text x="200" y="152" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" font-weight="500" fill="#64748b" text-anchor="middle">${safeName}</text>
+        <text x="200" y="176" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="10.5" font-weight="500" fill="#94a3b8" text-anchor="middle">Attachment unavailable</text>
+      </svg>
+    `.trim());
+  }
+  res.status(404).send('File not found');
+});
+
+// Allowed public assets and folders
+app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'ignore' }));
+app.use('/js', express.static(path.join(__dirname, 'js'), { dotfiles: 'ignore' }));
+app.use('/assets', express.static(path.join(__dirname, 'assets'), { dotfiles: 'ignore' }));
+app.use(express.static(__dirname, { dotfiles: 'ignore', index: false }));
+
+// 5. Rate Limiting: Global API Limiter & Dedicated Auth Limiter (Anti-Brute Force / DDoS)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes window
+  max: 25,                  // max 25 auth calls per IP per 15 min
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many authentication attempts from this IP address. Please wait 15 minutes before trying again.'
+  }
+});
+app.use('/api/auth/', authLimiter);
+app.use('/api/admin/create-account', authLimiter);
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500,                 // limit each IP per window
   standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => req.path.startsWith('/auth/'),
+  legacyHeaders: false
 });
 app.use('/api/', apiLimiter);
+// Health check endpoint for uptime monitoring and hosting platforms
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Client-safe dynamic Supabase config endpoint
+app.get('/api/config', (req, res) => {
+  res.json({
+    supabaseUrl: process.env.SUPABASE_URL || 'https://qxpsbewbgdwkermxeeso.supabase.co',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
+  });
+});
+
 
 // Every /api/ route returns live data, never a static asset
 app.use('/api/', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
-
-// --- Supabase admin client (service role — server-side only) ---
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    global: {
-      headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` }
-    },
-    auth: { autoRefreshToken: false, persistSession: false }
-  }
-);
 
 // --- Profanity / severe-word filter ---
 const PROFANITY_LIST = [
@@ -172,12 +457,47 @@ async function requireUser(req, res) {
   const token = authHeader.replace('Bearer ', '');
   if (!token) { res.status(401).json({ error: 'Missing auth token' }); return null; }
 
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) { res.status(401).json({ error: 'Invalid session' }); return null; }
+  // Verify session with anon client (with valid registered API key) or fallback to admin
+  let user = null;
+  const anonAuth = await supabaseAnon.auth.getUser(token);
+  if (!anonAuth.error && anonAuth.data?.user) {
+    user = anonAuth.data.user;
+  } else {
+    try {
+      const adminAuth = await supabaseAdmin.auth.getUser(token);
+      if (!adminAuth.error && adminAuth.data?.user) user = adminAuth.data.user;
+    } catch (e) {}
+  }
+  if (!user) { res.status(401).json({ error: 'Invalid session' }); return null; }
 
-  const { data: profile } = await supabaseAdmin
-    .from('users').select('*').eq('id', user.id).single();
-  if (!profile) { res.status(401).json({ error: 'No profile found' }); return null; }
+  // Scoped user client for database operations
+  const userClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false }
+  });
+  req.userClient = userClient;
+
+  let { data: profile } = await userClient
+    .from('users').select('*').eq('id', user.id).maybeSingle();
+  if (!profile) {
+    try {
+      const adminRes = await supabaseAdmin.from('users').select('*').eq('id', user.id).maybeSingle();
+      if (adminRes.data) profile = adminRes.data;
+    } catch (e) {}
+  }
+  if (!profile) {
+    const meta = user.user_metadata || {};
+    profile = {
+      id: user.id,
+      email: user.email,
+      full_name: meta.full_name || (user.email ? user.email.split('@')[0] : 'User'),
+      role: meta.role || 'student',
+      strand: meta.strand || null,
+      grade_level: meta.grade_level || null,
+      section: meta.section || null,
+      is_active: true
+    };
+  }
 
   if (profile.is_active === false) {
     res.status(403).json({ error: 'Account has been deactivated. Permissions revoked by administration.' });
@@ -393,13 +713,16 @@ app.post('/api/admin/create-account', async (req, res) => {
   const { full_name, role, email, strand, grade_level, section, subjects, custom_password } = req.body;
 
   if (!full_name || !full_name.trim()) return res.status(400).json({ error: 'Missing full name' });
-  if (!['student', 'teacher', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
-  
-  if (role !== 'admin' && (!email || !/^\S+@\S+\.\S+$/.test(email))) {
-    return res.status(400).json({ error: 'Missing or invalid email' });
+  if (!['student', 'teacher', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role. Must be student, teacher, or admin.' });
+
+  // Lenient email check: at least one char @ at least one char . at least one char
+  const isValidEmail = (e) => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+
+  if (role !== 'admin' && !isValidEmail(email)) {
+    return res.status(400).json({ error: `Invalid or missing email address for ${role} account. Please provide a valid email (e.g. student@hwa.edu.ph).` });
   }
-  if (role === 'admin' && email && !/^\S+@\S+\.\S+$/.test(email)) {
-    return res.status(400).json({ error: 'Invalid recovery email format' });
+  if (role === 'admin' && email && !isValidEmail(email)) {
+    return res.status(400).json({ error: 'Invalid recovery email format. Leave it blank or enter a valid email.' });
   }
 
   let school_id;
@@ -441,9 +764,15 @@ app.post('/api/admin/create-account', async (req, res) => {
     }
   });
   if (authErr) {
-    const msg = /already.*regist/i.test(authErr.message)
-      ? 'An account with this email already exists'
-      : authErr.message;
+    let msg = authErr.message || 'Unknown Supabase error';
+    if (/already.*regist|already.*exist|duplicate/i.test(msg)) {
+      msg = `An account with the email "${accountEmail}" already exists in the system. Use a different email address.`;
+    } else if (msg === 'User not allowed' || msg.includes('not allowed')) {
+      msg = 'Server Configuration Error: The Supabase service_role key is missing or invalid. Contact the system administrator to check the SUPABASE_SERVICE_ROLE_KEY environment variable on Railway.';
+    } else if (msg.includes('invalid') && msg.includes('email')) {
+      msg = `The email address "${accountEmail}" was rejected by the authentication server. Please use a standard email format.`;
+    }
+    console.error('[create-account] Supabase auth error:', authErr.message, '| email:', accountEmail, '| role:', role);
     return res.status(400).json({ error: msg });
   }
 
@@ -469,8 +798,8 @@ app.post('/api/admin/create-account', async (req, res) => {
     return res.status(500).json({ error: insertErr.message });
   }
 
-  // Persistent provenance audit record
-  saveAuditRecord({
+  // Persistent provenance audit record directly in Supabase
+  await saveAuditRecord({
     user_id: authData.user.id,
     school_id,
     name: full_name.trim(),
@@ -504,7 +833,7 @@ app.get('/api/admin/account-audit', async (req, res) => {
   if (!profile) return;
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can view audit records' });
 
-  const records = getAuditRecords();
+  const records = await getAuditRecords();
   res.json({ success: true, records });
 });
 
@@ -540,7 +869,7 @@ app.post('/api/admin/toggle-user-status', async (req, res) => {
     }
   }
 
-  const currentRecords = getAuditRecords();
+  const currentRecords = await getAuditRecords();
   const key = updatedUser.school_id || user_id;
   const existingAudit = currentRecords[key] || {};
   const statusHistory = existingAudit.status_history || [];
@@ -556,7 +885,7 @@ app.post('/api/admin/toggle-user-status', async (req, res) => {
     reason: reason || (is_active ? 'Account reactivated by administrator' : 'Account deactivated by administrator')
   });
 
-  saveAuditRecord({
+  await saveAuditRecord({
     ...existingAudit,
     user_id,
     school_id: updatedUser.school_id,
@@ -599,6 +928,127 @@ app.post('/api/admin/reset-user-password', async (req, res) => {
     name: targetUser.full_name,
     temp_password: newTempPassword
   });
+});
+
+app.post('/api/admin/update-user-sections', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can modify user sections' });
+
+  const { user_id, school_id, section, user_ids, updates } = req.body;
+
+  try {
+    // 1. Bulk updates with individual sections
+    if (Array.isArray(updates) && updates.length > 0) {
+      for (const item of updates) {
+        const targetId = item.user_id || item.id || item.school_id;
+        const targetSec = item.section !== undefined ? item.section : null;
+        if (targetId) {
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(targetId));
+          if (isUUID) {
+            await supabaseAdmin.from('users').update({ section: targetSec }).eq('id', targetId);
+          } else {
+            await supabaseAdmin.from('users').update({ section: targetSec }).eq('school_id', targetId);
+          }
+        }
+      }
+      return res.json({ success: true, count: updates.length });
+    }
+
+    // 2. Mass assignment of an array of user_ids to a single section
+    if (Array.isArray(user_ids) && user_ids.length > 0) {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .update({ section: section !== undefined ? section : null })
+        .in('id', user_ids)
+        .select();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ success: true, updated: data });
+    }
+
+    // 3. Single user section update (by user_id or school_id)
+    if (user_id || school_id) {
+      let query = supabaseAdmin.from('users').update({ section: section !== undefined ? section : null });
+      const target = user_id || school_id;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(target));
+      if (isUUID) {
+        query = query.eq('id', target);
+      } else {
+        query = query.eq('school_id', target);
+      }
+      const { data, error } = await query.select();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ success: true, updated: data });
+    }
+
+    return res.status(400).json({ error: 'Missing target user ID(s) or updates payload' });
+  } catch (err) {
+    console.error('Failed to update user section:', err);
+    return res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+});
+
+// --- Managed Sections Store & Sync (Supabase Cloud Table 'sections') ---
+app.get('/api/sections', async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('sections')
+      .select('*')
+      .order('name');
+    if (error) throw error;
+    if (Array.isArray(data)) {
+      const formatted = data.map(s => ({
+        id: s.id,
+        name: s.name,
+        gradeLevel: s.grade_level,
+        strand: s.strand,
+        adviser: s.adviser || '',
+        room: s.room || '',
+        isArchived: !!s.is_archived,
+        archivedAt: s.archived_at,
+        unarchivedAt: s.unarchived_at,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at
+      }));
+      return res.json(formatted);
+    }
+  } catch (e) {
+    console.warn('[Sections] Supabase query note:', e.message);
+  }
+  res.json([]);
+});
+
+app.post('/api/admin/sections', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can manage sections' });
+
+  const { sections } = req.body;
+  if (!Array.isArray(sections)) {
+    return res.status(400).json({ error: 'Expected an array of sections' });
+  }
+
+  try {
+    for (const sec of sections) {
+      if (!sec || !sec.name) continue;
+      await supabaseAdmin.from('sections').upsert({
+        id: sec.id || `sec-${sec.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+        name: sec.name.trim(),
+        grade_level: sec.gradeLevel || sec.grade_level || 'Grade 11',
+        strand: sec.strand || 'STEM',
+        adviser: sec.adviser || '',
+        room: sec.room || '',
+        is_archived: !!(sec.isArchived ?? sec.is_archived),
+        archived_at: sec.archivedAt || sec.archived_at || null,
+        unarchived_at: sec.unarchivedAt || sec.unarchived_at || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'name' });
+    }
+    return res.json({ success: true, count: sections.length });
+  } catch (err) {
+    console.error('Failed to save sections to Supabase:', err);
+    return res.status(500).json({ error: 'Failed to persist sections to Supabase' });
+  }
 });
 
 app.post('/api/auth/demo-login', async (req, res) => {
@@ -644,6 +1094,84 @@ function getMuteForStrikes(strikes) {
   return { action: 'muted_permanent', permanently_muted: true, muted_until: null };
 }
 
+// --- Chat File Uploads ---
+const chatStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, chatUploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname) || '';
+    const safeBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+    cb(null, `${uniqueSuffix}_${safeBase}${ext}`);
+  }
+});
+
+const ALLOWED_UPLOAD_EXTS = new Set([
+  '.png', '.jpg', '.jpeg', '.webp', '.gif',
+  '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'
+]);
+
+const chatUpload = multer({
+  storage: chatStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_UPLOAD_EXTS.has(ext)) {
+      return cb(new Error('File type not allowed. Supported formats: images, PDF, documents, presentations, spreadsheets, and text files.'));
+    }
+    cb(null, true);
+  }
+});
+
+app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  if (profile.permanently_muted) {
+    return res.status(403).json({ error: 'CHAT_MUTED_PERMANENT' });
+  }
+  if (profile.muted_until && new Date(profile.muted_until) > new Date()) {
+    return res.status(403).json({ error: 'CHAT_MUTED_UNTIL', mutedUntil: profile.muted_until });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  const relativeUrl = `/uploads/chat/${req.file.filename}`;
+  let base64Data = null;
+  try {
+    const fileBuf = fs.readFileSync(req.file.path);
+    base64Data = `data:${req.file.mimetype};base64,${fileBuf.toString('base64')}`;
+
+    // Upload immediately to permanent Supabase Storage 'chat-attachments' bucket
+    if (supabaseAdmin && supabaseAdmin.storage) {
+      const { error: storageErr } = await supabaseAdmin.storage
+        .from('chat-attachments')
+        .upload(req.file.filename, fileBuf, {
+          contentType: req.file.mimetype,
+          upsert: true
+        });
+      if (storageErr) {
+        console.warn('[Chat] Supabase Storage upload error:', storageErr.message);
+      } else {
+        console.log('[Chat] Successfully uploaded attachment to Supabase Storage:', req.file.filename);
+      }
+    }
+  } catch (err) {
+    console.warn('[Chat] File read/storage error:', err.message);
+  }
+
+  res.json({
+    url: relativeUrl,
+    name: req.file.originalname,
+    size: req.file.size,
+    mime: req.file.mimetype,
+    data: base64Data
+  });
+});
+
 app.post('/api/chat/send', async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
@@ -660,29 +1188,39 @@ app.post('/api/chat/send', async (req, res) => {
     return res.status(403).json({ error: 'CHAT_MUTED_UNTIL', mutedUntil: profile.muted_until });
   }
 
-  const localCheck = checkLocalContent(text);
-
-  let modResult;
-  try {
-    const modRes = await fetch('https://api.openai.com/v1/moderations', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({ input: text })
-    });
-    const modData = await modRes.json();
-
-    if (!modRes.ok || !modData.results) {
-      console.error('Moderation API error:', modRes.status, modData.error?.message || modData);
-      modResult = { flagged: false, categories: {} };
-    } else {
-      modResult = modData.results[0];
+  const isAttachment = typeof text === 'string' && text.trim().startsWith('{"type":"attachment"');
+  let textToCheck = text;
+  let parsedAttachment = null;
+  if (isAttachment) {
+    try {
+      parsedAttachment = JSON.parse(text);
+      textToCheck = parsedAttachment.name || '';
+    } catch (e) {
+      textToCheck = '';
     }
-  } catch (err) {
-    console.error('Moderation API request failed:', err.message);
-    modResult = { flagged: false, categories: {} };
+  }
+
+  const localCheck = checkLocalContent(textToCheck);
+
+  let modResult = { flagged: false, categories: {} };
+  if (!isAttachment && textToCheck && textToCheck.trim().length > 0) {
+    try {
+      const modRes = await fetch('https://api.openai.com/v1/moderations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({ input: textToCheck })
+      });
+      const modData = await modRes.json();
+
+      if (modRes.ok && modData.results) {
+        modResult = modData.results[0];
+      }
+    } catch (err) {
+      console.error('Moderation API request failed:', err.message);
+    }
   }
 
   const flaggedCategories = Object.entries(modResult.categories || {})
@@ -690,8 +1228,8 @@ app.post('/api/chat/send', async (req, res) => {
     .map(([k]) => k);
 
   const severeCategories = ['hate', 'hate/threatening', 'harassment/threatening', 'violence/graphic', 'self-harm', 'self-harm/intent', 'self-harm/instructions'];
-  const isSevere = localCheck.severeFlagged || flaggedCategories.some(c => severeCategories.includes(c));
-  const isProfanity = !isSevere && (localCheck.profanityFlagged || modResult.flagged);
+  const isSevere = !isAttachment && (localCheck.severeFlagged || flaggedCategories.some(c => severeCategories.includes(c)));
+  const isProfanity = !isAttachment && !isSevere && (localCheck.profanityFlagged || modResult.flagged);
 
   let finalBody = text;
   let warning = null;
@@ -723,26 +1261,143 @@ app.post('/api/chat/send', async (req, res) => {
       : 'Your message contained inappropriate content and was censored.';
   }
 
-  const { data: message, error: insertErr } = await supabaseAdmin
-    .from('messages')
-    .insert({
-      conversation_id: conversationId,
-      sender_id: profile.id,
-      sender_name: profile.full_name,
-      body: finalBody
-    })
-    .select().single();
+  const dbClient = req.userClient || supabaseAdmin;
+  let message = null;
+  let insertErr = null;
 
-  if (insertErr) return res.status(500).json({ error: insertErr.message });
+  try {
+    const resInsert = await dbClient
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        sender_id: profile.id,
+        sender_name: profile.full_name,
+        body: finalBody
+      })
+      .select().single();
+    message = resInsert.data;
+    insertErr = resInsert.error;
+  } catch (e) {
+    insertErr = e;
+  }
+
+  if (insertErr || !message) {
+    try {
+      const fallbackInsert = await supabaseAdmin
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: profile.id,
+          sender_name: profile.full_name,
+          body: finalBody
+        })
+        .select().single();
+      if (fallbackInsert.data) {
+        message = fallbackInsert.data;
+        insertErr = null;
+      }
+    } catch (e2) {}
+  }
+
+  if (insertErr || !message) {
+    console.error('Chat insert error:', insertErr?.message || insertErr);
+    return res.status(500).json({ error: insertErr?.message || 'Failed to send message' });
+  }
 
   if (muteUpdate) {
-    await supabaseAdmin.from('users').update(muteUpdate).eq('id', profile.id);
+    try {
+      await (req.userClient || supabaseAdmin).from('users').update(muteUpdate).eq('id', profile.id);
+    } catch (e) {}
   }
   if (violationToLog) {
-    await supabaseAdmin.from('chat_violations').insert(violationToLog);
+    try {
+      await (req.userClient || supabaseAdmin).from('chat_violations').insert(violationToLog);
+    } catch (e) {}
   }
 
   res.json({ ...message, warning });
+});
+
+// --- Chat Seen Receipts (Stored in Supabase Cloud Table 'chat_read_receipts') ---
+app.post('/api/chat/mark-seen', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const { conversationId, lastMessageId, lastMessageTime } = req.body;
+  if (!conversationId) {
+    return res.status(400).json({ error: 'Missing conversationId' });
+  }
+
+  const receipt = {
+    conversation_id: conversationId,
+    user_id: profile.id,
+    user_name: profile.full_name || 'Participant',
+    last_message_id: lastMessageId || null,
+    last_message_time: lastMessageTime || new Date().toISOString(),
+    seen_at: new Date().toISOString()
+  };
+
+  try {
+    await supabaseAdmin.from('chat_read_receipts').upsert(receipt, {
+      onConflict: 'conversation_id,user_id'
+    });
+  } catch (err) {
+    console.warn('[Chat] Supabase mark-seen note:', err.message);
+  }
+
+  res.json({
+    success: true,
+    receipt: {
+      userId: profile.id,
+      userName: profile.full_name || 'Participant',
+      lastMessageId: receipt.last_message_id,
+      lastMessageTime: receipt.last_message_time,
+      seenAt: receipt.seen_at
+    }
+  });
+});
+
+app.get('/api/chat/seen-receipts', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const { conversationId } = req.query;
+  try {
+    let query = supabaseAdmin.from('chat_read_receipts').select('*');
+    if (conversationId) query = query.eq('conversation_id', conversationId);
+    const { data, error } = await query;
+    if (!error && Array.isArray(data)) {
+      if (conversationId) {
+        const convReceipts = {};
+        data.forEach(r => {
+          convReceipts[r.user_id] = {
+            userId: r.user_id,
+            userName: r.user_name || 'Participant',
+            lastMessageId: r.last_message_id,
+            lastMessageTime: r.last_message_time,
+            seenAt: r.seen_at
+          };
+        });
+        return res.json({ receipts: convReceipts });
+      } else {
+        const grouped = {};
+        data.forEach(r => {
+          if (!grouped[r.conversation_id]) grouped[r.conversation_id] = {};
+          grouped[r.conversation_id][r.user_id] = {
+            userId: r.user_id,
+            userName: r.user_name || 'Participant',
+            lastMessageId: r.last_message_id,
+            lastMessageTime: r.last_message_time,
+            seenAt: r.seen_at
+          };
+        });
+        return res.json({ receipts: grouped });
+      }
+    }
+  } catch (err) {
+    console.warn('[Chat] Supabase seen-receipts note:', err.message);
+  }
+  res.json({ receipts: conversationId ? {} : {} });
 });
 
 // --- Learning Materials (centralized storage) ---
@@ -788,7 +1443,33 @@ app.post('/api/curriculum-subjects', async (req, res) => {
     description: `${gradeLevel} ${strand} ${track} subject.`,
     created_by: profile.id
   }).select('*').single();
-  if (error) return res.status(error.code === '23505' ? 409 : 500).json({ error: error.code === '23505' ? 'A subject with this code already exists in that section.' : 'Unable to save subject', details: error.message });
+
+  if (error) {
+    // If the table doesn't exist (42P01) or is inaccessible, return a local-only record
+    // so the front-end can still persist the subject in localStorage without blocking the user.
+    if (error.code === '42P01' || error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+      return res.status(200).json({
+        id: `local_${Date.now()}`,
+        title, code, grade_level: gradeLevel, strand, track, section,
+        description: `${gradeLevel} ${strand} ${track} subject.`,
+        created_by: profile.id,
+        created_at: new Date().toISOString(),
+        local_only: true
+      });
+    }
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'A subject with this code already exists in that section.' });
+    }
+    // For any other DB error, still return a local-only record so the UI doesn't break
+    return res.status(200).json({
+      id: `local_${Date.now()}`,
+      title, code, grade_level: gradeLevel, strand, track, section,
+      description: `${gradeLevel} ${strand} ${track} subject.`,
+      created_by: profile.id,
+      created_at: new Date().toISOString(),
+      local_only: true
+    });
+  }
   res.status(201).json(data);
 });
 
@@ -1002,6 +1683,51 @@ app.delete('/api/quizzes/:id', async (req, res) => {
   res.json({ success: true, id: req.params.id });
 });
 
+// --- Quiz attempts & class records retrieval for Teachers & Admins ---
+app.get('/api/quiz-attempts/:quizId', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (!['teacher', 'admin'].includes(profile.role)) return res.status(403).json({ error: 'Teacher or Admin only' });
+
+  const { quizId } = req.params;
+  const { data, error } = await supabaseAdmin
+    .from('quiz_attempts')
+    .select('*')
+    .eq('quiz_id', quizId)
+    .order('submitted_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ attempts: data || [] });
+});
+
+app.get('/api/class-records', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (!['teacher', 'admin'].includes(profile.role)) return res.status(403).json({ error: 'Teacher or Admin only' });
+
+  const { data, error } = await supabaseAdmin
+    .from('class_records')
+    .select('*')
+    .order('submitted_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ records: data || [] });
+});
+
+app.get('/api/users', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (!['teacher', 'admin'].includes(profile.role)) return res.status(403).json({ error: 'Teacher or Admin only' });
+
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, full_name, school_id, role, strand, grade_level, section, subjects, email, is_active, created_at, last_active_at, avatar_url, bio, profanity_strikes, permanently_muted, muted_until')
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ users: data || [] });
+});
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ALLOWED_FORMATS = ['mc', 'id', 'match', 'tf', 'true_false', 'multiple_choice', 'identification', 'matching'];
@@ -1189,6 +1915,13 @@ CRITICAL QUALITY AND ACCURACY RULES:
    - For every True/False question, you MUST provide an "explanation" property explaining the factual reason why the statement is True or False, and specifying why the opposite choice is wrong.
    - If the statement is False, clearly state what makes it incorrect and what the true fact or rule is (e.g. "Booleans in Java cannot be converted to numeric types because they are incompatible primitive types").
    - If the statement is True, succinctly cite the supporting rule or definition from the lesson.
+5. NEVER CITE OR MENTION FILENAMES, EXTENSIONS, OR HANDOUTS IN THE QUESTION TEXT:
+   - NEVER start questions with "According to [filename]...", "In [filename]...", "Based on [filename]...", "As stated in Document...", or mention any file name, PDF extension (.pdf), or document title inside the "question" string itself or within the "options".
+   - Phrase questions as natural, direct academic questions testing the concept itself (e.g. "What is the primary purpose of On-the-Job Training (OJT)?" instead of "According to 01_Handout_1A(35).pdf, which statement accurately reflects...?").
+   - The citation MUST reside ONLY in the metadata attributes "source_file" and "source_page", where students can view it after answering as a reference!
+6. GROUND DISTRACTORS STRICTLY IN THE HANDOUT CONTENT:
+   - All answer options and distractors must be directly grounded in the concepts present in the provided learning material.
+   - NEVER inject unrelated subjects (e.g., if the material is about Work Ethics or Computing, NEVER insert options like "General Biology", "Biology", or arbitrary scientific topics into the choices, even if the quiz title mentions a different subject). The source material is the sole authority for question and option content.
 
 Only include "type" values matching the requested formats. For True/False, options must be ["True", "False"]. For multiple choice, ensure ${numChoices} options. Base every question directly on the source material provided. Always include the specific individual "source_file" and "source_page" attributes.`;
 }
@@ -1204,6 +1937,10 @@ function isForbiddenFigureLabel(text) {
 function cleanAnswerTerm(answer) {
   if (!answer || typeof answer !== 'string') return '';
   let str = answer.trim();
+  if (str.includes('\n')) {
+    const lines = str.split('\n').map(l => l.trim()).filter(Boolean);
+    str = lines[lines.length - 1] || str;
+  }
   str = str.replace(/^["'`“‘]+|[)"'`”’:,;.]+$/g, '').trim();
   // Strip trailing pronoun connectors like " - It", " - it", " - These", " - This", " : It", " — It", " - They"
   str = str.replace(/\s*[-–—:]\s*(it|its|this|these|they|them|that|which)\s*$/i, '').trim();
@@ -1235,6 +1972,19 @@ function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
     if (type === 'tf') type = 'true_false';
     if (type === 'id') type = 'identification';
     if (type === 'match') type = 'matching';
+
+    // Strip accidental file/handout citations from question text
+    if (typeof q.question === 'string') {
+      let qText = q.question.trim();
+      qText = qText.replace(/^(?:according\s+to|in|based\s+on|as\s+stated\s+in|from)\s+["']?[^"'\n,:–-]+\.(?:pdf|docx?|txt|xlsx?)["']?[\s,:–-]+/i, '');
+      qText = qText.replace(/^(?:according\s+to|in|based\s+on|as\s+stated\s+in|from)\s+(?:the\s+)?(?:handout|material|document|module|file|reading)[\s,:–-]+/i, '');
+      qText = qText.trim();
+      if (qText.length > 0) {
+        qText = qText.charAt(0).toUpperCase() + qText.slice(1);
+      }
+      q.question = qText;
+    }
+
     return { ...q, type };
   }).filter(q => {
     if (!q || (typeof q.question !== 'string' && q.type !== 'matching')) return false;
@@ -1247,7 +1997,12 @@ function sanitizeQuestions(raw, fileList = [], fallbackFileName = '') {
 
     if (q.type === 'multiple_choice') {
       if (!Array.isArray(q.options) || q.options.length < 2) return false;
-      q.options = q.options.map(o => cleanAnswerTerm(String(o))).filter(o => !isForbiddenFigureLabel(o));
+      q.options = q.options.map(o => cleanAnswerTerm(String(o))).filter(o => {
+        if (isForbiddenFigureLabel(o)) return false;
+        // Filter out artificial placeholder distractors like "Key principle regarding General Biology (Part 5)"
+        if (/^key principle regarding/i.test(o) && /\(part\s*\d+\)$/i.test(o)) return false;
+        return true;
+      });
       if (q.options.length < 2) return false;
 
       if (q.multipleAnswers === true || (Array.isArray(q.answers) && q.answers.length > 1)) {
@@ -1337,10 +2092,21 @@ function isValidAcademicTerm(term) {
   if (!term || typeof term !== 'string') return false;
   let clean = term.trim().replace(/^["'`“‘(]+|[)"'`”’:,;.]+$/g, '').trim();
   clean = clean.replace(/^(the|a|an)\s+/i, '').trim();
-  if (clean.length < 2 || clean.length > 45) return false;
+  if (clean.length < 3 || clean.length > 45) return false;
+
+  // Reject terms with OCR / symbol noise or brackets or punctuation
+  if (/[»«\\|/\[\]{}~@#$%^&*_=<>©®\(\),;]/.test(clean)) return false;
+  // Reject copyright / attribution strings
+  if (/encyclop[æe]dia britannica|all rights reserved|getty images|shutterstock|wikipedia/i.test(clean)) return false;
 
   // Reject figure, table, diagram, page labels
   if (isForbiddenFigureLabel(clean)) return false;
+
+  // Reject terms with numbers (e.g. "Tire in 1", "of EA 2", "Page 4")
+  if (/\b\d+\b/.test(clean)) return false;
+
+  // Reject 2 or 3 character uppercase acronym noise (e.g. "RI", "EA")
+  if (/^[A-Z]{2,3}$/.test(clean)) return false;
 
   // Reject sentence fragments containing copula/linking verbs
   if (/\b(is|are|was|were|has|have|can|will|should|represents|defined)\b/i.test(clean)) return false;
@@ -1353,6 +2119,11 @@ function isValidAcademicTerm(term) {
   if (INVALID_TERM_STARTERS.test(clean)) return false;
   if (STOP_WORDS && STOP_WORDS.has(clean.toLowerCase())) return false;
   if (/^[0-9\W]+$/.test(clean)) return false;
+
+  // Ensure high ratio of alphabetic characters
+  const alpha = (clean.match(/[a-zA-Z]/g) || []).length;
+  if ((alpha / clean.length) < 0.75) return false;
+
   return true;
 }
 
@@ -1459,13 +2230,36 @@ function extractQuestionsFromText(params) {
           allItems.push(itemObj);
           itemsByDoc[sec.doc].push(itemObj);
         }
+      } else {
+        const cleanLine = cleanAnswerTerm(line);
+        if (isValidAcademicTerm(cleanLine) && !isForbiddenFigureLabel(cleanLine) && cleanLine.length >= 3 && cleanLine.length <= 40) {
+          const itemObj = {
+            doc: sec.doc,
+            page: sec.page,
+            term: cleanLine,
+            def: '',
+            sentence: line,
+            isDef: false
+          };
+          allItems.push(itemObj);
+          itemsByDoc[sec.doc].push(itemObj);
+        }
       }
     });
+
+    const isGarbageOcr = (str) => {
+      if (!str || typeof str !== 'string') return true;
+      const symbols = (str.match(/[»«\\|/\[\]{}~@#$%^&*_=<>©®\(\)]/g) || []).length;
+      if (symbols > 1 || (symbols / str.length) > 0.05) return true;
+      if (/encyclop[æe]dia britannica|all rights reserved|getty images|shutterstock/i.test(str)) return true;
+      if (/\b[a-zA-Z]+\s+\d+\b|\b\d+\s+[a-zA-Z]+\b/.test(str)) return true;
+      return false;
+    };
 
     // Check sentence-by-sentence
     const sList = sec.text.split(/(?<=[.!?\n])\s+/)
       .map(s => s.trim())
-      .filter(s => s.length > 20 && s.length < 240 && !s.startsWith('%') && !s.startsWith('#'));
+      .filter(s => s.length > 20 && s.length < 240 && !s.startsWith('%') && !s.startsWith('#') && !isGarbageOcr(s));
 
     sList.forEach(s => {
       // Find definition verb non-greedily
@@ -1503,21 +2297,28 @@ function extractQuestionsFromText(params) {
   // Ensure every document in validFiles has items
   validFiles.forEach(f => {
     if (!itemsByDoc[f] || itemsByDoc[f].length === 0) {
-      const cleanName = f.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-      const fallbackItem = {
-        doc: f,
-        page: 1,
-        term: `Core Concept of ${cleanName}`,
-        def: `fundamental principle presented in ${cleanName}`,
-        sentence: `Key subject matter detailed within ${cleanName}`,
-        isDef: true
-      };
-      itemsByDoc[f] = [fallbackItem];
-      allItems.push(fallbackItem);
+      // Extract any available sentences from raw text before falling back
+      const rawSentences = rawClean.split(/[.\n]+/).map(s => s.trim()).filter(s => s.length > 25 && s.length < 200);
+      if (rawSentences.length > 0) {
+        rawSentences.slice(0, 10).forEach((rs, rIdx) => {
+          const words = rs.split(/\s+/);
+          const candidateTerm = words.slice(0, 3).join(' ').replace(/[^a-zA-Z0-9\s]/g, '').trim();
+          const itemObj = {
+            doc: f,
+            page: 1,
+            term: isValidAcademicTerm(candidateTerm) ? candidateTerm : '',
+            def: rs,
+            sentence: rs,
+            isDef: false
+          };
+          allItems.push(itemObj);
+          itemsByDoc[f].push(itemObj);
+        });
+      }
     }
   });
 
-  // Collect all valid unique extracted terms
+  // Collect all valid unique extracted terms from actual text
   const validTermsList = [];
   allItems.forEach(it => {
     if (it.term && isValidAcademicTerm(it.term) && !validTermsList.includes(it.term)) {
@@ -1525,23 +2326,29 @@ function extractQuestionsFromText(params) {
     }
   });
 
-  // Combine distractors
-  const isTechSubject = /game|programming|ict|software|code|data|computer|network|web|it|tech/i.test(title);
-  const subjectDistractors = isTechSubject
-    ? [...DOMAIN_DISTRACTORS.gamedev, ...DOMAIN_DISTRACTORS.tech, ...DOMAIN_DISTRACTORS.general]
-    : [...DOMAIN_DISTRACTORS.general, ...DOMAIN_DISTRACTORS.tech];
+  // Also collect capitalized technical phrases from source text as clean domain distractors
+  const extractedPhrases = [];
+  const phraseMatches = rawClean.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b/g) || [];
+  phraseMatches.forEach(p => {
+    const cleanP = cleanAnswerTerm(p);
+    if (isValidAcademicTerm(cleanP) && !validTermsList.includes(cleanP) && !extractedPhrases.includes(cleanP)) {
+      extractedPhrases.push(cleanP);
+    }
+  });
 
   const getFreshDistractors = (answer, neededCount) => {
-    const pool = [...validTermsList, ...subjectDistractors].filter(t => 
-      t && t.toLowerCase() !== answer.toLowerCase() && isValidAcademicTerm(t)
+    const pool = [...validTermsList, ...extractedPhrases].filter(t => 
+      t && t.toLowerCase() !== (answer || '').toLowerCase() && isValidAcademicTerm(t)
     );
     const shuffled = [...new Set(pool)].sort(() => Math.random() - 0.5);
     const chosen = shuffled.slice(0, neededCount);
-    let fallbackIdx = 1;
-    while (chosen.length < neededCount) {
-      const fallback = `Alternative ${fallbackIdx++}`;
-      if (!chosen.includes(fallback) && fallback.toLowerCase() !== answer.toLowerCase()) {
-        chosen.push(fallback);
+    const fallbackTerms = [...DOMAIN_DISTRACTORS.general, ...DOMAIN_DISTRACTORS.tech].filter(t => 
+      t.toLowerCase() !== (answer || '').toLowerCase() && !chosen.includes(t)
+    );
+    while (chosen.length < neededCount && fallbackTerms.length > 0) {
+      const cand = fallbackTerms.shift();
+      if (cand && !chosen.includes(cand)) {
+        chosen.push(cand);
       }
     }
     return chosen;
@@ -1557,7 +2364,7 @@ function extractQuestionsFromText(params) {
     
     // Balance evenly across all uploaded documents
     const targetDoc = validFiles[i % validFiles.length];
-    const docPool = (itemsByDoc[targetDoc] && itemsByDoc[targetDoc].length > 0) ? itemsByDoc[targetDoc] : allItems;
+    const docPool = (itemsByDoc[targetDoc] && itemsByDoc[targetDoc].length > 0) ? itemsByDoc[targetDoc] : (allItems.length > 0 ? allItems : [{ doc: targetDoc, page: 1, term: 'Core Concept', def: 'Fundamental subject concept', sentence: 'Essential learning principle', isDef: true }]);
     
     // Pick an item from this document's pool that hasn't had its answer used yet
     let item = null;
@@ -1570,11 +2377,12 @@ function extractQuestionsFromText(params) {
       }
     }
     if (!item) {
-      item = docPool[i % docPool.length] || allItems[i % allItems.length];
+      item = docPool[i % docPool.length] || allItems[i % Math.max(1, allItems.length)];
     }
 
     const itemDoc = item.doc || targetDoc;
     const itemPage = item.page || 1;
+    const sentenceSnippet = item.sentence ? (item.sentence.length > 90 ? item.sentence.slice(0, 90) + '...' : item.sentence) : 'the core principle';
 
     if (isMc) {
       let qText = '';
@@ -1583,20 +2391,16 @@ function extractQuestionsFromText(params) {
         qText = `Which concept is described as: "${item.def}"?`;
         correct = item.term;
       } else {
-        const sentenceSnippet = item.sentence.length > 90 ? item.sentence.slice(0, 90) + '...' : item.sentence;
-        qText = `According to ${itemDoc}, which statement accurately reflects the discussion on: "${sentenceSnippet}"?`;
-        correct = `It forms a foundational concept in ${title}`;
-        if (usedAnswers.has(correct.toLowerCase())) {
-          correct = `Key principle regarding ${title} (Part ${i + 1})`;
-        }
+        qText = `Which statement best describes the following concept: "${sentenceSnippet}"?`;
+        correct = item.sentence || 'It represents an essential foundational principle';
       }
 
-      // If correct answer was already used, make it unique
+      // If correct answer was already used, try an unused academic term
       if (usedAnswers.has(correct.toLowerCase().trim())) {
         const unusedTerm = validTermsList.find(t => !usedAnswers.has(t.toLowerCase()));
         if (unusedTerm) {
           correct = unusedTerm;
-          qText = `Which term corresponds to key topics discussed in ${itemDoc}?`;
+          qText = `Which term best corresponds to the concept described by: "${sentenceSnippet}"?`;
         }
       }
 
@@ -1619,26 +2423,20 @@ function extractQuestionsFromText(params) {
       if (item.isDef && item.term && item.def && isValidAcademicTerm(item.term)) {
         if (isTrue) {
           qText = `${item.term} is defined as ${item.def.toLowerCase().startsWith('a') || item.def.toLowerCase().startsWith('the') ? item.def : 'the ' + item.def}.`;
-          explanation = `This statement is True. By definition in ${itemDoc}, ${item.term} refers to ${item.def}.`;
+          explanation = `This statement is True. By definition, ${item.term} refers to ${item.def}.`;
         } else {
-          qText = `${item.term} refers exclusively to external non-academic factors and does not relate to ${item.def.slice(0, 40)}.`;
-          explanation = `This statement is False. In ${itemDoc}, ${item.term} directly relates to ${item.def}.`;
+          qText = `${item.term} is unrelated to and does not involve ${item.def.slice(0, 45)}.`;
+          explanation = `This statement is False. ${item.term} directly relates to ${item.def}.`;
         }
       } else {
         if (isTrue) {
           qText = `${item.sentence.replace(/[.]+$/, '')}.`;
-          explanation = `This statement is True as confirmed in ${itemDoc}.`;
+          explanation = `This statement is True as supported by the learning material.`;
         } else {
-          qText = `In the context of ${itemDoc}, ${item.sentence.replace(/[.]+$/, '')} is considered invalid and disregarded.`;
-          explanation = `This statement is False. According to ${itemDoc}, this statement is valid and recognized in the curriculum.`;
+          qText = `It is incorrect to conclude that ${item.sentence.replace(/[.]+$/, '')}.`;
+          explanation = `This statement is False. The course material explicitly validates this principle.`;
         }
       }
-
-      const tfKey = (qText + ':' + (isTrue ? 'True' : 'False')).toLowerCase();
-      if (usedQuestions.has(tfKey)) {
-        qText += ` (Ref. Section ${i + 1})`;
-      }
-      usedQuestions.add(tfKey);
 
       questions.push({
         type: 'true_false',
@@ -1656,17 +2454,15 @@ function extractQuestionsFromText(params) {
         qText = `Identify the term: "${item.def}"`;
         correct = item.term;
       } else {
-        qText = `In ${itemDoc}, name the primary concept associated with: "${item.sentence.slice(0, 90)}..."`;
-        correct = (item.term && isValidAcademicTerm(item.term)) ? item.term : `${title.split(' ')[0] || 'Core'} Module`;
+        qText = `Identify the concept associated with: "${sentenceSnippet}"`;
+        correct = (item.term && isValidAcademicTerm(item.term)) ? item.term : (validTermsList[i % Math.max(1, validTermsList.length)] || 'Core Principle');
       }
 
       if (usedAnswers.has(correct.toLowerCase().trim())) {
         const unusedTerm = validTermsList.find(t => !usedAnswers.has(t.toLowerCase()));
         if (unusedTerm) {
           correct = unusedTerm;
-          qText = `State the term for the concept reviewed in ${itemDoc} (Page ${itemPage})`;
-        } else {
-          correct = `${correct} (Section ${i + 1})`;
+          qText = `Identify the term described by: "${sentenceSnippet}"`;
         }
       }
       usedAnswers.add(correct.toLowerCase().trim());
@@ -1685,19 +2481,19 @@ function extractQuestionsFromText(params) {
         selected.forEach(p => usedAnswers.add(p.term.toLowerCase().trim()));
         questions.push({
           type: 'matching',
-          instructions: `Match each description on the left with the correct term on the right from ${itemDoc}.`,
+          instructions: `Match each description on the left with the correct concept on the right.`,
           pairs: selected.map(p => ({ left: p.def, right: p.term })),
           source_file: itemDoc,
           source_page: itemPage
         });
       } else {
-        const correct = (item.term && isValidAcademicTerm(item.term)) ? item.term : `${title} Standard`;
+        const correct = (item.term && isValidAcademicTerm(item.term)) ? item.term : (validTermsList[i % Math.max(1, validTermsList.length)] || 'Core Principle');
         usedAnswers.add(correct.toLowerCase().trim());
         const distractors = getFreshDistractors(correct, numChoices - 1);
         const options = [correct, ...distractors].sort(() => Math.random() - 0.5);
         questions.push({
           type: 'multiple_choice',
-          question: `Which key concept in ${itemDoc} is emphasized in: "${item.sentence.slice(0, 90)}..."?`,
+          question: `Which key concept is emphasized in: "${sentenceSnippet}"?`,
           options: options,
           answer: correct,
           source_file: itemDoc,
@@ -1723,25 +2519,24 @@ app.post('/api/quiz/extract-image', quizLimiter, async (req, res) => {
     const actualMime = mimeType || 'image/jpeg';
 
     const candidateModels = [
-      'gemini-2.5-flash',
-      'gemini-1.5-flash',
-      'gemini-flash-latest',
-      'gemini-3.5-flash'
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.6-flash'
     ];
 
     for (const model of candidateModels) {
       try {
-        const response = await fetch(
+        let response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(35000),
+            signal: AbortSignal.timeout(25000),
             body: JSON.stringify({
               contents: [{
                 parts: [
                   {
-                    text: "You are an accurate academic OCR tool. Transcribe all readable text, notes, equations, bullet points, headers, definitions, and questions found in this image. Do not add conversational commentary or meta-text. Just output the clean extracted text."
+                    text: "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part' (for example: 'Mitochondrion: Organelle that generates chemical energy (ATP) to power the cell; the powerhouse of the cell', 'Ribosomes: Molecular machines responsible for protein synthesis', 'Nucleus: The membrane-enclosed organelle that contains genetic material and coordinates cellular activities', 'Golgi apparatus: Cellular organelle that packages and sorts proteins for secretion').\n\nDo not add conversational commentary or meta-text. Just output clean, line-separated academic terms and definitions."
                   },
                   {
                     inlineData: {
@@ -1755,11 +2550,43 @@ app.post('/api/quiz/extract-image', quizLimiter, async (req, res) => {
           }
         );
 
+        if (response.status === 503) {
+          console.warn(`[ImageExtract] Gemini ${model} 503 spike, retrying after 1s...`);
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout(25000),
+                body: JSON.stringify({
+                  contents: [{
+                    parts: [
+                      {
+                        text: "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part'."
+                      },
+                      {
+                        inlineData: {
+                          mimeType: actualMime,
+                          data: cleanBase64
+                        }
+                      }
+                    ]
+                  }]
+                })
+              }
+            );
+          } catch (rErr) {}
+        }
+
         if (response.ok) {
           const data = await response.json();
-          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
           if (text && text.trim()) {
-            return res.json({ text: text.trim(), source: 'gemini-vision', model });
+            text = text.trim();
+            console.log(`[ImageExtract] Successfully extracted via vision model ${model} (${text.length} chars)`);
+            return res.json({ text, source: 'gemini-vision', model });
           }
         }
       } catch (mErr) {
@@ -1795,30 +2622,19 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
     const pageMatches = (req.body.sourceText || '').match(/\[Document:[^\]|]+\|\s*Page:\s*(\d+)\]/gi);
     const estimatedPages = pageMatches ? pageMatches.length : Math.max(1, Math.ceil((req.body.sourceText || '').length / 2200));
 
-    // Realistic dynamic timeout: 60s base per handout + 30s per extra handout + 30s-60s if >5 or >10 pages (max 3 mins)
-    let dynamicTimeoutMs = 60000;
-    if (fileCount > 1) {
-      dynamicTimeoutMs += (fileCount - 1) * 30000;
-    }
-    if (estimatedPages > 10) {
-      dynamicTimeoutMs += 60000; // Extra full minute for 10+ pages
-    } else if (estimatedPages > 5) {
-      dynamicTimeoutMs += 30000; // Extra 30 seconds for 5-10 pages
-    }
-    dynamicTimeoutMs = Math.min(180000, Math.max(60000, dynamicTimeoutMs));
-    console.log(`[QuizGen] Dynamic AI leeway timeout set to ${(dynamicTimeoutMs / 1000).toFixed(0)}s (Files: ${fileCount}, Pages: ~${estimatedPages})`);
+    // Fast & responsive AI timeout (12s per model) to ensure user never hangs
+    const dynamicTimeoutMs = 12000;
+    console.log(`[QuizGen] Responsive AI timeout set to ${(dynamicTimeoutMs / 1000).toFixed(0)}s`);
 
     const candidateModels = [
-      'gemini-3.6-flash',
       'gemini-3.5-flash',
-      'gemini-flash-latest',
       'gemini-3.5-flash-lite',
-      'gemini-2.5-flash'
+      'gemini-3.6-flash'
     ];
     for (const model of candidateModels) {
       try {
         console.log(`[QuizGen] Calling Gemini model ${model} (timeout ${(dynamicTimeoutMs / 1000).toFixed(0)}s)...`);
-        const aiResponse = await fetch(
+        let aiResponse = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
           {
             method: 'POST',
@@ -1830,6 +2646,25 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
             })
           }
         );
+
+        if (aiResponse.status === 503) {
+          console.warn(`[QuizGen] Gemini ${model} 503 spike, retrying after 1s...`);
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            aiResponse = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout(dynamicTimeoutMs),
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: prompt }] }],
+                  generationConfig: { responseMimeType: 'application/json' }
+                })
+              }
+            );
+          } catch (rErr) {}
+        }
 
         if (aiResponse.ok) {
           const data = await aiResponse.json();

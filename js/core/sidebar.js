@@ -89,12 +89,39 @@ function initDashboardShell() {
     sidebarMenu.appendChild(a);
   });
 
-  renderPage('dashboard');
+  const requestedPage = new URLSearchParams(window.location.search).get('page');
+  let attachmentReturn = null;
+  try {
+    const savedReturn = localStorage.getItem('scholaria_chat_attachment_return')
+      || sessionStorage.getItem('scholaria_chat_attachment_return');
+    attachmentReturn = savedReturn ? JSON.parse(savedReturn) : null;
+    localStorage.removeItem('scholaria_chat_attachment_return');
+    sessionStorage.removeItem('scholaria_chat_attachment_return');
+  } catch (_) {}
+  if (typeof resetChatState === 'function') resetChatState();
+  if (typeof seedLocalNotificationTestSamples === 'function') seedLocalNotificationTestSamples();
+  const initialPage = attachmentReturn?.conversationId
+    ? 'chats'
+    : (requestedPage === 'quiz' && (ROLE === 'teacher' || ROLE === 'admin') ? 'quiz' : 'dashboard');
+  renderPage(initialPage);
+  if (attachmentReturn?.conversationId) {
+    setTimeout(async () => {
+      if (currentPage !== 'chats') renderPage('chats');
+      if (typeof loadConversationsFromDB === 'function') await loadConversationsFromDB();
+      if (typeof openConversation === 'function') openConversation(attachmentReturn.conversationId);
+    }, 450);
+  }
   refreshNotificationsUI();
   if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
   if (typeof showNewsAlertIfNeeded === 'function') showNewsAlertIfNeeded();
-  if (typeof resetChatState === 'function') resetChatState();
-  loadConversationsFromDB().then(ensureChatRealtimeSubscription);
+  if (typeof ensureChatRealtimeSubscription === 'function') ensureChatRealtimeSubscription();
+  if (typeof loadConversationsFromDB === 'function') {
+    loadConversationsFromDB().then(loaded => {
+      if (loaded !== false && ROLE === 'teacher') {
+        if (typeof refreshTeacherUnreadMessageCount === 'function') refreshTeacherUnreadMessageCount(false);
+      }
+    });
+  }
 }
 
 function getPageContent(role, page) {
@@ -117,6 +144,12 @@ let isFetchingClassRecAttempts = false;
 function setClassRecSectionFilter(sec) {
   classRecSectionFilter = sec;
   if (typeof renderPage === 'function') renderPage('classrec');
+}
+
+function printClassRecordSection(section) {
+  const targetSection = section || classRecSectionFilter || classRecExpandedSection || (managedSections[0]?.name || 'Section A');
+  classRecSectionFilter = targetSection;
+  if (typeof openSectionReportModal === 'function') openSectionReportModal(targetSection);
 }
 
 function openExpandedSectionView(sec) {
@@ -338,6 +371,7 @@ async function loadClassRecAttempts(force = true) {
     });
 
     classRecAttemptsCache = combined;
+    if (typeof currentPage !== 'undefined' && currentPage === 'quiz') refreshQuizAttemptCountLabels();
   } catch(e) {
     console.error('Error loading class record attempts:', e);
   } finally {
@@ -363,8 +397,20 @@ function saveCustomClassRecEntry(studentKey, data) {
 }
 
 function isStudentHandledByTeacher(student, teacherProfile) {
-  // Teachers and Admins are permitted to view and inspect all students' progress specification and academic records
-  return true;
+  if (typeof ROLE !== 'undefined' && ROLE === 'admin') return true;
+  if (!teacherProfile || !student) return false;
+  const studentSection = (student.section || '').trim().toLowerCase();
+  if (!studentSection) return false;
+  if (typeof isSectionArchived === 'function' && isSectionArchived(studentSection)) return false;
+
+  const teacherSections = (teacherProfile.section || '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean)
+    .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+
+  if (!teacherSections.length) return false;
+  return teacherSections.includes(studentSection);
 }
 
 function deduplicateQuizAttempts(attemptsList) {
@@ -427,6 +473,120 @@ function getAllRecordedAttempts() {
   } catch(e) {}
 
   return deduplicateQuizAttempts(pool);
+}
+
+function getTeacherAnalysisSections(selectedQuiz) {
+  const isTeacher = typeof ROLE !== 'undefined' && ROLE === 'teacher';
+  const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
+  const allManaged = typeof managedSections !== 'undefined' && Array.isArray(managedSections)
+    ? managedSections.filter(s => !s.isArchived)
+    : [];
+
+  let candidateSections = allManaged.length
+    ? allManaged
+    : (typeof SECTIONS !== 'undefined' ? SECTIONS.map(name => ({ name, strand: '' })) : []);
+
+  if (isTeacher) {
+    const teacherStrand = String(prof.strand || '').trim().toUpperCase();
+    const teacherSections = prof.section
+      ? prof.section.split(',').map(s => s.trim().toLowerCase()).filter(Boolean).filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec))
+      : [];
+
+    if (teacherSections.length === 0) {
+      return [];
+    }
+
+    candidateSections = candidateSections.filter(sec => {
+      const secName = (sec.name || sec).trim().toLowerCase();
+      const secStrand = String(sec.strand || '').trim().toUpperCase();
+
+      if (typeof isSectionArchived === 'function' && isSectionArchived(secName)) return false;
+      if (!teacherSections.includes(secName)) return false;
+      if (secStrand && teacherStrand && secStrand !== 'ALL' && teacherStrand !== 'ALL') {
+        if (secStrand !== teacherStrand) return false;
+      }
+      return true;
+    });
+  }
+
+  if (selectedQuiz && selectedQuiz.strand) {
+    const quizStrand = String(selectedQuiz.strand).trim().toUpperCase();
+    if (quizStrand && quizStrand !== 'ALL' && quizStrand !== 'ALL STRANDS') {
+      candidateSections = candidateSections.filter(sec => {
+        const secStrand = String(sec.strand || '').trim().toUpperCase();
+        return !secStrand || secStrand === 'ALL' || secStrand === quizStrand;
+      });
+    }
+  }
+
+  const names = candidateSections.map(s => s.name || s);
+  return typeof sortSectionsNaturally === 'function' ? sortSectionsNaturally(names) : [...new Set(names)].sort();
+}
+window.getTeacherAnalysisSections = getTeacherAnalysisSections;
+
+function getQuizUniqueStudentAttemptCount(quizId, quizTitle) {
+  const attempts = typeof getAllRecordedAttempts === 'function' ? getAllRecordedAttempts() : [];
+  const registered = typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : [];
+  const students = registered.filter(user => String(user.role || '').toLowerCase() === 'student');
+  const teachersAndAdmins = registered.filter(user => {
+    const r = String(user.role || '').toLowerCase();
+    return r === 'teacher' || r === 'admin' || r === 'faculty';
+  });
+
+  const studentKeys = new Set();
+  attempts.filter(attempt => {
+    const attemptQuizId = String(attempt.quiz_id || '').trim();
+    return attemptQuizId
+      ? attemptQuizId === String(quizId)
+      : String(attempt.quiz_title || '').trim().toLowerCase() === String(quizTitle || '').trim().toLowerCase();
+  }).forEach(attempt => {
+    if (attempt.is_preview || (typeof isArtificialSeedAttempt === 'function' && isArtificialSeedAttempt(attempt))) return;
+    const id = String(attempt.student_id || attempt.studentId || attempt.user_id || attempt.email || attempt.student_email || '').trim().toLowerCase();
+    if (!id) return;
+    const email = String(attempt.student_email || attempt.email || '').trim().toLowerCase();
+    const name = String(attempt.student_name || attempt.studentName || attempt.name || '').trim().toLowerCase();
+
+    // Skip attempts made by teachers or administrators
+    const isTeacherOrAdmin = teachersAndAdmins.some(u => {
+      const uIds = [u.id, u.dbId, u.school_id].filter(Boolean).map(uid => String(uid).trim().toLowerCase());
+      const uEmail = String(u.email || '').trim().toLowerCase();
+      const uName = String(u.name || u.full_name || '').trim().toLowerCase();
+      return (id && uIds.includes(id)) || (email && uEmail && email === uEmail) || (name && uName && name === uName);
+    });
+    if (isTeacherOrAdmin) return;
+
+    const student = students.find(user =>
+      [user.id, user.dbId, user.school_id].some(userId => userId && String(userId).trim().toLowerCase() === id) ||
+      (email && String(user.email || '').trim().toLowerCase() === email) ||
+      (name && String(user.name || user.full_name || '').trim().toLowerCase() === name)
+    );
+    if (!student) return;
+    studentKeys.add(String(student.dbId || student.id || student.school_id).trim().toLowerCase());
+  });
+  return studentKeys.size;
+}
+
+let quizManagerAttemptRealtimeChannel = null;
+let quizManagerAttemptRefreshTimer = null;
+function ensureQuizManagerAttemptRealtime() {
+  if (quizManagerAttemptRealtimeChannel || typeof db === 'undefined' || !db?.channel) return;
+  const scheduleRefresh = () => {
+    if (typeof currentPage !== 'undefined' && currentPage !== 'quiz') return;
+    clearTimeout(quizManagerAttemptRefreshTimer);
+    quizManagerAttemptRefreshTimer = setTimeout(() => loadClassRecAttempts(true), 500);
+  };
+  quizManagerAttemptRealtimeChannel = db.channel('quiz-manager-attempt-counts')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'quiz_attempts' }, scheduleRefresh)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'class_records' }, scheduleRefresh)
+    .subscribe();
+}
+
+function refreshQuizAttemptCountLabels() {
+  document.querySelectorAll('[data-quiz-attempt-count]').forEach(label => {
+    const count = getQuizUniqueStudentAttemptCount(label.dataset.quizAttemptCount, label.dataset.quizTitle || '');
+    const text = label.querySelector('.quiz-attempt-count-text');
+    if (text) text.textContent = `${count} student${count === 1 ? '' : 's'} took this quiz`;
+  });
 }
 
 function isAttemptBelongingToStudent(a, u) {
@@ -553,7 +713,34 @@ function buildRealClassRecordEntries() {
     loadUsersFromDB();
   }
 
-  const students = registeredUsers.filter(u => u.role === 'student');
+  let students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
+
+  // If viewing as a teacher, only include students handled by this teacher!
+  // Exclude unassigned students and students from unhandled or archived sections.
+  if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+    const prof = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE) ? CURRENT_PROFILE : {};
+    const teacherSections = (prof.section || '')
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean)
+      .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+
+    if (!teacherSections.length) {
+      return [];
+    }
+
+    students = students.filter(u => {
+      const studSec = (u.section || '').trim().toLowerCase();
+      return studSec && teacherSections.includes(studSec) && (typeof isSectionArchived !== 'function' || !isSectionArchived(studSec));
+    });
+  } else {
+    // For admin or other active views, also exclude students in archived sections
+    students = students.filter(u => {
+      const studSec = (u.section || '').trim().toLowerCase();
+      return !studSec || (typeof isSectionArchived !== 'function' || !isSectionArchived(studSec));
+    });
+  }
+
   const custom = getCustomClassRecEntries();
   const quizzes = getClassRecordQuizzes();
   const allAttempts = getAllRecordedAttempts();
@@ -657,7 +844,10 @@ function buildSectionSummaryEntries() {
   const sectionMap = new Map();
 
   allStudentEntries.forEach(st => {
-    const sec = st.section || 'Unassigned';
+    const sec = (st.section || '').trim();
+    // Exclude Unassigned, empty, placeholder, or archived section labels
+    if (!sec || sec.toLowerCase() === 'unassigned' || sec.toLowerCase() === 'none') return;
+    if (typeof isSectionArchived === 'function' && isSectionArchived(sec)) return;
     if (!sectionMap.has(sec)) {
       sectionMap.set(sec, {
         section: sec,
@@ -804,6 +994,21 @@ function toggleProfileCurrentPassword() {
 }
 window.toggleProfileCurrentPassword = toggleProfileCurrentPassword;
 
+function toggleProfilePassword(inputId, toggleId, label) {
+  const input = document.getElementById(inputId);
+  const toggle = document.getElementById(toggleId);
+  if (!input || !toggle) return;
+  const isVisible = input.type === 'text';
+  input.type = isVisible ? 'password' : 'text';
+  toggle.setAttribute('aria-label', `${isVisible ? 'Show' : 'Hide'} ${label}`);
+  toggle.setAttribute('aria-pressed', String(!isVisible));
+  toggle.title = isVisible ? 'Show password' : 'Hide password';
+  toggle.innerHTML = isVisible
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a15 15 0 0 1-3.1 3.8M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7a10 10 0 0 0 4-.8"/></svg>';
+}
+window.toggleProfilePassword = toggleProfilePassword;
+
 async function confirmPasswordChange() {
   const button = document.getElementById('pfConfirmPasswordBtn');
   const currentPassword = document.getElementById('pfCurrentPassword')?.value || '';
@@ -854,6 +1059,7 @@ async function confirmPasswordChange() {
     }
   }
 }
+window.confirmPasswordChange = confirmPasswordChange;
 
 async function saveUserProfile() {
   const saveBtn = document.getElementById('pfSaveBtn');
@@ -1331,15 +1537,20 @@ function buildProfilePage(role) {
           </div>
           <div class="pf-field">
             <label for="pfNewPassword">New Password</label>
-            <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
+            <div class="pf-password-wrap">
+              <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
+              <button type="button" class="pf-password-toggle" id="pfNewPasswordToggle" onclick="toggleProfilePassword('pfNewPassword', 'pfNewPasswordToggle', 'new password')" aria-label="Show new password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
           </div>
           <div class="pf-field">
             <label for="pfConfirmPassword">Confirm New Password</label>
-            <input type="password" id="pfConfirmPassword" placeholder="Confirm new password" autocomplete="new-password" />
+            <div class="pf-password-wrap">
+              <input type="password" id="pfConfirmPassword" placeholder="Confirm new password" autocomplete="new-password" />
+              <button type="button" class="pf-password-toggle" id="pfConfirmNewPasswordToggle" onclick="toggleProfilePassword('pfConfirmPassword', 'pfConfirmNewPasswordToggle', 'confirmed new password')" aria-label="Show confirmed new password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
             <button type="button" id="pfConfirmPasswordBtn" class="add-btn" style="display:block;width:100%;height:36px;margin-top:10px;padding:0 14px;font-size:13px;border-radius:9px;font-weight:700;" onclick="confirmPasswordChange()">Confirm Password</button>
             <span style="font-size:11px;color:var(--text-muted);display:block;margin-top:8px;">Enter your current password and matching new passwords, then confirm to apply the change.</span>
           </div>
-
         </div>
       </div>
     </div>
@@ -1595,7 +1806,8 @@ function scrollStudentSubjectShelf(direction) {
 
 function renderStudentEssentials() {
   const attempted = new Set(myQuizAttempts.map(attempt => String(attempt.quiz_id)));
-  const upcoming = customQuizzes.filter(quiz => isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !attempted.has(String(quiz.id)) && new Date(quiz.dueDate || quiz.due_date).getTime() >= Date.now())
+  const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+  const upcoming = quizList.filter(quiz => isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !attempted.has(String(quiz.id)) && new Date(quiz.dueDate || quiz.due_date).getTime() >= Date.now())
     .sort((a,b) => new Date(a.dueDate || a.due_date) - new Date(b.dueDate || b.due_date));
   const next = upcoming[0];
   const profile = CURRENT_PROFILE || {};
@@ -1615,7 +1827,8 @@ function renderStudentAssessmentOverview() {
   const completed = new Set(attempts.map(attempt => String(attempt.quiz_id)));
   const now = Date.now();
   const weekEnd = now + 7 * 24 * 60 * 60 * 1000;
-  const dueSoon = customQuizzes.filter(quiz => {
+  const quizList = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+  const dueSoon = quizList.filter(quiz => {
     const due = new Date(quiz.dueDate || quiz.due_date).getTime();
     return isQuizTargetedForStudent(quiz, CURRENT_PROFILE) && !completed.has(String(quiz.id)) && due >= now && due <= weekEnd;
   }).length;
@@ -1623,7 +1836,7 @@ function renderStudentAssessmentOverview() {
     <header><h3 id="assessmentOverviewTitle">${dashboardIcon('chart')} Assessment Overview</h3><p>A quick look at your assessment activity.</p></header>
     <dl class="assessment-overview-stats"><div><dt>Completed quizzes</dt><dd>${completed.size}</dd></div><div><dt>Due in the next 7 days</dt><dd>${dueSoon}</dd></div></dl>
     <h4>Recent Results</h4><div class="assessment-recent-results">${attempts.length ? attempts.slice(0,3).map(attempt => {
-      const quiz = customQuizzes.find(item => String(item.id) === String(attempt.quiz_id));
+      const quiz = quizList.find(item => String(item.id) === String(attempt.quiz_id));
       const score = Number(attempt.score);
       const total = Number(attempt.total_items);
       const result = attempt.score != null && Number.isFinite(score) && Number.isFinite(total) && total > 0 ? Math.round(score / total * 100) + '%' : 'Submitted';
@@ -1848,22 +2061,13 @@ function renderStudentDeadlinesWidgetHTML() {
         <p>Track upcoming quiz schedules, day/time deadlines, and types for every subject you take.</p>
       </div>
 
-      <!-- Top Pills -->
-      <div class="deadlines-top-pills">
-        <button class="top-pill-btn ${studentDeadlineStatusFilter === 'pending' || (studentDeadlineStatusFilter === 'all' && studentDeadlineTab === 'pending') ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
-          Pending Quizzes <span style="font-weight:800;margin-left:2px;">${pendingTasksCount}</span>
-        </button>
-        <button class="top-pill-btn ${studentDeadlineStatusFilter === 'all' && studentDeadlineTab !== 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
-          All Tasks <span style="font-weight:800;margin-left:2px;">${totalTasksCount}</span>
-        </button>
-      </div>
     </div>
 
     <!-- Filter Dropdowns Row -->
     <div class="deadlines-filters-row">
       <!-- 1. Subject Filter -->
       <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)" title="Filter by Subject">
-        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (${subjectOptions.length})</option>
+        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>All Subjects (${subjectOptions.length})</option>
         ${subjectOptions.map(s => `
           <option value="${escHtml(s)}" ${studentDeadlineSubjectFilter === s ? 'selected' : ''}>${escHtml(s)}</option>
         `).join('')}
@@ -1871,23 +2075,23 @@ function renderStudentDeadlinesWidgetHTML() {
 
       <!-- 2. Types of Quiz Filter -->
       <select class="deadline-filter-select" onchange="setStudentDeadlineType(this.value)" title="Filter by Quiz Type">
-        <option value="all" ${studentDeadlineTypeFilter === 'all' ? 'selected' : ''}>📝 All Quiz Types</option>
-        <option value="interactive" ${studentDeadlineTypeFilter === 'interactive' ? 'selected' : ''}>🎮 Interactive Quiz</option>
-        <option value="normal" ${studentDeadlineTypeFilter === 'normal' ? 'selected' : ''}>📋 Normal Quiz</option>
+        <option value="all" ${studentDeadlineTypeFilter === 'all' ? 'selected' : ''}>All Quiz Types</option>
+        <option value="interactive" ${studentDeadlineTypeFilter === 'interactive' ? 'selected' : ''}>Interactive Quiz</option>
+        <option value="normal" ${studentDeadlineTypeFilter === 'normal' ? 'selected' : ''}>Normal Quiz</option>
       </select>
 
       <!-- 3. Status Filter -->
       <select class="deadline-filter-select" onchange="setStudentDeadlineStatus(this.value)" title="Filter by Status">
-        <option value="all" ${studentDeadlineStatusFilter === 'all' ? 'selected' : ''}>⚡ All Status</option>
-        <option value="pending" ${studentDeadlineStatusFilter === 'pending' ? 'selected' : ''}>⏳ Pending</option>
-        <option value="completed" ${studentDeadlineStatusFilter === 'completed' ? 'selected' : ''}>✅ Completed</option>
+        <option value="all" ${studentDeadlineStatusFilter === 'all' ? 'selected' : ''}>All Status</option>
+        <option value="pending" ${studentDeadlineStatusFilter === 'pending' ? 'selected' : ''}>Pending</option>
+        <option value="completed" ${studentDeadlineStatusFilter === 'completed' ? 'selected' : ''}>Completed</option>
         <option value="not_submitted" ${studentDeadlineStatusFilter === 'not_submitted' ? 'selected' : ''}>Not Submitted</option>
         <option value="failed" ${studentDeadlineStatusFilter === 'failed' ? 'selected' : ''}>Failed</option>
       </select>
 
       <!-- 4. Month Filter -->
       <select class="deadline-filter-select" onchange="setStudentDeadlineMonth(this.value)" title="Filter by Month/Date">
-        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
+        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>All Months</option>
         ${monthOptions.map(m => `
           <option value="${escHtml(m.val)}" ${String(studentDeadlineMonthFilter) === String(m.val) ? 'selected' : ''}>${escHtml(m.label)}</option>
         `).join('')}
@@ -1975,7 +2179,7 @@ function studentPage(page) {
       const mySubjects = [...new Set(materialsData.map(m => m.subject).filter(Boolean))];
       const attemptedQuizIds = new Set(myQuizAttempts.map(a => a.quiz_id));
       const now = Date.now();
-      const availableQuizzes = customQuizzes.filter(q =>
+      const availableQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q =>
         ['active', 'approved', 'ongoing'].includes(String(q.status || '').toLowerCase()) &&
         !q.isDemo &&
         !attemptedQuizIds.has(String(q.id)) &&
@@ -1983,7 +2187,7 @@ function studentPage(page) {
         (typeof isQuizTargetedForStudent === 'function' ? isQuizTargetedForStudent(q, CURRENT_PROFILE) : true)
       );
       const latestAttempt = myQuizAttempts[0] || null;
-      const latestQuizTitle = latestAttempt ? (customQuizzes.find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
+      const latestQuizTitle = latestAttempt ? ((typeof customQuizzes !== 'undefined' ? customQuizzes : []).find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
       const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : 63;
 
       const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function'
@@ -2235,7 +2439,7 @@ function studentPage(page) {
 
     case 'quizzes': {
       const attemptsByQuiz = new Map(myQuizAttempts.map(a => [a.quiz_id, a]));
-      const visibleQuizzes = customQuizzes.filter(q =>
+      const visibleQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q =>
         q.status === 'closed' || isQuizTargetedForStudent(q, CURRENT_PROFILE)
       );
       const nowMs = Date.now();
@@ -2337,7 +2541,7 @@ function studentPage(page) {
       const hasActiveFilters = Boolean(studentQuizSearchQuery || studentQuizFilterSubject || studentQuizFilterStatus || studentQuizSortBy !== 'pending');
 
       return `
-      <div class="student-quizzes-container" style="max-width:1160px;width:100%;display:flex;flex-direction:column;gap:12px;">
+      <div class="student-quizzes-container" style="max-width:none;width:100%;display:flex;flex-direction:column;gap:12px;">
         <div class="section-hdr" style="margin-bottom:0;">
           <div>
             <h2 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 2px 0;">Quizzes</h2>
@@ -2483,7 +2687,7 @@ function studentPage(page) {
         : myQuizAttempts;
 
       // Filter quizzes targeted for this student
-      const targetedQuizzes = customQuizzes.filter(q =>
+      const targetedQuizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q =>
         (q.status === 'active' || q.status === 'approved' || q.status === 'closed' || q.isDemo) &&
         isQuizTargetedForStudent(q, CURRENT_PROFILE)
       );
@@ -2868,11 +3072,12 @@ function teacherPage(page) {
       const demo = !!CURRENT_PROFILE?.is_demo;
       const own = item => !item.uploaded_by || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(item.uploaded_by);
       const materials = materialsData.filter(own);
-      const quizzes = customQuizzes.filter(q => (!q.isDemo || demo) && (!q.createdBy || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(q.createdBy)));
+      const quizzes = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => (!q.isDemo || demo) && (!q.createdBy || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(q.createdBy)));
       const active = quizzes.filter(q => q.status === 'active');
       const news = (typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : []).filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft);
       const read = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
       const attempts = classRecAttemptsCache.filter(a => quizzes.some(q => String(q.id) === String(a.quiz_id)));
+      const teacherAssignedSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim()).filter(Boolean);
       const strands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
       const go = page => `renderPage('${page}')`;
       const icon = (svg, tone='blue') => `<span class="td-icon td-${tone}">${svg}</span>`;
@@ -2880,15 +3085,16 @@ function teacherPage(page) {
       const row = (title, sub, side='', tone='purple', svg=iconQuiz(), action='quiz') => `<button type="button" class="td-row" onclick="${go(action)}">${icon(svg,tone)}<span class="td-row-copy"><strong>${escHtml(title)}</strong><small>${escHtml(sub)}</small></span><span class="td-row-side">${side}</span></button>`;
       const panel = (title, svg, content, page, cls='') => `<section class="td-panel ${cls}"><header>${icon(svg)}<h3>${title}</h3><button type="button" class="td-link" onclick="${go(page)}">View All</button></header>${content}</section>`;
       const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
+      const unreadChatCount = demo ? 7 : (typeof getTeacherUnreadChatCount === 'function' ? getTeacherUnreadChatCount() : 0);
       const metrics = [
-        ['My Classes',demo?2:strands.length,'Classes handled','classrec',iconUsers(),'blue'],
+        ['My Classes',demo?2:teacherAssignedSections.length,'Classes handled','classrec',iconUsers(),'blue'],
         ['Total Students',demo?68:new Set(attempts.map(a=>a.student_id).filter(Boolean)).size,'Across all classes','classrec',iconUsers(),'green'],
         ['Materials Uploaded',demo?12:materials.length,'This semester','materials',iconFolder(),'orange'],
         ['Published Lessons',demo?8:materials.filter(m=>m.status==='approved').length,'Ready for students','materials',iconFolder(),'purple'],
         ['Active Quizzes',demo?3:active.length,'Currently ongoing','quiz',iconQuiz(),'purple'],
         ['Upcoming Deadlines',demo?5:active.filter(q=>{const t=new Date(q.dueDate||q.due_date).getTime()-Date.now();return t>=0&&t<=604800000;}).length,'Within 7 days','quiz',iconRecord(),'pink'],
         ['Unread News',demo?2:news.filter(a=>!read.has(String(a.id))).length,'School announcements','announcements',iconAnnouncement(),'pink'],
-        ['Unread Messages',demo?7:'0','Students & parents','chats',iconChat(),'blue']
+        ['Unread Messages',unreadChatCount,'Chats','chats',iconChat(),'blue']
       ];
       const pending = demo ? [
         ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
@@ -2898,7 +3104,7 @@ function teacherPage(page) {
       ].map(r=>row(r[0],r[1],`<b>${r[2]}</b> submissions<small>Due: ${r[3]}</small>`)).join('') : empty('No submissions awaiting review.');
       const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials')).join('') || empty('No materials uploaded yet.');
       const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : news.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
-      const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : strands).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned.');
+      const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : teacherAssignedSections).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned yet.');
       const assessments = demo ? [['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM'],['Essay: Role of Media in Society','Komunikasyon at Pananaliksik - Grade 11 - HUMSS'],['Quiz 1 - 21st Century Literature','Research in Daily Life - Grade 11 - STEM']].map(q=>row(q[0],q[1],'<em>Ongoing</em>')).join('') : active.slice(0,3).map(q=>row(q.title,q.subject||q.meta||'','<em>Ongoing</em>')).join('') || empty('No active quizzes right now.');
       const eventItems = demo ? [
         {title:'Faculty Meeting',detail:'All Teachers',when:'8:00 AM - 10:00 AM',date:'2025-02-03'},
@@ -2925,16 +3131,23 @@ function teacherPage(page) {
       <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
 
     case 'quiz': {
-      let filtered = customQuizzes.slice();
+      let filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).slice();
       if (ROLE === 'teacher') {
-        const myQuizzes = customQuizzes.filter(q => 
-          !q.createdBy || 
-          q.createdBy === CURRENT_PROFILE?.id || 
-          q.createdBy === CURRENT_PROFILE?.dbId || 
-          q.isDemo ||
-          ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
-        );
-        filtered = myQuizzes.length ? myQuizzes : customQuizzes;
+        const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        const teacherSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => {
+          const isCreator = (q.createdBy && (
+            q.createdBy === CURRENT_PROFILE?.id || 
+            q.createdBy === CURRENT_PROFILE?.dbId || 
+            q.createdBy === CURRENT_PROFILE?.school_id
+          ));
+          if (isCreator) return true;
+          if (q.strand && myStrands.length > 0 && teacherSections.length > 0) {
+            const qStrand = String(q.strand).toUpperCase();
+            return myStrands.some(st => qStrand.includes(st) || st === 'GENERAL' || qStrand === 'ALL');
+          }
+          return false;
+        });
       }
 
       const totalCount = filtered.length;
@@ -3067,6 +3280,7 @@ function teacherPage(page) {
             : (q.timeLimitMinutes ? `⏱️ ${q.timeLimitMinutes} mins` : 'Untimed');
           const dueText = q.dueDate ? `📅 Due: ${new Date(q.dueDate).toLocaleDateString()}` : '📅 No Expiration';
           const isReviewAllowed = q.allowReviewAnswers !== false && q.allow_review_answers !== false;
+          const takenStudentCount = getQuizUniqueStudentAttemptCount(q.id, q.title);
 
           return `
           <div class="quiz-row" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;gap:16px;flex-wrap:wrap;">
@@ -3085,45 +3299,59 @@ function teacherPage(page) {
               </div>
             </div>
 
-            <!-- ACTION BUTTONS & REVIEW CHECKBOX -->
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <!-- REVIEW ANSWERS CHECKBOX -->
-              <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
-                <input type="checkbox" ${isReviewAllowed ? 'checked' : ''} onchange="toggleQuizReviewAnswers('${q.id}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
-                <span>${isReviewAllowed ? '👁️ Show Answers on Review' : '🔒 Answers Hidden'}</span>
-              </label>
-
-              <button class="table-act-btn take" onclick="openTakeQuizModal('${q.id}')" title="Preview Quiz Questions">
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                Preview
-              </button>
-              ${isInter ? `
-              <button class="table-act-btn" style="background:linear-gradient(135deg,#0284c7,#8b5cf6);color:#fff;border:none;" onclick="openInteractiveQuiz('${q.id}')" title="Play Interactive Game Mode">
-                🎮 Play Game
-              </button>` : ''}
-              <button class="table-act-btn review" onclick="setAnalysisQuiz('${q.id}')" title="View Question Accuracy & Psychometrics">
-                📊 Item Analysis
-              </button>
-              <button class="table-act-btn" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">
-                🏆 Leaderboard
-              </button>
-
-              ${q.status === 'active' ? `
-                <button class="table-act-btn" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;" onclick="toggleQuizStatus('${q.id}', 'closed')" title="Close Quiz submissions">
-                  Close
+            <!-- ACTION BUTTONS & REVIEW CHECKBOX (2 CLEAN STACKS) -->
+            <div class="quiz-row-actions">
+              <!-- TOP STACK: Attempts, Review toggle, Preview, Take/Play -->
+              <div class="quiz-actions-stack">
+                <div class="quiz-attempt-count" data-quiz-attempt-count="${escHtml(q.id)}" data-quiz-title="${escHtml(q.title || '')}">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
+                </div>
+                <!-- REVIEW ANSWERS CHECKBOX -->
+                <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
+                  <input type="checkbox" ${isReviewAllowed ? 'checked' : ''} onchange="toggleQuizReviewAnswers('${q.id}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
+                  <span>${isReviewAllowed ? '👁️ Show Answers on Review' : '🔒 Answers Hidden'}</span>
+                </label>
+                <button class="table-act-btn take" onclick="openQuizQuestionsPreview('${q.id}')" title="Preview Quiz Questions">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  Preview
                 </button>
-              ` : q.status === 'closed' ? `
-                <button class="table-act-btn" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;" onclick="toggleQuizStatus('${q.id}', 'active')" title="Re-open Quiz submissions">
-                  Activate
-                </button>
-              ` : ROLE === 'admin' ? `
-                <button class="table-act-btn take" onclick="approveQuiz('${q.id}')">Approve</button>
-                <button class="table-act-btn" style="color:#dc2626;" onclick="rejectQuiz('${q.id}')">Reject</button>
-              ` : ''}
+                ${isInter ? `
+                <button class="table-act-btn" style="background:linear-gradient(135deg,#0284c7,#8b5cf6);color:#fff;border:none;" onclick="openInteractiveQuiz('${q.id}')" title="Play Interactive Game Mode">
+                  🎮 Play Game
+                </button>` : `
+                <button class="table-act-btn take" onclick="takeQuizAsTeacher('${q.id}')" title="Take this standard quiz as a student">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
+                  Take Quiz
+                </button>`}
+              </div>
 
-              <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 10px;" onclick="deleteQuiz('${q.id}')" title="Delete Quiz">
-                ${iconTrash()}
-              </button>
+              <!-- BOTTOM STACK: Item Analysis, Leaderboard, Close/Activate, Trash -->
+              <div class="quiz-actions-stack">
+                <button class="table-act-btn review" onclick="setAnalysisQuiz('${q.id}')" title="View Question Accuracy & Psychometrics">
+                  📊 Item Analysis
+                </button>
+                <button class="table-act-btn" style="background:#fef3c7;color:#b45309;border:1px solid #fde68a;font-weight:700;" onclick="openClassLeaderboardModalById('${q.id}')" title="View Student Ranking & Completion Times">
+                  🏆 Leaderboard
+                </button>
+
+                ${q.status === 'active' ? `
+                  <button class="table-act-btn" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;" onclick="toggleQuizStatus('${q.id}', 'closed')" title="Close Quiz submissions">
+                    Close
+                  </button>
+                ` : q.status === 'closed' ? `
+                  <button class="table-act-btn" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;" onclick="toggleQuizStatus('${q.id}', 'active')" title="Re-open Quiz submissions">
+                    Activate
+                  </button>
+                ` : ROLE === 'admin' ? `
+                  <button class="table-act-btn take" onclick="approveQuiz('${q.id}')">Approve</button>
+                  <button class="table-act-btn" style="color:#dc2626;" onclick="runApprovalAction('quiz','${q.id}',false)">Reject</button>
+                ` : ''}
+
+                <button class="table-act-btn" style="background:#fee2e2;color:#dc2626;border:none;padding:6px 10px;" onclick="deleteQuiz('${q.id}')" title="Delete Quiz">
+                  ${iconTrash()}
+                </button>
+              </div>
             </div>
           </div>`;
         }).join('')
@@ -3142,18 +3370,48 @@ function teacherPage(page) {
     }
 
     case 'analysis': {
-      let myQuizzesForAnalysis = customQuizzes.slice();
       if (ROLE === 'teacher') {
-        const myQuizzes = customQuizzes.filter(q => 
-          !q.createdBy || 
-          q.createdBy === CURRENT_PROFILE?.id || 
-          q.createdBy === CURRENT_PROFILE?.dbId || 
-          q.isDemo ||
-          ((CURRENT_PROFILE?.strand || '').split(',').some(st => st.trim() && (q.strand || '').includes(st.trim())))
-        );
-        myQuizzesForAnalysis = myQuizzes.length ? myQuizzes : customQuizzes;
+        const teacherSections = (CURRENT_PROFILE?.section || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(s => Boolean(s) && (typeof isSectionArchived === 'function' ? !isSectionArchived(s) : true));
+
+        if (!teacherSections.length) {
+          return `
+          <div class="section-hdr">
+            <div>
+              <h2>Item Analysis Report</h2>
+              <span style="font-size:12px;color:var(--text-muted);">Question-level psychometrics and difficulty metrics</span>
+            </div>
+          </div>
+          <div style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:16px;padding:48px 24px;text-align:center;max-width:680px;margin:30px auto;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+            <div style="font-size:48px;margin-bottom:12px;">📊</div>
+            <h3 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">No Assigned Class Sections</h3>
+            <p style="font-size:13.5px;color:#64748b;line-height:1.5;margin:0 auto;max-width:480px;">
+              Your faculty account (<strong>${escHtml(CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || 'Teacher')}</strong>) is not assigned to handle any class sections yet. Student psychometrics and accuracy rates are calculated exclusively from sections you handle.
+            </p>
+          </div>`;
+        }
       }
-      const displayQuizzes = myQuizzesForAnalysis.length ? myQuizzesForAnalysis : customQuizzes;
+
+      let myQuizzesForAnalysis = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).slice();
+      if (ROLE === 'teacher') {
+        const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        myQuizzesForAnalysis = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => {
+          const isCreator = (q.createdBy && (
+            q.createdBy === CURRENT_PROFILE?.id || 
+            q.createdBy === CURRENT_PROFILE?.dbId || 
+            q.createdBy === CURRENT_PROFILE?.school_id
+          ));
+          if (isCreator) return true;
+          if (q.strand && myStrands.length > 0) {
+            const qStrand = String(q.strand).toUpperCase();
+            return myStrands.some(st => qStrand.includes(st) || st === 'GENERAL' || qStrand === 'ALL');
+          }
+          return false;
+        });
+      }
+      const displayQuizzes = myQuizzesForAnalysis;
 
       if (!displayQuizzes.length) {
         return `
@@ -3164,9 +3422,11 @@ function teacherPage(page) {
           </div>
           <button class="add-btn" onclick="openQuizModal()">${iconPlus()} Create Quiz</button>
         </div>
-        <div class="announcement-card">
-          <h3>No Quizzes Found</h3>
-          <p style="color:var(--text-muted);font-size:13px;margin-top:6px;">You haven't created any quizzes yet — create one in Quiz Manager first to view student performance and question difficulty metrics.</p>
+        <div class="announcement-card" style="padding:48px 24px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:12px;">📝</div>
+          <h3 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">No Quizzes Found</h3>
+          <p style="color:var(--text-muted);font-size:13.5px;max-width:480px;margin:0 auto 16px;">You haven't created any quizzes for your handled sections yet. Create an assessment in Quiz Manager to begin tracking question psychometrics and difficulty metrics.</p>
+          <button class="add-btn" style="margin:0 auto;" onclick="openQuizModal()">${iconPlus()} Create First Quiz</button>
         </div>`;
       }
 
@@ -3201,31 +3461,16 @@ function teacherPage(page) {
       const quizStatus = String(selectedQuiz.status || 'Active').trim();
       const quizStatusClass = /reject/i.test(quizStatus) ? 'not-taken' : /pending/i.test(quizStatus) ? 'pending' : /complete|done|closed/i.test(quizStatus) ? 'done' : 'ongoing';
 
+      const analysisFilteredSections = getTeacherAnalysisSections(selectedQuiz);
+      if (analysisSectionFilter && !analysisFilteredSections.includes(analysisSectionFilter)) {
+        analysisSectionFilter = '';
+      }
+
       return `
       <div class="section-hdr analysis-report-header">
         <div class="analysis-report-heading">
           <h2>Item Analysis Report</h2>
           <span style="font-size:12px;color:var(--text-muted);">Psychometric item discrimination, accuracy rates, and question difficulty breakdown</span>
-        </div>
-        <div class="analysis-filter-container">
-          <div class="analysis-tab-bar" role="tablist" aria-label="Item analysis views">
-            <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('questions')">
-              <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${rows.length}</span>
-            </button>
-            <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('students')">
-              <span class="analysis-tab-icon" aria-hidden="true">${iconUsers()}</span> Student Submissions <span class="analysis-tab-count">${attemptCount}</span>
-            </button>
-          </div>
-          <div class="analysis-filters-row">
-            <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)">
-              <option value="">All Handled Sections</option>
-              ${SECTIONS.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
-            </select>
-            <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)">
-              ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
-            </select>
-            <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
-          </div>
         </div>
       </div>
 
@@ -3252,7 +3497,7 @@ function teacherPage(page) {
           <div class="ic-content">
             <div class="ic-sub">Score Range</div>
             <div class="ic-num gold compact">${highestScore !== null ? `${highestScore}% / ${lowestScore}%` : '—'}</div>
-            <p>Highest vs lowest student score</p>
+            <p>Highest vs Lowest</p>
           </div>
         </div>
         <div class="info-card horizontal-card">
@@ -3262,6 +3507,27 @@ function teacherPage(page) {
             <div class="ic-num">${rows.length}</div>
             <p>${selectedQuiz.type === 'interactive' ? '🎮 Interactive Mode' : '📝 Standard Assessment'}</p>
           </div>
+        </div>
+      </div>
+
+      <div class="analysis-filter-container">
+        <div class="analysis-tab-bar" role="tablist" aria-label="Item analysis views">
+          <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('questions')">
+            <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${rows.length}</span>
+          </button>
+          <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('students')">
+            <span class="analysis-tab-icon" aria-hidden="true">${iconUsers()}</span> Student Submissions <span class="analysis-tab-count">${attemptCount}</span>
+          </button>
+        </div>
+        <div class="analysis-filters-row">
+          <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)">
+            <option value="">All Handled Sections</option>
+            ${analysisFilteredSections.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+          </select>
+          <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)">
+            ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
+          </select>
+          <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
         </div>
       </div>
 
@@ -3295,7 +3561,7 @@ function teacherPage(page) {
             ${attempts.length ? attempts.map((attempt, index) => `
               <tr>
                 <td style="font-weight:700;color:var(--blue);">${index + 1}</td>
-                <td style="font-weight:600;color:#0f172a;">${escHtml(attempt.student_name || attempt.studentName || attempt.name || 'Student')}</td>
+                <td style="font-weight:600;color:#0f172a;">${escHtml(attempt.student_name || attempt.studentName || attempt.name || '')}</td>
                 <td>${escHtml(attempt.section || attempt.section_name || '—')}</td>
                 <td style="text-align:center;font-weight:700;color:var(--blue);">${attempt.score != null ? escHtml(String(attempt.score)) : escHtml(String(attempt.score_percentage ?? '—'))}${attempt.total_items && attempt.score != null ? ` / ${escHtml(String(attempt.total_items))}` : ''}</td>
                 <td>${attempt.submitted_at ? escHtml(new Date(attempt.submitted_at).toLocaleDateString()) : '—'}</td>
@@ -3329,16 +3595,18 @@ function teacherPage(page) {
                 <td style="text-align:center;font-weight:700;color:#059669;">${r.correct}</td>
                 <td style="text-align:center;font-weight:700;color:#dc2626;">${r.incorrect}</td>
                 <td>
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <span class="analysis-bar-wrap" style="flex:1;"><span class="analysis-bar ${r.pct >= 80 ? 'high' : r.pct < 50 ? 'low' : ''}" style="width:${r.pct}%"></span></span>
-                    <span style="font-weight:700;font-size:12px;min-width:36px;">${r.pct}%</span>
+                  <div style="display:flex;align-items:center;gap:8px;min-width:110px;">
+                    <span class="analysis-bar-wrap" style="display:block;flex:1;height:8px;background:#e2e8f0;border-radius:6px;overflow:hidden;min-width:70px;">
+                      <span class="analysis-bar ${r.pct >= 80 ? 'high' : r.pct < 50 ? 'low' : ''}" style="display:block;height:100%;width:${r.pct}%;background:${r.pct >= 80 ? '#10b981' : r.pct < 50 ? '#ef4444' : '#3b82f6'};border-radius:6px;transition:width 0.3s ease;"></span>
+                    </span>
+                    <span style="font-weight:700;font-size:12px;min-width:36px;color:#334155;">${r.pct}%</span>
                   </div>
                 </td>
                 <td style="text-align:center;">
                   <span class="status-pill ${r.diffBadge}" style="color:${r.diffColor};">${r.difficulty}</span>
                 </td>
-                <td style="font-size:12px;color:var(--text-secondary);font-weight:600;">
-                  ${escHtml(r.correctAnswer || '—')}
+                <td style="font-size:12px;font-weight:600;">
+                  <span class="analysis-correct-answer">${escHtml(r.correctAnswer || '—')}</span>
                 </td>
               </tr>`).join('')
               : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">No question items found in this quiz.</td></tr>`}
@@ -3351,6 +3619,31 @@ function teacherPage(page) {
 
 
     case 'classrec': {
+      if (ROLE === 'teacher') {
+        const teacherSections = (CURRENT_PROFILE?.section || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+          .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+
+        if (!teacherSections.length) {
+          return `
+          <div class="section-hdr">
+            <div>
+              <h2>Class Record Portal</h2>
+              <span style="font-size:12px;color:var(--text-muted);">Overview of handled class sections and combined section grade performance</span>
+            </div>
+          </div>
+          <div style="background:#ffffff;border:1.5px dashed #cbd5e1;border-radius:16px;padding:48px 24px;text-align:center;max-width:680px;margin:30px auto;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+            <div style="font-size:48px;margin-bottom:12px;">📋</div>
+            <h3 style="font-size:18px;font-weight:700;color:#0f172a;margin-bottom:8px;">No Active Handled Class Sections</h3>
+            <p style="font-size:13.5px;color:#64748b;line-height:1.5;margin:0 auto;max-width:480px;">
+              You do not have any active class sections assigned. Your previously handled section(s) may have been archived by the administration.
+            </p>
+          </div>`;
+        }
+      }
+
       if (!classRecAttemptsCache.length) loadClassRecAttempts(true);
       const quizzes = getClassRecordQuizzes();
       const filteredEntries = buildRealClassRecordEntries();
@@ -3366,7 +3659,10 @@ function teacherPage(page) {
 
       // MODE 1: MAIN CLASS RECORD PAGE (SECTIONS ONLY)
       if (!classRecExpandedSection) {
-        const targetPrintSec = classRecSectionFilter || (managedSections[0]?.name || 'Section A');
+        const availableClassRecSections = (ROLE === 'teacher')
+          ? (typeof getTeacherAnalysisSections === 'function' ? getTeacherAnalysisSections() : (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim()).filter(Boolean))
+          : SECTIONS;
+        const targetPrintSec = classRecSectionFilter || (availableClassRecSections[0] || 'Section A');
         return `
         <div class="section-hdr">
           <div>
@@ -3376,9 +3672,9 @@ function teacherPage(page) {
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <select class="user-filter-select" onchange="setClassRecSectionFilter(this.value)">
               <option value="">All Handled Sections</option>
-              ${SECTIONS.map(sec => `<option value="${sec}" ${classRecSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+              ${availableClassRecSections.map(sec => `<option value="${sec}" ${classRecSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
             </select>
-            <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openSectionReportModal('${escHtml(targetPrintSec)}')">
+            <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openAllSectionReportsModal()">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               Print Grade Summary
             </button>
@@ -3430,7 +3726,7 @@ function teacherPage(page) {
             <tbody>
               ${sectionSummaries.length ? sectionSummaries.map(s => `
                 <tr style="cursor:pointer;" onclick="openExpandedSectionView('${escHtml(s.section)}')">
-                  <td><strong><span class="user-role-badge student" style="font-size:13px;padding:4px 10px;">${escHtml(s.section)}</span></strong></td>
+                  <td><strong><span class="user-role-badge student" style="font-size:13px;padding:4px 10px;">${escHtml(String(s.section || '').replace(/^section\s+/i, ''))}</span></strong></td>
                   <td>${escHtml(s.subject)}</td>
                   <td><strong>${s.studentsCount}</strong> student${s.studentsCount === 1 ? '' : 's'}</td>
                   <td><span class="analysis-bar-wrap"><span class="analysis-bar ${s.passRate >= 80 ? 'high' : s.passRate < 50 ? 'low' : ''}" style="width:${s.passRate || 0}%"></span></span> ${s.passRate !== null ? s.passRate + '%' : '—'}</td>
@@ -3441,7 +3737,7 @@ function teacherPage(page) {
                         Expand Record
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
                       </button>
-                      <button class="table-act-btn review" title="Print Master Sheet" onclick="event.stopPropagation(); openSectionReportModal('${escHtml(s.section)}')">
+                      <button class="table-act-btn review" title="Print Master Sheet" onclick="event.stopPropagation(); printClassRecordSection('${escHtml(s.section)}')">
                         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Print
                       </button>
@@ -3460,9 +3756,8 @@ function teacherPage(page) {
       return `
       <div class="section-hdr" style="background:#ffffff;padding:16px 20px;border-radius:16px;border:1px solid #e2e8f0;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
         <div style="display:flex;align-items:center;gap:14px;">
-          <button class="add-btn" style="background:#1e293b;color:#ffffff;padding:8px 16px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-radius:10px;cursor:pointer;" onclick="closeExpandedSectionView()">
+          <button class="add-btn" style="background:#1e293b;color:#ffffff;padding:8px 16px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-radius:10px;cursor:pointer;" aria-label="Back to All Sections" title="Back to All Sections" onclick="closeExpandedSectionView()">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-            Back to All Sections
           </button>
           <div>
             <h2 style="margin:0;font-size:20px;color:#0f172a;">Class Record — ${escHtml(classRecExpandedSection)}</h2>
@@ -3475,7 +3770,7 @@ function teacherPage(page) {
             <button type="button" class="anc-archive-tab ${classRecSubView === 'matrix' ? 'active' : ''}" style="padding:6px 12px;font-size:12px;" onclick="setClassRecSubView('matrix')">📑 Quiz Matrix Columns</button>
           </div>
 
-          <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="openSectionReportModal('${escHtml(classRecExpandedSection)}')">
+          <button class="add-btn" style="background:#1e293b;color:#fff;" onclick="printClassRecordSection('${escHtml(classRecExpandedSection)}')">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             Print Master Sheet
           </button>
@@ -3533,7 +3828,7 @@ function teacherPage(page) {
               <tr>
                 <th>Student</th>
                 <th>Section</th>
-                <th>Subject</th>
+                <th>Strand</th>
                 <th>Quizzes Completed</th>
                 <th>Combined Overall Grade</th>
                 <th>Action</th>
@@ -3542,9 +3837,9 @@ function teacherPage(page) {
             <tbody>
               ${filteredEntries.length ? filteredEntries.map(e => `
                 <tr>
-                  <td><strong>${escHtml(e.name)}</strong> ${e.hasRealData ? '<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;">Live</span>' : ''}</td>
-                  <td><span class="user-role-badge student">${escHtml(e.section)}</span></td>
-                  <td>${escHtml(e.subject)}</td>
+                  <td><strong>${escHtml(e.name)}</strong></td>
+                  <td><span class="user-role-badge student">${escHtml(String(e.section || '').replace(/^section\s+/i, ''))}</span></td>
+                  <td>${escHtml(e.strand)}</td>
                   <td><strong>${e.quizzesTakenCount}</strong> quiz${e.quizzesTakenCount === 1 ? '' : 'zes'} taken</td>
                   <td class="score-val ${e.avg !== null && e.avg >= 85 ? 'good' : e.avg !== null && e.avg < 75 ? 'low' : ''}">
                     ${e.avg !== null ? `<strong>${e.avg.toFixed(2)}%</strong> <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:${e.avg >= 75 ? '#dcfce7' : '#fee2e2'};color:${e.avg >= 75 ? '#15803d' : '#991b1b'};font-weight:700;">${e.avg >= 75 ? 'PASSING' : 'NEEDS IMP.'}</span>` : '<span style="color:var(--text-muted);">—</span>'}
@@ -3574,7 +3869,7 @@ function teacherPage(page) {
               <tr>
                 <th>Student</th>
                 <th>Section</th>
-                <th>Subject</th>
+                <th>Strand</th>
                 ${quizzes.map(q => `<th>${escHtml(q.title)}</th>`).join('')}
                 <th>Average</th>
               </tr>
@@ -3582,9 +3877,9 @@ function teacherPage(page) {
             <tbody>
               ${filteredEntries.length ? filteredEntries.map(e => `
                 <tr>
-                  <td><strong>${escHtml(e.name)}</strong> ${e.hasRealData ? '<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;">Live</span>' : ''}</td>
-                  <td><span class="user-role-badge student">${escHtml(e.section)}</span></td>
-                  <td>${escHtml(e.subject)}</td>
+                  <td><strong>${escHtml(e.name)}</strong></td>
+                  <td><span class="user-role-badge student">${escHtml(String(e.section || '').replace(/^section\s+/i, ''))}</span></td>
+                  <td>${escHtml(e.strand)}</td>
                   ${quizzes.map(q => {
                     const qs = e.quizScores[q.id];
                     if (!qs || qs.scorePct === null) {
@@ -3616,6 +3911,19 @@ function setAdminReportsTab(tab) {
   if (typeof renderPage === 'function') renderPage('reports');
 }
 
+function switchCensusTab(tab) {
+  const showArchived = tab === 'archived';
+  const activeTable = document.getElementById('censusActiveTable');
+  const archivedTable = document.getElementById('censusArchivedTable');
+  const activeTab = document.getElementById('censusActiveTab');
+  const archivedTab = document.getElementById('censusArchivedTab');
+  if (activeTable) activeTable.style.display = showArchived ? 'none' : '';
+  if (archivedTable) archivedTable.style.display = showArchived ? '' : 'none';
+  if (activeTab) activeTab.classList.toggle('active', !showArchived);
+  if (archivedTab) archivedTab.classList.toggle('active', showArchived);
+}
+window.switchCensusTab = switchCensusTab;
+
 function adminPage(page) {
   switch(page) {
     case 'dashboard': {
@@ -3624,13 +3932,41 @@ function adminPage(page) {
       const students = users.filter(u=>u.role==='student');
       const teachers = users.filter(u=>u.role==='teacher');
       const admins = users.filter(u=>u.role==='admin');
-      const activeStudents = students.filter(u=>u.isActive!==false).length;
+      const activeStudents = students.filter(u=>u.isActive!==false && u.is_active!==false).length;
+      const inactiveStudents = students.length - activeStudents;
+      const activeTeachers = teachers.filter(u=>u.isActive!==false && u.is_active!==false).length;
+      const activeAdmins = admins.filter(u=>u.isActive!==false && u.is_active!==false).length;
       const sections = typeof managedSections !== 'undefined' ? managedSections : [];
       const entries = typeof approvalEntries==='function' ? approvalEntries().filter(e=>e.status==='pending') : [];
+      const pendingHandouts = entries.filter(e => !e.isQuiz && e.type !== 'quiz').length;
+      const pendingQuizzes = entries.filter(e => e.isQuiz || e.type === 'quiz').length;
+      // Real pending approvals that carry a deadline, sorted soonest-first so admins can
+      // approve them before the deadline is reached (replaces the old placeholder dates).
+      const quizzesRef = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
+      const matsRef = typeof materialsData !== 'undefined' ? materialsData : [];
+      const pendingDeadlineItems = entries.map(item => {
+        const isQ = item.kind === 'quiz' || /quiz/i.test(item.type || '');
+        const src = isQ
+          ? quizzesRef.find(q => String(q.id) === String(item.id))
+          : matsRef.find(m => String(m.id) === String(item.id));
+        const dueRaw = src ? (src.dueDate || src.due_date || src.deadline || null) : null;
+        const dueTs = dueRaw ? new Date(dueRaw).getTime() : NaN;
+        return { id: item.id, title: item.title || (isQ ? 'Quiz submission' : 'Learning material'), isQuiz: isQ, dueTs: isNaN(dueTs) ? null : dueTs };
+      });
+      const upcomingDeadlineItems = pendingDeadlineItems.filter(d => d.dueTs).sort((a, b) => a.dueTs - b.dueTs);
+      const pendingNoDeadlineCount = pendingDeadlineItems.length - upcomingDeadlineItems.length;
       const announcements = typeof getStoredAnnouncements==='function' ? getStoredAnnouncements() : [];
-      const live = announcements.filter(n=>!n.isArchived && n.status!=='draft' && !n.isDraft);
+      const oneWeekAgo = Date.now() - 7 * 86400000;
+      const live = announcements.filter(n=>!n.isArchived && n.status!=='draft' && !n.isDraft && !(n.expiresAt && new Date(n.expiresAt).getTime() <= Date.now()));
+      const announcementsThisWeek = live.filter(n => new Date(n.timestamp).getTime() >= oneWeekAgo);
       const drafts = announcements.filter(n=>n.status==='draft'||n.isDraft);
       const emergencies = live.filter(n=>n.category==='emergency');
+
+      // Dynamic User Management Stats
+      const adviserCount = sections.filter(s => s.adviser || s.adviser_id).length || teachers.filter(t => sections.some(s => s.adviser === t.name || s.adviser_id === t.id)).length;
+      const newThisWeekCount = users.filter(u => u.created_at && new Date(u.created_at).getTime() >= oneWeekAgo).length;
+      const deactivatedCount = users.filter(u => u.isActive === false || u.is_active === false).length;
+      const pendingIssuesCount = users.filter(u => (u.isActive === false || u.is_active === false) || u.must_reset_password).length;
 
       const count = (sample, value) => (isDemo || typeof value === 'undefined' || value === null) ? sample : value;
 
@@ -3662,51 +3998,124 @@ function adminPage(page) {
       };
 
       const metricsData = [
-        { label: 'Pending Approvals', val: count(4, entries.length), sub: '2 handouts &bull; 2 quizzes<br>awaiting review', icon: adSvg.approvalCheck, color: '#ea580c', bg: '#ffedd5', page: 'approval' },
-        { label: 'Total Students', val: count(125, students.length), sub: '<span style="color:#10b981;font-weight:700;">120 active</span> &bull; <span style="color:#ef4444;font-weight:700;">5 inactive</span>', icon: adSvg.user, color: '#2563eb', bg: '#dbeafe', page: 'users' },
-        { label: 'Number of Teachers', val: count(10, teachers.length), sub: '<span style="color:#10b981;font-weight:700;">9 active</span>', icon: adSvg.users, color: '#059669', bg: '#d1fae5', page: 'users' },
-        { label: 'System Admins', val: count(2, admins.length), sub: '<span style="color:#7c3aed;font-weight:700;">2 active</span> admin accounts', icon: adSvg.shield, color: '#7c3aed', bg: '#ede9fe', page: 'users' },
-        { label: 'Active Sections', val: count(5, sections.length), sub: 'Across Grade 11 &amp; 12', icon: adSvg.doc, color: '#e11d48', bg: '#ffe4e6', page: 'sections' },
-        { label: 'Published Materials', val: count(48, materialsData.filter(m=>m.status==='approved').length), sub: 'All approved resources', icon: adSvg.folder, color: '#0891b2', bg: '#cffafe', page: 'materials' },
-        { label: 'Active Quizzes', val: count(9, customQuizzes.filter(q=>q.status==='active').length), sub: 'Running across all subjects', icon: adSvg.quiz, color: '#d97706', bg: '#fef3c7', page: 'quiz' },
-        { label: 'Announcements<br>This Week', val: count(6, live.length), sub: 'School-wide updates<br>posted', icon: adSvg.megaphone, color: '#9333ea', bg: '#f3e8ff', page: 'announcements' }
+        { label: 'Pending Approvals', val: count(entries.length, entries.length), sub: `${pendingHandouts} handout${pendingHandouts!==1?'s':''} &bull; ${pendingQuizzes} quiz${pendingQuizzes!==1?'zes':''}<br>awaiting review`, icon: adSvg.approvalCheck, color: '#ea580c', bg: '#ffedd5', page: 'approval' },
+        { label: 'Total Students', val: count(students.length, students.length), sub: `<span style="color:#10b981;font-weight:700;">${activeStudents} active</span> &bull; <span style="color:#ef4444;font-weight:700;">${inactiveStudents} inactive</span>`, icon: adSvg.user, color: '#2563eb', bg: '#dbeafe', page: 'users' },
+        { label: 'Number of Teachers', val: count(teachers.length, teachers.length), sub: `<span style="color:#10b981;font-weight:700;">${activeTeachers} active</span>`, icon: adSvg.users, color: '#059669', bg: '#d1fae5', page: 'users' },
+        { label: 'System Admins', val: count(admins.length, admins.length), sub: `<span style="color:#7c3aed;font-weight:700;">${activeAdmins} active</span> admin account${activeAdmins!==1?'s':''}`, icon: adSvg.shield, color: '#7c3aed', bg: '#ede9fe', page: 'users' },
+        { label: 'Active Sections', val: count(sections.length, sections.length), sub: 'Across Grade 11 &amp; 12', icon: adSvg.doc, color: '#e11d48', bg: '#ffe4e6', page: 'sections' },
+        { label: 'Published Materials', val: (typeof materialsData !== 'undefined' ? materialsData.filter(m=>m.status==='approved').length : 0), sub: 'All approved resources', icon: adSvg.folder, color: '#0891b2', bg: '#cffafe', page: 'materials' },
+        { label: 'Active Quizzes', val: (typeof customQuizzes !== 'undefined' ? customQuizzes.filter(q=>q.status==='active').length : 0), sub: 'Running across all subjects', icon: adSvg.quiz, color: '#d97706', bg: '#fef3c7', page: 'approval' },
+        { label: 'Announcements<br>This Week', val: announcementsThisWeek.length, sub: 'School-wide updates<br>posted', icon: adSvg.megaphone, color: '#9333ea', bg: '#f3e8ff', page: 'announcements' }
       ];
 
-      const queueItems = [
-        { title: 'General Mathematics \u2014 Worksheet 3', author: 'Uploaded by Haven Faculty', type: 'Handout', isQuiz: false, time1: 'Submitted today', time2: 'Feb 10, 2025 10:24 AM', iconColor: '#2563eb', iconBg: '#eff6ff', icon: adSvg.doc, id: 'qm1' },
-        { title: 'Komunikasyon sa Wika \u2014 Quiz 2', author: 'Uploaded by Haven Faculty', type: 'Quiz', isQuiz: true, time1: 'Due this week', time2: 'Feb 9, 2025 4:10 PM', iconColor: '#db2777', iconBg: '#fdf2f8', icon: adSvg.quiz, id: 'qm2' },
-        { title: 'Research in Daily Life \u2014 Performance Task', author: 'Uploaded by Haven Faculty', type: 'Handout', isQuiz: false, time1: 'Submitted today', time2: 'Feb 9, 2025 2:35 PM', iconColor: '#059669', iconBg: '#ecfdf5', icon: adSvg.doc, id: 'qm3' },
-        { title: 'Empowerment Technologies \u2014 Quiz 1', author: 'Uploaded by Haven Faculty', type: 'Quiz', isQuiz: true, time1: 'Submitted yesterday', time2: 'Feb 8, 2025 11:20 AM', iconColor: '#d97706', iconBg: '#fffbeb', icon: adSvg.quiz, id: 'qm4' }
+      const queueItems = entries.length ? entries.slice(0, 4).map((item, idx) => {
+        const isQ = item.isQuiz || item.type === 'quiz';
+        return {
+          title: item.title || 'Instructional Material',
+          author: item.author || item.uploaded_by || 'Haven Faculty',
+          type: isQ ? 'Quiz' : 'Handout',
+          isQuiz: isQ,
+          time1: 'Submitted',
+          time2: item.created_at ? formatSentDate(item.created_at) : 'Awaiting Review',
+          iconColor: isQ ? '#db2777' : '#2563eb',
+          iconBg: isQ ? '#fdf2f8' : '#eff6ff',
+          icon: isQ ? adSvg.quiz : adSvg.doc,
+          id: item.id || `qm${idx}`
+        };
+      }) : [
+        { title: 'No pending approvals in queue', author: 'All submissions reviewed', type: 'Complete', isQuiz: false, time1: 'All caught up', time2: 'System up to date', iconColor: '#10b981', iconBg: '#ecfdf5', icon: adSvg.checkCircle, id: 'none' }
       ];
 
-      const bulletins = [
-        { icon: adSvg.megaphone, color: '#ea580c', title: 'Midterm Examination Schedule', desc: 'Please be guided with the midterm exam schedule for AY 2024\u20132025.', date: 'Feb 9, 2025', time: '10:30 AM' },
-        { icon: adSvg.calendar, color: '#d97706', title: 'SHS Intramurals 2025', desc: 'Upcoming program and general guidelines.', date: 'Feb 7, 2025', time: '2:15 PM' },
-        { icon: adSvg.alertTriangle, color: '#dc2626', title: 'Suspension of Classes (Feb 12)', desc: 'Classes in all levels are suspended due to expected weather conditions.', date: 'Feb 6, 2025', time: '9:00 AM' }
+      const bulletins = live.length ? live.slice(0, 3).map(b => {
+        const dt = formatSentDate(b.timestamp);
+        return {
+          icon: b.category === 'emergency' ? adSvg.alertTriangle : adSvg.megaphone,
+          color: b.category === 'emergency' ? '#dc2626' : '#ea580c',
+          title: b.title,
+          desc: b.message ? (b.message.length > 90 ? b.message.slice(0, 90) + '…' : b.message) : 'Official advisory broadcasted.',
+          date: dt.split(',')[0] || 'Recently',
+          time: dt.split(',')[1] || ''
+        };
+      }) : [
+        { icon: adSvg.megaphone, color: '#64748b', title: 'No active broadcasts right now', desc: 'Create a new announcement to notify students and faculty.', date: 'Today', time: '' }
       ];
 
-      const matRows = [
-        { subj: 'General Mathematics', user: 'Haven Faculty', type: 'Handout', isQuiz: false, time: 'Feb 10, 10:24 AM', status: 'Pending', isPending: true },
-        { subj: 'Komunikasyon sa Wika', user: 'Haven Faculty', type: 'Quiz', isQuiz: true, time: 'Feb 9, 4:10 PM', status: 'Pending', isPending: true },
-        { subj: 'Research in Daily Life', user: 'Haven Faculty', type: 'Handout', isQuiz: false, time: 'Feb 9, 2:35 PM', status: 'Approved', isPending: false },
-        { subj: 'Oral Communication', user: 'Mr. D. Cruz', type: 'Handout', isQuiz: false, time: 'Feb 8, 5:20 PM', status: 'Approved', isPending: false }
+      const allMats = typeof materialsData !== 'undefined' ? materialsData : [];
+      const matRows = allMats.length ? allMats.slice(0, 5).map(m => {
+        const isQ = m.type === 'quiz';
+        const isPend = m.status === 'pending';
+        return {
+          subj: m.subject || m.title || 'General Subject',
+          user: m.uploaded_by || m.author || 'Haven Faculty',
+          type: isQ ? 'Quiz' : 'Handout',
+          isQuiz: isQ,
+          time: m.created_at ? formatSentDate(m.created_at) : 'Recently',
+          status: isPend ? 'Pending' : 'Approved',
+          isPending: isPend
+        };
+      }) : [
+        { subj: 'No instructional materials uploaded yet', user: 'System', type: 'Info', isQuiz: false, time: '—', status: 'None', isPending: false }
       ];
 
-      const strandList = [
-        { name: 'STEM', count: 35, pct: 85 },
-        { name: 'ABM', count: 25, pct: 58 },
-        { name: 'HUMSS', count: 30, pct: 72 },
-        { name: 'GAS', count: 20, pct: 47 },
-        { name: 'TVL', count: 15, pct: 35 }
-      ];
+      // Dynamic real strand distribution
+      const strandKeys = ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL'];
+      const strandCounts = { STEM: 0, ABM: 0, HUMSS: 0, GAS: 0, TVL: 0 };
+      students.forEach(st => {
+        let strand = (st.strand || '').toUpperCase();
+        if (!strand && st.section) {
+          const sec = sections.find(s => s.name === st.section || s.id === st.section_id);
+          if (sec && sec.strand) strand = sec.strand.toUpperCase();
+        }
+        if (strand && strandCounts[strand] !== undefined) {
+          strandCounts[strand]++;
+        } else if (strand) {
+          for (const key of strandKeys) {
+            if (strand.includes(key)) { strandCounts[key]++; break; }
+          }
+        }
+      });
+      const maxStrandVal = Math.max(1, ...Object.values(strandCounts));
+      const strandList = strandKeys.map(key => ({
+        name: key,
+        count: strandCounts[key],
+        pct: Math.round((strandCounts[key] / maxStrandVal) * 100)
+      }));
 
-      const activityList = [
-        { icon: adSvg.checkCircle, color: '#10b981', title: 'Admin approved General Mathematics \u2014 Worksheet 3', desc: 'Content has been approved and published.', time: '12 minutes ago' },
-        { icon: adSvg.user, color: '#2563eb', title: 'Teacher account updated: Ma. Lopez', desc: 'Profile information and access rights modified.', time: '28 minutes ago' },
-        { icon: adSvg.megaphone, color: '#f43f5e', title: 'Announcement posted: Midterm Schedule', desc: 'Broadcast sent to all Senior High School users.', time: '1 hour ago' },
-        { icon: adSvg.users, color: '#06b6d4', title: 'Section HUMSS-11 roster updated', desc: '5 students added, 1 removed.', time: '2 hours ago' },
-        { icon: adSvg.quiz, color: '#f59e0b', title: 'Quiz approval requested by Haven Faculty', desc: 'Empowerment Technologies \u2014 Quiz 1', time: '3 hours ago' }
-      ];
+      // Dynamic activity logs
+      const activityList = [];
+      if (live.length) {
+        activityList.push({
+          icon: adSvg.megaphone,
+          color: '#f43f5e',
+          title: `Announcement posted: ${live[0].title}`,
+          desc: `Broadcast sent to ${Array.isArray(live[0].audience) ? live[0].audience.join(', ') : 'all users'}.`,
+          time: typeof formatTimeAgo === 'function' ? formatTimeAgo(live[0].timestamp) : 'Recently'
+        });
+      }
+      if (allMats.length) {
+        const firstApproved = allMats.find(m => m.status === 'approved') || allMats[0];
+        activityList.push({
+          icon: adSvg.checkCircle,
+          color: '#10b981',
+          title: `Material available: ${firstApproved.title || firstApproved.subject}`,
+          desc: 'Instructional content accessible in Materials Hub.',
+          time: typeof formatTimeAgo === 'function' ? formatTimeAgo(firstApproved.created_at) : 'Recently'
+        });
+      }
+      if (entries.length) {
+        activityList.push({
+          icon: adSvg.quiz,
+          color: '#f59e0b',
+          title: `Pending review: ${entries[0].title || 'Submission'}`,
+          desc: `Submitted for administrative approval.`,
+          time: 'Awaiting review'
+        });
+      }
+      if (activityList.length === 0) {
+        activityList.push(
+          { icon: adSvg.checkCircle, color: '#10b981', title: 'System status normal', desc: 'All academic modules running smoothly.', time: 'Just now' }
+        );
+      }
 
       return `<div class="admin-reference-dashboard">
         <!-- ── HERO BANNER ── -->
@@ -3889,7 +4298,7 @@ function adminPage(page) {
               <div class="ad-urole-box" style="background:#fff7ed;" onclick="renderPage('users')">
                 <div class="ad-urole-icon" style="color:#ea580c;">${adSvg.mortarboard}</div>
                 <div>
-                  <div class="ad-urole-num" style="color:#ea580c;">5</div>
+                  <div class="ad-urole-num" style="color:#ea580c;">${adviserCount}</div>
                   <div class="ad-urole-lbl">Advisers</div>
                 </div>
               </div>
@@ -3898,17 +4307,17 @@ function adminPage(page) {
               <div class="ad-ustatus-item">
                 <span style="color:#10b981;display:inline-flex;width:14px;height:14px;">${adSvg.checkCircle}</span>
                 <span>New this week</span>
-                <strong style="color:#10b981;">7</strong>
+                <strong style="color:#10b981;">${newThisWeekCount}</strong>
               </div>
               <div class="ad-ustatus-item">
                 <span style="color:#ef4444;display:inline-flex;width:14px;height:14px;">${adSvg.alertCircle}</span>
                 <span>Pending account issues</span>
-                <strong style="color:#ef4444;">2</strong>
+                <strong style="color:#ef4444;">${pendingIssuesCount}</strong>
               </div>
               <div class="ad-ustatus-item">
                 <span style="color:#64748b;display:inline-flex;width:14px;height:14px;">${adSvg.infoCircle}</span>
                 <span>Deactivated accounts</span>
-                <strong style="color:#64748b;">5</strong>
+                <strong style="color:#64748b;">${deactivatedCount}</strong>
               </div>
             </div>
             <div class="ad-user-actions-row">
@@ -4099,32 +4508,27 @@ function adminPage(page) {
                   </div>
                   <div>
                     <h3>Upcoming Deadlines</h3>
-                    <p>Important school submissions</p>
+                    <p>Pending approvals &middot; approve before the deadline</p>
                   </div>
                 </div>
               </div>
               <div class="ad-deadline-list">
-                <div class="ad-deadline-item">
-                  <div class="ad-dl-left">
-                    <span class="ad-dl-icon" style="color:#2563eb;">${adSvg.doc}</span>
-                    <span>Learning materials</span>
-                  </div>
-                  <span class="ad-dl-pill blue">Feb 12</span>
-                </div>
-                <div class="ad-deadline-item">
-                  <div class="ad-dl-left">
-                    <span class="ad-dl-icon" style="color:#ef4444;">${adSvg.quiz}</span>
-                    <span>Quiz submissions</span>
-                  </div>
-                  <span class="ad-dl-pill pink">Feb 14</span>
-                </div>
-                <div class="ad-deadline-item">
-                  <div class="ad-dl-left">
-                    <span class="ad-dl-icon" style="color:#2563eb;">${adSvg.bars}</span>
-                    <span>Grade reports</span>
-                  </div>
-                  <span class="ad-dl-pill blue">Feb 20</span>
-                </div>
+                ${upcomingDeadlineItems.length ? upcomingDeadlineItems.slice(0, 5).map(d => {
+                  const now = Date.now();
+                  const overdue = d.dueTs < now;
+                  const soon = !overdue && (d.dueTs - now) <= 3 * 86400000;
+                  const pillStyle = overdue ? 'background:#fee2e2;color:#b91c1c;' : (soon ? 'background:#fef3c7;color:#b45309;' : '');
+                  const pillLabel = overdue ? 'Overdue' : new Date(d.dueTs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  return `<div class="ad-deadline-item" style="cursor:pointer;" onclick="renderPage('approval')" title="Open Content Approval to review this submission">
+                    <div class="ad-dl-left" style="min-width:0;flex:1;">
+                      <span class="ad-dl-icon" style="color:${d.isQuiz ? '#db2777' : '#2563eb'};flex-shrink:0;">${d.isQuiz ? adSvg.quiz : adSvg.doc}</span>
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${escHtml(d.title)}</span>
+                    </div>
+                    <span class="ad-dl-pill" style="${pillStyle}">${pillLabel}</span>
+                  </div>`;
+                }).join('') : `<div style="padding:16px 8px;text-align:center;color:#8798b2;font-size:11px;line-height:1.5;">${pendingDeadlineItems.length ? 'No pending approvals have a deadline set.' : 'No pending approvals right now.'}</div>`}
+                ${pendingNoDeadlineCount > 0 ? `<div style="padding:4px 8px;text-align:center;color:#0879b7;font-size:10px;font-weight:700;cursor:pointer;" onclick="renderPage('approval')">+${pendingNoDeadlineCount} pending without a deadline &rarr; Review</div>` : ''}
+                ${upcomingDeadlineItems.length > 5 ? `<div style="padding:4px 8px;text-align:center;color:#0879b7;font-size:10px;font-weight:700;cursor:pointer;" onclick="renderPage('approval')">View all ${upcomingDeadlineItems.length} deadlines &rarr;</div>` : ''}
               </div>
             </div>
 
@@ -4147,7 +4551,7 @@ function adminPage(page) {
                     <span style="display:inline-flex;width:16px;height:16px;">${adSvg.user}</span>
                   </div>
                   <div>
-                    <div class="ad-acc-num">120</div>
+                    <div class="ad-acc-num">${activeStudents}</div>
                     <div class="ad-acc-lbl">Active</div>
                   </div>
                 </div>
@@ -4156,7 +4560,7 @@ function adminPage(page) {
                     <span style="display:inline-flex;width:16px;height:16px;">${adSvg.user}</span>
                   </div>
                   <div>
-                    <div class="ad-acc-num">5</div>
+                    <div class="ad-acc-num">${inactiveStudents}</div>
                     <div class="ad-acc-lbl">Inactive</div>
                   </div>
                 </div>
@@ -4295,7 +4699,7 @@ function renderAdminAcademicReportsContent() {
       <p>Achieving 75% or higher</p>
     </div>
     <div class="info-card">
-      <div class="ic-head"><div class="ic-icon">${iconFolder()}</div><div><div class="ic-sub">Active Sections</div><div class="ic-num">${managedSections.length}</div></div></div>
+      <div class="ic-head"><div class="ic-icon">${iconFolder()}</div><div><div class="ic-sub">Active Sections</div><div class="ic-num">${typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived).length : 0}</div></div></div>
       <p>Managed senior high sections</p>
     </div>
   </div>
@@ -4442,13 +4846,13 @@ function exportAdminCensusCSV() {
   const humssCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('HUMSS')).length;
   const abmCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('ABM')).length;
   const tvlCount = activeStudents.filter(s => (s.strand || '').toUpperCase().includes('TVL') || (s.strand || '').toUpperCase().includes('ICT')).length;
-  const secCount = typeof managedSections !== 'undefined' ? managedSections.length : 12;
+  const secCount = typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived).length : 12;
 
   let csv = 'HAVEN OF WISDOM ACADEMY - INSTITUTIONAL CENSUS & CLASS RECORD DASHBOARD\n';
   csv += 'Generated Date: ' + new Date().toLocaleString() + '\n';
   csv += 'Current Academic Year: S.Y. 2026-2027\n\n';
 
-  csv += '--- LONGITUDINAL ENROLMENT & FACULTY COMPARATIVE CENSUS ---\n';
+  csv += '--- LONGITUDINAL ENROLLMENT & FACULTY COMPARATIVE CENSUS ---\n';
   csv += 'Academic Year,Status,Total Students,Active Teachers,Student-Teacher Ratio,Sections,STEM,HUMSS,ABM,TVL/ICT,Passing Rate,YoY Growth\n';
   let savedHistoricalArchives = [];
   try {
@@ -4462,7 +4866,7 @@ function exportAdminCensusCSV() {
 
   csv += '--- CURRENT ACADEMIC YEAR SECTION ROSTER CENSUS ---\n';
   csv += 'Section Name,Grade Level,Strand,Class Adviser,Enrolled Students,Capacity Limit,Utilization\n';
-  (typeof managedSections !== 'undefined' ? managedSections : []).forEach(sec => {
+  (typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived) : []).forEach(sec => {
     const enrolled = activeStudents.filter(s => (s.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()).length;
     csv += `"${sec.name}","${sec.gradeLevel || 'Grade 11'}","${sec.strand || 'STEM'}","${sec.adviser || 'Department Faculty'}",${enrolled},45,${Math.round((enrolled / 45) * 100)}%\n`;
   });
@@ -4480,10 +4884,7 @@ function exportAdminCensusCSV() {
 }
 
 function printAdminCensus() {
-  const prevTitle = document.title;
-  document.title = 'Haven_of_Wisdom_Academy_Official_Census_SY2026_2027';
-  window.print();
-  setTimeout(() => { document.title = prevTitle; }, 1200);
+  openInstitutionalCensusReportModal();
 }
 
 function renderAdminClassRecordCensus() {
@@ -4545,7 +4946,7 @@ function renderAdminClassRecordCensus() {
     students: currentYearTotalStudents,
     teachers: currentYearTotalTeachers,
     ratio: currentYearRatio,
-    sections: (typeof managedSections !== 'undefined' ? managedSections.length : 0),
+    sections: (typeof managedSections !== 'undefined' ? managedSections.filter(s => !s.isArchived).length : 0),
     stem: strandCounts.STEM,
     humss: strandCounts.HUMSS,
     abm: strandCounts.ABM,
@@ -4561,7 +4962,9 @@ function renderAdminClassRecordCensus() {
 
   // Section summary metrics
   const sectionsList = typeof managedSections !== 'undefined' ? managedSections : [];
-  const secCensusRows = sectionsList.map(sec => {
+  const activeSections = sectionsList.filter(s => !s.isArchived);
+  const archivedSections = sectionsList.filter(s => s.isArchived);
+  const secCensusRows = activeSections.map(sec => {
     const enrolled = activeStudents.filter(s => (s.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()).length;
     const capacity = 45;
     const utilPct = Math.min(100, Math.round((enrolled / capacity) * 100));
@@ -4573,6 +4976,17 @@ function renderAdminClassRecordCensus() {
       enrolled,
       capacity,
       utilPct
+    };
+  });
+  const archivedCensusRows = archivedSections.map(sec => {
+    const enrolled = activeStudents.filter(s => (s.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase()).length;
+    return {
+      name: sec.name,
+      gradeLevel: sec.gradeLevel || 'Grade 11',
+      strand: sec.strand || 'STEM',
+      adviser: sec.adviser || 'Department Adviser',
+      enrolled,
+      archivedAt: sec.archivedAt
     };
   });
 
@@ -4593,7 +5007,7 @@ function renderAdminClassRecordCensus() {
             Overall Institutional Census
           </h2>
           <p style="font-size:13px;color:#94a3b8;margin:0;max-width:620px;line-height:1.5;">
-            Official senior high school institutional census, longitudinal student enrolment trends across all academic years, active faculty counts, and section allocations.
+            Official senior high school institutional census, longitudinal student enrollment trends across all academic years, active faculty counts, and section allocations.
           </p>
         </div>
 
@@ -4683,11 +5097,11 @@ function renderAdminClassRecordCensus() {
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="color:#0284c7;font-size:18px;">📈</span>
               <h3 style="font-size:17px;font-weight:800;color:var(--text-primary);margin:0;">
-                Comparative Longitudinal Enrolment Breakdown
+                Comparative Longitudinal Enrollment Breakdown
               </h3>
             </div>
             <p style="font-size:12.5px;color:var(--text-secondary);margin:4px 0 0 0;">
-              Longitudinal institutional audit comparing enrolment records, faculty counts, and academic metrics across academic years.
+              Longitudinal institutional audit comparing enrollment records, faculty counts, and academic metrics across academic years.
             </p>
           </div>
           <span style="font-size:12px;color:var(--text-muted);font-weight:600;background:#f8fafc;padding:5px 12px;border-radius:8px;border:1px solid #e2e8f0;">
@@ -4732,7 +5146,7 @@ function renderAdminClassRecordCensus() {
             <thead>
               <tr>
                 <th style="white-space:nowrap;">Academic Year</th>
-                <th style="white-space:nowrap;">Total Enrolment</th>
+                <th style="white-space:nowrap;">Total Enrollment</th>
                 <th style="white-space:nowrap;">YoY Trend</th>
                 <th style="white-space:nowrap;">Faculty</th>
                 <th style="white-space:nowrap;">Student-Teacher Ratio</th>
@@ -4829,13 +5243,13 @@ function renderAdminClassRecordCensus() {
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
             <div style="background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
-              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 11 Enrolment</div>
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 11 Enrollment</div>
               <div style="font-size:24px;font-weight:800;color:#0284c7;margin:4px 0;">${gr11Count}</div>
               <span style="font-size:11px;color:var(--text-muted);">${currentYearTotalStudents > 0 ? Math.round((gr11Count / currentYearTotalStudents) * 100) : 0}% of institutional total</span>
             </div>
 
             <div style="background:#f8fafc;padding:14px;border-radius:12px;border:1px solid #e2e8f0;text-align:center;">
-              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 12 Enrolment</div>
+              <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Grade 12 Enrollment</div>
               <div style="font-size:24px;font-weight:800;color:#059669;margin:4px 0;">${gr12Count}</div>
               <span style="font-size:11px;color:var(--text-muted);">${currentYearTotalStudents > 0 ? Math.round((gr12Count / currentYearTotalStudents) * 100) : 0}% of institutional total</span>
             </div>
@@ -4866,15 +5280,23 @@ function renderAdminClassRecordCensus() {
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
           <div>
             <h3 style="font-size:16.5px;font-weight:800;color:var(--text-primary);margin:0 0 2px 0;">
-              Class Section Enrolment & Capacity Census
+              Class Section Enrollment & Capacity Census
             </h3>
             <span style="font-size:12px;color:var(--text-muted);">
               Official distribution of learners per section against DepEd maximum capacity of 45 students
             </span>
           </div>
+          <div style="display:inline-flex;background:#f1f5f9;padding:4px;border-radius:12px;gap:6px;border:1px solid #e2e8f0;">
+            <button type="button" class="anc-archive-tab active" id="censusActiveTab" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="switchCensusTab('active')">
+              🏫 Active (${secCensusRows.length})
+            </button>
+            <button type="button" class="anc-archive-tab" id="censusArchivedTab" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="switchCensusTab('archived')">
+              📦 Archived (${archivedCensusRows.length})
+            </button>
+          </div>
         </div>
 
-        <div class="score-table score-table-responsive" style="box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+        <div id="censusActiveTable" class="score-table score-table-responsive" style="box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
           <table style="min-width:920px;width:100%;border-collapse:collapse;">
             <thead>
               <tr>
@@ -4912,6 +5334,39 @@ function renderAdminClassRecordCensus() {
                 </tr>
               `).join('') : `
                 <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);white-space:nowrap;">No sections configured in the census yet.</td></tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+
+        <div id="censusArchivedTable" class="score-table score-table-responsive" style="display:none;box-shadow:none;border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;">
+          <table style="min-width:920px;width:100%;border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="white-space:nowrap;">Section</th>
+                <th style="white-space:nowrap;">Grade Level & Strand</th>
+                <th style="white-space:nowrap;">Class Adviser</th>
+                <th style="white-space:nowrap;">Enrolled Headcount</th>
+                <th style="white-space:nowrap;">Archived Date</th>
+                <th style="white-space:nowrap;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${archivedCensusRows.length ? archivedCensusRows.map(s => `
+                <tr style="opacity:0.85;background:#fffdfa;">
+                  <td style="white-space:nowrap;">
+                    <strong><span class="user-role-badge student" style="font-size:12.5px;padding:3px 9px;white-space:nowrap;">${escHtml(s.name)}</span></strong>
+                  </td>
+                  <td style="white-space:nowrap;">${escHtml(s.gradeLevel)} · <span class="role-tag student" style="white-space:nowrap;">${escHtml(s.strand)}</span></td>
+                  <td style="white-space:nowrap;">${escHtml(s.adviser)}</td>
+                  <td style="white-space:nowrap;"><strong>${s.enrolled}</strong> students</td>
+                  <td style="white-space:nowrap;">${s.archivedAt ? new Date(s.archivedAt).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : 'N/A'}</td>
+                  <td style="white-space:nowrap;">
+                    <span style="background:#fef3c7;color:#b45309;font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:6px;display:inline-block;">📦 Archived</span>
+                  </td>
+                </tr>
+              `).join('') : `
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);white-space:nowrap;">No archived sections.</td></tr>
               `}
             </tbody>
           </table>
@@ -4988,22 +5443,43 @@ function renderPage(page) {
   mainContent.dataset.page = page;
   mainContent.dataset.role = ROLE || '';
   mainContent.innerHTML = getPageContent(ROLE, page);
+  if (typeof refreshTeacherUnreadOnPageChange === 'function') refreshTeacherUnreadOnPageChange();
+  mainContent.scrollTop = 0;
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
   if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
 
   if (page === 'users' || page === 'classrec') loadUsersFromDB();
   if (page === 'classrec') loadClassRecAttempts();
-  if (page === 'quiz') loadQuizzesFromDB();
+  if (page === 'quiz') {
+    loadQuizzesFromDB();
+    if (ROLE === 'teacher') {
+      loadClassRecAttempts();
+      if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
+      ensureQuizManagerAttemptRealtime();
+    }
+  }
   if (page === 'quizzes' || page === 'progress') { loadQuizzesFromDB(); loadMyAttemptsFromDB(); }
-  if (page === 'analysis') loadQuizzesFromDB();
+  if (page === 'analysis') {
+    loadQuizzesFromDB();
+    if (typeof ensureAnalysisAttemptsRealtime === 'function') ensureAnalysisAttemptsRealtime();
+    if (ROLE === 'teacher') {
+      Promise.resolve(typeof loadUsersFromDB === 'function' ? loadUsersFromDB() : null)
+        .then(() => typeof loadClassRecAttempts === 'function' ? loadClassRecAttempts(true) : null)
+        .then(() => {
+          if (analysisSelectedQuizId && typeof loadAttemptsForAnalysis === 'function') loadAttemptsForAnalysis(analysisSelectedQuizId, true);
+        });
+    }
+  }
   if (page === 'chats') loadChatsPage();
   if (page === 'dashboard') {
     if (ROLE === 'teacher' || ROLE === 'admin') {
       loadMaterialsFromDB();
       loadQuizzesFromDB();
       if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
-      if (ROLE === 'teacher' && typeof refreshTeacherUnreadMessageCount === 'function') refreshTeacherUnreadMessageCount();
       if (ROLE === 'teacher' && typeof ensureChatRealtimeSubscription === 'function') ensureChatRealtimeSubscription();
     }
     if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
@@ -5014,6 +5490,13 @@ function renderPage(page) {
   materialsPollTimer = null;
   if (page === 'materials' || page === 'approval') {
     loadMaterialsFromDB();
+    if (page === 'materials' && ROLE === 'admin' && typeof loadUsersFromDB === 'function') {
+      loadUsersFromDB().then(() => {
+        if (currentPage === 'materials' && typeof renderMaterialsContainer === 'function') {
+          renderMaterialsContainer();
+        }
+      });
+    }
     if (page === 'approval') {
       if (typeof loadQuizzesFromDB === 'function') loadQuizzesFromDB();
       if (typeof loadUsersFromDB === 'function') loadUsersFromDB();

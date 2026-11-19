@@ -79,7 +79,43 @@ function getStoredHotlines() {
 
 function saveHotlines(list) {
   localStorage.setItem(HOTLINES_STORAGE_KEY, JSON.stringify(list));
-  renderHotlinesUI(); // re-render UIs whenever saved
+  syncAnnouncementHotlineSnapshots(list);
+  renderHotlinesUI(); // re-render hotline containers whenever saved
+  refreshHotlineDependentViews();
+}
+
+// Keep every announcement's attached hotline snapshot in sync with the live
+// directory: refresh edited fields and drop hotlines that were deleted.
+function syncAnnouncementHotlineSnapshots(hotlines) {
+  try {
+    if (typeof getStoredAnnouncements !== 'function' || typeof saveAnnouncements !== 'function') return;
+    const byId = new Map((hotlines || []).map(h => [h.id, h]));
+    const ancs = getStoredAnnouncements();
+    let changed = false;
+    ancs.forEach(a => {
+      if (!Array.isArray(a.hotlines)) return;
+      const next = [];
+      a.hotlines.forEach(h => {
+        const live = byId.get(h.id);
+        if (!live) { changed = true; return; } // hotline deleted — remove from snapshot
+        if (live.name !== h.name || live.shortName !== h.shortName || live.number !== h.number || live.tel !== h.tel || live.icon !== h.icon) {
+          changed = true;
+        }
+        next.push({ ...h, ...live });
+      });
+      if (next.length !== a.hotlines.length) changed = true;
+      a.hotlines = next;
+    });
+    if (changed) saveAnnouncements(ancs);
+  } catch (e) {}
+}
+
+// Re-render every view that displays hotline data so edits appear system-wide.
+function refreshHotlineDependentViews() {
+  if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
+  if (typeof renderPage === 'function' && typeof currentPage !== 'undefined' && currentPage) {
+    renderPage(currentPage);
+  }
 }
 
 function renderHotlinesUI() {
@@ -271,25 +307,6 @@ function addNewHotline() {
         icon
       };
       saveHotlines(hotlines);
-
-      // Sync updated hotline into stored announcements if attached
-      try {
-        if (typeof getStoredAnnouncements === 'function' && typeof saveAnnouncements === 'function') {
-          const ancs = getStoredAnnouncements();
-          let anyUpdated = false;
-          ancs.forEach(a => {
-            if (a.hotlines && Array.isArray(a.hotlines)) {
-              a.hotlines.forEach((h, hIdx) => {
-                if (h.id === editingHotlineId) {
-                  a.hotlines[hIdx] = { ...h, name, shortName, number, tel, icon };
-                  anyUpdated = true;
-                }
-              });
-            }
-          });
-          if (anyUpdated) saveAnnouncements(ancs);
-        }
-      } catch (e) {}
 
       cancelEditHotline();
       if (typeof showToast === 'function') showToast('Hotline updated successfully!', 'success');

@@ -13,8 +13,12 @@ let managedRooms = (() => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Filter out legacy placeholder seeds
-        return parsed.filter(r => !['room-301', 'room-302', 'room-401', 'room-402', 'room-avr', 'room-comlab1'].includes(r.id));
+        // Filter out legacy placeholder seeds and any room with a non-timestamp ID
+        return parsed.filter(r => {
+          if (['room-301', 'room-302', 'room-401', 'room-402', 'room-avr', 'room-comlab1'].includes(r.id)) return false;
+          // Real rooms created by users have id = 'room-' + Date.now() (13-digit epoch)
+          return r.id && /^room-\d{13}$/.test(r.id);
+        });
       }
     }
   } catch (e) {
@@ -318,7 +322,7 @@ function renderRoomsTabContent() {
           <div style="font-size:12px;color:var(--text-muted);padding:8px 12px;">No active sections available. Please create a section first.</div>
         ` : activeSections.map(s => {
           const enrolled = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).filter(u =>
-            u.role === 'student' && (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
+            u.role === 'student' && u.isActive !== false && (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
           ).length;
           return `
             <div class="sec-drag-pill" draggable="true" ondragstart="handleSectionDragStart(event, '${escHtml(s.name)}')" title="Click or drag to assign to a room">
@@ -574,7 +578,7 @@ function renderRoomModalForm(r) {
       </div>
       <div class="gen-field">
         <label>Seating Capacity *</label>
-        <input type="number" id="rfCapacity" placeholder="e.g. 45" value="${r.capacity || 45}" min="1" max="500" data-type="number" maxlength="4" required>
+        <input type="number" id="rfCapacity" placeholder="e.g. 45" value="${r.capacity || 45}" min="1" max="500" data-type="number" maxlength="4" style="width:100%;box-sizing:border-box;" required>
         <span style="font-size:11px;color:var(--text-muted);">Maximum students (Digits only, max 4 digits)</span>
       </div>
     </div>
@@ -689,6 +693,8 @@ function renderAssignSectionModalForm() {
   if (!body || !foot) return;
 
   const activeSections = (typeof managedSections !== 'undefined' ? managedSections : []).filter(s => !s.isArchived);
+  const initialSectionName = currentAssignTargetSection || (activeSections[0] ? activeSections[0].name : '');
+  const subjectOptions = getAssignSubjectOptions(initialSectionName);
 
   body.innerHTML = `
     <!-- Real-time Conflict Alert Box -->
@@ -720,8 +726,16 @@ function renderAssignSectionModalForm() {
 
     <div class="gen-field">
       <label>Subject / Class Course (Optional)</label>
-      <input type="text" id="asfSubject" placeholder="e.g. General Biology 1, Pre-Calculus, Practical Research" maxlength="80">
-      <span style="font-size:11px;color:var(--text-muted);">Specific academic subject taking place in this room</span>
+      ${typeof renderSearchableSubjectPicker === 'function' ? renderSearchableSubjectPicker({
+        id: 'asfSubjectPicker',
+        inputId: 'asfSubject',
+        value: '',
+        options: subjectOptions.length ? subjectOptions : ['Pre-Calculus', 'Basic Calculus', 'General Biology 1', 'General Biology 2', 'General Physics 1', 'General Physics 2', 'Empowerment Technologies (ICT)'],
+        placeholder: 'Select from dropdown or search subject...'
+      }) : `
+        <input type="text" id="asfSubject" placeholder="e.g. General Biology 1, Pre-Calculus, Practical Research" maxlength="80">
+      `}
+      <span id="asfSubjectHint" style="font-size:11px;color:var(--text-muted);">${escHtml(assignSubjectHintText(initialSectionName))}</span>
     </div>
 
     <div class="gen-field" style="margin-bottom:18px;">
@@ -877,8 +891,43 @@ if (typeof window !== 'undefined') {
   window.updateAssignScheduleDaysUI = updateAssignScheduleDaysUI;
 }
 
+function getAssignSubjectStrand(secName) {
+  const sec = (typeof managedSections !== 'undefined' ? managedSections : []).find(s => s.name === secName);
+  return sec ? (sec.strand || '').toUpperCase() : '';
+}
+
+function getAssignSubjectOptions(secName) {
+  const all = (typeof getCurriculumSubjectsList === 'function') ? getCurriculumSubjectsList() : [];
+  const strand = getAssignSubjectStrand(secName);
+  if (!strand) return all;
+  const courses = (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) ? COURSES_DATABASE : [];
+  const map = (typeof window !== 'undefined' && window.SUBJECTS_BY_STRAND) || {};
+  const strandCount = new Map();
+  Object.values(map).forEach(list => {
+    if (Array.isArray(list)) list.forEach(t => strandCount.set(t, (strandCount.get(t) || 0) + 1));
+  });
+  const strandList = new Set(Array.isArray(map[strand]) ? map[strand] : []);
+  return all.filter(title => {
+    const matches = courses.filter(c => c && c.title === title);
+    if (matches.length) {
+      return matches.some(c => c.track === 'Core' || c.track === 'Applied' || (c.strand || '').toUpperCase() === strand);
+    }
+    return strandList.has(title) || (strandCount.get(title) || 0) > 1 || !strandCount.has(title);
+  });
+}
+
+function assignSubjectHintText(secName) {
+  const strand = getAssignSubjectStrand(secName);
+  return strand
+    ? `Showing ${strand} strand subjects (core & applied included) for ${secName}`
+    : 'Select from curriculum dropdown or type to search with matching text highlight';
+}
+
 function handleSectionSelectChange(secName) {
   currentAssignTargetSection = secName;
+  if (typeof sspSetOptions === 'function') sspSetOptions('asfSubjectPicker', getAssignSubjectOptions(secName));
+  const hint = document.getElementById('asfSubjectHint');
+  if (hint) hint.textContent = assignSubjectHintText(secName);
 }
 
 function validateAssignTimesLive() {

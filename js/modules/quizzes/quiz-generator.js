@@ -1,6 +1,5 @@
 /* ── SYSTEM QUIZ GENERATOR & MANAGEMENT MODULE ── */
 
-const QUIZ_API_ENDPOINT = typeof API_BASE !== 'undefined' ? `${API_BASE}/api/quiz/generate` : 'http://localhost:3001/api/quiz/generate';
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 let customQuizzes = [];
@@ -130,6 +129,12 @@ function goToQuizStep(targetStep) {
 }
 
 function validateQuizStep(step) {
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedSections = getTeacherAllowedSections();
+  if (isTeacher && allowedSections.length === 0) {
+    showToast('You cannot create quizzes because you have no assigned class sections.', 'warning');
+    return false;
+  }
   if (step === 1) {
     if (!quizGen.type) {
       quizGen.type = 'standard';
@@ -137,6 +142,9 @@ function validateQuizStep(step) {
     return true;
   }
   if (step === 2) {
+    if (isTeacher && quizGen.sections.size === 0 && allowedSections.length > 0) {
+      allowedSections.forEach(s => quizGen.sections.add(s));
+    }
     if (!quizGen.title || !quizGen.title.trim()) {
       showToast('Please enter a Quiz Title to proceed', 'warning');
       const el = document.getElementById('quizGenTitleInput');
@@ -341,26 +349,43 @@ function getTeacherAllowedGradeLevels() {
 
 function getTeacherAllowedSections() {
   const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
-  if (isTeacher && CURRENT_PROFILE.section) {
-    const sections = CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean);
-    if (sections.length > 0) return sections;
+  if (isTeacher) {
+    if (!CURRENT_PROFILE.section) return [];
+    const sections = CURRENT_PROFILE.section.split(',')
+      .map(s => s.trim())
+      .filter(s => Boolean(s) && (typeof isSectionArchived === 'function' ? !isSectionArchived(s) : true));
+    return sections;
   }
-  return typeof SECTIONS !== 'undefined' ? SECTIONS : ['Section A', 'Section B', 'Section C', 'Section D'];
+  const allSecs = typeof managedSections !== 'undefined'
+    ? managedSections.filter(s => !s.isArchived).map(s => s.name)
+    : (typeof SECTIONS !== 'undefined' ? SECTIONS : []);
+  return allSecs.filter(s => (typeof isSectionArchived === 'function' ? !isSectionArchived(s) : true));
 }
 
 function openQuizModal() {
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedSections = getTeacherAllowedSections();
   const container = document.getElementById('quizMakerContainer');
   const modal = document.getElementById('quizModal');
-  
+
+  if (isTeacher && allowedSections.length === 0) {
+    if (!container && !modal) {
+      if (typeof showToast === 'function') {
+        showToast('You cannot create quizzes because you have no assigned class sections. Please contact an administrator.', 'warning');
+      }
+      return;
+    }
+    renderQuizModal();
+    return;
+  }
+
   if (!container && !modal) {
     window.location.href = 'quiz-maker.html';
     return;
   }
 
-  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
   const allowedStrands = getTeacherAllowedStrands();
   const allowedGrades = getTeacherAllowedGradeLevels();
-  const allowedSections = getTeacherAllowedSections();
 
   const defaultSections = (isTeacher && CURRENT_PROFILE && CURRENT_PROFILE.section) 
     ? new Set(allowedSections) 
@@ -431,6 +456,17 @@ function closeQuizModal(redirect = true) {
     window.location.href = 'dashboard.html';
   }
 }
+
+// The standalone Quiz Maker page must always return to the Quiz Manager,
+// not the dashboard landing page, when the user cancels creation.
+function cancelQuizMaker() {
+  if (document.getElementById('quizMakerContainer')) {
+    window.location.assign('dashboard.html?page=quiz');
+    return;
+  }
+  closeQuizModal(false);
+}
+window.cancelQuizMaker = cancelQuizMaker;
 
 if (typeof SUBJECTS_BY_STRAND === 'undefined') {
   window.SUBJECTS_BY_STRAND = {
@@ -626,7 +662,7 @@ function getAvailableSubjectsForQuizGen() {
     });
   }
 
-  return Array.from(subjectsSet).sort();
+  return Array.from(subjectsSet).filter(s => typeof isSubjectArchived !== 'function' || !isSubjectArchived(s)).sort();
 }
 
 function toggleQuizStrand(s) {
@@ -1219,7 +1255,7 @@ async function generateQuiz() {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 75000); // 75 seconds leeway for AI models
-    const response = await fetch(QUIZ_API_ENDPOINT, {
+    const response = await fetch(`${API_BASE}/api/quiz/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -2087,8 +2123,7 @@ async function approveQuiz(id) {
   if (wrap && typeof renderApprovalMaterialRows === 'function') wrap.innerHTML = renderApprovalMaterialRows();
 }
 
-async function rejectQuiz(id) {
-  if (!confirm('Deny this quiz? It will be permanently deleted from the approval queue.')) return;
+async function rejectQuiz(id, reason) {
   const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
   let deletedSuccess = false;
 
@@ -2106,7 +2141,7 @@ async function rejectQuiz(id) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ status: 'rejected' })
+        body: JSON.stringify({ status: 'rejected', reason: reason || '' })
       });
       if (res.ok) deletedSuccess = true;
     } catch (e) {
@@ -2432,6 +2467,29 @@ function renderQuizModal() {
   const foot = document.getElementById('quizModalFoot');
   if (body) body.scrollTop = 0;
 
+  const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
+  const allowedSections = getTeacherAllowedSections();
+  if (isTeacher && allowedSections.length === 0) {
+    if (body) {
+      body.innerHTML = `
+        <div style="max-width:540px;margin:50px auto;background:#fff;border-radius:20px;padding:44px 32px;text-align:center;box-shadow:0 12px 36px rgba(15,23,42,0.08);border:1px solid #e2e8f0;">
+          <div style="width:64px;height:64px;border-radius:18px;background:#fef3c7;color:#d97706;display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h3 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 8px 0;">Quiz Creation Restricted</h3>
+          <p style="font-size:13.5px;color:#64748b;line-height:1.6;margin:0 0 24px 0;">
+            You currently have <strong>no assigned active class sections</strong>. Quizzes and interactive games cannot be created or distributed until an administrator assigns you to a class section in Section Management.
+          </p>
+          <a href="dashboard.html" style="display:inline-flex;align-items:center;gap:8px;padding:11px 22px;background:#0284c7;color:#fff;border-radius:10px;font-weight:700;font-size:13.5px;text-decoration:none;box-shadow:0 4px 14px rgba(2,132,199,0.3);">
+            &larr; Return to Dashboard
+          </a>
+        </div>
+      `;
+    }
+    if (foot) foot.innerHTML = '';
+    return;
+  }
+
   if (quizGen.step === 'loading') {
     const numFiles = (quizGen.files && quizGen.files.length > 1) ? quizGen.files.length : (quizGen.file ? 1 : 1);
     const fileCountText = numFiles > 1 ? `Analyzing ${numFiles} uploaded handouts` : 'Analyzing your uploaded handout';
@@ -2462,7 +2520,6 @@ function renderQuizModal() {
   const teacherStrands = (CURRENT_PROFILE && CURRENT_PROFILE.strand)
     ? CURRENT_PROFILE.strand.split(',').map(s => s.trim()).filter(Boolean)
     : [];
-  const isTeacher = CURRENT_PROFILE && CURRENT_PROFILE.role === 'teacher';
 
   const formatNames = { mc: 'Multiple Choice', tf: 'True / False', id: 'Identification', match: 'Matching Type' };
   const selectedFmtList = Array.from(quizGen.formats);
@@ -2536,7 +2593,7 @@ function renderQuizModal() {
     `;
 
     foot.innerHTML = `
-      <button class="foot-btn-secondary" onclick="closeQuizModal()">Cancel</button>
+      <button class="foot-btn-secondary" onclick="cancelQuizMaker()">Cancel</button>
       <button class="gen-btn" onclick="nextQuizStep()">Next: Quiz Description &rarr;</button>
     `;
     return;

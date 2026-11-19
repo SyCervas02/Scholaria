@@ -1,6 +1,7 @@
 /* ── PERSISTENT ROLE-AWARE NOTIFICATIONS MODULE ── */
 
 const NOTIF_STORAGE_KEY = 'scholaria_notifications_v1';
+let pendingNotificationDelete = null;
 
 const DEFAULT_SEED_NOTIFICATIONS = [];
 
@@ -22,6 +23,37 @@ function saveNotifications(list) {
   try {
     localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(list));
   } catch (e) {}
+}
+
+function seedLocalNotificationTestSamples() {
+  if (!['localhost', '127.0.0.1'].includes(window.location.hostname)) return;
+  const seedKey = 'scholaria_local_notification_samples_v1';
+  if (localStorage.getItem(seedKey) || !CURRENT_PROFILE) return;
+
+  const now = Date.now();
+  const sampleItems = [
+    ['Sample: New announcement', 'A new school announcement is available. Open this notification to review its full details.'],
+    ['Sample: Quiz reminder', 'Reminder: your assigned quiz is available in the Quizzes section. Please review the instructions before starting.'],
+    ['Sample: Materials update', 'A new learning material has been added for your subject. Visit My Materials to read it.'],
+    ['Sample: Schedule update', 'There has been an update to an upcoming academic schedule. Check the announcement details for more information.'],
+    ['Sample: Important school notice', 'This is a longer sample announcement to test how full notification details appear in the expanded popup. It includes extra context and a reminder to check the appropriate section for any related materials or actions.']
+  ];
+  const samples = sampleItems.map(([title, message], index) => ({
+    id: `notif_sample_${now}_${index + 1}`,
+    targetRole: null,
+    targetUserId: CURRENT_PROFILE.id || null,
+    title,
+    message,
+    senderName: 'Sample Notification',
+    senderAvatar: 'SN',
+    timestamp: new Date(now - index * 60 * 60 * 1000).toISOString(),
+    readBy: [],
+    type: index === 1 ? 'quiz' : 'announcement',
+    isLocalTestSample: true
+  }));
+
+  saveNotifications([...samples, ...getStoredNotifications()]);
+  localStorage.setItem(seedKey, 'true');
 }
 
 /**
@@ -122,19 +154,117 @@ function refreshNotificationsUI() {
 }
 
 function handleNotifItemClick(id) {
+  closeNotif();
+  openNotificationDetailModal(id);
+}
+
+function ensureNotificationDetailModal() {
+  let modal = document.getElementById('notificationDetailModal');
+  if (modal) return modal;
+
+  modal = document.createElement('div');
+  modal.id = 'notificationDetailModal';
+  modal.className = 'notification-detail-overlay';
+  modal.setAttribute('role', 'presentation');
+  modal.innerHTML = `
+    <section class="notification-detail-card" role="dialog" aria-modal="true" aria-labelledby="notifDetailTitle">
+      <button type="button" class="notification-detail-close" aria-label="Close notification details" onclick="closeNotificationDetailModal()">&times;</button>
+      <div class="notification-detail-kicker"><span class="notif-detail-badge" id="notifDetailTypeBadge"></span><span id="notifDetailStatusBadge"></span></div>
+      <h2 id="notifDetailTitle"></h2>
+      <div class="notification-detail-meta">
+        <span id="notifDetailSender"></span>
+        <span id="notifDetailDate"></span>
+      </div>
+      <div class="notification-detail-message" id="notifDetailMsg"></div>
+      <footer class="notification-detail-actions" id="notifDetailActionBtnWrap"></footer>
+    </section>`;
+  modal.addEventListener('click', event => {
+    if (event.target === modal) closeNotificationDetailModal();
+  });
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function openNotificationDetailModal(id) {
   const all = getStoredNotifications();
   const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
   const item = all.find(n => n.id === id);
-  if (item) {
-    if (!item.readBy) item.readBy = [];
-    if (!item.readBy.includes(myId)) {
-      item.readBy.push(myId);
-      saveNotifications(all);
-      refreshNotificationsUI();
+  if (!item) return;
+
+  // Mark as read
+  if (!item.readBy) item.readBy = [];
+  if (!item.readBy.includes(myId)) {
+    item.readBy.push(myId);
+    saveNotifications(all);
+    refreshNotificationsUI();
+    if (isNotificationsPageActive() && typeof renderPage === 'function') {
+      renderPage('notifications');
     }
   }
-  closeNotif();
-  if (typeof renderPage === 'function') renderPage('notifications');
+
+  const modal = ensureNotificationDetailModal();
+
+  const typeEl = document.getElementById('notifDetailTypeBadge');
+  const statusEl = document.getElementById('notifDetailStatusBadge');
+  const titleEl = document.getElementById('notifDetailTitle');
+  const senderEl = document.getElementById('notifDetailSender');
+  const dateEl = document.getElementById('notifDetailDate');
+  const msgEl = document.getElementById('notifDetailMsg');
+  const actionWrap = document.getElementById('notifDetailActionBtnWrap');
+
+  const typeConfig = {
+    approval: { label: '📌 Approval Queue', bg: '#ffedd5', color: '#c2410c', page: 'approval', btnLabel: 'Open Approvals' },
+    material: { label: '📄 Learning Material', bg: '#e0f2fe', color: '#0369a1', page: 'materials', btnLabel: 'View in Materials' },
+    quiz: { label: '🎉 Quiz & Assessment', bg: '#fef3c7', color: '#b45309', page: 'quiz', btnLabel: 'Open Quizzes' },
+    announcement: { label: '📢 School Announcement', bg: '#f3e8ff', color: '#7e22ce', page: 'announcements', btnLabel: 'Go to Announcements' },
+    info: { label: 'ℹ️ System Notice', bg: '#f1f5f9', color: '#475569' }
+  };
+  const cfg = typeConfig[item.type] || typeConfig.info;
+
+  if (typeEl) {
+    typeEl.textContent = cfg.label;
+    typeEl.style.background = cfg.bg;
+    typeEl.style.color = cfg.color;
+  }
+  if (statusEl) {
+    statusEl.innerHTML = `<span style="font-size:11px;font-weight:700;color:#059669;background:#dcfce7;padding:3px 9px;border-radius:12px;">✔ Read</span>`;
+  }
+  if (titleEl) titleEl.textContent = item.title || 'Notification';
+  if (senderEl) {
+    const sName = item.senderName || 'Academic Instructor';
+    senderEl.textContent = `👤 From: ${sName}`;
+  }
+  if (dateEl) {
+    dateEl.textContent = `📅 ${formatSentDate(item.timestamp)} (${formatTimeAgo(item.timestamp)})`;
+  }
+  if (msgEl) {
+    msgEl.textContent = item.message || '';
+  }
+
+  if (actionWrap) {
+    let actionBtnHtml = '';
+    if (cfg.page && typeof renderPage === 'function') {
+      actionBtnHtml += `
+        <button type="button" class="gen-btn" style="background:#2563eb;color:#fff;padding:7px 14px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;" onclick="closeNotificationDetailModal(); renderPage('${cfg.page}');">
+          ${cfg.btnLabel || 'View Details'} &rarr;
+        </button>
+      `;
+    }
+    actionBtnHtml += `
+      <button type="button" class="notif-act-btn danger" style="padding:7px 12px;font-size:12px;cursor:pointer;" onclick="requestNotificationDelete('single', '${item.id}')">
+        Delete
+      </button>
+    `;
+    actionWrap.innerHTML = actionBtnHtml;
+  }
+
+  modal.classList.add('active');
+  modal.querySelector('.notification-detail-close')?.focus();
+}
+
+function closeNotificationDetailModal() {
+  const modal = document.getElementById('notificationDetailModal');
+  if (modal) modal.classList.remove('active');
 }
 
 function isNotificationsPageActive() {
@@ -164,7 +294,8 @@ function formatSentDate(isoString) {
 function toggleNotif() {
   const dropdown = document.getElementById('notifDropdown');
   if (dropdown) {
-    dropdown.classList.toggle('open');
+    const isOpen = dropdown.classList.toggle('open');
+    document.getElementById('notifBtn')?.setAttribute('aria-expanded', String(isOpen));
     refreshNotificationsUI();
   }
 }
@@ -172,7 +303,15 @@ function toggleNotif() {
 function closeNotif() {
   const dropdown = document.getElementById('notifDropdown');
   if (dropdown) dropdown.classList.remove('open');
+  document.getElementById('notifBtn')?.setAttribute('aria-expanded', 'false');
 }
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    closeNotif();
+    closeNotificationDetailModal();
+  }
+});
 
 document.addEventListener('click', e => {
   const wrap = document.getElementById('notifWrap');
@@ -246,36 +385,88 @@ function markSelectedNotifsRead() {
   if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
 }
 
-function deleteSelectedNotifs() {
-  if (selectedNotifIds.size === 0) {
-    if (typeof showToast === 'function') showToast('No notifications selected', 'error');
+function requestNotificationDelete(action, id = null) {
+  const visibleIds = new Set(getNotificationsForCurrentUser().map(item => String(item.id)));
+  if (action === 'selected') {
+    const selectedVisible = [...selectedNotifIds].filter(selectedId => visibleIds.has(String(selectedId)));
+    if (!selectedVisible.length) {
+      if (typeof showToast === 'function') showToast('No notifications selected', 'error');
+      return;
+    }
+    pendingNotificationDelete = { action, ids: selectedVisible };
+  } else if (action === 'all') {
+    const ids = [...visibleIds];
+    if (!ids.length) {
+      if (typeof showToast === 'function') showToast('There are no notifications to delete', 'info');
+      return;
+    }
+    pendingNotificationDelete = { action, ids };
+  } else if (action === 'single' && id != null && visibleIds.has(String(id))) {
+    pendingNotificationDelete = { action, id: String(id) };
+  } else {
     return;
   }
-  let all = getStoredNotifications();
-  all = all.filter(n => !selectedNotifIds.has(n.id));
-  saveNotifications(all);
-  selectedNotifIds.clear();
+
+  let confirmModal = document.getElementById('notificationDeleteConfirm');
+  if (!confirmModal) {
+    confirmModal = document.createElement('div');
+    confirmModal.id = 'notificationDeleteConfirm';
+    confirmModal.className = 'notification-detail-overlay notification-delete-confirm';
+    confirmModal.innerHTML = `
+      <section class="notification-detail-card notification-delete-card" role="alertdialog" aria-modal="true" aria-labelledby="notificationDeleteTitle" aria-describedby="notificationDeleteMessage">
+        <div class="notification-delete-icon" aria-hidden="true">!</div>
+        <h2 id="notificationDeleteTitle">Delete notification?</h2>
+        <p id="notificationDeleteMessage"></p>
+        <footer class="notification-detail-actions">
+          <button type="button" class="notif-act-btn" onclick="cancelNotificationDelete()">No, keep it</button>
+          <button type="button" class="notif-act-btn danger" onclick="confirmNotificationDelete()">Yes, delete</button>
+        </footer>
+      </section>`;
+    confirmModal.addEventListener('click', event => {
+      if (event.target === confirmModal) cancelNotificationDelete();
+    });
+    document.body.appendChild(confirmModal);
+  }
+  const isSingle = pendingNotificationDelete.action === 'single';
+  const count = pendingNotificationDelete.ids?.length || 1;
+  confirmModal.querySelector('#notificationDeleteTitle').textContent = isSingle ? 'Delete notification?' : `Delete ${pendingNotificationDelete.action === 'all' ? 'all' : 'selected'} notifications?`;
+  confirmModal.querySelector('#notificationDeleteMessage').textContent = isSingle
+    ? 'Are you sure you want to delete this notification? This action cannot be undone.'
+    : `Are you sure you want to delete ${count} ${count === 1 ? 'notification' : 'notifications'}? This action cannot be undone.`;
+  confirmModal.classList.add('active');
+  confirmModal.querySelector('.notification-delete-card .notif-act-btn.danger')?.focus();
+}
+
+function cancelNotificationDelete() {
+  pendingNotificationDelete = null;
+  document.getElementById('notificationDeleteConfirm')?.classList.remove('active');
+}
+
+function confirmNotificationDelete() {
+  if (!pendingNotificationDelete) return;
+  const { action, id, ids = [] } = pendingNotificationDelete;
+  const deleteIds = new Set(action === 'single' ? [id] : ids.map(String));
+  const all = getStoredNotifications();
+  saveNotifications(all.filter(item => !deleteIds.has(String(item.id))));
+  deleteIds.forEach(deleteId => selectedNotifIds.delete(deleteId));
+  pendingNotificationDelete = null;
+  document.getElementById('notificationDeleteConfirm')?.classList.remove('active');
+  closeNotificationDetailModal();
   refreshNotificationsUI();
-  if (typeof showToast === 'function') showToast('Selected notifications deleted', 'success');
+  if (typeof showToast === 'function') showToast(`${deleteIds.size === 1 ? 'Notification' : 'Notifications'} deleted`, 'success');
   if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
+}
+
+function deleteSelectedNotifs() {
+  requestNotificationDelete('selected');
 }
 
 function deleteSingleNotif(id) {
-  let all = getStoredNotifications();
-  all = all.filter(n => n.id !== id);
-  selectedNotifIds.delete(id);
-  saveNotifications(all);
-  refreshNotificationsUI();
-  if (typeof showToast === 'function') showToast('Notification deleted', 'success');
-  if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
+  requestNotificationDelete('single', id);
 }
 
 function clearAllNotifs() {
-  saveNotifications([]);
-  selectedNotifIds.clear();
-  refreshNotificationsUI();
-  if (typeof showToast === 'function') showToast('All notifications cleared', 'success');
-  if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
+  requestNotificationDelete('all');
 }
 
 function buildNotificationsPage() {
@@ -323,8 +514,8 @@ function buildNotificationsPage() {
           <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
           Delete
         </button>
-        <button class="notif-act-btn danger-outline" onclick="clearAllNotifs()" title="Clear all notifications">
-          Clear
+        <button class="notif-act-btn danger-outline" onclick="clearAllNotifs()" title="Delete all notifications">
+          Delete all
         </button>
       </div>
     </div>
@@ -355,8 +546,8 @@ function buildNotificationsPage() {
                 const senderName = n.senderName || 'Academic Instructor';
 
                 return `
-                  <tr class="${isUnread ? 'unread-row' : ''}">
-                    <td class="notif-cell-select" style="text-align:center;">
+                  <tr class="${isUnread ? 'unread-row' : ''}" onclick="openNotificationDetailModal('${n.id}')" style="cursor:pointer;">
+                    <td class="notif-cell-select" style="text-align:center;" onclick="event.stopPropagation();">
                       <input type="checkbox" aria-label="Select notification ${idx + 1}" ${isSelected ? 'checked' : ''} onchange="toggleNotifSelection('${n.id}')"/>
                     </td>
                     <td class="notif-cell-number"><strong>${idx + 1}</strong></td>
@@ -380,7 +571,7 @@ function buildNotificationsPage() {
                         ? '<span class="notif-status-badge unread">❌ Unread</span>' 
                         : '<span class="notif-status-badge read">✔ Read</span>'}
                     </td>
-                    <td class="notif-cell-action" style="text-align:center;">
+                    <td class="notif-cell-action" style="text-align:center;" onclick="event.stopPropagation();">
                       <button class="notif-del-row-btn" onclick="deleteSingleNotif('${n.id}')" title="Delete notification">
                         <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                       </button>
@@ -400,3 +591,19 @@ function buildNotificationsPage() {
   </div>
   `;
 }
+
+// Ensure global accessibility
+window.openNotificationDetailModal = openNotificationDetailModal;
+window.closeNotificationDetailModal = closeNotificationDetailModal;
+window.deleteSingleNotif = deleteSingleNotif;
+window.toggleNotifSelection = toggleNotifSelection;
+window.toggleSelectAllNotifs = toggleSelectAllNotifs;
+window.setNotifTabFilter = setNotifTabFilter;
+window.markSelectedNotifsRead = markSelectedNotifsRead;
+window.deleteSelectedNotifs = deleteSelectedNotifs;
+window.clearAllNotifs = clearAllNotifs;
+window.markAllRead = markAllRead;
+window.handleNotifItemClick = handleNotifItemClick;
+window.requestNotificationDelete = requestNotificationDelete;
+window.cancelNotificationDelete = cancelNotificationDelete;
+window.confirmNotificationDelete = confirmNotificationDelete;

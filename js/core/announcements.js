@@ -30,6 +30,10 @@ function isAnnouncementExpired(anc) {
   if (!anc) return false;
   if (anc.isArchived) return true;
   if (anc.expiresAt && new Date(anc.expiresAt).getTime() <= Date.now()) return true;
+  if (anc.isPermanent) return false;
+  if (anc.timestamp && (Date.now() - new Date(anc.timestamp).getTime() > 7 * 24 * 60 * 60 * 1000)) {
+    return true;
+  }
   return false;
 }
 
@@ -85,6 +89,7 @@ function reuseAnnouncement(id) {
 
   if (titleInput) titleInput.value = anc.title || '';
   if (msgInput) msgInput.value = anc.message || '';
+  updateAncCharCount();
 
   if (anc.category === 'others') {
     handleAncCategoryChange('others');
@@ -187,6 +192,7 @@ function closeEmergencyBanner() {
 }
 
 function openEmergencyHotlinesModal() {
+  if (typeof renderHotlinesUI === 'function') renderHotlinesUI();
   const modal = document.getElementById('hotlineDirectoryModal');
   if (modal) modal.classList.add('active');
 }
@@ -260,6 +266,24 @@ function openAnnouncementDetailModal(id) {
     } else {
       hotlinesWrap.style.display = 'none';
       hotlinesList.innerHTML = '';
+    }
+  }
+
+  const adminActionsEl = document.getElementById('ancDetailModalAdminActions');
+  if (adminActionsEl) {
+    const canManage = (typeof ROLE !== 'undefined') && (ROLE === 'admin' || (ROLE === 'teacher' && anc.authorRole === 'Teacher'));
+    if (canManage) {
+      const isArch = isAnnouncementExpired(anc);
+      adminActionsEl.innerHTML = `
+        <button type="button" class="anc-preset-btn" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="toggleArchiveAnnouncement('${anc.id}'); closeAnnouncementDetailModal();">
+          ${typeof iconArchive === 'function' ? iconArchive() : ''} ${isArch ? 'Restore to Active' : 'Move to Archive'}
+        </button>
+        <button type="button" class="anc-preset-btn" style="padding:6px 12px;font-size:12px;color:#dc2626;border-color:#fca5a5;background:#fef2f2;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="deleteAnnouncement('${anc.id}'); closeAnnouncementDetailModal();">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete
+        </button>
+      `;
+    } else {
+      adminActionsEl.innerHTML = '';
     }
   }
 
@@ -523,41 +547,21 @@ function buildAnnouncementsPage() {
 
         <div class="anc-widget-card">
           <h4 class="anc-widget-title">City of Imus Emergency Directory</h4>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🚨</div>
-            <div class="anc-dir-details">
-              <h5>Imus Disaster Risk (CDRRMO)</h5>
-              <span style="font-weight:800;color:#dc2626;">(046) 515-1358</span>
-            </div>
-          </div>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🚒</div>
-            <div class="anc-dir-details">
-              <h5>Imus Bureau of Fire (BFP)</h5>
-              <span style="font-weight:800;color:#dc2626;">(046) 970-5161</span>
-            </div>
-          </div>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🚓</div>
-            <div class="anc-dir-details">
-              <h5>Imus PNP Police Station</h5>
-              <span>(046) 471-3993</span>
-            </div>
-          </div>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🏥</div>
-            <div class="anc-dir-details">
-              <h5>Medical Center Imus</h5>
-              <span>(046) 471-9487</span>
-            </div>
-          </div>
-          <div class="anc-dir-item">
-            <div class="anc-dir-icon">🏛️</div>
-            <div class="anc-dir-details">
-              <h5>Imus City Hall (Mayor)</h5>
-              <span>(046) 471-2732</span>
-            </div>
-          </div>
+          ${(() => {
+            const hls = typeof getStoredHotlines === 'function' ? getStoredHotlines() : [];
+            if (!hls.length) {
+              return '<p style="font-size:12.5px;color:#64748b;padding:6px 0;">No emergency hotlines configured yet.</p>';
+            }
+            return hls.map(hl => `
+              <a href="tel:${escHtml(hl.tel || hl.number.replace(/[^0-9+]/g, ''))}" class="anc-dir-item" style="text-decoration:none;color:inherit;" title="Click to call ${escHtml(hl.name)}">
+                <div class="anc-dir-icon" style="background:transparent;">${typeof hotlineIconSvg === 'function' ? hotlineIconSvg(hl, 32) : '📞'}</div>
+                <div class="anc-dir-details">
+                  <h5>${escHtml(hl.name)}</h5>
+                  <span style="font-weight:800;color:#dc2626;">${escHtml(hl.number)}</span>
+                </div>
+              </a>
+            `).join('');
+          })()}
         </div>
       </div>
     </div>
@@ -667,9 +671,77 @@ function onAncExpiryInputChange() {
 }
 
 /* ── ANNOUNCEMENT CREATOR MODAL (ADMIN & TEACHER) ── */
+function updateAncCharCount() {
+  const input = document.getElementById('ancMessageInput');
+  const counter = document.getElementById('ancCharCount');
+  if (!input || !counter) return;
+  const max = input.maxLength > 0 ? input.maxLength : 2000;
+  counter.textContent = `char count (${input.value.length}/${max})`;
+  counter.style.color = input.value.length >= max ? '#dc2626' : '#94a3b8';
+}
+
+function ancFormat(action) {
+  const input = document.getElementById('ancMessageInput');
+  if (!input) return;
+  input.focus();
+  const start = input.selectionStart || 0;
+  const end = input.selectionEnd || 0;
+  const value = input.value;
+  const selected = value.slice(start, end);
+  const insert = (text, selFrom, selTo) => {
+    input.value = value.slice(0, start) + text + value.slice(end);
+    input.selectionStart = selFrom;
+    input.selectionEnd = selTo;
+    updateAncCharCount();
+  };
+  const wrap = (marker) => {
+    const body = selected;
+    const wrapped = marker + body + marker;
+    insert(wrapped, start + marker.length, start + marker.length + body.length);
+  };
+  const prefixLines = (makePrefix) => {
+    const body = selected;
+    const lines = body.split('\n');
+    const out = lines.map((ln, i) => makePrefix(i) + ln).join('\n');
+    insert(out, start, start + out.length);
+  };
+  switch (action) {
+    case 'bold': wrap('*'); break;
+    case 'italic': wrap('_'); break;
+    case 'quote': wrap('"'); break;
+    case 'bullet': prefixLines(() => '• '); break;
+    case 'numbered': prefixLines(i => `${i + 1}. `); break;
+    case 'link': {
+      const url = prompt('Link URL:', 'https://');
+      if (!url) break;
+      const label = selected || url;
+      const text = `${label} (${url})`;
+      insert(text, start, start + text.length);
+      break;
+    }
+    case 'image': {
+      const url = prompt('Image URL:', 'https://');
+      if (!url) break;
+      const text = `[Image: ${url}]`;
+      insert(text, start, start + text.length);
+      break;
+    }
+    case 'attachment': {
+      const name = prompt('Attachment name / reference:', '');
+      if (!name) break;
+      const text = `[Attachment: ${name}]`;
+      insert(text, start, start + text.length);
+      break;
+    }
+  }
+}
+
 function openCreateAnnouncementModal() {
   const modal = document.getElementById('ancModal');
   if (modal) modal.classList.add('active');
+  const msgInput = document.getElementById('ancMessageInput');
+  if (msgInput) msgInput.value = '';
+  updateAncCharCount();
 
   const catSelect = document.getElementById('ancCategoryInput');
   const emergencyOpt = catSelect ? catSelect.querySelector('option[value="emergency"]') : null;

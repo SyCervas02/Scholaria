@@ -1,11 +1,14 @@
 {
-  "name": "capstone-web",
+  "name": "scholaria",
   "version": "1.0.0",
-  "description": "",
-  "main": "seed-demo-account.js",
+  "description": "Scholaria Learning Management Platform",
+  "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [],
   "author": "",

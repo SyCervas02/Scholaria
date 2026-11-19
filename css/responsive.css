@@ -1,7 +1,13 @@
 /* Load after page and module styles so mobile rules share one cascade. */
-.main, .page-section, .info-card, .ic-head > div, .welcome-text-box {
+.main, .page-section, .info-card, .ic-head > div {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+}
+.welcome-text-box {
+  min-width: 0;
+  width: 100%;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 .demo-mode-banner { height: auto; min-height: 40px; padding-block: 8px; }
 .emergency-top-banner { height: auto; min-height: 46px; padding-block: 8px; }
@@ -201,5 +207,136 @@
   .notif-dropdown {
     top: calc(var(--nav-h) + var(--banner-h, 0px) + var(--anc-banner-h, 0px) + 6px) !important;
     max-height: calc(100dvh - var(--nav-h) - var(--banner-h, 0px) - var(--anc-banner-h, 0px) - 16px) !important;
+  }
+}
+
+/* Smartphone & Small Tablet Responsive Adjustments */
+@media screen and (max-width: 768px) {
+  .welcome-banner {
+    padding: 16px 14px !important;
+    border-radius: 14px !important;
+  }
+  .banner-content {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+  .welcome-text-box {
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+  .welcome-text-box h1 {
+    font-size: 18px !important;
+    line-height: 1.25 !important;
+    letter-spacing: -0.01em !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+  .welcome-text-box h2 {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+  .welcome-text-box > div:first-child {
+    max-width: 100% !important;
+    white-space: normal !important;
+    line-height: 1.4 !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+  }
+  .banner-content > div:last-child {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .banner-content > div:last-child button {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+  }
+
+  /* Lesson Headers on Mobile */
+  .sw-lesson-header {
+    padding: 12px 14px !important;
+    gap: 10px !important;
+  }
+  .sw-lesson-cover-img {
+    width: 60px !important;
+    height: 44px !important;
+  }
+  .sw-lesson-header h4 {
+    font-size: 13.5px !important;
+    white-space: normal !important;
+    line-height: 1.35 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+  }
+  .sw-lesson-subtitle {
+    flex-wrap: wrap !important;
+    gap: 4px 6px !important;
+  }
+  .sw-lesson-subtitle span {
+    white-space: nowrap !important;
+  }
+}
+
+/* Laptop Screens (900px to 1280px) */
+@media screen and (min-width: 769px) and (max-width: 1280px) {
+  .welcome-banner {
+    padding: 18px 22px !important;
+  }
+  .welcome-text-box h1 {
+    font-size: 22px !important;
+  }
+  .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+}
+
+/* Admin Operations Dashboard Mobile and Laptop Overrides */
+@media screen and (max-width: 1024px) {
+  .admin-metric-grid-8 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  .admin-dashboard-row-3,
+  .admin-dashboard-row-4 {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .admin-metric-grid-8 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  .admin-metric-card {
+    padding: 12px 14px !important;
+  }
+  .admin-metric-card .ic-num {
+    font-size: 22px !important;
+  }
+  .admin-dash-panel {
+    padding: 16px !important;
+    border-radius: 14px !important;
+  }
+  .admin-dashboard-split {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .admin-metric-grid-8 {
+    grid-template-columns: 1fr !important;
   }
 }
