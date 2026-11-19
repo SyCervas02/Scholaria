@@ -1837,6 +1837,6 @@
 .ca-stat.approved.active {
   border-color: #10b981 !important;
 }
-.ca-stat.revision.active {
-  border-color: #ef4444 !important;
+.ca-stat.archived.active {
+  border-color: #64748b !important;
 }

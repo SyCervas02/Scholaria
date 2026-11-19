@@ -535,6 +535,18 @@ function isTeacherMaterial(m) {
   return true;
 }
 
+function resolveMaterialUploaderName(m) {
+  if (!m) return 'Teacher';
+  const known = m.uploaded_by_name || m.uploader_name || m.instructor;
+  if (known) return known;
+  if (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers)) {
+    const owner = registeredUsers.find(x => x && (x.dbId === m.uploaded_by || x.id === m.uploaded_by));
+    const name = owner?.name || owner?.full_name;
+    if (name) return name;
+  }
+  return 'Teacher';
+}
+
 function getSubjectLessons(course) {
   const lessons = getRawSubjectLessons(course);
   if (!lessons || !lessons.length || !Array.isArray(lessons)) return lessons || [];
@@ -586,12 +598,12 @@ function getSubjectLessons(course) {
             title: u.title || u.fileName || "Curriculum Handout",
             type: u.type || (u.file_type && u.file_type.includes("word") ? "DOCX" : (u.file_type && u.file_type.includes("presentation") ? "PPTX" : "PDF")),
             score: (() => {
-              let name = u.uploaded_by_name || u.uploader_name || '';
-              if (!name && typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers)) {
-                const owner = registeredUsers.find(x => x && (x.dbId === u.uploaded_by || x.id === u.uploaded_by));
-                name = owner?.name || owner?.full_name || '';
-              }
-              return (name && !name.toLowerCase().includes('admin')) ? name : 'Official Admin Handout';
+              const owner = (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers))
+                ? registeredUsers.find(x => x && (x.dbId === u.uploaded_by || x.id === u.uploaded_by))
+                : null;
+              const name = u.uploaded_by_name || u.uploader_name || owner?.name || owner?.full_name || '';
+              if (name && !name.toLowerCase().includes('admin')) return name;
+              return owner && String(owner.role || '').toLowerCase() === 'teacher' ? (name || 'Faculty Teacher') : 'Official Admin Handout';
             })(),
             submitted: u.date_formatted || "Oct 16, 2026",
             due: u.date_formatted || "Official Handout",
@@ -3949,7 +3961,7 @@ async function previewSubjectUploadedMaterial(id) {
   const dlBtn = document.getElementById('docPreviewDlBtn');
 
   const title = m.title || m.fileName || 'Learning Material';
-  const uploader = m.uploaded_by_name || m.uploader_name || m.instructor || 'Teacher';
+  const uploader = resolveMaterialUploaderName(m);
   const subject = m.subject || 'General Subject';
   const size = m.size || m.meta || '';
   const date = m.date_formatted || '';
@@ -4153,14 +4165,9 @@ function approvalIcon(name) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.file}</svg>`;
 }
 
-function getRevisionItems() {
-  try { return JSON.parse(localStorage.getItem('scholaria_revision_items_v1') || '[]'); } catch (e) { return []; }
-}
-
 function approvalEntries() {
   const quizzes = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
   const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
-  const revisionKeys = getRevisionItems();
 
   const allMaterials = Array.isArray(materialsData) ? materialsData.filter(Boolean).filter(m => !String(m.id).startsWith('local_')) : [];
   const allQuizzes = Array.isArray(quizzes) ? quizzes.filter(Boolean) : [];
@@ -4168,16 +4175,14 @@ function approvalEntries() {
   return [
     ...allMaterials.map(m => {
       const isArchived = isEntryArchived('material', m.id, m.status);
-      const isRevision = revisionKeys.includes(`material:${String(m.id)}`);
-      let status = isArchived ? 'archived' : (isRevision ? 'revision' : (m.status || 'pending'));
-      if (!isArchived && !isRevision && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
+      const status = isArchived ? 'archived' : (m.status || 'pending');
       return {
         id: m.id,
         kind: 'material',
         title: m.title || m.fileName || 'Untitled Material',
         type: m.content_type || m.file_type || 'Material',
         subject: m.subject || 'General',
-        name: m.uploaded_by_name || m.uploader_name || 'Teacher',
+        name: resolveMaterialUploaderName(m),
         date: m.created_at,
         status,
         isArchived
@@ -4185,9 +4190,7 @@ function approvalEntries() {
     }),
     ...allQuizzes.map(q => {
       const isArchived = isEntryArchived('quiz', q.id, q.status);
-      const isRevisionQ = revisionKeys.includes(`quiz:${String(q.id)}`);
-      let status = isArchived ? 'archived' : (isRevisionQ ? 'revision' : (q.status === 'active' ? 'approved' : (q.status || 'pending')));
-      if (!isArchived && !isRevisionQ && ['rejected', 'revision', 'needs_revision'].includes(status)) status = 'revision';
+      const status = isArchived ? 'archived' : (q.status === 'active' ? 'approved' : (q.status || 'pending'));
       const authorUser = users.find(u => u.dbId === q.createdBy || u.id === q.createdBy || (q.createdBy && String(u.dbId).toLowerCase() === String(q.createdBy).toLowerCase()));
       const uploaderName = q.createdByName || q.author || q.uploaded_by_name || authorUser?.name || authorUser?.full_name || 'Teacher';
       const isInteractive = q.quiz_type === 'interactive' || q.type === 'interactive';
@@ -4203,7 +4206,7 @@ function approvalEntries() {
         isArchived
       };
     })
-  ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  ].filter(e => ['pending', 'approved', 'archived'].includes(e.status)).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 }
 
 function setApprovalView(key, value) {
@@ -4248,8 +4251,7 @@ function renderApprovalMaterialRows() {
       <td>
         <div class="ca-actions">
           <button class="ca-review" onclick="reviewApprovalEntry(${args})">${approvalIcon('eye')} Review</button>
-          ${e.status === 'pending' ? `<button class="ca-approve" title="Approve" aria-label="Approve ${escHtml(e.title)}" onclick="runApprovalAction(${args},true)">${approvalIcon('check')}</button><button class="ca-reject" title="Deny" aria-label="Deny ${escHtml(e.title)}" onclick="runApprovalAction(${args},false)">${approvalIcon('close')}</button><button class="ca-revision-btn" title="Needs Revision" aria-label="Mark needs revision ${escHtml(e.title)}" onclick="markNeedsRevision(${args})" style="background:#fff7ed;border:1.5px solid #f97316;color:#ea580c;border-radius:7px;padding:5px 9px;cursor:pointer;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;" title="Needs Revision"><svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>Revision</button>` : ''}
-          ${(e.status === 'archived' || approvalView.tab === 'archived') ? `<button class="ca-unarchive-btn" title="Unarchive" aria-label="Unarchive ${escHtml(e.title)}" onclick="toggleArchiveApprovalEntry('${e.kind}', '${escHtml(String(e.id))}')">${approvalIcon('archive')} Unarchive</button>` : ''}
+          ${e.status === 'pending' ? `<button class="ca-approve" title="Approve" aria-label="Approve ${escHtml(e.title)}" onclick="runApprovalAction(${args},true)">${approvalIcon('check')}</button><button class="ca-reject" title="Deny" aria-label="Deny ${escHtml(e.title)}" onclick="runApprovalAction(${args},false)">${approvalIcon('close')}</button>` : ''}
           <div class="ca-more-wrap">
             <button class="ca-more-btn" title="More options" aria-label="More options" onclick="toggleApprovalMenu(event)">${approvalIcon('dots')}</button>
             <div class="ca-more-menu">
@@ -4262,8 +4264,8 @@ function renderApprovalMaterialRows() {
   }).join('');
   return `<div class="ca-heading"><h2>Content Approval</h2><div class="ca-heading-actions"><button class="ca-button ca-primary" onclick="refreshApprovalView()">${iconRefresh()} Refresh</button></div></div>
     <div class="ca-banner"><h3>Approval Queue</h3><p>All materials and quizzes submitted by teachers require your approval before they become visible to students.</p></div>
-    <div class="ca-stats">${[['pending','Pending review','clock'],['approved','Approved','check'],['revision','Needs revision','file']].map(([status,label,icon]) => `<div class="ca-stat ${status} ${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')" role="button" tabindex="0" title="Click to filter ${label}"><div class="ca-stat-icon">${approvalIcon(icon)}</div><div><span>${label}</span><strong>${counts(status)}</strong></div></div>`).join('')}</div>
-    <div class="ca-panel"><div class="ca-tabs" aria-label="Submission status">${[['pending',`Pending (${counts('pending')})`],['approved','Approved'],['revision','Needs revision'],['archived',`Archive (${counts('archived')})`]].map(([status,label]) => `<button aria-pressed="${approvalView.tab === status}" class="${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')">${label}</button>`).join('')}</div>
+    <div class="ca-stats">${[['pending','Pending review','clock'],['approved','Approved','check'],['archived','Archive','archive']].map(([status,label,icon]) => `<div class="ca-stat ${status} ${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')" role="button" tabindex="0" title="Click to filter ${label}"><div class="ca-stat-icon">${approvalIcon(icon)}</div><div><span>${label}</span><strong>${counts(status)}</strong></div></div>`).join('')}</div>
+    <div class="ca-panel"><div class="ca-tabs" aria-label="Submission status">${[['pending',`Pending (${counts('pending')})`],['approved','Approved'],['archived',`Archive (${counts('archived')})`]].map(([status,label]) => `<button aria-pressed="${approvalView.tab === status}" class="${approvalView.tab === status ? 'active' : ''}" onclick="setApprovalView('tab','${status}')">${label}</button>`).join('')}</div>
     <div class="ca-filters"><label class="ca-search">${approvalIcon('search')}<input id="caSearch" aria-label="Search submissions" placeholder="Search submissions..." value="${escHtml(approvalView.search)}" oninput="setApprovalView('search',this.value)"></label><select aria-label="Content type" onchange="setApprovalView('type',this.value)"><option value="">All content types</option>${options('type')}</select><select aria-label="Subject" onchange="setApprovalView('subject',this.value)"><option value="">All subjects</option>${options('subject')}</select></div>
     <div class="ca-table-wrap"><table class="ca-table"><thead><tr><th scope="col">Content</th><th scope="col">Submitted by</th><th scope="col">Date submitted</th><th scope="col">Actions</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="ca-empty">No submissions found.</td></tr>'}</tbody></table></div>
     <div class="ca-footer"><span>Showing ${Math.min(5, filtered.length - offset)} of ${filtered.length} submissions</span><nav class="ca-pagination" aria-label="Submission pages">${approvalView.page > 1 ? `<button aria-label="Previous page" onclick="setApprovalView('page',${approvalView.page - 1})">&#8249;</button>` : ''}${Array.from({ length: Math.min(3, pages) }, (_, i) => Math.max(1, Math.min(approvalView.page - 1, pages - 2)) + i).map(page => `<button aria-label="Page ${page}" ${page === approvalView.page ? 'aria-current="page"' : ''} class="${page === approvalView.page ? 'active' : ''}" onclick="setApprovalView('page',${page})">${page}</button>`).join('')}<button aria-label="Next page" ${approvalView.page === pages ? 'disabled' : ''} onclick="setApprovalView('page',${approvalView.page + 1})">&#8250;</button></nav></div></div>`;
@@ -4275,28 +4277,17 @@ function runApprovalAction(kind, id, approve) {
       return kind === 'quiz' ? approveQuiz(id) : approveMaterial(id);
     }
     // Show deny reason panel before actually rejecting
-    showDenyReasonPanel(kind, id, 'reject');
+    showDenyReasonPanel(kind, id);
   } catch (e) {
     console.error('runApprovalAction error:', e);
     showToast('An error occurred while processing. Please try again.', 'error');
   }
 }
 
-async function markNeedsRevision(kind, id) {
-  // Show reason panel before marking as needs revision
-  showDenyReasonPanel(kind, id, 'revision');
-}
-
-function showDenyReasonPanel(kind, id, action) {
+function showDenyReasonPanel(kind, id) {
   // Remove any existing panel first
   const existingDialog = document.getElementById('denyReasonDialog');
   if (existingDialog) existingDialog.remove();
-
-  const isRevision = action === 'revision';
-  const title = isRevision ? 'Request Revision' : 'Deny Submission';
-  const btnLabel = isRevision ? 'Mark as Needs Revision' : 'Deny Submission';
-  const btnClass = isRevision ? 'ca-revision-confirm-btn' : 'ca-deny-confirm-btn';
-  const btnColor = isRevision ? '#ea580c' : '#dc2626';
 
   const dialog = document.createElement('dialog');
   dialog.id = 'denyReasonDialog';
@@ -4304,21 +4295,17 @@ function showDenyReasonPanel(kind, id, action) {
   dialog.innerHTML = `
     <div style="padding:28px 28px 24px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <h3 style="margin:0;font-size:18px;font-weight:700;color:#111827;">${title}</h3>
+        <h3 style="margin:0;font-size:18px;font-weight:700;color:#111827;">Deny Submission</h3>
         <button onclick="document.getElementById('denyReasonDialog').close()" style="background:none;border:none;cursor:pointer;font-size:22px;color:#6b7280;line-height:1;">&times;</button>
       </div>
-      <p style="margin:0 0 14px;font-size:14px;color:#4b5563;">
-        ${isRevision
-          ? 'Describe what changes the teacher needs to make before resubmitting.'
-          : 'Explain why this submission is being denied. The teacher will be notified.'}
-      </p>
-      <textarea id="denyReasonText" placeholder="${isRevision ? 'e.g. Please fix the formatting and add proper references...' : 'e.g. This content does not align with the curriculum...'}"
+      <p style="margin:0 0 14px;font-size:14px;color:#4b5563;">Explain why this submission is being denied. The teacher will be notified.</p>
+      <textarea id="denyReasonText" placeholder="e.g. This content does not align with the curriculum..."
         style="width:100%;box-sizing:border-box;min-height:110px;border:1.5px solid #d1d5db;border-radius:8px;padding:10px 12px;font-size:14px;resize:vertical;font-family:inherit;color:#111827;outline:none;"
         oninput="this.style.borderColor=this.value.trim()?'#6366f1':'#d1d5db'"></textarea>
       <p style="margin:6px 0 20px;font-size:12px;color:#9ca3af;">Optional — leave blank to send without a reason.</p>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button onclick="document.getElementById('denyReasonDialog').close()" style="padding:9px 18px;border:1.5px solid #d1d5db;background:#fff;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;color:#374151;">Cancel</button>
-        <button class="${btnClass}" onclick="_confirmDenyAction('${kind}','${id}','${action}')" style="padding:9px 18px;background:${btnColor};border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;color:#fff;">${btnLabel}</button>
+        <button class="ca-deny-confirm-btn" onclick="_confirmDenyAction('${kind}','${id}')" style="padding:9px 18px;background:#dc2626;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;color:#fff;">Deny Submission</button>
       </div>
     </div>`;
   dialog.addEventListener('close', () => dialog.remove());
@@ -4328,82 +4315,17 @@ function showDenyReasonPanel(kind, id, action) {
 }
 window.showDenyReasonPanel = showDenyReasonPanel;
 
-async function _confirmDenyAction(kind, id, action) {
+async function _confirmDenyAction(kind, id) {
   const reasonEl = document.getElementById('denyReasonText');
   const reason = reasonEl ? reasonEl.value.trim() : '';
   const dialog = document.getElementById('denyReasonDialog');
   if (dialog) dialog.close();
 
-  const REVISION_KEY = 'scholaria_revision_items_v1';
-
-  if (action === 'revision') {
-    let revisionList = [];
-    try { revisionList = JSON.parse(localStorage.getItem(REVISION_KEY) || '[]'); } catch (e) {}
-    const key = `${kind}:${String(id)}`;
-    if (!revisionList.includes(key)) revisionList.push(key);
-    localStorage.setItem(REVISION_KEY, JSON.stringify(revisionList));
-
-    if (kind === 'material') {
-      const idx = materialsData.findIndex(m => String(m.id) === String(id));
-      if (idx >= 0) materialsData[idx].status = 'revision';
-      const localList = getCustomMaterialsFromStorage();
-      const lIdx = localList.findIndex(m => String(m.id) === String(id));
-      if (lIdx >= 0) {
-        localList[lIdx].status = 'revision';
-        localStorage.setItem(CUSTOM_MATERIALS_STORAGE_KEY, JSON.stringify(localList));
-      }
-      const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-      if (session && session.access_token) {
-        try {
-          await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/status`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-            body: JSON.stringify({ status: 'rejected', reason })
-          });
-        } catch (err) { console.warn('markNeedsRevision backend notice:', err); }
-      }
-      if (typeof addNotification === 'function') {
-        const mat = materialsData.find(m => String(m.id) === String(id));
-        if (mat && mat.uploaded_by) {
-          addNotification({
-            targetUserId: mat.uploaded_by,
-            targetRole: 'teacher',
-            title: 'Revision Requested',
-            message: `Your material "${mat.title || 'Material'}" needs revision.${reason ? ' Reason: ' + reason : ''}`,
-            type: 'material'
-          });
-        }
-      }
-    } else if (kind === 'quiz') {
-      const qIdx = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).findIndex(q => String(q.id) === String(id));
-      if (qIdx >= 0 && typeof customQuizzes !== 'undefined') customQuizzes[qIdx].status = 'revision';
-      const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-      if (session && session.access_token) {
-        try {
-          await fetch(`${API_BASE}/api/quizzes/${encodeURIComponent(id)}/status`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-            body: JSON.stringify({ status: 'rejected', reason })
-          });
-        } catch (err) { console.warn('markNeedsRevision quiz backend notice:', err); }
-      }
-    }
-
-    showToast('Marked as needs revision', 'info');
+  if (kind === 'material') {
+    await rejectMaterial(id, reason);
   } else {
-    // reject / deny
-    if (kind === 'material') {
-      await rejectMaterial(id, reason);
-    } else {
-      await rejectQuiz(id, reason);
-    }
-    return; // rejectMaterial/rejectQuiz already show toast and re-render
+    await rejectQuiz(id, reason);
   }
-
-  const wrap = document.getElementById('approvalListWrap');
-  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
-  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
-  if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
 }
 window._confirmDenyAction = _confirmDenyAction;
 
@@ -4522,26 +4444,12 @@ function quizReviewQuestionHTML(q, index) {
 async function reviewApprovalEntry(kind, id) {
   if (kind === 'material') {
     const material = materialsData.find(m => String(m.id) === id);
-    if (!material) return;
-    const dialog = document.createElement('dialog');
-    dialog.className = 'ca-review-dialog';
-    dialog.setAttribute('aria-labelledby', 'caReviewTitle');
-    dialog.innerHTML = `<form method="dialog"><button class="ca-dialog-close" aria-label="Close review">&times;</button></form><h2 id="caReviewTitle">${escHtml(material.title)}</h2><p>${escHtml(material.subject || 'General')}</p><p class="ca-file-preview" aria-live="polite">Loading file...</p>`;
-    dialog.addEventListener('close', () => dialog.remove());
-    document.body.appendChild(dialog);
-    dialog.showModal();
-    const preview = dialog.querySelector('.ca-file-preview');
-    try {
-      const { data: { session } } = await db.auth.getSession();
-      if (!session) throw new Error('Please sign in to review this file.');
-      const response = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${session.access_token}` } });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Unable to open material.');
-      const url = new URL(data.url);
-      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid file URL.');
-      preview.innerHTML = `<a href="${escHtml(url.href)}" target="_blank" rel="noopener noreferrer">Open submitted file</a>`;
-    } catch (error) { preview.textContent = error.message; }
-    return;
+    if (!material) {
+      showToast('Material not found. Please refresh the approval queue.', 'error');
+      return;
+    }
+    // Same rich preview modal used in the Materials Manager.
+    return previewSubjectUploadedMaterial(material.id);
   }
   const quiz = customQuizzes.find(q => String(q.id) === id);
   if (!quiz) return;

@@ -1270,20 +1270,88 @@ function ncToggleContact(id) {
 
       if (hasFaculty) {
         showToast('Direct messaging with faculty is 1-on-1 only. Unselect faculty to create a group chat with students.', 'warning');
+        syncNewChatModalSelection();
         return;
       }
       if (hasStudents && targetRole !== 'student') {
         showToast('Students can only create group chats with other students.', 'warning');
+        syncNewChatModalSelection();
         return;
       }
       if (targetRole !== 'student' && newChatState.selected.size >= 1) {
         showToast('Students can only create group chats with other students.', 'warning');
+        syncNewChatModalSelection();
         return;
       }
     }
     newChatState.selected.add(id);
   }
-  renderNewChatModal();
+  syncNewChatModalSelection();
+}
+
+// Update the open New Chat modal in place so picking people never re-renders
+// the list (which used to reset the scroll position on every click).
+function syncNewChatModalSelection() {
+  const body = document.getElementById('newChatModalBody');
+  const isStudent = typeof ROLE !== 'undefined' && ROLE === 'student';
+  const selectedList = newChatState.directory.filter(c => newChatState.selected.has(c.id));
+  const hasFacultySelected = selectedList.some(c => String(c.role || '').toLowerCase() !== 'student');
+  const hasStudentSelected = selectedList.some(c => String(c.role || '').toLowerCase() === 'student');
+
+  if (body) {
+    body.querySelectorAll('.nc-contact-row[data-contact-id]').forEach(row => {
+      const contact = newChatState.directory.find(c => String(c.id) === row.dataset.contactId);
+      if (!contact) return;
+      const isContactStudent = String(contact.role || '').toLowerCase() === 'student';
+      const isSelected = newChatState.selected.has(contact.id);
+      const isDisabled = isStudent && !isSelected && (hasFacultySelected || (hasStudentSelected && !isContactStudent));
+
+      row.classList.toggle('picked', isSelected);
+      row.style.opacity = isDisabled ? '0.45' : '';
+      row.style.cursor = isDisabled ? 'not-allowed' : '';
+      row.title = isDisabled ? (hasFacultySelected ? 'Direct messaging with faculty is 1-on-1 only' : 'Students can only create group chats with other students') : '';
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (cb) { cb.checked = isSelected; cb.disabled = isDisabled; }
+
+      let note = row.querySelector('.nc-rule-note');
+      if (isDisabled) {
+        if (!note) {
+          note = document.createElement('span');
+          note.className = 'nc-rule-note';
+          row.appendChild(note);
+        }
+        note.textContent = hasFacultySelected ? '1-on-1 only' : 'Students only';
+      } else if (note) {
+        note.remove();
+      }
+    });
+
+    const list = body.querySelector('.nc-contact-list');
+    const groupField = body.querySelector('#ncGroupNameField');
+    if (newChatState.selected.size > 1) {
+      if (!groupField && list) {
+        const wrap = document.createElement('div');
+        wrap.className = 'gen-field';
+        wrap.id = 'ncGroupNameField';
+        wrap.innerHTML = `<label>Group name (optional)</label><input type="text" class="nc-group-name" id="ncGroupName" placeholder="e.g. Grade 12 STEM — Study Group">`;
+        list.insertAdjacentElement('afterend', wrap);
+      }
+    } else if (groupField) {
+      groupField.remove();
+    }
+  }
+
+  const foot = document.getElementById('newChatModalFoot');
+  if (foot) {
+    const n = newChatState.selected.size;
+    const countEl = foot.querySelector('.nc-picked-count');
+    if (countEl) countEl.textContent = `${n} selected`;
+    const createBtn = foot.querySelector('.nc-create-btn');
+    if (createBtn) {
+      createBtn.disabled = n === 0;
+      createBtn.innerHTML = `${iconPlus()} ${n > 1 ? 'Start Group Chat' : 'Start Chat'}`;
+    }
+  }
 }
 function ncFilterContacts(v) {
   newChatState.search = v;
@@ -1316,14 +1384,14 @@ function renderNewChatModal() {
       : '';
 
     return `
-    <label class="nc-contact-row ${isSelected ? 'picked' : ''}" style="${isDisabled ? 'opacity:0.45;cursor:not-allowed;' : ''}" title="${rowTitle}">
+    <label class="nc-contact-row ${isSelected ? 'picked' : ''}" data-contact-id="${escHtml(String(c.id))}" style="${isDisabled ? 'opacity:0.45;cursor:not-allowed;' : ''}" title="${rowTitle}">
       <input type="checkbox" ${isSelected ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="ncToggleContact('${c.id}')">
       <div class="contact-avatar" style="width:32px;height:32px;font-size:11px;">${initialsFor(c.full_name)}</div>
       <div class="contact-info">
         <h4>${escHtml(c.full_name)}</h4>
         <span>${escHtml(c.role.charAt(0).toUpperCase() + c.role.slice(1))}${c.school_id ? ' · ' + escHtml(c.school_id) : ''}</span>
       </div>
-      ${isDisabled ? `<span style="font-size:11px;color:#94a3b8;margin-left:auto;padding-right:6px;">${hasFacultySelected ? '1-on-1 only' : 'Students only'}</span>` : ''}
+      ${isDisabled ? `<span class="nc-rule-note" style="font-size:11px;color:#94a3b8;margin-left:auto;padding-right:6px;">${hasFacultySelected ? '1-on-1 only' : 'Students only'}</span>` : ''}
     </label>`;
   }).join('') : `<div class="nc-empty">No matching people found.</div>`;
 
@@ -1338,7 +1406,7 @@ function renderNewChatModal() {
     <input type="text" class="nc-search" placeholder="Search by name or role…" value="${escHtml(newChatState.search)}" oninput="ncFilterContacts(this.value)">
     <div class="nc-contact-list">${rowsHtml}</div>
     ${newChatState.selected.size > 1 ? `
-      <div class="gen-field"><label>Group name (optional)</label>
+      <div class="gen-field" id="ncGroupNameField"><label>Group name (optional)</label>
         <input type="text" class="nc-group-name" id="ncGroupName" placeholder="e.g. Grade 12 STEM — Study Group">
       </div>` : ''}`;
 
@@ -1347,7 +1415,7 @@ function renderNewChatModal() {
     <span class="nc-picked-count">${n} selected</span>
     <div style="display:flex;gap:10px;">
       <button class="foot-btn-secondary" onclick="closeNewChatModal()">Cancel</button>
-      <button class="foot-btn-secondary" style="border-color:var(--blue);color:var(--blue);" ${n === 0 ? 'disabled' : ''} onclick="ncCreateConversation()">${iconPlus()} ${n > 1 ? 'Start Group Chat' : 'Start Chat'}</button>
+      <button class="foot-btn-secondary nc-create-btn" style="border-color:var(--blue);color:var(--blue);" ${n === 0 ? 'disabled' : ''} onclick="ncCreateConversation()">${iconPlus()} ${n > 1 ? 'Start Group Chat' : 'Start Chat'}</button>
     </div>`;
 }
 

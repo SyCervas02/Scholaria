@@ -31,12 +31,12 @@
 .ca-stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; margin-bottom: 16px; }
 .ca-stat { display: flex; align-items: center; gap: 24px; padding: 8px 24px; border: 1px solid #ffead0; border-radius: 8px; background: #fffaf1; }
 .ca-stat.approved { background: #f3fdf8; border-color: #d8f2e5; }
-.ca-stat.revision { background: #fff5f5; border-color: #ffdfdf; }
+.ca-stat.archived { background: #f8fafc; border-color: #e2e8f0; }
 .ca-stat-icon { width: 58px; height: 58px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%; background: #ffecd2; color: #ff8500; }
 .ca-stat-icon svg { width: 33px; height: 33px; }
 .ca-stat.approved .ca-stat-icon { background: #d8f4e4; color: #009c49; }
 .ca-stat.approved .ca-stat-icon svg { border-radius: 50%; background: #009c49; color: white; padding: 5px; }
-.ca-stat.revision .ca-stat-icon { background: #ffdddd; color: #ff3440; }
+.ca-stat.archived .ca-stat-icon { background: #e2e8f0; color: #475569; }
 .ca-stat span { font-size: 14px; }
 .ca-stat strong { display: block; font-size: 28px; line-height: 1.3; }
 .ca-panel { background: #ffffffed; border: 1px solid #e6edfc; border-radius: 14px; padding: 0 17px; }

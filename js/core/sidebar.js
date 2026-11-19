@@ -100,9 +100,14 @@ function initDashboardShell() {
   } catch (_) {}
   if (typeof resetChatState === 'function') resetChatState();
   if (typeof seedLocalNotificationTestSamples === 'function') seedLocalNotificationTestSamples();
+  const navPages = (SIDEBAR[ROLE] || []).map(i => i.page);
+  let savedPage = null;
+  try { savedPage = sessionStorage.getItem(`scholaria_active_page_${ROLE || 'user'}`); } catch (_) {}
+  if (savedPage && !navPages.includes(savedPage)) savedPage = null;
+  const requestedValid = !!requestedPage && (navPages.includes(requestedPage) || (requestedPage === 'quiz' && (ROLE === 'teacher' || ROLE === 'admin')));
   const initialPage = attachmentReturn?.conversationId
     ? 'chats'
-    : (requestedPage === 'quiz' && (ROLE === 'teacher' || ROLE === 'admin') ? 'quiz' : 'dashboard');
+    : (requestedValid ? requestedPage : (savedPage || 'dashboard'));
   renderPage(initialPage);
   if (attachmentReturn?.conversationId) {
     setTimeout(async () => {
@@ -413,6 +418,18 @@ function isStudentHandledByTeacher(student, teacherProfile) {
   return teacherSections.includes(studentSection);
 }
 
+// Section match alone can leak students from other strands that share a section
+// label, so teachers also get scoped by the strand(s) on their profile.
+function teacherCoversStudent(student, teacherProfile) {
+  if (!isStudentHandledByTeacher(student, teacherProfile)) return false;
+  const teacherStrandText = String(teacherProfile?.strand || '').toUpperCase();
+  if (!teacherStrandText.trim()) return true;
+  const studentStrand = String(student?.strand || '').toUpperCase();
+  const strandKey = ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL'].find(k => studentStrand.includes(k));
+  if (!strandKey) return true;
+  return teacherStrandText.includes(strandKey);
+}
+
 function deduplicateQuizAttempts(attemptsList) {
   const result = [];
   (attemptsList || []).forEach(item => {
@@ -673,8 +690,11 @@ function openAddClassRecordModal() {
   if (!modal) return;
   const select = document.getElementById('crStudentSelect');
   if (select) {
-    const students = registeredUsers.filter(u => u.role === 'student');
-    select.innerHTML = students.map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('');
+    const students = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false
+      && (typeof ROLE === 'undefined' || ROLE !== 'teacher' || teacherCoversStudent(u, CURRENT_PROFILE)));
+    select.innerHTML = students.length
+      ? students.map(u => `<option value="${u.dbId || u.id || u.name}">${escHtml(u.name)} (${escHtml(u.strand || 'General')} · ${escHtml(u.section || 'Unassigned')})</option>`).join('')
+      : '<option value="">No students in your handled strand/section</option>';
   }
   const quizSelect = document.getElementById('crQuizSelect');
   if (quizSelect) {
@@ -692,7 +712,8 @@ function closeAddClassRecordModal() {
 function submitAddClassRecord() {
   const studentKey = document.getElementById('crStudentSelect')?.value;
   const quizId = document.getElementById('crQuizSelect')?.value || 'quiz_1';
-  const score = Number(document.getElementById('crScoreInput')?.value || 85);
+  const rawScore = Number(document.getElementById('crScoreInput')?.value);
+  const score = Math.min(100, Math.max(0, Number.isFinite(rawScore) ? rawScore : 85));
   const subj = document.getElementById('crSubjInput')?.value || 'Web Systems';
 
   if (!studentKey) { showToast('Please select a student', 'error'); return; }
@@ -729,10 +750,7 @@ function buildRealClassRecordEntries() {
       return [];
     }
 
-    students = students.filter(u => {
-      const studSec = (u.section || '').trim().toLowerCase();
-      return studSec && teacherSections.includes(studSec) && (typeof isSectionArchived !== 'function' || !isSectionArchived(studSec));
-    });
+    students = students.filter(u => teacherCoversStudent(u, prof));
   } else {
     // For admin or other active views, also exclude students in archived sections
     students = students.filter(u => {
@@ -963,7 +981,11 @@ function handleAvatarFileSelect(event) {
     if (dataUrlInput) {
       dataUrlInput.value = dataUrl;
     }
-    showToast('Profile picture preview updated! Click "Save Changes" to apply.', 'info');
+    if (CURRENT_PROFILE) {
+      CURRENT_PROFILE.avatar_url = dataUrl;
+      updateNavAvatarUI();
+    }
+    showToast('Profile picture updated! Click "Save Changes" to apply.', 'info');
   };
   reader.readAsDataURL(file);
 }
@@ -3688,7 +3710,7 @@ function teacherPage(page) {
       const quizzes = getClassRecordQuizzes();
       const filteredEntries = buildRealClassRecordEntries();
       const sectionSummaries = buildSectionSummaryEntries();
-      const allHandledStudents = registeredUsers.filter(u => u.role === 'student' && (ROLE !== 'teacher' || isStudentHandledByTeacher(u, CURRENT_PROFILE)));
+      const allHandledStudents = registeredUsers.filter(u => u.role === 'student' && (ROLE !== 'teacher' || teacherCoversStudent(u, CURRENT_PROFILE)));
 
       const totalStudentsCount = allHandledStudents.length;
       const quizzesCount = quizzes.length;
@@ -5487,6 +5509,7 @@ window.approveDashboardQueueItem = approveDashboardQueueItem;
 function renderPage(page) {
   currentPage = page;
   window.currentPage = page;
+  try { sessionStorage.setItem(`scholaria_active_page_${ROLE || 'user'}`, page); } catch (_) {}
   if (page === 'materials') {
     if (typeof setActiveSubjectMaterials === 'function') {
       setActiveSubjectMaterials(null, null, false);

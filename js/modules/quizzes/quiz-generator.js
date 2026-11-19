@@ -2152,6 +2152,17 @@ async function approveQuiz(id) {
 async function rejectQuiz(id, reason) {
   const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
   let deletedSuccess = false;
+  const rejectedQuiz = customQuizzes.find(q => String(q.id) === String(id));
+
+  if (rejectedQuiz && typeof addNotification === 'function') {
+    addNotification({
+      targetUserId: rejectedQuiz.createdBy,
+      targetRole: 'teacher',
+      title: 'Submission Denied',
+      message: `Your quiz "${rejectedQuiz.title}" has been denied by the Admin.${reason ? ` Reason: ${reason}` : ''}`,
+      type: 'quiz'
+    });
+  }
 
   customQuizzes = customQuizzes.filter(q => String(q.id) !== String(id));
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
