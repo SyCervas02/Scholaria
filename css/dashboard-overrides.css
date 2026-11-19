@@ -461,6 +461,39 @@ body.has-anc-banner {
   border: 1px solid #fef08a;
 }
 
+/* Quiz Manager row header: keep status/type pills on the same line as the
+   quiz title and reserve width for the meta row so it stays on one line. */
+.quiz-row .qz-info {
+  /* 560px keeps the longest meta row (subject · strand · grade · items ·
+     time · due) on a single line; below that the actions wrap underneath. */
+  flex: 1 1 560px !important;
+  min-width: min(100%, 300px) !important;
+}
+.quiz-row .qz-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap !important;
+  gap: 8px;
+  min-width: 0;
+}
+.quiz-row .qz-title-line > .qz-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0 !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quiz-row .qz-title-line > .status-pill,
+.quiz-row .qz-title-line > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.quiz-row .qz-meta {
+  gap: 8px !important;
+  font-size: 11.5px !important;
+}
+
 /* Responsive Quiz Manager Actions:
    - When zoomed out or on wide screens: utilizes the full row horizontally in a single line.
    - When space is constrained (e.g. 100% zoom, smaller screen): neatly wraps into two clean stacks,
@@ -473,7 +506,8 @@ body.has-anc-banner {
   gap: 8px !important;
   align-items: center !important;
   justify-content: flex-end !important;
-  flex: 1 1 auto !important;
+  /* Keep the natural button width so the info column is never squeezed. */
+  flex: 0 0 auto !important;
   margin-left: auto !important;
   max-width: 100% !important;
 }
@@ -504,38 +538,11 @@ body.has-anc-banner {
 }
 
 @media (max-width: 1380px) {
-  /* Quiz Manager row header: keep status/type pills on the same line as the
-     quiz title and reserve enough width for a single-line meta row. */
-  .quiz-row .qz-info {
-    flex: 1 1 420px;
-    min-width: min(100%, 280px);
-  }
-  .quiz-row .qz-title-line {
-    display: flex;
-    align-items: center;
-    flex-wrap: nowrap !important;
-    gap: 8px;
-    min-width: 0;
-  }
-  .quiz-row .qz-title-line > .qz-title {
-    flex: 0 1 auto;
-    min-width: 0;
-    margin: 0 !important;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .quiz-row .qz-title-line > .status-pill,
-  .quiz-row .qz-title-line > span {
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
   .quiz-row-actions {
     flex-direction: column !important;
     align-items: flex-end !important;
-    /* Do not absorb the leftover width: keep the info column wide enough
-       for the title/pills line and a single-line meta row. */
-    flex: 0 1 auto !important;
+    /* In column mode grow must not stretch the stack vertically. */
+    flex: 0 0 auto !important;
   }
 }
 
