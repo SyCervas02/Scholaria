@@ -2651,7 +2651,7 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
                 <span style="background:#e0f2fe;color:#0369a1;font-weight:700;font-size:11px;padding:2px 8px;border-radius:6px;">Section: ${escHtml(card.assignedSection)}</span>
                 <span style="background:#f1f5f9;color:#475569;font-weight:600;font-size:11px;padding:2px 8px;border-radius:6px;">${escHtml(card.displayStrand || card.sectionStrand || card.strand || 'General')} · ${escHtml(card.gradeLevel || 'Grade 11')}</span>
               </div>
-              <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+              <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;overflow-wrap:anywhere;">
                 ${escHtml(card.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
               </p>
               <div class="sfc-foot" style="padding-top:12px;border-top:1px solid #f1f5f9;display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569;font-weight:600;flex-wrap:nowrap;overflow:hidden;">
@@ -2705,7 +2705,7 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
             </div>
             <div class="sfc-body" style="padding:18px;">
               <h4 class="sfc-title" style="font-size:16px;margin-bottom:6px;">${escHtml(course.title)}</h4>
-              <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+              <p style="margin:0 0 10px 0;font-size:12px;color:#64748b;line-height:1.45;overflow-wrap:anywhere;">
                 ${escHtml(course.description || 'Curriculum learning modules, handouts, and laboratory activities.')}
               </p>
               <p class="sfc-instructor" style="margin-bottom:12px;">👤 <span>Instructor: <strong>${escHtml(course.instructor || 'Faculty')}</strong></span></p>

@@ -665,6 +665,31 @@ function getAvailableSubjectsForQuizGen() {
   return Array.from(subjectsSet).filter(s => typeof isSubjectArchived !== 'function' || !isSubjectArchived(s)).sort();
 }
 
+function getQuizLessonOptions(subject) {
+  if (!subject) return [];
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const target = norm(subject);
+  let lessons = [];
+
+  if (typeof getSubjectLessons === 'function' && typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
+    const course = COURSES_DATABASE.find(c => {
+      const title = norm(c.title);
+      return title && (title === target || title.includes(target) || target.includes(title));
+    });
+    if (course) lessons = getSubjectLessons(course) || [];
+  }
+  if (!lessons.length && typeof getRawSubjectLessons === 'function') {
+    lessons = getRawSubjectLessons({ title: subject, id: `quiz-${target.replace(/\s+/g, '-')}` }) || [];
+  }
+
+  const options = [];
+  lessons.forEach(lesson => {
+    const value = String(lesson.title || lesson.num || '').trim();
+    if (value && !options.some(o => o.value.toLowerCase() === value.toLowerCase())) options.push({ value, label: value });
+  });
+  return options;
+}
+
 function toggleQuizStrand(s) {
   const isTeacher = CURRENT_PROFILE && (CURRENT_PROFILE.role === 'teacher' || (typeof ROLE !== 'undefined' && ROLE === 'teacher'));
   const allowedStrands = getTeacherAllowedStrands();
@@ -703,7 +728,8 @@ function toggleQuizSection(s) {
 }
 
 function updateTitle(v)  { quizGen.title = v; }
-function updateSubject(v){ quizGen.subject = v; }
+function updateSubject(v){ quizGen.subject = v; quizGen.lesson = ''; renderQuizModal(); }
+function updateLesson(v) { quizGen.lesson = v; }
 
 function handleFileInput(input) {
   const selectedFiles = Array.from(input.files || []);
@@ -2673,7 +2699,22 @@ function renderQuizModal() {
               ${allowedGrades.map(g => `<option value="${g}" ${quizGen.gradeLevel === g ? 'selected' : ''}>${g}</option>`).join('')}
             </select>
           </div>
-          <div class="gen-field"><label>Lesson</label><input type="text" placeholder="e.g. Lesson 3" value="${escHtml(quizGen.lesson)}" oninput="quizGen.lesson = this.value;"></div>
+          <div class="gen-field">
+            <label>Lesson</label>
+            ${(() => {
+              const lessonOptions = getQuizLessonOptions(quizGen.subject);
+              const hasSubject = !!quizGen.subject;
+              const current = quizGen.lesson || '';
+              const placeholder = !hasSubject ? 'Select a subject first' : (lessonOptions.length ? 'Select lesson' : 'No lessons available');
+              return `
+                <select id="quizGenLessonSelect" onchange="updateLesson(this.value)" ${hasSubject ? '' : 'disabled style="background:#f8fafc;cursor:not-allowed;"'}>
+                  <option value="" ${current ? '' : 'selected'}>${placeholder}</option>
+                  ${lessonOptions.map(l => `<option value="${escHtml(l.value)}" ${current === l.value ? 'selected' : ''}>${escHtml(l.label)}</option>`).join('')}
+                  ${(current && !lessonOptions.some(l => l.value === current)) ? `<option value="${escHtml(current)}" selected>${escHtml(current)}</option>` : ''}
+                </select>
+              `;
+            })()}
+          </div>
         </div>
 
         <div class="gen-field">

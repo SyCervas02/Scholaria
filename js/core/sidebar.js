@@ -3099,11 +3099,18 @@ function teacherPage(page) {
       const panel = (title, svg, content, page, cls='') => `<section class="td-panel ${cls}"><header>${icon(svg)}<h3>${title}</h3><button type="button" class="td-link" onclick="${go(page)}">View All</button></header>${content}</section>`;
       const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
       const unreadChatCount = demo ? 7 : (typeof getTeacherUnreadChatCount === 'function' ? getTeacherUnreadChatCount() : 0);
+      const adminPublishedCount = (Array.isArray(materialsData) ? materialsData : []).filter(m => {
+        if (!m || m.status !== 'approved') return false;
+        if (m.is_curriculum === true) return true;
+        const role = String(m.uploader_role || m.uploaded_by_role || '').toLowerCase();
+        const name = String(m.uploaded_by_name || m.uploader_name || '').toLowerCase();
+        return role.includes('admin') || name.includes('admin');
+      }).length;
       const metrics = [
         ['My Classes',demo?2:teacherAssignedSections.length,'Classes handled','classrec',iconUsers(),'blue'],
         ['Total Students',demo?68:new Set(attempts.map(a=>a.student_id).filter(Boolean)).size,'Across all classes','classrec',iconUsers(),'green'],
         ['Materials Uploaded',demo?12:materials.length,'This semester','materials',iconFolder(),'orange'],
-        ['Published Lessons',demo?8:materials.filter(m=>m.status==='approved').length,'Ready for students','materials',iconFolder(),'purple'],
+        ['Published Lessons',demo?8:adminPublishedCount,'Published by admins','materials',iconFolder(),'purple'],
         ['Active Quizzes',demo?3:active.length,'Currently ongoing','quiz',iconQuiz(),'purple'],
         ['Upcoming Deadlines',demo?5:active.filter(q=>{const t=new Date(q.dueDate||q.due_date).getTime()-Date.now();return t>=0&&t<=604800000;}).length,'Within 7 days','quiz',iconRecord(),'pink'],
         ['Unread News',demo?2:news.filter(a=>!read.has(String(a.id))).length,'School announcements','announcements',iconAnnouncement(),'pink'],
