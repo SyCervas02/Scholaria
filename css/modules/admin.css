@@ -807,14 +807,16 @@ table.au-format-table tr:nth-child(even) td.req-cell { background: #fef3c7; }
 }
 
 @media print {
-  body * {
+  /* Scope to credential-slip printing; an unscoped `body *` rule hid
+     every other printable report (e.g. the institutional census). */
+  body.printing-credential-slip * {
     visibility: hidden;
   }
-  .credential-slip-card,
-  .credential-slip-card * {
+  body.printing-credential-slip .credential-slip-card,
+  body.printing-credential-slip .credential-slip-card * {
     visibility: visible;
   }
-  .credential-slip-card {
+  body.printing-credential-slip .credential-slip-card {
     position: absolute;
     left: 0;
     top: 0;
