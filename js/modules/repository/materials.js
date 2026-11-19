@@ -589,7 +589,7 @@ function getSubjectLessons(course) {
             submitted: u.date_formatted || "Oct 16, 2026",
             due: u.date_formatted || "Official Handout",
             status: "Completed",
-            file_url: u.file_url || null
+            file_url: u.file_url || "SURVEY FORMS - Scholaria.pdf"
           });
         }
       });
@@ -917,7 +917,10 @@ async function loadMaterialsFromDB() {
   if (currentPage === 'materials' || currentPage === 'approval') {
     renderMaterialsContainer();
   } else if (currentPage === 'dashboard') {
-    if (typeof rerenderCurrentPage === 'function') rerenderCurrentPage();
+    const mainContent = document.getElementById('mainContent');
+    if (mainContent && typeof getPageContent === 'function') {
+      mainContent.innerHTML = getPageContent(ROLE, 'dashboard');
+    }
   }
 }
 
@@ -1022,8 +1025,7 @@ function renderMaterialsList(role) {
 
       const quizProgressPct = subjectQuizzes.length > 0
         ? Math.round((completedQuizzesCount / subjectQuizzes.length) * 100)
-        : 0;
-      const subjectIsEmpty = subjectQuizzes.length === 0 && totalSubjectMat === 0;
+        : 100;
 
       const sC = 238.76;
       const sCompLen = (quizProgressPct / 100) * sC;
@@ -1179,7 +1181,7 @@ function renderMaterialsList(role) {
                                                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                                 Preview
                                               </button>
-                                              <a href="javascript:void(0)" onclick="event.stopPropagation(); downloadMaterial('${it.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;cursor:pointer;" title="Download Handout">
+                                              <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
                                                 <span>⬇</span> Download
                                               </a>
                                               ${(role === 'admin') ? `
@@ -1397,16 +1399,16 @@ function renderMaterialsList(role) {
               </div>
               <div class="sw-gauge-wrap" style="position:relative;width:120px;height:120px;margin:0 auto 16px auto;">
                 <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg);">
-                  <!-- Base track (dashed when the subject has no content at all) -->
-                  <circle cx="50" cy="50" r="38" fill="none" stroke="${subjectIsEmpty ? '#cbd5e1' : '#f1f5f9'}" stroke-width="9" ${subjectIsEmpty ? 'stroke-dasharray="2 6" stroke-linecap="round"' : ''}/>
+                  <!-- Base track -->
+                  <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" stroke-width="9"/>
                   <!-- Completed (Green) -->
                   ${sCompLen > 0 ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sCompLen.toFixed(2)} ${sC}" stroke-dashoffset="0"/>` : ''}
                   <!-- Pending (Amber) -->
                   ${(pendingQuizzesCount > 0 && sPendLen > 0) ? `<circle cx="50" cy="50" r="38" fill="none" stroke="#d97706" stroke-width="9" stroke-linecap="round" stroke-dasharray="${sPendLen.toFixed(2)} ${sC}" stroke-dashoffset="-${sCompLen.toFixed(2)}"/>` : ''}
                 </svg>
                 <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-                  <span style="font-size:24px;font-weight:800;color:${subjectQuizzes.length === 0 ? '#94a3b8' : '#0f172a'};line-height:1;">${quizProgressPct}%</span>
-                  <span style="font-size:9px;font-weight:700;color:#64748b;margin-top:2px;">${subjectQuizzes.length === 0 ? (subjectIsEmpty ? 'EMPTY' : 'NO QUIZZES') : (pendingQuizzesCount === 0 ? 'COMPLETE' : 'PROGRESS')}</span>
+                  <span style="font-size:24px;font-weight:800;color:#0f172a;line-height:1;">${quizProgressPct}%</span>
+                  <span style="font-size:9px;font-weight:700;color:#64748b;margin-top:2px;">${pendingQuizzesCount === 0 ? 'COMPLETE' : 'PROGRESS'}</span>
                 </div>
               </div>
               <span style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:0.6px;text-transform:uppercase;text-align:center;display:block;margin-top:6px;margin-bottom:12px;">ACADEMIC OVERVIEW</span>
@@ -1416,8 +1418,8 @@ function renderMaterialsList(role) {
                   <strong style="color:#0f172a;">${completedQuizzesCount} / ${subjectQuizzes.length}</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
-                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:${subjectQuizzes.length === 0 ? '#cbd5e1' : (pendingQuizzesCount > 0 ? '#d97706' : '#16a34a')};"></span> Quizzes Pending</span>
-                  <strong style="color:${subjectQuizzes.length === 0 ? '#94a3b8' : (pendingQuizzesCount > 0 ? '#d97706' : '#16a34a')};">${pendingQuizzesCount}</strong>
+                  <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:${pendingQuizzesCount > 0 ? '#d97706' : '#16a34a'};"></span> Quizzes Pending</span>
+                  <strong style="color:${pendingQuizzesCount > 0 ? '#d97706' : '#16a34a'};">${pendingQuizzesCount}</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                   <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#0284c7;"></span> Teacher Handouts</span>
@@ -1425,7 +1427,7 @@ function renderMaterialsList(role) {
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                   <span style="display:inline-flex;align-items:center;gap:6px;color:#475569;"><span style="width:8px;height:8px;border-radius:50%;background:#8b5cf6;"></span> Modules Available</span>
-                  <strong style="color:#0f172a;">${activeLessonsCount}</strong>
+                  <strong style="color:#0f172a;">${lessons.length}</strong>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;padding-top:6px;border-top:1px solid #f1f5f9;">
                   <span style="display:inline-flex;align-items:center;gap:6px;color:#0284c7;font-weight:700;"><span style="width:8px;height:8px;border-radius:50%;background:#0284c7;"></span> Total Learning Files</span>
@@ -1496,7 +1498,7 @@ window.getSectionStrand = getSectionStrand;
 function getSectionGradeLevel(secName) {
   if (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) {
     const found = managedSections.find(s => (s.name || '').toLowerCase().trim() === (secName || '').toLowerCase().trim());
-    if (found && found.gradeLevel) return found.gradeLevel.trim();
+    if (found && (found.gradeLevel || found.grade_level)) return (found.gradeLevel || found.grade_level).trim();
   }
   const sLow = (secName || '').toLowerCase().trim();
   if (sLow.includes('grade 12') || sLow.includes('gr12') || sLow.includes('g12')) return 'Grade 12';
@@ -1525,6 +1527,9 @@ window.teacherGradeFilter = 'all';
 function setTeacherGradeFilter(gradeVal) {
   teacherGradeFilter = gradeVal || 'all';
   window.teacherGradeFilter = teacherGradeFilter;
+  const strandSelect = document.getElementById('teacherStrandSelect');
+  const activeStrand = strandSelect ? (window.teacherStrandFilter || 'all').toLowerCase() : 'all';
+  updateSectionDropdownOptions(activeStrand, teacherGradeFilter);
   applyTeacherClassFilter();
 }
 window.setTeacherGradeFilter = setTeacherGradeFilter;
@@ -1623,7 +1628,7 @@ function clearTeacherClassSearch() {
 }
 window.clearTeacherClassSearch = clearTeacherClassSearch;
 
-function updateSectionDropdownOptions(activeStrand) {
+function updateSectionDropdownOptions(activeStrand, activeGrade) {
   const select = document.getElementById('teacherSectionSelect');
   if (!select) return;
 
@@ -1631,21 +1636,32 @@ function updateSectionDropdownOptions(activeStrand) {
   const options = select.querySelectorAll('option[data-section-strand]');
   let isCurrentStillValid = (currentVal === 'all');
 
+  const strandNorm = (activeStrand !== undefined ? activeStrand : (window.teacherStrandFilter || 'all')).toLowerCase();
+  const gradeNorm = (activeGrade !== undefined ? activeGrade : (window.teacherGradeFilter || 'all')).toLowerCase().replace(/\s+/g, '');
+
   options.forEach(opt => {
     const optStrand = (opt.dataset.sectionStrand || '').toLowerCase();
-    if (activeStrand === 'all' || optStrand === activeStrand || optStrand === 'all') {
+    const optGrade = (opt.dataset.sectionGrade || '').toLowerCase().replace(/\s+/g, '');
+
+    const strandMatch = (strandNorm === 'all' || optStrand === strandNorm || optStrand === 'all');
+    const gradeMatch = (gradeNorm === 'all' || optGrade === gradeNorm || optGrade === 'all');
+
+    if (strandMatch && gradeMatch) {
       opt.style.display = '';
       opt.disabled = false;
+      opt.hidden = false;
       if (opt.value.toLowerCase() === currentVal) isCurrentStillValid = true;
     } else {
       opt.style.display = 'none';
       opt.disabled = true;
+      opt.hidden = true;
     }
   });
 
   if (!isCurrentStillValid) {
     select.value = 'all';
     window.teacherSectionFilter = 'all';
+    if (typeof teacherSectionFilter !== 'undefined') teacherSectionFilter = 'all';
   } else {
     select.value = window.teacherSectionFilter;
   }
@@ -1714,7 +1730,7 @@ function applyTeacherClassFilter() {
   });
 
   // Dynamically update section dropdown to hide non-matching sections
-  updateSectionDropdownOptions(activeStrand);
+  updateSectionDropdownOptions(activeStrand, activeGrade);
 
   // Live count badge
   const countBadge = document.getElementById('activeClassesCountBadge');
@@ -2230,12 +2246,39 @@ function getMaterialFormatBadge(type, fileName) {
 }
 
 function renderAdminApprovedHandoutRow(m) {
-  const isTeacher = (m.uploader_role || '').toLowerCase().includes('teacher') || 
-                    (m.uploaded_by_name || '').toLowerCase().includes('teacher') || 
-                    (m.uploader_name || '').toLowerCase().includes('teacher');
-  const uploaderRole = isTeacher ? 'Teacher' : 'Admin';
-  const uploaderName = m.uploaded_by_name || m.uploader_name || (isTeacher ? 'Faculty Instructor' : 'Administrator');
-  const approverName = m.approved_by_name || (isTeacher ? 'Academic Admin' : uploaderName);
+  const users = typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : [];
+  const findUser = id => id == null ? null : users.find(user =>
+    [user.dbId, user.id, user.school_id].some(userId => userId != null && String(userId) === String(id))
+  );
+  const uploader = findUser(m.uploaded_by);
+  const uploaderRoleValue = String(uploader?.role || m.uploader_role || m.uploaded_by_role || '').toLowerCase();
+  const isTeacher = uploaderRoleValue.includes('teacher') || uploaderRoleValue === 'faculty' ||
+                    (!uploaderRoleValue && ((m.uploaded_by_name || '').toLowerCase().includes('teacher') ||
+                    (m.uploader_name || '').toLowerCase().includes('teacher')));
+  const uploaderRole = isTeacher ? 'Teacher' : uploaderRoleValue.includes('admin') ? 'Admin' : 'Uploader';
+  const uploaderName = uploader?.name || uploader?.full_name || m.uploaded_by_name || m.uploader_name || 'Unknown uploader';
+  const approver = findUser(m.approved_by);
+  const namedApprover = users.find(user =>
+    String(user.role || '').toLowerCase() === 'admin' &&
+    String(user.name || user.full_name || '').trim().toLowerCase() === String(m.approved_by_name || '').trim().toLowerCase()
+  );
+  const namedApproverAccount = users.find(user =>
+    String(user.name || user.full_name || '').trim().toLowerCase() === String(m.approved_by_name || '').trim().toLowerCase()
+  );
+  const knownApprover = approver && String(approver.role || '').toLowerCase() === 'admin' ? approver : namedApprover;
+  const activeAdmin = String(ROLE || CURRENT_PROFILE?.role || '').toLowerCase() === 'admin'
+    ? users.find(user =>
+        String(user.role || '').toLowerCase() === 'admin' &&
+        [user.dbId, user.id, user.school_id].some(userId =>
+          userId != null && [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].some(profileId =>
+            profileId != null && String(userId) === String(profileId)
+          )
+        )
+      ) || CURRENT_PROFILE
+    : null;
+  const approverName = knownApprover?.name || knownApprover?.full_name ||
+    activeAdmin?.full_name || activeAdmin?.name ||
+    (m.approved_by_name && !approver && !namedApproverAccount ? m.approved_by_name : 'Not recorded');
 
   const title = m.title || m.fileName || 'Curriculum Handout';
   const formatBadge = getMaterialFormatBadge(m.type, m.fileName);
@@ -2261,9 +2304,9 @@ function renderAdminApprovedHandoutRow(m) {
     '</td>' +
     '<td><span class="repo-section" title="' + escHtml(section) + '">' + escHtml(section) + '</span></td>' +
     '<td>' +
-      '<div class="repo-cell-flex">' +
-        '<span class="role-tag ' + uploaderRole.toLowerCase() + '" style="flex-shrink:0;">' + uploaderRole + '</span>' +
-        '<div class="repo-min"><div class="repo-clip repo-name" title="' + escHtml(uploaderName) + '">' + escHtml(uploaderName) + '</div></div>' +
+      '<div class="repo-person">' +
+        '<span class="role-tag ' + uploaderRole.toLowerCase() + '">' + uploaderRole + '</span>' +
+        '<div class="repo-clip repo-name" title="' + escHtml(uploaderName) + '">' + escHtml(uploaderName) + '</div>' +
       '</div>' +
     '</td>' +
     '<td>' +
@@ -2333,12 +2376,12 @@ function renderAdminApprovedHandoutsTableHTML() {
     '<div class="repo-table-wrap" id="adminApprovedTableWrap">' +
       '<table style="width:100%;border-collapse:collapse;table-layout:fixed;">' +
         '<colgroup>' +
-          '<col style="width:24%;">' +
-          '<col style="width:16%;">' +
-          '<col style="width:9%;">' +
-          '<col style="width:15%;">' +
+          '<col style="width:18%;">' +
           '<col style="width:14%;">' +
-          '<col style="width:22%;">' +
+          '<col style="width:12%;">' +
+          '<col style="width:18%;">' +
+          '<col style="width:18%;">' +
+          '<col style="width:20%;">' +
         '</colgroup>' +
         '<thead>' +
           '<tr>' +
@@ -2526,7 +2569,14 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
         ${distinctSections.map(sec => {
           const secStrand = getSectionStrand(sec);
           const secGrade = getSectionGradeLevel(sec);
-          return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" data-section-grade="${escHtml(secGrade)}" ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand} · ${secGrade})</option>`;
+          const curGradeNorm = (teacherGradeFilter || 'all').toLowerCase().replace(/\s+/g, '');
+          const curStrandNorm = (teacherStrandFilter || 'all').toLowerCase();
+          const optGradeNorm = (secGrade || '').toLowerCase().replace(/\s+/g, '');
+          const optStrandNorm = (secStrand || '').toLowerCase();
+          const isGradeHidden = curGradeNorm !== 'all' && optGradeNorm !== 'all' && optGradeNorm !== curGradeNorm;
+          const isStrandHidden = curStrandNorm !== 'all' && optStrandNorm !== 'all' && optStrandNorm !== curStrandNorm;
+          const isHidden = isGradeHidden || isStrandHidden;
+          return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" data-section-grade="${escHtml(secGrade)}" ${isHidden ? 'style="display:none;" hidden disabled' : ''} ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand} · ${secGrade})</option>`;
         }).join('')}
       </select>
 
@@ -2632,37 +2682,13 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
       ${enrolledCourses.map(course => {
         const courseLessons = getSubjectLessons(course);
         const activeCourseModulesCount = courseLessons.filter(l => l.items && l.items.length > 0).length;
-        // Card counts must mirror the workspace filters (section, teacher status,
-        // student targeting) — otherwise cards advertise content the student
-        // cannot open ("ghost" quizzes/files from other sections).
-        const cardSection = CURRENT_PROFILE?.section || 'Section A';
-        const courseUploads = materialsData.filter(m => {
-          if (!isMaterialMatchingCourse(m, course)) return false;
-          if (typeof isTeacherMaterial === 'function' && !isTeacherMaterial(m)) return false;
-          const mSec = (m.section || m.target_section || '').toLowerCase();
-          const aSec = cardSection.toLowerCase();
-          if (mSec && mSec !== 'all' && !mSec.includes(aSec) && !aSec.includes(mSec)) return false;
-          return m.status === 'approved' || (m.uploader_role || '').toLowerCase().includes('teacher') || (m.uploaded_by_name || '').toLowerCase().includes('teacher') || (m.uploader_name || '').toLowerCase().includes('teacher');
-        });
+        const courseUploads = materialsData.filter(m => isMaterialMatchingCourse(m, course));
         const courseQuizzes = (typeof customQuizzes !== 'undefined') ? customQuizzes.filter(q => {
-          if (!q) return false;
-          const normalizeSubject = value => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-          const qSubject = normalizeSubject(q.subject || q.subject_name);
-          const courseTitle = normalizeSubject(course.title);
-          const courseCode = normalizeSubject(course.code);
-          const qCourseId = String(q.course_id || q.courseId || '').toLowerCase().trim();
-          const matchesCourse = qCourseId === String(course.id || '').toLowerCase().trim() ||
-            (!!qSubject && ((courseTitle && (qSubject.includes(courseTitle) || courseTitle.includes(qSubject))) ||
-              (courseCode && (qSubject.includes(courseCode) || courseCode.includes(qSubject)))));
-          if (!matchesCourse) return false;
-          const qSec = [q.sections, q.section, q.target_section].flat().filter(Boolean).join(',').toLowerCase();
-          const aSec = cardSection.toLowerCase();
-          if (qSec && qSec !== 'all' && !qSec.includes(aSec) && !aSec.includes(qSec)) return false;
-          if (typeof isQuizTargetedForStudent === 'function' &&
-            String(q.status || '').toLowerCase() !== 'closed' && !isQuizTargetedForStudent(q, CURRENT_PROFILE)) return false;
-          return true;
+          if (!q.subject) return false;
+          const s = q.subject.toLowerCase();
+          const t = course.title.toLowerCase();
+          return s.includes(t) || t.includes(s);
         }) : [];
-        const cardIsEmpty = activeCourseModulesCount === 0 && courseUploads.length === 0 && courseQuizzes.length === 0;
 
         const searchKeywords = `${course.title} ${course.code || ''} ${course.instructor || ''} ${course.description || ''} ${course.track || ''}`.toLowerCase();
 
@@ -2676,7 +2702,6 @@ function renderStudentSubjectsGridHTML(enrolledCourses, studentStrand) {
             <div class="sfc-thumb" style="height:125px;background-image:url('${course.cover || 'assets/slide1.jpg'}');">
               <span class="sfc-code" style="background:#ffffff;color:#0284c7;font-weight:800;border-radius:8px;padding:4px 10px;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,0.18);">${escHtml(course.code || 'STEM-1101')}</span>
               <span class="sfc-strand" style="background:#0284c7;">${escHtml(course.track || 'Specialized')}</span>
-              ${cardIsEmpty ? `<span style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:2;background:rgba(255,255,255,0.94);color:#64748b;font-size:10px;font-weight:800;letter-spacing:0.8px;padding:4px 12px;border-radius:999px;border:1.5px dashed #94a3b8;white-space:nowrap;">NO CONTENT YET</span>` : ''}
             </div>
             <div class="sfc-body" style="padding:18px;">
               <h4 class="sfc-title" style="font-size:16px;margin-bottom:6px;">${escHtml(course.title)}</h4>
@@ -2777,7 +2802,7 @@ function getStudentFilteredMaterials() {
       dateAdded: m.date_formatted ? `${m.date_formatted} ${m.time_formatted || ''}` : 'Recent',
       status: 'Completed',
       cover: m.cover || 'assets/slide1.jpg',
-      file_url: m.file_url || null
+      file_url: m.file_url || 'SURVEY FORMS - Scholaria.pdf'
     };
   });
 
@@ -3871,41 +3896,8 @@ function downloadSubjectPdf(courseId, docId) {
   downloadMaterial(docId);
 }
 
-// Resolve a real, browser-loadable URL for a material. DB records are signed via
-// the authenticated download endpoint; raw Supabase storage paths are signed
-// directly. Never returns a relative/demo filename — that produced "Cannot GET"
-// preview iframes. Returns { url, fileType } (url null when nothing resolves).
-async function resolveMaterialFileUrl(m) {
-  let fileType = String(m?.file_type || m?.type || '').toLowerCase();
-  if (!m) return { url: null, fileType };
-  const raw = m.file_url || m.url || '';
-  if (/^(https?:|blob:|data:)/i.test(raw)) return { url: raw, fileType };
-  try {
-    const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
-    if (session && session.access_token && m.id) {
-      const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(m.id)}/download`, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          if (data.file_type) fileType = String(data.file_type).toLowerCase();
-          return { url: data.url, fileType };
-        }
-      }
-    }
-  } catch (e) {}
-  if (raw) {
-    try {
-      const { data, error } = await db.storage.from('learning-materials').createSignedUrl(raw, 60 * 15);
-      if (!error && data?.signedUrl) return { url: data.signedUrl, fileType };
-    } catch (e) {}
-  }
-  return { url: null, fileType };
-}
-
 async function previewSubjectUploadedMaterial(id) {
-  let m = materialsData.find(mat => String(mat.id) === String(id)) ||
+  let m = materialsData.find(mat => String(mat.id) === String(id)) || 
             getCustomMaterialsFromStorage().find(mat => String(mat.id) === String(id)) ||
             (typeof STUDENT_DEFAULT_MATERIALS !== 'undefined' ? STUDENT_DEFAULT_MATERIALS.find(mat => String(mat.id) === String(id)) : null);
 
@@ -3920,7 +3912,7 @@ async function previewSubjectUploadedMaterial(id) {
             title: item.title,
             fileName: item.fileName || item.title,
             subject: c.title,
-            file_url: item.file_url || null,
+            file_url: item.file_url || 'SURVEY FORMS - Scholaria.pdf',
             file_type: 'application/pdf',
             type: item.type || 'PDF',
             date_formatted: item.due || item.submitted || 'Recent',
@@ -3963,12 +3955,50 @@ async function previewSubjectUploadedMaterial(id) {
     </div>
   `;
 
-  const resolved = await resolveMaterialFileUrl(m);
-  const fileUrl = resolved.url;
-  const fileType = resolved.fileType;
+  let fileUrl = null;
+  let fileType = (m.file_type || m.type || '').toLowerCase();
+
+  try {
+    const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+    if (session && session.access_token) {
+      const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(m.id)}/download`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          fileUrl = data.url;
+          if (data.file_type) fileType = data.file_type.toLowerCase();
+        }
+      }
+    }
+
+    if (!fileUrl && m.file_url) {
+      if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
+        fileUrl = m.file_url;
+      } else {
+        const { data, error } = await db.storage
+          .from('learning-materials')
+          .createSignedUrl(m.file_url, 60 * 15);
+        if (!error && data?.signedUrl) {
+          fileUrl = data.signedUrl;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching file URL for preview:', err);
+  }
 
   const isPdf = fileType.includes('pdf') || (m.fileName && m.fileName.toLowerCase().endsWith('.pdf')) || (m.title && m.title.toLowerCase().endsWith('.pdf')) || m.type === 'PDF';
   const isImage = fileType.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(m.fileName || m.title || '');
+
+  if (!fileUrl) {
+    if (m.file_url || m.url) {
+      fileUrl = m.file_url || m.url;
+    } else if (isPdf) {
+      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
+    }
+  }
 
   if (!fileUrl) {
     bodyEl.innerHTML = `
@@ -4614,7 +4644,46 @@ async function downloadMaterial(id) {
 
   showToast(`Preparing download for "${m?.title || 'document'}"…`, 'info');
 
-  const { url: fileUrl } = await resolveMaterialFileUrl(m);
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  let fileUrl = null;
+
+  if (session && session.access_token) {
+    try {
+      const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) fileUrl = data.url;
+      }
+    } catch (e) {
+      console.warn('API download call failed, checking direct storage:', e);
+    }
+  }
+
+  // Fallback to direct Supabase storage signed URL
+  if (!fileUrl && m?.file_url) {
+    if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
+      fileUrl = m.file_url;
+    } else {
+      try {
+        const { data, error } = await db.storage
+          .from('learning-materials')
+          .createSignedUrl(m.file_url, 60 * 10);
+        if (!error && data?.signedUrl) {
+          fileUrl = data.signedUrl;
+        }
+      } catch (e) {}
+    }
+  }
+
+  if (!fileUrl) {
+    if (m?.file_url || m?.url) {
+      fileUrl = m.file_url || m.url;
+    } else {
+      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
+    }
+  }
 
   if (!fileUrl) {
     showToast('Download failed: File not found in storage.', 'error');
@@ -5180,8 +5249,7 @@ async function submitMaterialUpload() {
       approved_by: ROLE === 'admin' ? (CURRENT_PROFILE?.id || 'admin') : null,
       approved_by_name: ROLE === 'admin' ? uploaderName : null,
       is_curriculum: ROLE === 'admin',
-      file_url: srv ? srv.file_url : null,
-      file_type: (srv && srv.file_type) || f.type || 'application/pdf',
+      file_type: f.type || 'application/pdf',
       type: typeLabel,
       status: targetStatus,
       created_at: now.toISOString(),
