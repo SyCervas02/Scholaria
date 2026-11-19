@@ -114,7 +114,14 @@ function initDashboardShell() {
   refreshNotificationsUI();
   if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
   if (typeof showNewsAlertIfNeeded === 'function') showNewsAlertIfNeeded();
-  loadConversationsFromDB().then(ensureChatRealtimeSubscription);
+  if (typeof ensureChatRealtimeSubscription === 'function') ensureChatRealtimeSubscription();
+  if (typeof loadConversationsFromDB === 'function') {
+    loadConversationsFromDB().then(loaded => {
+      if (loaded !== false && ROLE === 'teacher') {
+        if (typeof refreshTeacherUnreadMessageCount === 'function') refreshTeacherUnreadMessageCount(false);
+      }
+    });
+  }
 }
 
 function getPageContent(role, page) {
@@ -987,6 +994,21 @@ function toggleProfileCurrentPassword() {
 }
 window.toggleProfileCurrentPassword = toggleProfileCurrentPassword;
 
+function toggleProfilePassword(inputId, toggleId, label) {
+  const input = document.getElementById(inputId);
+  const toggle = document.getElementById(toggleId);
+  if (!input || !toggle) return;
+  const isVisible = input.type === 'text';
+  input.type = isVisible ? 'password' : 'text';
+  toggle.setAttribute('aria-label', `${isVisible ? 'Show' : 'Hide'} ${label}`);
+  toggle.setAttribute('aria-pressed', String(!isVisible));
+  toggle.title = isVisible ? 'Show password' : 'Hide password';
+  toggle.innerHTML = isVisible
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a15 15 0 0 1-3.1 3.8M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7a10 10 0 0 0 4-.8"/></svg>';
+}
+window.toggleProfilePassword = toggleProfilePassword;
+
 async function confirmPasswordChange() {
   const button = document.getElementById('pfConfirmPasswordBtn');
   const currentPassword = document.getElementById('pfCurrentPassword')?.value || '';
@@ -1515,11 +1537,17 @@ function buildProfilePage(role) {
           </div>
           <div class="pf-field">
             <label for="pfNewPassword">New Password</label>
-            <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
+            <div class="pf-password-wrap">
+              <input type="password" id="pfNewPassword" placeholder="Enter new password (min. 6 chars)" autocomplete="new-password" />
+              <button type="button" class="pf-password-toggle" id="pfNewPasswordToggle" onclick="toggleProfilePassword('pfNewPassword', 'pfNewPasswordToggle', 'new password')" aria-label="Show new password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
           </div>
           <div class="pf-field">
             <label for="pfConfirmPassword">Confirm New Password</label>
-            <input type="password" id="pfConfirmPassword" placeholder="Confirm new password" autocomplete="new-password" />
+            <div class="pf-password-wrap">
+              <input type="password" id="pfConfirmPassword" placeholder="Confirm new password" autocomplete="new-password" />
+              <button type="button" class="pf-password-toggle" id="pfConfirmNewPasswordToggle" onclick="toggleProfilePassword('pfConfirmPassword', 'pfConfirmNewPasswordToggle', 'confirmed new password')" aria-label="Show confirmed new password" aria-pressed="false" title="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
             <button type="button" id="pfConfirmPasswordBtn" class="add-btn" style="display:block;width:100%;height:36px;margin-top:10px;padding:0 14px;font-size:13px;border-radius:9px;font-weight:700;" onclick="confirmPasswordChange()">Confirm Password</button>
             <span style="font-size:11px;color:var(--text-muted);display:block;margin-top:8px;">Enter your current password and matching new passwords, then confirm to apply the change.</span>
           </div>
@@ -2033,22 +2061,13 @@ function renderStudentDeadlinesWidgetHTML() {
         <p>Track upcoming quiz schedules, day/time deadlines, and types for every subject you take.</p>
       </div>
 
-      <!-- Top Pills -->
-      <div class="deadlines-top-pills">
-        <button class="top-pill-btn ${studentDeadlineStatusFilter === 'pending' || (studentDeadlineStatusFilter === 'all' && studentDeadlineTab === 'pending') ? 'active' : ''}" onclick="setStudentDeadlineTab('pending')">
-          Pending Quizzes <span style="font-weight:800;margin-left:2px;">${pendingTasksCount}</span>
-        </button>
-        <button class="top-pill-btn ${studentDeadlineStatusFilter === 'all' && studentDeadlineTab !== 'pending' ? 'active' : ''}" onclick="setStudentDeadlineTab('all')">
-          All Tasks <span style="font-weight:800;margin-left:2px;">${totalTasksCount}</span>
-        </button>
-      </div>
     </div>
 
     <!-- Filter Dropdowns Row -->
     <div class="deadlines-filters-row">
       <!-- 1. Subject Filter -->
       <select class="deadline-filter-select" onchange="setStudentDeadlineSubject(this.value)" title="Filter by Subject">
-        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>📚 All Subjects (${subjectOptions.length})</option>
+        <option value="all" ${studentDeadlineSubjectFilter === 'all' ? 'selected' : ''}>All Subjects (${subjectOptions.length})</option>
         ${subjectOptions.map(s => `
           <option value="${escHtml(s)}" ${studentDeadlineSubjectFilter === s ? 'selected' : ''}>${escHtml(s)}</option>
         `).join('')}
@@ -2056,23 +2075,23 @@ function renderStudentDeadlinesWidgetHTML() {
 
       <!-- 2. Types of Quiz Filter -->
       <select class="deadline-filter-select" onchange="setStudentDeadlineType(this.value)" title="Filter by Quiz Type">
-        <option value="all" ${studentDeadlineTypeFilter === 'all' ? 'selected' : ''}>📝 All Quiz Types</option>
-        <option value="interactive" ${studentDeadlineTypeFilter === 'interactive' ? 'selected' : ''}>🎮 Interactive Quiz</option>
-        <option value="normal" ${studentDeadlineTypeFilter === 'normal' ? 'selected' : ''}>📋 Normal Quiz</option>
+        <option value="all" ${studentDeadlineTypeFilter === 'all' ? 'selected' : ''}>All Quiz Types</option>
+        <option value="interactive" ${studentDeadlineTypeFilter === 'interactive' ? 'selected' : ''}>Interactive Quiz</option>
+        <option value="normal" ${studentDeadlineTypeFilter === 'normal' ? 'selected' : ''}>Normal Quiz</option>
       </select>
 
       <!-- 3. Status Filter -->
       <select class="deadline-filter-select" onchange="setStudentDeadlineStatus(this.value)" title="Filter by Status">
-        <option value="all" ${studentDeadlineStatusFilter === 'all' ? 'selected' : ''}>⚡ All Status</option>
-        <option value="pending" ${studentDeadlineStatusFilter === 'pending' ? 'selected' : ''}>⏳ Pending</option>
-        <option value="completed" ${studentDeadlineStatusFilter === 'completed' ? 'selected' : ''}>✅ Completed</option>
+        <option value="all" ${studentDeadlineStatusFilter === 'all' ? 'selected' : ''}>All Status</option>
+        <option value="pending" ${studentDeadlineStatusFilter === 'pending' ? 'selected' : ''}>Pending</option>
+        <option value="completed" ${studentDeadlineStatusFilter === 'completed' ? 'selected' : ''}>Completed</option>
         <option value="not_submitted" ${studentDeadlineStatusFilter === 'not_submitted' ? 'selected' : ''}>Not Submitted</option>
         <option value="failed" ${studentDeadlineStatusFilter === 'failed' ? 'selected' : ''}>Failed</option>
       </select>
 
       <!-- 4. Month Filter -->
       <select class="deadline-filter-select" onchange="setStudentDeadlineMonth(this.value)" title="Filter by Month/Date">
-        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>📅 All Months</option>
+        <option value="all" ${studentDeadlineMonthFilter === 'all' ? 'selected' : ''}>All Months</option>
         ${monthOptions.map(m => `
           <option value="${escHtml(m.val)}" ${String(studentDeadlineMonthFilter) === String(m.val) ? 'selected' : ''}>${escHtml(m.label)}</option>
         `).join('')}
@@ -3066,6 +3085,7 @@ function teacherPage(page) {
       const row = (title, sub, side='', tone='purple', svg=iconQuiz(), action='quiz') => `<button type="button" class="td-row" onclick="${go(action)}">${icon(svg,tone)}<span class="td-row-copy"><strong>${escHtml(title)}</strong><small>${escHtml(sub)}</small></span><span class="td-row-side">${side}</span></button>`;
       const panel = (title, svg, content, page, cls='') => `<section class="td-panel ${cls}"><header>${icon(svg)}<h3>${title}</h3><button type="button" class="td-link" onclick="${go(page)}">View All</button></header>${content}</section>`;
       const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
+      const unreadChatCount = demo ? 7 : (typeof getTeacherUnreadChatCount === 'function' ? getTeacherUnreadChatCount() : 0);
       const metrics = [
         ['My Classes',demo?2:teacherAssignedSections.length,'Classes handled','classrec',iconUsers(),'blue'],
         ['Total Students',demo?68:new Set(attempts.map(a=>a.student_id).filter(Boolean)).size,'Across all classes','classrec',iconUsers(),'green'],
@@ -3074,7 +3094,7 @@ function teacherPage(page) {
         ['Active Quizzes',demo?3:active.length,'Currently ongoing','quiz',iconQuiz(),'purple'],
         ['Upcoming Deadlines',demo?5:active.filter(q=>{const t=new Date(q.dueDate||q.due_date).getTime()-Date.now();return t>=0&&t<=604800000;}).length,'Within 7 days','quiz',iconRecord(),'pink'],
         ['Unread News',demo?2:news.filter(a=>!read.has(String(a.id))).length,'School announcements','announcements',iconAnnouncement(),'pink'],
-        ['Unread Messages',demo?7:(typeof lastTeacherUnreadMessageCount === 'number' ? String(lastTeacherUnreadMessageCount) : '0'),'Students & parents','chats',iconChat(),'blue']
+        ['Unread Messages',unreadChatCount,'Chats','chats',iconChat(),'blue']
       ];
       const pending = demo ? [
         ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
@@ -3477,7 +3497,7 @@ function teacherPage(page) {
           <div class="ic-content">
             <div class="ic-sub">Score Range</div>
             <div class="ic-num gold compact">${highestScore !== null ? `${highestScore}% / ${lowestScore}%` : '—'}</div>
-            <p>Highest vs lowest student score</p>
+            <p>Highest vs Lowest</p>
           </div>
         </div>
         <div class="info-card horizontal-card">
@@ -3585,8 +3605,8 @@ function teacherPage(page) {
                 <td style="text-align:center;">
                   <span class="status-pill ${r.diffBadge}" style="color:${r.diffColor};">${r.difficulty}</span>
                 </td>
-                <td style="font-size:12px;color:var(--text-secondary);font-weight:600;">
-                  ${escHtml(r.correctAnswer || '—')}
+                <td style="font-size:12px;font-weight:600;">
+                  <span class="analysis-correct-answer">${escHtml(r.correctAnswer || '—')}</span>
                 </td>
               </tr>`).join('')
               : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">No question items found in this quiz.</td></tr>`}
@@ -3706,7 +3726,7 @@ function teacherPage(page) {
             <tbody>
               ${sectionSummaries.length ? sectionSummaries.map(s => `
                 <tr style="cursor:pointer;" onclick="openExpandedSectionView('${escHtml(s.section)}')">
-                  <td><strong><span class="user-role-badge student" style="font-size:13px;padding:4px 10px;">${escHtml(s.section)}</span></strong></td>
+                  <td><strong><span class="user-role-badge student" style="font-size:13px;padding:4px 10px;">${escHtml(String(s.section || '').replace(/^section\s+/i, ''))}</span></strong></td>
                   <td>${escHtml(s.subject)}</td>
                   <td><strong>${s.studentsCount}</strong> student${s.studentsCount === 1 ? '' : 's'}</td>
                   <td><span class="analysis-bar-wrap"><span class="analysis-bar ${s.passRate >= 80 ? 'high' : s.passRate < 50 ? 'low' : ''}" style="width:${s.passRate || 0}%"></span></span> ${s.passRate !== null ? s.passRate + '%' : '—'}</td>
@@ -3736,9 +3756,8 @@ function teacherPage(page) {
       return `
       <div class="section-hdr" style="background:#ffffff;padding:16px 20px;border-radius:16px;border:1px solid #e2e8f0;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
         <div style="display:flex;align-items:center;gap:14px;">
-          <button class="add-btn" style="background:#1e293b;color:#ffffff;padding:8px 16px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-radius:10px;cursor:pointer;" onclick="closeExpandedSectionView()">
+          <button class="add-btn" style="background:#1e293b;color:#ffffff;padding:8px 16px;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border-radius:10px;cursor:pointer;" aria-label="Back to All Sections" title="Back to All Sections" onclick="closeExpandedSectionView()">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-            Back to All Sections
           </button>
           <div>
             <h2 style="margin:0;font-size:20px;color:#0f172a;">Class Record — ${escHtml(classRecExpandedSection)}</h2>
@@ -3809,7 +3828,7 @@ function teacherPage(page) {
               <tr>
                 <th>Student</th>
                 <th>Section</th>
-                <th>Subject</th>
+                <th>Strand</th>
                 <th>Quizzes Completed</th>
                 <th>Combined Overall Grade</th>
                 <th>Action</th>
@@ -3818,9 +3837,9 @@ function teacherPage(page) {
             <tbody>
               ${filteredEntries.length ? filteredEntries.map(e => `
                 <tr>
-                  <td><strong>${escHtml(e.name)}</strong> ${e.hasRealData ? '<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;">Live</span>' : ''}</td>
-                  <td><span class="user-role-badge student">${escHtml(e.section)}</span></td>
-                  <td>${escHtml(e.subject)}</td>
+                  <td><strong>${escHtml(e.name)}</strong></td>
+                  <td><span class="user-role-badge student">${escHtml(String(e.section || '').replace(/^section\s+/i, ''))}</span></td>
+                  <td>${escHtml(e.strand)}</td>
                   <td><strong>${e.quizzesTakenCount}</strong> quiz${e.quizzesTakenCount === 1 ? '' : 'zes'} taken</td>
                   <td class="score-val ${e.avg !== null && e.avg >= 85 ? 'good' : e.avg !== null && e.avg < 75 ? 'low' : ''}">
                     ${e.avg !== null ? `<strong>${e.avg.toFixed(2)}%</strong> <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:${e.avg >= 75 ? '#dcfce7' : '#fee2e2'};color:${e.avg >= 75 ? '#15803d' : '#991b1b'};font-weight:700;">${e.avg >= 75 ? 'PASSING' : 'NEEDS IMP.'}</span>` : '<span style="color:var(--text-muted);">—</span>'}
@@ -3850,7 +3869,7 @@ function teacherPage(page) {
               <tr>
                 <th>Student</th>
                 <th>Section</th>
-                <th>Subject</th>
+                <th>Strand</th>
                 ${quizzes.map(q => `<th>${escHtml(q.title)}</th>`).join('')}
                 <th>Average</th>
               </tr>
@@ -3858,9 +3877,9 @@ function teacherPage(page) {
             <tbody>
               ${filteredEntries.length ? filteredEntries.map(e => `
                 <tr>
-                  <td><strong>${escHtml(e.name)}</strong> ${e.hasRealData ? '<span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700;">Live</span>' : ''}</td>
-                  <td><span class="user-role-badge student">${escHtml(e.section)}</span></td>
-                  <td>${escHtml(e.subject)}</td>
+                  <td><strong>${escHtml(e.name)}</strong></td>
+                  <td><span class="user-role-badge student">${escHtml(String(e.section || '').replace(/^section\s+/i, ''))}</span></td>
+                  <td>${escHtml(e.strand)}</td>
                   ${quizzes.map(q => {
                     const qs = e.quizScores[q.id];
                     if (!qs || qs.scorePct === null) {
@@ -5424,10 +5443,14 @@ function renderPage(page) {
   mainContent.dataset.page = page;
   mainContent.dataset.role = ROLE || '';
   mainContent.innerHTML = getPageContent(ROLE, page);
+  if (typeof refreshTeacherUnreadOnPageChange === 'function') refreshTeacherUnreadOnPageChange();
+  mainContent.scrollTop = 0;
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
   if (page === 'dashboard' && ROLE === 'student') mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
-  window.scrollTo(0, 0);
 
   if (page === 'users' || page === 'classrec') loadUsersFromDB();
   if (page === 'classrec') loadClassRecAttempts();
@@ -5457,7 +5480,6 @@ function renderPage(page) {
       loadMaterialsFromDB();
       loadQuizzesFromDB();
       if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
-      if (ROLE === 'teacher' && typeof refreshTeacherUnreadMessageCount === 'function') refreshTeacherUnreadMessageCount();
       if (ROLE === 'teacher' && typeof ensureChatRealtimeSubscription === 'function') ensureChatRealtimeSubscription();
     }
     if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
@@ -5468,6 +5490,13 @@ function renderPage(page) {
   materialsPollTimer = null;
   if (page === 'materials' || page === 'approval') {
     loadMaterialsFromDB();
+    if (page === 'materials' && ROLE === 'admin' && typeof loadUsersFromDB === 'function') {
+      loadUsersFromDB().then(() => {
+        if (currentPage === 'materials' && typeof renderMaterialsContainer === 'function') {
+          renderMaterialsContainer();
+        }
+      });
+    }
     if (page === 'approval') {
       if (typeof loadQuizzesFromDB === 'function') loadQuizzesFromDB();
       if (typeof loadUsersFromDB === 'function') loadUsersFromDB();
@@ -5478,23 +5507,6 @@ function renderPage(page) {
         loadQuizzesFromDB();
       }
     }, 15000);
-  }
-}
-
-// Background loaders (quizzes, materials) re-render the active page when fresh
-// data arrives. Raw innerHTML swaps would reset derived widgets — teacher
-// unread-message counter, student calendar banner — so route those re-renders
-// through here instead.
-function rerenderCurrentPage() {
-  const mainContent = document.getElementById('mainContent');
-  if (!mainContent || typeof getPageContent !== 'function') return;
-  mainContent.innerHTML = getPageContent(ROLE, currentPage);
-  if (currentPage !== 'dashboard') return;
-  if (ROLE === 'student' && typeof renderDashboardCalendarBanner === 'function') {
-    mainContent.insertAdjacentHTML('beforeend', renderDashboardCalendarBanner());
-  }
-  if (ROLE === 'teacher' && typeof refreshTeacherUnreadMessageCount === 'function') {
-    refreshTeacherUnreadMessageCount();
   }
 }
 
