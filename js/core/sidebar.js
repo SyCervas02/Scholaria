@@ -3285,12 +3285,12 @@ function teacherPage(page) {
           return `
           <div class="quiz-row" data-quiz-review-mode="${isReviewAllowed ? 'visible' : 'hidden'}" style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;gap:16px;flex-wrap:wrap;">
             <div class="qz-info" style="min-width:min(100%,240px);flex:1;">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
-                <h4 style="font-size:15px;font-weight:700;color:#0f172a;margin:0;">${escHtml(q.title)}</h4>
+              <div class="qz-title-line" style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;min-width:0;">
+                <h4 class="qz-title" style="font-size:15px;font-weight:700;color:#0f172a;margin:0;">${escHtml(q.title)}</h4>
                 <span class="status-pill ${statusClass}">${statusLabel}</span>
                 ${isInter ? '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:700;">🎮 Interactive</span>' : '<span style="display:inline-block;padding:2px 8px;border-radius:50px;background:#f1f5f9;color:#475569;font-size:10px;font-weight:600;">📝 Standard</span>'}
               </div>
-              <div style="font-size:12px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+              <div class="qz-meta" style="font-size:12px;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
                 <span>📚 <strong>${escHtml(q.subject || 'General')}</strong></span>
                 <span>🎓 ${escHtml(q.strand || 'All Strands')} · ${escHtml(q.gradeLevel || 'Grade 11')}</span>
                 <span>📋 ${itemsCount} Item${itemsCount === 1 ? '' : 's'}</span>

@@ -504,9 +504,38 @@ body.has-anc-banner {
 }
 
 @media (max-width: 1380px) {
+  /* Quiz Manager row header: keep status/type pills on the same line as the
+     quiz title and reserve enough width for a single-line meta row. */
+  .quiz-row .qz-info {
+    flex: 1 1 420px;
+    min-width: min(100%, 280px);
+  }
+  .quiz-row .qz-title-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap !important;
+    gap: 8px;
+    min-width: 0;
+  }
+  .quiz-row .qz-title-line > .qz-title {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin: 0 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .quiz-row .qz-title-line > .status-pill,
+  .quiz-row .qz-title-line > span {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
   .quiz-row-actions {
     flex-direction: column !important;
     align-items: flex-end !important;
+    /* Do not absorb the leftover width: keep the info column wide enough
+       for the title/pills line and a single-line meta row. */
+    flex: 0 1 auto !important;
   }
 }
 
@@ -518,6 +547,9 @@ body.has-anc-banner {
   .quiz-row-actions {
     align-items: flex-start !important;
     width: 100% !important;
+  }
+  .quiz-row .qz-title-line {
+    flex-wrap: wrap !important;
   }
 }
 
