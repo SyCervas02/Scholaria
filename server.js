@@ -1486,6 +1486,46 @@ app.post('/api/chat/send', async (req, res) => {
   res.json({ ...message, warning });
 });
 
+// Persists the per-conversation read marker. Without this the client's
+// in-memory marker was reset from the database on every Chats visit, so read
+// messages kept coming back as unread.
+app.post('/api/chat/read-marker', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const { conversation_id, last_read_at } = req.body || {};
+  if (!conversation_id || !last_read_at) {
+    return res.status(400).json({ error: 'Missing conversation_id or last_read_at' });
+  }
+  const ts = new Date(last_read_at);
+  if (Number.isNaN(ts.getTime())) {
+    return res.status(400).json({ error: 'Invalid last_read_at' });
+  }
+
+  const { data: part, error: partErr } = await supabaseAdmin
+    .from('conversation_participants')
+    .select('conversation_id, last_read_at')
+    .eq('conversation_id', conversation_id)
+    .eq('user_id', profile.id)
+    .maybeSingle();
+  if (partErr) return res.status(500).json({ error: partErr.message });
+  if (!part) return res.status(403).json({ error: 'You are not a participant in this conversation' });
+
+  const prev = part.last_read_at ? new Date(part.last_read_at) : null;
+  if (prev && prev.getTime() >= ts.getTime()) {
+    return res.json({ success: true, last_read_at: part.last_read_at });
+  }
+
+  const { error: updateErr } = await supabaseAdmin
+    .from('conversation_participants')
+    .update({ last_read_at: ts.toISOString() })
+    .eq('conversation_id', conversation_id)
+    .eq('user_id', profile.id);
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  res.json({ success: true, last_read_at: ts.toISOString() });
+});
+
 // --- Chat Seen Receipts (Stored in Supabase Cloud Table 'chat_read_receipts') ---
 app.post('/api/chat/mark-seen', async (req, res) => {
   const profile = await requireUser(req, res);

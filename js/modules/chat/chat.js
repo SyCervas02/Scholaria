@@ -41,6 +41,25 @@ async function setChatReadMarker(conversationId, timestamp) {
   }
 }
 
+// A database read must never move a marker backwards: the just-read timestamp
+// lives in the cache while the request that persists it may still be in flight.
+function hydrateChatReadMarker(conversationId, value) {
+  if (!conversationId) return;
+  const cached = chatReadMarkers[conversationId] || '';
+  if (!value) {
+    if (!cached) chatReadMarkers[conversationId] = '';
+    return;
+  }
+  if (!cached || new Date(value).getTime() > new Date(cached).getTime()) {
+    chatReadMarkers[conversationId] = value;
+  }
+}
+
+function getTeacherUnreadChatCount() {
+  return typeof lastTeacherUnreadMessageCount === 'number' ? lastTeacherUnreadMessageCount : 0;
+}
+window.getTeacherUnreadChatCount = getTeacherUnreadChatCount;
+
 async function refreshTeacherUnreadMessageCount() {
   const badge = document.getElementById('teacherUnreadMessageCount');
   if (!badge || !CURRENT_PROFILE || !db) return;
@@ -48,7 +67,7 @@ async function refreshTeacherUnreadMessageCount() {
   const { data: rows, error } = await db.from('conversation_participants')
     .select('conversation_id, last_read_at').eq('user_id', CURRENT_PROFILE.id);
   if (error) { console.error('Could not load unread chat count:', error.message); return; }
-  (rows || []).forEach(r => { chatReadMarkers[r.conversation_id] = r.last_read_at || ''; });
+  (rows || []).forEach(r => hydrateChatReadMarker(r.conversation_id, r.last_read_at || ''));
   const conversationIds = [...new Set((rows || []).map(row => row.conversation_id).filter(Boolean))];
   if (!conversationIds.length) { badge.textContent = '0'; lastTeacherUnreadMessageCount = 0; return; }
   const { data: messages, error: messageError } = await db.from('messages')
@@ -64,6 +83,14 @@ async function refreshTeacherUnreadMessageCount() {
   lastTeacherUnreadMessageCount = unreadCount;
   if (badge.isConnected) badge.textContent = String(unreadCount);
 }
+
+function refreshTeacherUnreadOnPageChange() {
+  if (typeof ROLE === 'undefined' || ROLE !== 'teacher') return;
+  if (typeof currentPage !== 'undefined' && currentPage === 'dashboard') {
+    refreshTeacherUnreadMessageCount();
+  }
+}
+window.refreshTeacherUnreadOnPageChange = refreshTeacherUnreadOnPageChange;
 
 function resetChatState() {
   chatConversations = [];
@@ -145,7 +172,7 @@ async function loadConversationsFromDB() {
   }
 
   // Hydrate read-marker cache from Supabase before unread counts are computed.
-  (partRows || []).forEach(r => { chatReadMarkers[r.conversation_id] = r.last_read_at || ''; });
+  (partRows || []).forEach(r => hydrateChatReadMarker(r.conversation_id, r.last_read_at || ''));
 
   const validPartRows = (partRows || []).filter(r => r && r.conversation_id && r.conversations);
   const convIds = validPartRows.map(r => r.conversation_id);
