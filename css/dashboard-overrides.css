@@ -1970,8 +1970,11 @@ button svg {
 
   /* Interactive Quiz Player on Mobile */
   .iq-mc-options-grid {
-    grid-template-columns: 1fr !important;
     gap: 10px !important;
+  }
+  .iq-mc-options-grid > .iq-mc-card {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
   }
   .iq-header {
     flex-direction: column !important;

@@ -1249,16 +1249,27 @@
   box-shadow: 0 12px 30px rgba(15, 39, 68, 0.2);
 }
 
+/* Flex rows (instead of a fixed 4-column grid) so a short last row is
+   centered rather than left-aligned when the choice count is odd. */
 .iq-mc-options-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
   gap: 16px;
   width: 100%;
 }
 
+.iq-mc-options-grid > .iq-mc-card {
+  box-sizing: border-box;
+  flex: 0 0 calc((100% - (var(--iq-mc-cols, 4) - 1) * 16px) / var(--iq-mc-cols, 4) - 0.5px);
+  max-width: calc((100% - (var(--iq-mc-cols, 4) - 1) * 16px) / var(--iq-mc-cols, 4) - 0.5px);
+  min-width: 0;
+}
+
 @media (max-width: 768px) {
-  .iq-mc-options-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .iq-mc-options-grid > .iq-mc-card {
+    --iq-mc-cols: 2;
   }
 }
 

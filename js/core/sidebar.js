@@ -3308,9 +3308,9 @@ function teacherPage(page) {
                   <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
                 </div>
                 <!-- REVIEW ANSWERS CHECKBOX -->
-                <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
+                <label style="display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;min-width:208px;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
                   <input type="checkbox" ${isReviewAllowed ? 'checked' : ''} onchange="toggleQuizReviewAnswers('${q.id}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
-                  <span>${isReviewAllowed ? '👁️ Show Answers on Review' : '🔒 Answers Hidden'}</span>
+                  <span>${isReviewAllowed ? '👁️' : '🔒'} Show Answers on Review</span>
                 </label>
                 <button class="table-act-btn take" onclick="openQuizQuestionsPreview('${q.id}')" title="Preview Quiz Questions">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -4020,10 +4020,11 @@ function adminPage(page) {
           iconColor: isQ ? '#db2777' : '#2563eb',
           iconBg: isQ ? '#fdf2f8' : '#eff6ff',
           icon: isQ ? adSvg.quiz : adSvg.doc,
+          kind: item.kind || (isQ ? 'quiz' : 'material'),
           id: item.id || `qm${idx}`
         };
       }) : [
-        { title: 'No pending approvals in queue', author: 'All submissions reviewed', type: 'Complete', isQuiz: false, time1: 'All caught up', time2: 'System up to date', iconColor: '#10b981', iconBg: '#ecfdf5', icon: adSvg.checkCircle, id: 'none' }
+        { title: 'No pending approvals in queue', author: 'All submissions reviewed', type: 'Complete', isQuiz: false, kind: 'none', time1: 'All caught up', time2: 'System up to date', iconColor: '#10b981', iconBg: '#ecfdf5', icon: adSvg.checkCircle, id: 'none' }
       ];
 
       const bulletins = live.length ? live.slice(0, 3).map(b => {
@@ -4196,7 +4197,7 @@ function adminPage(page) {
                   </div>
                   <div class="ad-queue-actions">
                     <button type="button" class="ad-btn-review" onclick="renderPage('approval')">Review</button>
-                    <button type="button" class="ad-btn-approve" onclick="renderPage('approval')">Approve</button>
+                    <button type="button" class="ad-btn-approve" onclick="approveDashboardQueueItem('${item.kind}', '${escHtml(String(item.id))}')">Approve</button>
                     <button type="button" class="ad-btn-dots" onclick="renderPage('approval')">${adSvg.dots}</button>
                   </div>
                 </div>
@@ -5422,6 +5423,26 @@ function buildChatPage(role) {
 let currentPage = 'dashboard';
 window.currentPage = 'dashboard';
 let materialsPollTimer = null;
+
+// Dashboard "Pending Approval Queue" shortcut: approve in place and refresh
+// the dashboard so the approved item leaves the queue immediately.
+async function approveDashboardQueueItem(kind, id) {
+  if (!id || id === 'none') return;
+  try {
+    if (kind === 'quiz' && typeof approveQuiz === 'function') {
+      await approveQuiz(id);
+    } else if (typeof approveMaterial === 'function') {
+      await approveMaterial(id);
+    } else {
+      return;
+    }
+    if (typeof renderPage === 'function') renderPage(currentPage || 'dashboard');
+  } catch (err) {
+    console.error('approveDashboardQueueItem error:', err);
+    if (typeof showToast === 'function') showToast('Unable to approve this item. Please try again.', 'error');
+  }
+}
+window.approveDashboardQueueItem = approveDashboardQueueItem;
 
 function renderPage(page) {
   currentPage = page;

@@ -1873,7 +1873,17 @@ function usePowerupHint() {
       const j = Math.floor(Math.random() * (i + 1));
       [wrongIndices[i], wrongIndices[j]] = [wrongIndices[j], wrongIndices[i]];
     }
-    const toEliminate = wrongIndices.slice(0, Math.min(2, Math.max(1, wrongIndices.length - 1)));
+    // Leave half of the choices. An odd count cannot be split evenly, so drop
+    // the extra option too (remaining = floor(n/2), but never below two and
+    // never removing the last wrong option, which would reveal the key).
+    const totalOptions = opts.length;
+    let eliminateCount = Math.min(2, Math.max(1, wrongIndices.length - 1));
+    if (totalOptions % 2 === 1) {
+      const targetRemaining = Math.max(2, Math.floor(totalOptions / 2));
+      eliminateCount = Math.max(eliminateCount, totalOptions - targetRemaining);
+      eliminateCount = Math.min(eliminateCount, Math.max(1, wrongIndices.length - 1));
+    }
+    const toEliminate = wrongIndices.slice(0, eliminateCount);
 
     toEliminate.forEach(idx => {
       const card = document.getElementById(`mc_card_${idx}`);
@@ -1973,6 +1983,12 @@ function renderMultipleChoiceView(q) {
 
   const isTf = q.type === 'true_false' || q.type === 'tf';
   const isMulti = Boolean(q.multipleAnswers || (Array.isArray(q.answers) && q.answers.length > 1));
+  const optionCount = (q.options || []).length;
+  // Capping at four columns keeps desktop readable, but counts like 5 or 7
+  // would leave a lone card hanging on the left of the last row. Dropping to
+  // three columns there balances the rows and centers the excess cards.
+  let mcColumns = isTf || optionCount <= 2 ? 2 : Math.min(4, optionCount);
+  if (optionCount > 4 && optionCount % mcColumns === 1) mcColumns = 3;
 
   if (isMulti) {
     interactivePlayerState.multiChoiceSelectedIndices = [];
@@ -1984,7 +2000,7 @@ function renderMultipleChoiceView(q) {
         ${escHtml(q.question)}
       </div>
 
-      <div class="iq-mc-options-grid" style="${isTf || (q.options || []).length <= 2 ? 'grid-template-columns: 1fr 1fr;' : ''}">
+      <div class="iq-mc-options-grid" style="--iq-mc-cols:${mcColumns};">
         ${(q.options || []).map((opt, i) => {
           const letter = cardLetters[i] || String.fromCharCode(65 + i);
           const cardClass = cardClasses[i % cardClasses.length];
