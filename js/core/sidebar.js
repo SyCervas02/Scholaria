@@ -3308,9 +3308,9 @@ function teacherPage(page) {
                   <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
                 </div>
                 <!-- REVIEW ANSWERS CHECKBOX -->
-                <label style="display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;min-width:208px;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
+                <label data-quiz-review-toggle="${escHtml(String(q.id))}" style="display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;min-width:208px;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
                   <input type="checkbox" ${isReviewAllowed ? 'checked' : ''} onchange="toggleQuizReviewAnswers('${q.id}', this.checked)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;">
-                  <span>${isReviewAllowed ? '👁️' : '🔒'} Show Answers on Review</span>
+                  <span data-quiz-review-label>${isReviewAllowed ? '👁️' : '🔒'} Show Answers on Review</span>
                 </label>
                 <button class="table-act-btn take" onclick="openQuizQuestionsPreview('${q.id}')" title="Preview Quiz Questions">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>

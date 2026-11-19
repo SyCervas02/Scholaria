@@ -2256,6 +2256,19 @@ function setQuizManagerFilterReview(val) {
   if (typeof renderPage === 'function') renderPage('quiz');
 }
 
+function refreshQuizReviewAnswerToggle(quizId, allowed) {
+  document.querySelectorAll('[data-quiz-review-toggle]').forEach(label => {
+    if (String(label.getAttribute('data-quiz-review-toggle')) !== String(quizId)) return;
+    label.style.background = allowed ? '#eff6ff' : '#f8fafc';
+    label.style.borderColor = allowed ? '#bfdbfe' : '#cbd5e1';
+    label.style.color = allowed ? '#1d4ed8' : '#64748b';
+    const textEl = label.querySelector('[data-quiz-review-label]');
+    if (textEl) textEl.textContent = `${allowed ? '👁️' : '🔒'} Show Answers on Review`;
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    if (checkbox) checkbox.checked = allowed;
+  });
+}
+
 async function toggleQuizReviewAnswers(quizId, isChecked) {
   const quiz = customQuizzes.find(q => String(q.id) === String(quizId));
   if (!quiz) return;
@@ -2267,6 +2280,10 @@ async function toggleQuizReviewAnswers(quizId, isChecked) {
     if (!quiz.questions[0]._meta) quiz.questions[0]._meta = {};
     quiz.questions[0]._meta.allowReviewAnswers = newSetting;
   }
+
+  // Update the row in place; re-rendering the whole Quiz Manager would reload
+  // the page and lose the teacher's scroll position.
+  refreshQuizReviewAnswerToggle(quizId, newSetting);
 
   // Update in Supabase
   if (typeof db !== 'undefined' && db && db.from) {
@@ -2304,10 +2321,6 @@ async function toggleQuizReviewAnswers(quizId, isChecked) {
     ? `Students can now see correct answers on "${quiz.title}".`
     : `Correct answers are now hidden from students on "${quiz.title}".`;
   if (typeof showToast === 'function') showToast(msg, newSetting ? 'success' : 'info');
-
-  if (typeof renderPage === 'function' && typeof currentPage !== 'undefined') {
-    renderPage(currentPage);
-  }
 }
 
 
