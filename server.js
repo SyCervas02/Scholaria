@@ -902,6 +902,94 @@ app.post('/api/admin/toggle-user-status', async (req, res) => {
   });
 });
 
+/* ── Chat Mute Management (Admin only) ──
+   Mutes are stored on users.permanently_muted / muted_until so they survive
+   logout, login and device changes. Only an admin session can change them. */
+
+app.post('/api/admin/mute-user', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can mute accounts' });
+
+  const { user_id } = req.body || {};
+  if (!user_id) return res.status(400).json({ error: 'Missing user ID' });
+  if (String(user_id) === String(profile.id)) {
+    return res.status(400).json({ error: 'You cannot mute your own administrator account.' });
+  }
+
+  const { data: target, error: findErr } = await supabaseAdmin
+    .from('users')
+    .select('id, full_name, role, is_demo, profanity_strikes')
+    .eq('id', user_id)
+    .maybeSingle();
+  if (findErr) return res.status(500).json({ error: findErr.message });
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.is_demo) return res.status(403).json({ error: 'Demo accounts are protected and cannot be muted.' });
+
+  const { error: updateErr } = await supabaseAdmin
+    .from('users')
+    .update({
+      permanently_muted: true,
+      muted_until: null,
+      profanity_strikes: Math.max(1, Number(target.profanity_strikes) || 0)
+    })
+    .eq('id', user_id);
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  res.json({
+    success: true,
+    message: `${target.full_name || 'Account'} is now muted from chat until an administrator unmutes it.`
+  });
+});
+
+app.post('/api/admin/unmute-user', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can unmute accounts' });
+
+  const { user_id } = req.body || {};
+  if (!user_id) return res.status(400).json({ error: 'Missing user ID' });
+  if (String(user_id) === String(profile.id)) {
+    return res.status(403).json({ error: 'Muted administrators can only be unmuted by another administrator.' });
+  }
+
+  const { data: target, error: findErr } = await supabaseAdmin
+    .from('users')
+    .select('id, full_name, role, is_demo')
+    .eq('id', user_id)
+    .maybeSingle();
+  if (findErr) return res.status(500).json({ error: findErr.message });
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.is_demo) return res.status(403).json({ error: 'Demo accounts are protected and cannot be modified.' });
+
+  const { error: updateErr } = await supabaseAdmin
+    .from('users')
+    .update({ permanently_muted: false, muted_until: null, profanity_strikes: 0 })
+    .eq('id', user_id);
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  res.json({ success: true, message: `${target.full_name || 'Account'} can chat again.` });
+});
+
+app.get('/api/admin/chat-violations', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can view chat logs' });
+
+  const userId = String(req.query.user_id || '').trim();
+  if (!userId) return res.status(400).json({ error: 'Missing user_id' });
+
+  const { data, error } = await supabaseAdmin
+    .from('chat_violations')
+    .select('id, user_id, original_body, categories, severity, strike_number, action, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ violations: data || [] });
+});
+
 app.post('/api/admin/reset-user-password', async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
@@ -1304,15 +1392,24 @@ app.post('/api/chat/send', async (req, res) => {
     return res.status(500).json({ error: insertErr?.message || 'Failed to send message' });
   }
 
+  // Mute state and violation evidence must be written with the service role:
+  // the sender's own RLS policies do not allow those columns, and a silently
+  // failed write is what made mutes vanish after the next login.
   if (muteUpdate) {
     try {
-      await (req.userClient || supabaseAdmin).from('users').update(muteUpdate).eq('id', profile.id);
-    } catch (e) {}
+      const { error: muteErr } = await supabaseAdmin.from('users').update(muteUpdate).eq('id', profile.id);
+      if (muteErr) console.error('Chat mute persist error:', muteErr.message);
+    } catch (e) {
+      console.error('Chat mute persist error:', e.message);
+    }
   }
   if (violationToLog) {
     try {
-      await (req.userClient || supabaseAdmin).from('chat_violations').insert(violationToLog);
-    } catch (e) {}
+      const { error: logErr } = await supabaseAdmin.from('chat_violations').insert(violationToLog);
+      if (logErr) console.error('Chat violation log error:', logErr.message);
+    } catch (e) {
+      console.error('Chat violation log error:', e.message);
+    }
   }
 
   res.json({ ...message, warning });
@@ -1721,7 +1818,7 @@ app.get('/api/users', async (req, res) => {
 
   const { data, error } = await supabaseAdmin
     .from('users')
-    .select('id, full_name, school_id, role, strand, grade_level, section, subjects, email, is_active, created_at, last_active_at, avatar_url, bio, profanity_strikes, permanently_muted, muted_until')
+    .select('id, full_name, school_id, role, strand, grade_level, section, subjects, email, is_active, is_demo, created_at, last_active_at, avatar_url, bio, profanity_strikes, permanently_muted, muted_until')
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });

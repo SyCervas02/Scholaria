@@ -115,10 +115,12 @@ function setChatFilter(role) {
 
 async function loadChatsPage() {
   chatListState.search = '';
+  // Mute state lives in the database. Re-sync it on every visit instead of
+  // clearing it locally, otherwise a mute looks gone right after re-login.
   if (CURRENT_PROFILE) {
-    CURRENT_PROFILE.permanently_muted = false;
-    CURRENT_PROFILE.muted_until = null;
-    CURRENT_PROFILE.profanity_strikes = 0;
+    try {
+      await refreshOwnMuteStatus();
+    } catch (_) {}
   }
   chatListState.role = 'all';
   activeConversationId = null;

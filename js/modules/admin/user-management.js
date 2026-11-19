@@ -372,7 +372,7 @@ async function adminToggleUserStatus(userId, shouldActivate, name) {
 
 function renderStudentRow(u) {
   const isAdmin = (typeof ROLE !== 'undefined' && ROLE === 'admin') || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role === 'admin');
-  const isMuted = u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()) || (u.strikes && u.strikes > 0);
+  const isMuted = isChatMuted(u);
   const isUnassigned = !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—' || (typeof isSectionArchived === 'function' && isSectionArchived(u.section));
   const targetId = u.dbId || u.id;
   const actionBtn = isMuted
@@ -400,7 +400,7 @@ function renderStudentRow(u) {
 
 function renderTeacherRow(u) {
   const isAdmin = (typeof ROLE !== 'undefined' && ROLE === 'admin') || (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.role === 'admin');
-  const isMuted = u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()) || (u.strikes && u.strikes > 0);
+  const isMuted = isChatMuted(u);
   const targetId = u.dbId || u.id;
   const actionBtn = isMuted
     ? `<span class="action-link" style="color:#2563eb;font-weight:600;white-space:nowrap;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`
@@ -606,10 +606,17 @@ function renderUserManagementContent() {
   const teachers = registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false);
   const admins = registeredUsers.filter(u => u.role === 'admin' && u.isActive !== false);
   const deactivated = registeredUsers.filter(u => u.isActive === false);
+  const muted = registeredUsers.filter(isChatMuted);
+  const canManageMutes = typeof ROLE !== 'undefined' && ROLE === 'admin';
   const isStudentTab = adminUserTab === 'students';
   const isTeacherTab = adminUserTab === 'teachers';
   const isAdminTab = adminUserTab === 'admins';
   const isDeactivatedTab = adminUserTab === 'deactivated';
+  const isMutedTab = adminUserTab === 'muted';
+  const emptyCount = isMutedTab ? muted.length
+    : isDeactivatedTab ? deactivated.length
+      : isStudentTab ? students.length
+        : isTeacherTab ? teachers.length : admins.length;
 
   const rolePriority = { admin: 1, teacher: 2, student: 3 };
   const sortedDeactivated = [...deactivated].sort((a, b) => {
@@ -635,17 +642,30 @@ function renderUserManagementContent() {
       <button class="um-tab deactivated-tab ${isDeactivatedTab ? 'active' : ''}" style="${isDeactivatedTab ? 'background:#fef2f2;border-color:#fecaca;color:#991b1b;font-weight:700;' : 'color:#b91c1c;'}" onclick="setAdminUserTab('deactivated')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> Deactivated Accounts <span class="um-badge" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">${deactivated.length}</span>
       </button>
+      ${canManageMutes ? `
+      <button class="um-tab muted-tab ${isMutedTab ? 'active' : ''}" style="${isMutedTab ? 'background:#fff7ed;border-color:#fed7aa;color:#9a3412;font-weight:700;' : 'color:#c2410c;'}" onclick="setAdminUserTab('muted')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/><line x1="3" y1="3" x2="21" y2="21"/></svg> Muted Accounts <span class="um-badge" style="background:#ffedd5;color:#9a3412;border:1px solid #fed7aa;">${muted.length}</span>
+      </button>` : ''}
     </div>
 
     <div class="user-search-row">
       <div class="user-search-wrap">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input type="text" id="userSearchInput" placeholder="${isAdminTab ? 'Search admins by name, ID, or email…' : isDeactivatedTab ? 'Search deactivated accounts by name, ID, role, or strand…' : 'Search by name, ID, or strand…'}" oninput="filterUserTable()">
+        <input type="text" id="userSearchInput" placeholder="${isAdminTab ? 'Search admins by name, ID, or email…' : isDeactivatedTab ? 'Search deactivated accounts by name, ID, role, or strand…' : isMutedTab ? 'Search muted accounts by name, ID, role, or email…' : 'Search by name, ID, or strand…'}" oninput="filterUserTable()">
       </div>
 
       ${isDeactivatedTab ? `
         <select class="user-filter-select" id="deactivatedRoleFilter" onchange="filterUserTable()">
           <option value="">All Roles (Admin → Teacher → Student)</option>
+          <option value="admin">Administrators</option>
+          <option value="teacher">Teachers</option>
+          <option value="student">Students</option>
+        </select>
+      ` : ''}
+
+      ${isMutedTab ? `
+        <select class="user-filter-select" id="mutedRoleFilter" onchange="filterUserTable()">
+          <option value="">All Roles</option>
           <option value="admin">Administrators</option>
           <option value="teacher">Teachers</option>
           <option value="student">Students</option>
@@ -660,7 +680,7 @@ function renderUserManagementContent() {
         </select>
       ` : ''}
 
-      ${!isAdminTab ? `
+      ${(isStudentTab || isTeacherTab) ? `
         <select class="user-filter-select" id="userStrandFilter" onchange="filterUserTable()">
           <option value="">All Strands</option>
           <option value="STEM">STEM</option>
@@ -696,6 +716,15 @@ function renderUserManagementContent() {
               <th>Assigned Section</th>
               <th>Date & Origin</th>
               <th>Account Status</th>
+              <th>Actions</th>
+            </tr>
+          ` : isMutedTab ? `
+            <tr>
+              <th>Account Name</th>
+              <th>Account ID</th>
+              <th>Role</th>
+              <th>Mute Status</th>
+              <th>Chat Record</th>
               <th>Actions</th>
             </tr>
           ` : isStudentTab ? `
@@ -737,16 +766,20 @@ function renderUserManagementContent() {
         <tbody id="userTableBody">
           ${isDeactivatedTab
             ? sortedDeactivated.map(u => renderDeactivatedRow(u)).join('')
-            : isStudentTab
-              ? students.map(u => renderStudentRow(u)).join('')
-              : isTeacherTab
-                ? teachers.map(u => renderTeacherRow(u)).join('')
-                : admins.map(u => renderAdminRow(u)).join('')
+            : isMutedTab
+              ? muted.map(u => renderMutedRow(u)).join('')
+              : isStudentTab
+                ? students.map(u => renderStudentRow(u)).join('')
+                : isTeacherTab
+                  ? teachers.map(u => renderTeacherRow(u)).join('')
+                  : admins.map(u => renderAdminRow(u)).join('')
           }
         </tbody>
       </table>
-      <div id="userNoResults" style="${(isDeactivatedTab ? deactivated.length : isStudentTab ? students.length : isTeacherTab ? teachers.length : admins.length) === 0 ? '' : 'display:none;'}padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
-        No ${isDeactivatedTab ? 'deactivated accounts' : isStudentTab ? 'students' : isTeacherTab ? 'teachers' : 'administrators'} found matching the filter criteria.
+      <div id="userNoResults" style="${emptyCount === 0 ? '' : 'display:none;'}padding:24px;text-align:center;color:var(--text-muted);font-size:13px;">
+        ${isMutedTab
+          ? (muted.length === 0 ? 'No muted accounts. Everyone can currently chat.' : 'No muted accounts match the filter criteria.')
+          : `No ${isDeactivatedTab ? 'deactivated accounts' : isStudentTab ? 'students' : isTeacherTab ? 'teachers' : 'administrators'} found matching the filter criteria.`}
       </div>
     </div>
   `;
@@ -864,6 +897,7 @@ async function loadUsersFromDB() {
         lastActive: u.last_active_at || u.created_at || null,
         dbId: u.id,
         isActive: u.is_active !== false,
+        isDemo: !!u.is_demo,
         origin: origin,
         statusHistory: auditInfo?.status_history || [],
         permanentlyMuted: !!u.permanently_muted,
@@ -909,6 +943,138 @@ async function loadUsersFromDB() {
   }
 }
 
+function isChatMuted(u) {
+  if (!u) return false;
+  return Boolean(u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
+}
+
+function muteStatusBadge(u) {
+  if (u.permanentlyMuted) {
+    return `<span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Permanently muted
+    </span>`;
+  }
+  const until = new Date(u.mutedUntil);
+  const untilText = until.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return `<span class="sec-badge" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    Muted until ${escHtml(untilText)}
+  </span>`;
+}
+
+function renderMutedRow(u) {
+  const targetId = u.dbId || u.id;
+  const isSelf = typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && (CURRENT_PROFILE.id === u.dbId);
+  const strikes = Number(u.strikes) || 0;
+
+  let roleBadge = '';
+  if (u.role === 'admin') {
+    roleBadge = `<span class="role-tag" style="background:#fef3c7;color:#b45309;font-weight:700;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">Admin</span>`;
+  } else if (u.role === 'teacher') {
+    roleBadge = `<span class="role-tag teacher" style="white-space:nowrap;display:inline-block;">Teacher</span>`;
+  } else {
+    roleBadge = `<span class="role-tag student" style="white-space:nowrap;display:inline-block;">Student</span>`;
+  }
+
+  let unmuteHtml = '';
+  if (u.isDemo) {
+    unmuteHtml = `<span style="color:#94a3b8;font-size:11.5px;font-style:italic;white-space:nowrap;" title="Demo accounts are protected and can never be altered">Demo account (protected)</span>`;
+  } else if (isSelf) {
+    unmuteHtml = `<span style="color:#b45309;font-size:11.5px;font-weight:600;white-space:nowrap;" title="Unmuting yourself is blocked">Locked — another admin must unmute</span>`;
+  } else {
+    unmuteHtml = `<span class="action-link" style="color:#059669;font-weight:700;cursor:pointer;white-space:nowrap;" onclick="adminUnmuteUser('${escHtml(targetId)}')">Unmute</span>`;
+  }
+
+  return `<tr style="background:#fffbf5;">
+    <td style="white-space:nowrap;"><strong style="white-space:nowrap;">${escHtml(u.name)}</strong></td>
+    <td style="white-space:nowrap;"><code style="font-size:12px;background:#fff7ed;padding:3px 8px;border-radius:4px;color:#c2410c;font-family:'JetBrains Mono',monospace;white-space:nowrap;display:inline-block;">${escHtml(u.id)}</code></td>
+    <td style="white-space:nowrap;">${roleBadge}</td>
+    <td style="white-space:nowrap;">${muteStatusBadge(u)}</td>
+    <td style="white-space:nowrap;"><span style="font-size:12px;color:${strikes > 0 ? '#b45309' : 'var(--text-muted)'};font-weight:${strikes > 0 ? '700' : '500'};white-space:nowrap;">${strikes} strike${strikes === 1 ? '' : 's'}</span></td>
+    <td style="white-space:nowrap;">
+      <div style="display:inline-flex;align-items:center;gap:12px;white-space:nowrap;">
+        <span class="action-link" style="color:#2563eb;font-weight:700;cursor:pointer;white-space:nowrap;" onclick="openMuteChatLog('${escHtml(targetId)}')">View Chat Log</span>
+        ${unmuteHtml}
+      </div>
+    </td>
+  </tr>`;
+}
+
+async function openMuteChatLog(userId) {
+  const modal = document.getElementById('muteLogModal');
+  if (!modal) return;
+  const userObj = registeredUsers.find(u => u.dbId === userId || u.id === userId);
+  const titleEl = document.getElementById('muteLogModalTitle');
+  const subEl = document.getElementById('muteLogModalSubtitle');
+  const body = document.getElementById('muteLogModalBody');
+  if (titleEl) titleEl.textContent = `Chat Log — ${userObj?.name || 'Account'}`;
+  if (subEl) subEl.textContent = 'Uncensored messages recorded by chat moderation';
+  if (body) body.innerHTML = `<div style="padding:32px;text-align:center;color:#64748b;font-size:13px;">Loading chat log…</div>`;
+  modal.classList.add('active');
+
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) throw new Error('Your session has expired — please sign in again');
+    const res = await fetch(`${API_BASE}/api/admin/chat-violations?user_id=${encodeURIComponent(userId)}`, {
+      headers: { 'Authorization': `Bearer ${session.access_token}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to load chat log');
+
+    const rows = Array.isArray(data.violations) ? data.violations : [];
+    if (!body) return;
+
+    if (!rows.length) {
+      body.innerHTML = `<div style="padding:32px 20px;text-align:center;color:#64748b;font-size:13px;">
+        <div style="font-size:30px;margin-bottom:10px;">🕊️</div>
+        No recorded chat violations for this account.<br>
+        <span style="font-size:12px;color:#94a3b8;">This mute was most likely issued manually by an administrator.</span>
+      </div>`;
+      return;
+    }
+
+    const actionLabel = (action) => {
+      if (action === 'muted_permanent') return 'Permanently muted';
+      if (action === 'muted_long') return 'Muted 30 minutes';
+      if (action === 'muted_short') return 'Muted 5 minutes';
+      return action || 'Moderated';
+    };
+
+    body.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="font-size:12px;color:#64748b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">
+        ${rows.length} recorded violation${rows.length === 1 ? '' : 's'} · newest first · content below is shown exactly as typed (uncensored).
+      </div>
+      ${rows.map(v => {
+        const when = v.created_at ? new Date(v.created_at).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+        const severe = v.severity === 'severe';
+        const cats = Array.isArray(v.categories) && v.categories.length
+          ? v.categories.map(c => `<span style="font-size:10.5px;font-weight:700;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;padding:2px 7px;border-radius:20px;white-space:nowrap;">${escHtml(String(c).replace(/_/g, ' '))}</span>`).join(' ')
+          : '';
+        return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;background:#fff;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+            <span style="font-size:12px;font-weight:700;color:#334155;white-space:nowrap;">${escHtml(when)}</span>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;${severe ? 'background:#fef2f2;color:#991b1b;border:1px solid #fecaca;' : 'background:#fffbeb;color:#b45309;border:1px solid #fde68a;'}">${severe ? 'SEVERE' : 'PROFANITY'}</span>
+              ${v.strike_number ? `<span style="font-size:10.5px;font-weight:700;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;padding:2px 8px;border-radius:20px;white-space:nowrap;">Strike ${escHtml(String(v.strike_number))}</span>` : ''}
+              <span style="font-size:10.5px;font-weight:700;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;padding:2px 8px;border-radius:20px;white-space:nowrap;">${escHtml(actionLabel(v.action))}</span>
+            </div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.55;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-word;">${escHtml(v.original_body || '')}</div>
+          ${cats ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">${cats}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  } catch (err) {
+    if (body) body.innerHTML = `<div style="padding:32px 20px;text-align:center;color:#dc2626;font-size:13px;">${escHtml(err.message || 'Could not load the chat log')}</div>`;
+  }
+}
+
+function closeMuteLogModal() {
+  const modal = document.getElementById('muteLogModal');
+  if (modal) modal.classList.remove('active');
+}
+
 function chatStatusHtml(u) {
   const stillMuted = u.mutedUntil && new Date(u.mutedUntil) > new Date();
   if (u.permanentlyMuted) return `<span style="color:#dc2626;font-weight:600;">Muted (${u.strikes} strikes)</span>`;
@@ -917,84 +1083,104 @@ function chatStatusHtml(u) {
   return `<span style="color:var(--text-muted);">Clean</span>`;
 }
 
+function refreshUserManagementView() {
+  const wrap = document.getElementById('userManagementContentWrap');
+  // The muted tab needs a full re-render (row list + tab badge); other tabs
+  // only need their table body refreshed so the search/filters stay intact.
+  if (adminUserTab === 'muted') {
+    if (wrap) wrap.innerHTML = renderUserManagementContent();
+    return;
+  }
+  if (typeof filterUserTable === 'function') filterUserTable();
+}
+
 async function adminUnmuteUser(userId) {
   const userObj = registeredUsers.find(x => x.dbId === userId || x.id === userId);
   const targetId = userObj?.dbId || userId;
+  if (!targetId) return;
 
-  let success = false;
-
-  if (typeof db !== 'undefined' && db && typeof db.rpc === 'function') {
-    try {
-      const { error: rpcErr } = await db.rpc('admin_unmute_user', { p_user_id: targetId });
-      if (!rpcErr) success = true;
-    } catch (_) {}
+  if (userObj?.isDemo) {
+    if (typeof showToast === 'function') showToast('Demo accounts are protected and cannot be modified.', 'error');
+    return;
   }
+  if (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE && CURRENT_PROFILE.id === targetId) {
+    if (typeof showToast === 'function') showToast('Muted administrators can only be unmuted by another administrator.', 'error');
+    return;
+  }
+  if (!confirm(`Unmute "${userObj?.name || 'this account'}" from chat?\n\nThey will be able to send messages again.`)) return;
 
-  if (!success && typeof db !== 'undefined' && db && typeof db.from === 'function') {
-    try {
-      const { error: updateErr } = await db.from('users').update({
-        permanently_muted: false,
-        muted_until: null,
-        profanity_strikes: 0
-      }).eq('id', targetId);
-      if (!updateErr) success = true;
-    } catch (e) {
-      console.warn('Direct update failed:', e);
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) {
+      if (typeof showToast === 'function') showToast('Your session has expired — please sign in again', 'error');
+      return;
     }
-  }
-
-  if (userObj) {
-    userObj.permanentlyMuted = false;
-    userObj.mutedUntil = null;
-    userObj.strikes = 0;
-    success = true;
-  }
-
-  if (success) {
-    if (typeof showToast === 'function') showToast('User unmuted successfully', 'success');
-    if (typeof filterUserTable === 'function') {
-      filterUserTable();
-    } else if (typeof loadUsersFromDB === 'function') {
-      loadUsersFromDB();
+    const res = await fetch(`${API_BASE}/api/admin/unmute-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({ user_id: targetId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (typeof showToast === 'function') showToast(data.error || 'Could not unmute account', 'error');
+      return;
     }
-  } else {
-    if (typeof showToast === 'function') showToast('Could not unmute user', 'error');
+
+    if (userObj) {
+      userObj.permanentlyMuted = false;
+      userObj.mutedUntil = null;
+      userObj.strikes = 0;
+    }
+    if (typeof showToast === 'function') showToast(data.message || 'Account unmuted successfully', 'success');
+    refreshUserManagementView();
+  } catch (err) {
+    if (typeof showToast === 'function') showToast('Could not reach the server to unmute this account', 'error');
   }
 }
 
 async function adminMuteUser(userId) {
   const userObj = registeredUsers.find(x => x.dbId === userId || x.id === userId);
   const targetId = userObj?.dbId || userId;
+  if (!targetId) return;
 
-  let success = false;
-
-  if (typeof db !== 'undefined' && db && typeof db.from === 'function') {
-    try {
-      const { error: updateErr } = await db.from('users').update({
-        permanently_muted: true,
-        profanity_strikes: 1
-      }).eq('id', targetId);
-      if (!updateErr) success = true;
-    } catch (e) {
-      console.warn('Direct update failed:', e);
-    }
+  if (userObj?.isDemo) {
+    if (typeof showToast === 'function') showToast('Demo accounts are protected and cannot be muted.', 'error');
+    return;
   }
+  if (!confirm(`Mute "${userObj?.name || 'this account'}" from chat?\n\nThey will not be able to send messages until an administrator unmutes them.`)) return;
 
-  if (userObj) {
-    userObj.permanentlyMuted = true;
-    userObj.strikes = 1;
-    success = true;
-  }
-
-  if (success) {
-    if (typeof showToast === 'function') showToast('User muted from chat', 'info');
-    if (typeof filterUserTable === 'function') {
-      filterUserTable();
-    } else if (typeof loadUsersFromDB === 'function') {
-      loadUsersFromDB();
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session) {
+      if (typeof showToast === 'function') showToast('Your session has expired — please sign in again', 'error');
+      return;
     }
-  } else {
-    if (typeof showToast === 'function') showToast('Could not mute user', 'error');
+    const res = await fetch(`${API_BASE}/api/admin/mute-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({ user_id: targetId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (typeof showToast === 'function') showToast(data.error || 'Could not mute account', 'error');
+      return;
+    }
+
+    if (userObj) {
+      userObj.permanentlyMuted = true;
+      userObj.mutedUntil = null;
+      userObj.strikes = Math.max(1, Number(userObj.strikes) || 0);
+    }
+    if (typeof showToast === 'function') showToast(data.message || 'Account muted from chat', 'info');
+    refreshUserManagementView();
+  } catch (err) {
+    if (typeof showToast === 'function') showToast('Could not reach the server to mute this account', 'error');
   }
 }
 
@@ -1004,15 +1190,33 @@ function filterUserTable() {
   const strand = document.getElementById('userStrandFilter')?.value || '';
   const dateSort = document.getElementById('userDateSort')?.value || 'newest';
   const deactivatedRole = document.getElementById('deactivatedRoleFilter')?.value || '';
+  const mutedRole = document.getElementById('mutedRoleFilter')?.value || '';
 
   const isStudentTab = adminUserTab === 'students';
   const isTeacherTab = adminUserTab === 'teachers';
   const isAdminTab = adminUserTab === 'admins';
   const isDeactivatedTab = adminUserTab === 'deactivated';
+  const isMutedTab = adminUserTab === 'muted';
 
   let list = [];
 
-  if (isDeactivatedTab) {
+  if (isMutedTab) {
+    list = registeredUsers.filter(isChatMuted);
+    if (mutedRole) {
+      list = list.filter(u => u.role === mutedRole);
+    }
+    if (q) {
+      list = list.filter(u => (u.name + ' ' + u.id + ' ' + (u.email || '') + ' ' + (u.role || '')).toLowerCase().includes(q));
+    }
+
+    const rolePriority = { admin: 1, teacher: 2, student: 3 };
+    list.sort((a, b) => {
+      const pA = rolePriority[a.role] || 99;
+      const pB = rolePriority[b.role] || 99;
+      if (pA !== pB) return pA - pB;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  } else if (isDeactivatedTab) {
     list = registeredUsers.filter(u => u.isActive === false);
     if (deactivatedRole) {
       list = list.filter(u => u.role === deactivatedRole);
@@ -1068,6 +1272,7 @@ function filterUserTable() {
 
   if (tbody) {
     tbody.innerHTML = list.map(u => {
+      if (isMutedTab) return renderMutedRow(u);
       if (isDeactivatedTab) return renderDeactivatedRow(u);
       if (isStudentTab) return renderStudentRow(u);
       if (isTeacherTab) return renderTeacherRow(u);

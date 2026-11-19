@@ -194,6 +194,25 @@
     </div>
   </div>
 
+  <!-- Chat Mute Log Modal (Admins only) -->
+  <div class="modal-overlay" id="muteLogModal">
+    <div class="modal-card" style="max-width:760px;">
+      <div class="modal-head">
+        <div>
+          <h3 id="muteLogModalTitle">Chat Log</h3>
+          <span id="muteLogModalSubtitle">Uncensored messages recorded by chat moderation</span>
+        </div>
+        <button class="modal-x" onclick="closeMuteLogModal()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="muteLogModalBody"></div>
+      <div class="modal-foot">
+        <button class="foot-btn-secondary" onclick="closeMuteLogModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="sectionModal">
     <div class="modal-card">
       <div class="modal-head">
@@ -785,8 +804,8 @@
   <script src="js/modules/quizzes/interactive-player.js?v=20072"></script>
   <script src="js/modules/quizzes/item-analysis.js?v=20075"></script>
   <script src="js/modules/quizzes/quiz-generator.js?v=20092"></script>
-  <script src="js/modules/chat/chat.js?v=20092"></script>
-  <script src="js/modules/admin/user-management.js?v=20090"></script>
+  <script src="js/modules/chat/chat.js?v=20093"></script>
+  <script src="js/modules/admin/user-management.js?v=20091"></script>
   <script src="js/modules/admin/report-generator.js?v=20090"></script>
   <script src="js/modules/admin/rooms-management.js?v=20062"></script>
   <script src="js/modules/courses.js?v=20005"></script>
