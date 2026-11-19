@@ -761,7 +761,10 @@ app.post('/api/admin/create-account', async (req, res) => {
       must_reset_password: true,
       recovery_email: (email && email.trim()) ? email.trim() : null,
       created_by: creatorMeta
-    }
+    },
+    // Server-side copy of the issued temporary key so View Slip works on any
+    // browser/device. Cleared the moment the holder sets their own password.
+    app_metadata: { issued_password: temp_password, issued_at: createdAtIso }
   });
   if (authErr) {
     let msg = authErr.message || 'Unknown Supabase error';
@@ -1001,12 +1004,14 @@ app.post('/api/admin/reset-user-password', async (req, res) => {
   const { data: targetUser, error: findErr } = await supabaseAdmin
     .from('users').select('*').eq('id', user_id).single();
   if (findErr || !targetUser) return res.status(404).json({ error: 'Target user not found' });
+  if (targetUser.is_demo) return res.status(403).json({ error: 'Demo accounts are protected and cannot be modified.' });
 
   const newTempPassword = generateComplexPassword(14);
 
   const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
     password: newTempPassword,
-    user_metadata: { must_reset_password: true }
+    user_metadata: { must_reset_password: true },
+    app_metadata: { issued_password: newTempPassword, issued_at: new Date().toISOString() }
   });
   if (updateErr) return res.status(500).json({ error: updateErr.message });
 
@@ -1016,6 +1021,72 @@ app.post('/api/admin/reset-user-password', async (req, res) => {
     name: targetUser.full_name,
     temp_password: newTempPassword
   });
+});
+
+app.get('/api/admin/user-credential', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can view credentials' });
+
+  const userId = String(req.query.user_id || '').trim();
+  if (!userId) return res.status(400).json({ error: 'Missing user_id' });
+
+  const { data: target, error: findErr } = await supabaseAdmin
+    .from('users')
+    .select('id, school_id, full_name, role, email, is_demo, created_at')
+    .eq('id', userId)
+    .maybeSingle();
+  if (findErr) return res.status(500).json({ error: findErr.message });
+  if (!target) return res.status(404).json({ error: 'User not found' });
+
+  const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (authErr || !authData?.user) {
+    return res.status(500).json({ error: authErr?.message || 'Could not read authentication record' });
+  }
+
+  const appMeta = authData.user.app_metadata || {};
+  const userMeta = authData.user.user_metadata || {};
+  const issuedPassword = appMeta.issued_password || '';
+  const mustReset = !!userMeta.must_reset_password;
+
+  // active   → stored key is still the account's temporary login key
+  // user_set → holder already replaced it; passwords are hashed, so it cannot be shown
+  // unknown  → legacy account created before keys were stored server-side
+  const state = (issuedPassword && mustReset) ? 'active' : (mustReset ? 'unknown' : 'user_set');
+
+  res.json({
+    success: true,
+    user: {
+      id: target.id,
+      school_id: target.school_id,
+      full_name: target.full_name,
+      role: target.role,
+      email: target.email,
+      is_demo: !!target.is_demo,
+      created_at: target.created_at
+    },
+    credential_state: state,
+    temp_password: state === 'active' ? issuedPassword : null,
+    issued_at: appMeta.issued_at || null,
+    must_reset_password: mustReset,
+    last_sign_in_at: authData.user.last_sign_in_at || null
+  });
+});
+
+// A holder who sets their own password clears the admin-side copy of the old
+// temporary key. The client calls this right after a successful password update.
+app.post('/api/me/password-set', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  try {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(profile.id, {
+      app_metadata: { issued_password: '', issued_at: null }
+    });
+    if (error) console.error('Clear issued credential error:', error.message);
+  } catch (e) {
+    console.error('Clear issued credential error:', e.message);
+  }
+  res.json({ success: true });
 });
 
 app.post('/api/admin/update-user-sections', async (req, res) => {

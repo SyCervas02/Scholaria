@@ -1045,6 +1045,19 @@ async function confirmPasswordChange() {
     const { error: passwordError } = await db.auth.updateUser({ password: newPassword });
     if (passwordError) throw passwordError;
 
+    // The holder now has their own password; clear the admin-side copy of the
+    // issued temporary key so View Slip reports it as non-retrievable.
+    try {
+      const { data: sessionData } = await db.auth.getSession();
+      if (sessionData?.session) {
+        const base = (typeof API_BASE !== 'undefined' && API_BASE) ? API_BASE : window.location.origin;
+        await fetch(`${base}/api/me/password-set`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${sessionData.session.access_token}` }
+        });
+      }
+    } catch (_) {}
+
     showToast('Password updated successfully', 'success');
     document.getElementById('pfCurrentPassword').value = '';
     document.getElementById('pfNewPassword').value = '';

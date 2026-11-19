@@ -554,6 +554,11 @@ function viewAdminHandoutModal(schoolId) {
 }
 
 async function openAdminResetPasswordPrompt(userId, name) {
+  const targetUser = registeredUsers.find(x => x.dbId === userId || x.id === userId);
+  if (targetUser?.isDemo) {
+    if (typeof showToast === 'function') showToast('Demo accounts are protected and cannot be modified.', 'error');
+    return;
+  }
   if (!confirm(`Issue a new temporary strong password for "${name}"?\n\nThe employee's current password will be invalidated, and they will be required to change this new password upon login.`)) {
     return;
   }
@@ -3279,14 +3284,20 @@ function buildCredentialSlipCardHtml(slip, index = 0) {
     : [slip.strand || slip.subjects, slip.grade_level || slip.gradeLevel, slip.section].filter(Boolean).join(' · ') || 'Senior High School Academic Department';
 
   const emailDisplay = slip.recovery_email || slip.email || (slip.role === 'admin' ? `${(slip.school_id || '').toLowerCase()}@admin.hwa.edu.ph` : 'None on file');
-  const pwDisplay = slip.temp_password || slip.tempPassword || '[Security Key Issued / User Established]';
+  const pwDisplay = slip.temp_password || slip.tempPassword || '';
+  const credentialState = slip.credential_state || (pwDisplay ? 'active' : 'unknown');
+  const canIssueKey = !!slip.can_issue_key;
+  const isDemoSlip = !!slip.is_demo;
+  const pwPrintValue = pwDisplay || (credentialState === 'user_set'
+    ? 'NOT RETRIEVABLE - set by the account holder. Issue a new key.'
+    : 'NO KEY ON RECORD - issue a new key.');
 
   return `
     <div class="credential-slip-card" id="${cardId}"
          data-school-id="${escHtml(slip.school_id || slip.id || '')}"
          data-name="${escHtml(slip.name || slip.full_name || 'Authorized User')}"
          data-role="${escHtml(roleTitle)}"
-         data-temp-pw="${escHtml(pwDisplay)}"
+         data-temp-pw="${escHtml(pwPrintValue)}"
          data-created-at="${escHtml(createdTimeStr)}"
          data-created-by="${escHtml(creatorName)}"
          data-origin-id="${escHtml(creatorId)}"
@@ -3368,14 +3379,27 @@ function buildCredentialSlipCardHtml(slip, index = 0) {
           <span class="tag">Confidential Security Slip</span>
         </div>
         <div class="slip-pw-display">
-          <div>
+          <div style="min-width:0;">
             <div style="font-size:10.5px;color:#94a3b8;font-weight:600;margin-bottom:2px;">TEMPORARY SYSTEM PASSWORD</div>
-            <div class="slip-pw-code">${escHtml(pwDisplay)}</div>
+            ${pwDisplay ? `
+              <div class="slip-pw-code">${escHtml(pwDisplay)}</div>
+            ` : `
+              <div class="slip-pw-code" style="font-family:'Poppins',sans-serif;font-size:12px;font-weight:600;color:#b45309;white-space:normal;line-height:1.5;">${escHtml(getCredentialStateNote(credentialState))}</div>
+            `}
           </div>
-          <button type="button" class="admin-pw-btn" onclick="copyTextToClipboard('${escHtml(pwDisplay)}', 'Temporary password copied!')" title="Copy Password">
+          ${pwDisplay ? `
+          <button type="button" class="admin-pw-btn" onclick="copyCredentialKeyFromSlip(this)" title="Copy Password">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Copy Key
           </button>
+          ` : canIssueKey ? `
+          <button type="button" class="admin-pw-btn" style="background:#b45309;color:#fff;border-color:#b45309;" onclick="issueNewKeyFromSlip('${escHtml(slip.user_id || '')}', '${escHtml(slip.school_id || '')}')" title="Issue a new temporary password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            Issue New Key
+          </button>
+          ` : isDemoSlip ? `
+          <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap;">Demo account (protected)</span>
+          ` : ''}
         </div>
         <div class="slip-portal-url">
           <span>Official Login Portal URL:</span>
@@ -3679,21 +3703,52 @@ function showOfficialCredentialSlipModal(slips) {
   modal.classList.add('active');
 }
 
-function viewUserCredentialSlip(schoolId) {
+async function viewUserCredentialSlip(schoolId) {
   const savedSlip = getCredentialSlipRecord(schoolId);
-  const user = registeredUsers.find(u => u.id === schoolId || u.dbId === schoolId);
+  const user = registeredUsers.find(u => u.id === schoolId || u.school_id === schoolId || u.dbId === schoolId);
+  const userId = user?.dbId || null;
+
+  // The issued key is now stored server-side, so View Slip works on any
+  // browser/device instead of depending on this browser's localStorage.
+  let credential = null;
+  if (userId) {
+    try {
+      const { data: { session } } = await db.auth.getSession();
+      if (session) {
+        const res = await fetch(`${API_BASE}/api/admin/user-credential?user_id=${encodeURIComponent(userId)}`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (res.ok) credential = await res.json();
+      }
+    } catch (_) {}
+  }
+
+  const serverPassword = credential?.temp_password || '';
+  const isDemoAccount = !!(user?.isDemo || credential?.user?.is_demo);
+  const credentialState = serverPassword
+    ? 'active'
+    : (credential?.credential_state || (savedSlip?.temp_password ? 'local' : 'unknown'));
+  // A stale browser copy is only trusted while the holder has not replaced
+  // their temporary key yet (must_reset_password still true / unknown).
+  const localPassword = (!serverPassword && credential?.credential_state !== 'user_set')
+    ? (savedSlip?.temp_password || savedSlip?.tempPassword || '')
+    : '';
 
   const slipData = {
     school_id: schoolId,
-    name: savedSlip?.name || user?.name || 'Account Holder',
-    role: savedSlip?.role || user?.role || 'student',
+    user_id: userId,
+    name: savedSlip?.name || user?.name || credential?.user?.full_name || 'Account Holder',
+    role: savedSlip?.role || user?.role || credential?.user?.role || 'student',
     strand: savedSlip?.strand || user?.strand || '',
     grade_level: savedSlip?.grade_level || user?.gradeLevel || '',
     section: savedSlip?.section || user?.section || '',
-    email: savedSlip?.email || savedSlip?.recovery_email || user?.email || '',
-    recovery_email: savedSlip?.recovery_email || user?.recoveryEmail || user?.email || '',
-    temp_password: savedSlip?.temp_password || savedSlip?.tempPassword || '',
-    created_at: savedSlip?.created_at || savedSlip?.savedAt || user?.createdAt || new Date().toISOString(),
+    email: savedSlip?.email || savedSlip?.recovery_email || user?.email || credential?.user?.email || '',
+    recovery_email: savedSlip?.recovery_email || user?.recoveryEmail || user?.email || credential?.user?.email || '',
+    temp_password: serverPassword || localPassword,
+    credential_state: serverPassword ? 'active' : (localPassword ? 'local' : credentialState),
+    can_issue_key: !!userId && !isDemoAccount,
+    is_demo: isDemoAccount,
+    created_at: savedSlip?.created_at || savedSlip?.savedAt || user?.createdAt || credential?.user?.created_at || new Date().toISOString(),
     created_by: savedSlip?.created_by || user?.origin || {
       name: 'School Administration / Registrar',
       school_id: 'HWA-ADMIN',
@@ -3703,6 +3758,74 @@ function viewUserCredentialSlip(schoolId) {
   };
 
   showOfficialCredentialSlipModal([slipData]);
+}
+
+async function issueNewKeyFromSlip(userId, schoolId) {
+  const userObj = registeredUsers.find(u => u.dbId === userId || u.id === userId || u.id === schoolId);
+  if (!userId) return;
+  if (userObj?.isDemo) {
+    if (typeof showToast === 'function') showToast('Demo accounts are protected and cannot be modified.', 'error');
+    return;
+  }
+  if (!confirm(`Issue a brand-new temporary password for "${userObj?.name || schoolId}"?\n\nThe account's current password will stop working immediately.`)) return;
+
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) {
+    if (typeof showToast === 'function') showToast('Your session has expired — please sign in again', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/reset-user-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({ user_id: userId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (typeof showToast === 'function') showToast(data.error || 'Password reset failed', 'error');
+      return;
+    }
+
+    saveCredentialSlipRecord({
+      school_id: data.school_id || schoolId,
+      name: data.name || userObj?.name || '',
+      role: userObj?.role || 'student',
+      temp_password: data.temp_password,
+      created_at: new Date().toISOString(),
+      created_by: {
+        id: CURRENT_PROFILE?.id,
+        name: CURRENT_PROFILE?.full_name || 'Administrator',
+        school_id: CURRENT_PROFILE?.school_id || 'ADMIN',
+        role: 'admin'
+      }
+    });
+
+    if (typeof showToast === 'function') showToast('New key issued — the slip is updated', 'success');
+    await viewUserCredentialSlip(data.school_id || schoolId);
+  } catch (err) {
+    if (typeof showToast === 'function') showToast('Could not reach the server to reset password', 'error');
+  }
+}
+
+function getCredentialStateNote(state) {
+  if (state === 'user_set') {
+    return 'Set by the account holder. Passwords are stored one-way encrypted and can never be displayed — issue a new key to regain access.';
+  }
+  if (state === 'local') {
+    return 'Recovered from the saved slip on this browser. It is still the live password unless the account holder has changed it.';
+  }
+  return 'No temporary key is on record for this account. Issue a new key to generate a fresh login password.';
+}
+
+function copyCredentialKeyFromSlip(btn) {
+  const codeEl = btn?.parentElement?.querySelector('.slip-pw-code');
+  const value = codeEl?.textContent?.trim() || '';
+  if (!value) return;
+  if (typeof copyTextToClipboard === 'function') copyTextToClipboard(value, 'Temporary password copied!');
 }
 
 function showAdminHandoutModal(adminData) {
