@@ -3089,7 +3089,6 @@ function teacherPage(page) {
       const active = quizzes.filter(q => q.status === 'active');
       const news = (typeof getStoredAnnouncements === 'function' ? getStoredAnnouncements() : []).filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft);
       const read = typeof getReadAnnouncementIds === 'function' ? getReadAnnouncementIds() : new Set();
-      const attempts = classRecAttemptsCache.filter(a => quizzes.some(q => String(q.id) === String(a.quiz_id)));
       const teacherAssignedSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim()).filter(Boolean);
       const strands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
       const go = page => `renderPage('${page}')`;
@@ -3099,6 +3098,13 @@ function teacherPage(page) {
       const panel = (title, svg, content, page, cls='') => `<section class="td-panel ${cls}"><header>${icon(svg)}<h3>${title}</h3><button type="button" class="td-link" onclick="${go(page)}">View All</button></header>${content}</section>`;
       const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
       const unreadChatCount = demo ? 7 : (typeof getTeacherUnreadChatCount === 'function' ? getTeacherUnreadChatCount() : 0);
+      const handledStudentsCount = new Set(
+        (typeof registeredUsers !== 'undefined' && Array.isArray(registeredUsers) ? registeredUsers : [])
+          .filter(u => u && u.role === 'student' && u.isActive !== false)
+          .filter(u => typeof isStudentHandledByTeacher === 'function' ? isStudentHandledByTeacher(u, CURRENT_PROFILE) : true)
+          .map(u => u.dbId || u.id || u.name)
+          .filter(Boolean)
+      ).size;
       const adminPublishedCount = (Array.isArray(materialsData) ? materialsData : []).filter(m => {
         if (!m || m.status !== 'approved') return false;
         if (m.is_curriculum === true) return true;
@@ -3108,7 +3114,7 @@ function teacherPage(page) {
       }).length;
       const metrics = [
         ['My Classes',demo?2:teacherAssignedSections.length,'Classes handled','classrec',iconUsers(),'blue'],
-        ['Total Students',demo?68:new Set(attempts.map(a=>a.student_id).filter(Boolean)).size,'Across all classes','classrec',iconUsers(),'green'],
+        ['Total Students',demo?68:handledStudentsCount,'Across all classes','classrec',iconUsers(),'green'],
         ['Materials Uploaded',demo?12:materials.length,'This semester','materials',iconFolder(),'orange'],
         ['Published Lessons',demo?8:adminPublishedCount,'Published by admins','materials',iconFolder(),'purple'],
         ['Active Quizzes',demo?3:active.length,'Currently ongoing','quiz',iconQuiz(),'purple'],
@@ -3545,7 +3551,11 @@ function teacherPage(page) {
             ${analysisFilteredSections.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
           </select>
           <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)">
-            ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
+            ${displayQuizzes.map(q => {
+              const subjectName = String(q.subject || '').trim();
+              const optionLabel = subjectName ? `${subjectName} — ${q.title}` : q.title;
+              return `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(optionLabel)}</option>`;
+            }).join('')}
           </select>
           <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')">${iconRefresh()} Refresh</button>
         </div>
