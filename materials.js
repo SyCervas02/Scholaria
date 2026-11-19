@@ -1498,7 +1498,7 @@ window.getSectionStrand = getSectionStrand;
 function getSectionGradeLevel(secName) {
   if (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) {
     const found = managedSections.find(s => (s.name || '').toLowerCase().trim() === (secName || '').toLowerCase().trim());
-    if (found && found.gradeLevel) return found.gradeLevel.trim();
+    if (found && (found.gradeLevel || found.grade_level)) return (found.gradeLevel || found.grade_level).trim();
   }
   const sLow = (secName || '').toLowerCase().trim();
   if (sLow.includes('grade 12') || sLow.includes('gr12') || sLow.includes('g12')) return 'Grade 12';
@@ -1527,6 +1527,9 @@ window.teacherGradeFilter = 'all';
 function setTeacherGradeFilter(gradeVal) {
   teacherGradeFilter = gradeVal || 'all';
   window.teacherGradeFilter = teacherGradeFilter;
+  const strandSelect = document.getElementById('teacherStrandSelect');
+  const activeStrand = strandSelect ? (window.teacherStrandFilter || 'all').toLowerCase() : 'all';
+  updateSectionDropdownOptions(activeStrand, teacherGradeFilter);
   applyTeacherClassFilter();
 }
 window.setTeacherGradeFilter = setTeacherGradeFilter;
@@ -1625,7 +1628,7 @@ function clearTeacherClassSearch() {
 }
 window.clearTeacherClassSearch = clearTeacherClassSearch;
 
-function updateSectionDropdownOptions(activeStrand) {
+function updateSectionDropdownOptions(activeStrand, activeGrade) {
   const select = document.getElementById('teacherSectionSelect');
   if (!select) return;
 
@@ -1633,21 +1636,32 @@ function updateSectionDropdownOptions(activeStrand) {
   const options = select.querySelectorAll('option[data-section-strand]');
   let isCurrentStillValid = (currentVal === 'all');
 
+  const strandNorm = (activeStrand !== undefined ? activeStrand : (window.teacherStrandFilter || 'all')).toLowerCase();
+  const gradeNorm = (activeGrade !== undefined ? activeGrade : (window.teacherGradeFilter || 'all')).toLowerCase().replace(/\s+/g, '');
+
   options.forEach(opt => {
     const optStrand = (opt.dataset.sectionStrand || '').toLowerCase();
-    if (activeStrand === 'all' || optStrand === activeStrand || optStrand === 'all') {
+    const optGrade = (opt.dataset.sectionGrade || '').toLowerCase().replace(/\s+/g, '');
+
+    const strandMatch = (strandNorm === 'all' || optStrand === strandNorm || optStrand === 'all');
+    const gradeMatch = (gradeNorm === 'all' || optGrade === gradeNorm || optGrade === 'all');
+
+    if (strandMatch && gradeMatch) {
       opt.style.display = '';
       opt.disabled = false;
+      opt.hidden = false;
       if (opt.value.toLowerCase() === currentVal) isCurrentStillValid = true;
     } else {
       opt.style.display = 'none';
       opt.disabled = true;
+      opt.hidden = true;
     }
   });
 
   if (!isCurrentStillValid) {
     select.value = 'all';
     window.teacherSectionFilter = 'all';
+    if (typeof teacherSectionFilter !== 'undefined') teacherSectionFilter = 'all';
   } else {
     select.value = window.teacherSectionFilter;
   }
@@ -1716,7 +1730,7 @@ function applyTeacherClassFilter() {
   });
 
   // Dynamically update section dropdown to hide non-matching sections
-  updateSectionDropdownOptions(activeStrand);
+  updateSectionDropdownOptions(activeStrand, activeGrade);
 
   // Live count badge
   const countBadge = document.getElementById('activeClassesCountBadge');
@@ -2530,7 +2544,14 @@ function renderTeacherSubjectsHubHTML(enrolledCourses, activeRole = (typeof ROLE
         ${distinctSections.map(sec => {
           const secStrand = getSectionStrand(sec);
           const secGrade = getSectionGradeLevel(sec);
-          return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" data-section-grade="${escHtml(secGrade)}" ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand} · ${secGrade})</option>`;
+          const curGradeNorm = (teacherGradeFilter || 'all').toLowerCase().replace(/\s+/g, '');
+          const curStrandNorm = (teacherStrandFilter || 'all').toLowerCase();
+          const optGradeNorm = (secGrade || '').toLowerCase().replace(/\s+/g, '');
+          const optStrandNorm = (secStrand || '').toLowerCase();
+          const isGradeHidden = curGradeNorm !== 'all' && optGradeNorm !== 'all' && optGradeNorm !== curGradeNorm;
+          const isStrandHidden = curStrandNorm !== 'all' && optStrandNorm !== 'all' && optStrandNorm !== curStrandNorm;
+          const isHidden = isGradeHidden || isStrandHidden;
+          return `<option value="${escHtml(sec)}" data-section-strand="${escHtml(secStrand)}" data-section-grade="${escHtml(secGrade)}" ${isHidden ? 'style="display:none;" hidden disabled' : ''} ${teacherSectionFilter.toLowerCase() === sec.toLowerCase() ? 'selected' : ''}>${escHtml(sec)} (${secStrand} · ${secGrade})</option>`;
         }).join('')}
       </select>
 
