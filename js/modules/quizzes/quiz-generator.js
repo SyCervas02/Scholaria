@@ -53,7 +53,10 @@ async function loadQuizzesFromDB() {
     isFetchingQuizzes = false;
   }
   if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress' || currentPage === 'quiz' || currentPage === 'analysis' || currentPage === 'approval')) {
-    if (typeof rerenderCurrentPage === 'function') rerenderCurrentPage();
+    const mainContent = document.getElementById('mainContent');
+    if (mainContent && typeof getPageContent === 'function') {
+      mainContent.innerHTML = getPageContent(ROLE, currentPage);
+    }
   }
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();

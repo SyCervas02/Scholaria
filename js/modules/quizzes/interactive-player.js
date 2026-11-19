@@ -501,6 +501,7 @@ function openQuizQuestionsPreview(quizId) {
     try { questions = JSON.parse(questions); } catch (_) { questions = []; }
   }
   if (!Array.isArray(questions)) questions = [];
+  questions = questions.filter(question => question && typeof question === 'object');
   const isInteractivePreview = quiz.type === 'interactive' || quiz.quiz_type === 'interactive';
   const itemCount = questions.reduce((sum, question) => sum + (question.type === 'matching' ? (question.pairs || []).length : 1), 0);
 
@@ -557,6 +558,9 @@ function openQuizQuestionsPreview(quizId) {
   </div>`;
   modal.classList.remove('iq-preview-overlay', 'standard-preview-overlay');
   modal.classList.add('active', 'sq-take-quiz-overlay', isInteractivePreview ? 'iq-preview-overlay' : 'standard-preview-overlay');
+  document.body.style.overflow = 'hidden';
+  const previewScroll = modal.querySelector('.iq-preview-scroll');
+  if (previewScroll) previewScroll.scrollTop = 0;
 }
 
 function closeInteractiveQuizPreview() {
