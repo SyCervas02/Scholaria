@@ -12,6 +12,87 @@ const takeQuizState = {
   timerInterval: null
 };
 
+let quizReviewPolicyChannel = null;
+let quizReviewPolicyPoll = null;
+let quizReviewPolicyRequest = 0;
+
+function getQuizReviewAnswersAllowed(quiz) {
+  if (!quiz) return true;
+  if (quiz.allow_review_answers !== undefined && quiz.allow_review_answers !== null) return Boolean(quiz.allow_review_answers);
+  if (quiz.allowReviewAnswers !== undefined && quiz.allowReviewAnswers !== null) return Boolean(quiz.allowReviewAnswers);
+  let questions = quiz.questions || [];
+  if (typeof questions === 'string') {
+    try { questions = JSON.parse(questions); } catch (_) { questions = []; }
+  }
+  const firstQuestion = Array.isArray(questions) ? (questions[0] || {}) : {};
+  if (firstQuestion._meta?.allowReviewAnswers !== undefined) return Boolean(firstQuestion._meta.allowReviewAnswers);
+  if (firstQuestion._allowReviewAnswers !== undefined) return Boolean(firstQuestion._allowReviewAnswers);
+  return true;
+}
+
+function stopQuizReviewPolicyWatcher() {
+  clearInterval(quizReviewPolicyPoll);
+  quizReviewPolicyPoll = null;
+  quizReviewPolicyRequest++;
+  if (quizReviewPolicyChannel && typeof db !== 'undefined' && db?.removeChannel) {
+    try { db.removeChannel(quizReviewPolicyChannel); } catch (_) {}
+  }
+  quizReviewPolicyChannel = null;
+}
+
+function applyQuizReviewPolicyRow(row) {
+  if (!row || !takeQuizState.reviewMode || !takeQuizState.quiz) return;
+  const quiz = takeQuizState.quiz;
+  const previousAllowed = getQuizReviewAnswersAllowed(quiz);
+  if (row.allow_review_answers !== undefined && row.allow_review_answers !== null) {
+    quiz.allow_review_answers = row.allow_review_answers;
+    quiz.allowReviewAnswers = row.allow_review_answers;
+  } else {
+    delete quiz.allow_review_answers;
+    delete quiz.allowReviewAnswers;
+  }
+  if (row.questions !== undefined) quiz.questions = row.questions;
+  let questions = quiz.questions || [];
+  if (typeof questions === 'string') {
+    try { questions = JSON.parse(questions); } catch (_) { questions = []; }
+  }
+  if (!Array.isArray(questions)) questions = [];
+  const nestedSetting = questions[0]?._meta?.allowReviewAnswers ?? questions[0]?._allowReviewAnswers;
+  if ((row.allow_review_answers === undefined || row.allow_review_answers === null) && nestedSetting !== undefined) {
+    delete quiz.allow_review_answers;
+    delete quiz.allowReviewAnswers;
+  }
+  const allowed = getQuizReviewAnswersAllowed(quiz);
+  quiz.allowReviewAnswers = allowed;
+  quiz.allow_review_answers = allowed;
+  takeQuizState.reviewAnswersAllowed = allowed;
+  if (allowed !== previousAllowed) renderTakeQuizModal();
+}
+
+async function refreshQuizReviewPolicy(quizId, requestId) {
+  if (typeof db === 'undefined' || !db?.from || requestId !== quizReviewPolicyRequest || !takeQuizState.reviewMode) return;
+  try {
+    const { data, error } = await db.from('quizzes').select('*').eq('id', quizId).single();
+    if (!error && data && requestId === quizReviewPolicyRequest) applyQuizReviewPolicyRow(data);
+  } catch (_) {}
+}
+
+function startQuizReviewPolicyWatcher(quizId) {
+  stopQuizReviewPolicyWatcher();
+  if (!quizId || typeof db === 'undefined' || !db?.from) return;
+  const requestId = quizReviewPolicyRequest;
+  if (typeof db.channel === 'function') {
+    try {
+      quizReviewPolicyChannel = db.channel(`quiz-review-policy-${quizId}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'quizzes', filter: `id=eq.${quizId}` }, payload => {
+          if (requestId === quizReviewPolicyRequest) applyQuizReviewPolicyRow(payload.new);
+        })
+        .subscribe();
+    } catch (_) { quizReviewPolicyChannel = null; }
+  }
+  quizReviewPolicyPoll = setInterval(() => refreshQuizReviewPolicy(quizId, requestId), 4000);
+}
+
 function buildQuizItems(quiz) {
   const items = [];
   let rawQuestions = quiz?.questions || [];
@@ -419,6 +500,7 @@ window.restoreActiveQuizOnBoot = restoreActiveQuizOnBoot;
 
 
 function openTakeQuizModal(quizId) {
+  stopQuizReviewPolicyWatcher();
   let quiz = null;
   if (quizId && typeof quizId === 'object') {
     quiz = quizId;
@@ -506,6 +588,7 @@ function takeQuizAsTeacher(quizId) {
 }
 
 async function openReviewAttempt(quizIdOrAttemptId, optionalAttemptId) {
+  stopQuizReviewPolicyWatcher();
   clearInterval(takeQuizState.timerInterval);
   clearActiveQuizSession();
   const quizList = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
@@ -624,6 +707,29 @@ async function openReviewAttempt(quizIdOrAttemptId, optionalAttemptId) {
     };
   }
 
+  // Always prefer the current server row so a review opened after a teacher
+  // changes the setting does not rely on a stale quiz list cached in memory.
+  if (quizTargetId && typeof db !== 'undefined' && db?.from) {
+    try {
+      const { data } = await db.from('quizzes').select('*').eq('id', quizTargetId).single();
+      if (data) {
+        quiz = { ...(quiz || {}), ...data };
+        if (data.allow_review_answers === undefined || data.allow_review_answers === null) {
+          delete quiz.allow_review_answers;
+          delete quiz.allowReviewAnswers;
+        }
+        const allowed = getQuizReviewAnswersAllowed(quiz);
+        quiz.allowReviewAnswers = allowed;
+        quiz.allow_review_answers = allowed;
+      }
+    } catch (_) {}
+  }
+  if (quiz) {
+    const allowed = getQuizReviewAnswersAllowed(quiz);
+    quiz.allowReviewAnswers = allowed;
+    quiz.allow_review_answers = allowed;
+  }
+
   if (!attempt) { 
     if (typeof showToast === 'function') showToast('Quiz attempt record not found', 'error'); 
     return; 
@@ -664,6 +770,7 @@ async function openReviewAttempt(quizIdOrAttemptId, optionalAttemptId) {
     submitting: false, 
     reviewMode: true, 
     reviewAnswers: parsedAnswers,
+    reviewAnswersAllowed: getQuizReviewAnswersAllowed(quiz),
     timeLimitMinutes: 0,
     secondsLeft: 0
   });
@@ -672,6 +779,7 @@ async function openReviewAttempt(quizIdOrAttemptId, optionalAttemptId) {
     modal.classList.add('active', 'sq-take-quiz-overlay');
   }
   renderTakeQuizModal();
+  startQuizReviewPolicyWatcher(quiz.id || quizTargetId);
 }
 
 window.openReviewAttempt = openReviewAttempt;
@@ -702,6 +810,7 @@ function confirmExitQuiz() {
 }
 
 function closeTakeQuizModal() {
+  stopQuizReviewPolicyWatcher();
   clearInterval(takeQuizState.timerInterval);
   clearActiveQuizSession();
   const modal = document.getElementById('takeQuizModal');
@@ -836,13 +945,7 @@ function renderTakeQuizModal() {
       </div>`
     : '';
 
-  const allowReviewAnswers = (
-    quiz?.allowReviewAnswers !== false &&
-    quiz?.allow_review_answers !== false &&
-    quiz?._meta?.allowReviewAnswers !== false &&
-    quiz?.questions?.[0]?._meta?.allowReviewAnswers !== false &&
-    quiz?.questions?.[0]?._allowReviewAnswers !== false
-  );
+  const allowReviewAnswers = getQuizReviewAnswersAllowed(quiz);
   const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
   function buildQuestionCard(item, idx) {
@@ -878,7 +981,7 @@ function renderTakeQuizModal() {
     // Card review class: green border if correct, red border if incorrect
     let cardReviewClass = '';
     let cardHeaderStatusBadge = '';
-    if (reviewMode) {
+    if (reviewMode && allowReviewAnswers) {
       if (isAnsCorrect) {
         cardReviewClass = ' sq-review-correct';
         cardHeaderStatusBadge = `<span class="sq-opt-badge correct-badge" style="margin-left:auto;font-size:12px;padding:3px 10px;border-radius:20px;">✔ Correct</span>`;
@@ -915,7 +1018,9 @@ function renderTakeQuizModal() {
           rowClass += ' disabled';
           if (isSelected) {
             rowClass += ' selected';
-            if (isOptRight) {
+            if (!allowReviewAnswers) {
+              // Keep the submitted choice visible while hiding correctness.
+            } else if (isOptRight) {
               rowClass += ' correct';
               badgeHtml = `<span class="sq-opt-badge correct-badge">✔ Your Answer (Correct)</span>`;
             } else {
@@ -949,7 +1054,7 @@ function renderTakeQuizModal() {
       }).join('');
 
       let feedbackHtml = '';
-      if (reviewMode) {
+      if (reviewMode && allowReviewAnswers) {
         const correctText = Array.isArray(itemCorrect)
           ? itemCorrect.join(', ')
           : (Array.isArray(item.correctAnswers) ? item.correctAnswers.join(', ') : String(itemCorrect || ''));
@@ -976,7 +1081,7 @@ function renderTakeQuizModal() {
     } else if (item.type === 'identification') {
       let inputStyle = '';
       let feedbackHtml = '';
-      if (reviewMode) {
+      if (reviewMode && allowReviewAnswers) {
         if (isAnsCorrect) {
           inputStyle = 'border:2px solid #22c55e !important;background:#f0fdf4 !important;color:#15803d !important;font-weight:600;';
           feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#dcfce7;color:#166534;border:1px solid #86efac;">
@@ -1001,7 +1106,7 @@ function renderTakeQuizModal() {
       // matching
       let selectStyle = '';
       let feedbackHtml = '';
-      if (reviewMode) {
+      if (reviewMode && allowReviewAnswers) {
         if (isAnsCorrect) {
           selectStyle = 'border:2px solid #22c55e !important;background:#f0fdf4 !important;color:#15803d !important;font-weight:600;';
           feedbackHtml = `<div style="margin-top:12px;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;background:#dcfce7;color:#166534;border:1px solid #86efac;">

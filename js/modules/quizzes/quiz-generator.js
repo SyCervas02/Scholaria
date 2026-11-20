@@ -2985,7 +2985,7 @@ function renderQuizModal() {
                 <span>👁️</span> Allow students to see correct answers upon review
               </div>
               <div style="font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.4;">
-                When checked, students can view the answer key and question explanations after completing the quiz. If unchecked, students only see their score and right/wrong status; correct answers are kept hidden. (You can also change this anytime later in Quiz Manager).
+                When checked, students can view the answer key and question explanations after completing the quiz. If unchecked, they see their submitted responses and overall score; answer keys, correctness indicators, and explanations stay hidden. (You can also change this anytime later in Quiz Manager).
               </div>
             </div>
           </label>
