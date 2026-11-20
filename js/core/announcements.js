@@ -1147,7 +1147,7 @@ function submitCreateAnnouncement(isDraft = false) {
       });
     }
 
-    if (newAnc.priority === 'critical') {
+    if ((newAnc.priority === 'critical' || newAnc.category === 'emergency')) {
       sessionStorage.removeItem('scholaria_emergency_dismissed');
     }
     showToast('Announcement broadcasted successfully!', 'success');
@@ -1155,6 +1155,10 @@ function submitCreateAnnouncement(isDraft = false) {
     showToast('Announcement saved as draft (not yet posted)', 'info');
   }
 
+  // Land the author on the Active list so their new post is immediately visible,
+  // even if they were browsing Drafts/Archived or a category chip.
+  ancCategoryFilter = 'all';
+  ancArchiveView = isDraft ? 'drafts' : 'active';
   closeCreateAnnouncementModal();
   if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
   renderEmergencyTopBanner();
@@ -1186,9 +1190,13 @@ function publishAnnouncementDraft(id) {
     });
   }
 
-  if (anc.priority === 'critical') {
+  if (anc.priority === 'critical' || anc.category === 'emergency') {
     sessionStorage.removeItem('scholaria_emergency_dismissed');
   }
+
+  // Show the freshly published post to its author right away.
+  ancCategoryFilter = 'all';
+  ancArchiveView = 'active';
 
   showToast('Announcement published and broadcasted live!', 'success');
   if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
