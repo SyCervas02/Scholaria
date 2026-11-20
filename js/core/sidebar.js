@@ -3264,7 +3264,9 @@ function teacherPage(page) {
         ? pendingEntries.map(p => row(p.title, p.sub, '<em>Pending</em>', 'orange', p.svg, p.page)).join('')
         : empty('No submissions awaiting review.'));
       const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials')).join('') || empty('No materials uploaded yet.');
-      const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : news.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
+      const classNews = news.filter(n => n.category === 'academic' || n.category === 'emergency');
+      const latestClassNews = [...classNews, ...news.filter(n => !['academic', 'emergency', 'event'].includes(n.category))];
+      const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : latestClassNews.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
       const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : teacherAssignedSections).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned yet.');
       const assessments = demo ? [['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM'],['Essay: Role of Media in Society','Komunikasyon at Pananaliksik - Grade 11 - HUMSS'],['Quiz 1 - 21st Century Literature','Research in Daily Life - Grade 11 - STEM']].map(q=>row(q[0],q[1],'<em>Ongoing</em>')).join('') : active.slice(0,3).map(q=>row(q.title,q.subject||q.meta||'','<em>Ongoing</em>')).join('') || empty('No active quizzes right now.');
       const eventItems = demo ? [
@@ -3272,7 +3274,7 @@ function teacherPage(page) {
         {title:'Submission of Quarter 3 Grades',detail:'Faculty',when:'All Day',date:'2025-02-07'},
         {title:'Parent-Teacher Conference',detail:'Grade 11 Level',when:'1:00 PM - 4:00 PM',date:'2025-02-10'},
         {title:'Foundation Day',detail:'Whole School',when:'All Day',date:'2025-02-14'}
-      ] : news.filter(n=>n.category==='event' && new Date(n.event_date||n.eventDate)>=new Date(new Date().setHours(0,0,0,0))).map(n=>({title:n.title,detail:n.message||'',when:n.event_time||'',date:n.event_date||n.eventDate})).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,4);
+      ] : news.filter(n=>n.category==='event').map(n=>({title:n.title,detail:n.message||'',when:n.event_time||n.eventTime||'Event',date:n.event_date||n.eventDate||n.timestamp})).filter(n=>new Date(n.date)>=new Date(new Date().setHours(0,0,0,0))).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,4);
       const events = eventItems.map(e=>{const d=new Date(/^\d{4}-\d{2}-\d{2}$/.test(e.date)?e.date+'T00:00:00':e.date);const valid=!Number.isNaN(d.getTime());return `<button type="button" class="td-event" onclick="${go('announcements')}"><span class="td-event-date"><small>${valid?d.toLocaleDateString('en-US',{month:'short'}):''}</small><strong>${valid?d.getDate():''}</strong></span><span><strong>${escHtml(e.title)}</strong><small>${escHtml(e.detail)}</small><small>${escHtml(e.when)}</small></span></button>`;}).join('') || empty('No upcoming school events scheduled.');
       return `<div class="teacher-reference-dashboard">
         <section class="td-hero"><div><h1>WELCOME BACK</h1><h2>Haven of Wisdom Academy - Teacher Portal</h2><p>Here's what needs your attention today.</p></div><img src="assets/dashboard-books.svg" alt=""/><blockquote>&ldquo; Teaching is a work of heart.<br>Thank you for making a difference<br>in every student's journey. &rdquo;</blockquote></section>
@@ -3280,10 +3282,10 @@ function teacherPage(page) {
         <div class="td-grid">
           <section class="td-panel td-subjects"><div id="coursesWidgetContainer">${typeof renderCoursesWidgetHTML==='function'?renderCoursesWidgetHTML():empty('No subjects assigned.')}</div></section>
           ${panel('Pending Submissions / To Review',iconRecord(),pending,'classrec','td-pending')}
-          ${panel('Upcoming School Events',iconCalendar(),events,'announcements','td-events')}
+          ${panel('Latest Class Announcements',iconAnnouncement(),announcements,'announcements','td-announcements')}
           ${panel('My Class Sections',iconUsers(),sections,'classrec','td-sections')}
           ${panel('Recently Added Materials',iconFolder(),recent,'materials','td-materials')}
-          ${panel('Latest Class Announcements',iconAnnouncement(),announcements,'announcements','td-announcements')}
+          ${panel('Upcoming School Events',iconCalendar(),events,'announcements','td-events')}
           ${panel('Active Quizzes & Assessments',iconQuiz(),`<button type="button" class="td-create" onclick="openQuizModal()">+ Create Quiz</button>${assessments}`,'quiz','td-assessments')}
         </div></div>`;
     }

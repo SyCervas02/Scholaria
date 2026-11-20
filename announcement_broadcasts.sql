@@ -32,7 +32,10 @@ create policy "Read announcements for audience"
             coalesce(payload->'audience', '["All Students", "All Teachers"]'::jsonb) ? 'All Students'
             or coalesce(payload->'audience', '[]'::jsonb) ? (coalesce(u.strand, '') || ' Strand')
           ))
-          or (u.role = 'teacher' and coalesce(payload->'audience', '["All Students", "All Teachers"]'::jsonb) ? 'All Teachers')
+          or (u.role = 'teacher' and (
+            coalesce(payload->'audience', '["All Students", "All Teachers"]'::jsonb) ? 'All Teachers'
+            or payload->>'category' = 'emergency'
+          ))
         )
     )
   );
