@@ -141,7 +141,13 @@ async function initializeAnnouncementSync() {
     if (error) console.warn('Legacy announcements could not be migrated:', error.message);
   }
   const serverReady = await loadAnnouncementsFromServer();
-  if (!serverReady) return;
+  if (!serverReady) {
+    announcementSyncPoll = setTimeout(() => {
+      announcementSyncPoll = null;
+      initializeAnnouncementSync().catch(err => console.warn('Shared announcements retry notice:', err.message));
+    }, 15000);
+    return;
+  }
 
   if (typeof db.channel === 'function') {
     announcementRealtimeChannel = db.channel('school-announcements-live')
