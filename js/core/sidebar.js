@@ -3190,9 +3190,9 @@ function studentPage(page) {
                     <strong>${escHtml(subj)}</strong>
                   </button>
                 </div></td>
-                <td data-label="Assessment"><div class="progress-cell-value">
-                  ${escHtml(q.title || 'Quiz')}
-                  ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? '<span class="status-pill" style="margin-left:6px;font-size:10px;padding:2px 6px;background:#ede9fe;color:#7c3aed;font-weight:700;">🎮 Interactive</span>' : ''}
+                <td data-label="Assessment"><div class="progress-cell-value progress-assessment-value">
+                  <span class="progress-assessment-title">${escHtml(q.title || 'Quiz')}</span>
+                  ${(q.type === 'interactive' || q.quiz_type === 'interactive') ? '<span class="status-pill progress-interactive-pill">🎮 Interactive</span>' : ''}
                 </div></td>
                 <td style="color:var(--text-secondary);font-size:12.5px;white-space:nowrap;" data-label="Deadline"><div class="progress-cell-value">
                   <span style="display:inline-flex;align-items:center;gap:6px;${(!hasTaken && isPastDeadline) ? 'color:#dc2626;font-weight:600;' : ''}">

@@ -5,6 +5,23 @@
   stroke: currentColor; fill: none;
   stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
 }
+
+.student-progress-table .progress-assessment-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.student-progress-table .progress-interactive-pill {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 2px 6px;
+  background: #ede9fe;
+  color: #7c3aed;
+  font-size: 10px;
+  font-weight: 700;
+}
 .menu-item { display: flex; align-items: center; gap: 12px; }
 
 .menu-badge {
@@ -5166,14 +5183,20 @@ button,
     word-break: normal !important;
     line-height: 1.4;
   }
-  .main .student-progress-table th:nth-child(1) { width: 14%; }
-  .main .student-progress-table th:nth-child(2) { width: 22%; }
+  .main .student-progress-table th:nth-child(1) { width: 18%; }
+  .main .student-progress-table th:nth-child(2) { width: 23%; }
   .main .student-progress-table th:nth-child(3) { width: 14%; }
-  .main .student-progress-table th:nth-child(4) { width: 12%; }
-  .main .student-progress-table th:nth-child(5) { width: 13%; }
-  .main .student-progress-table th:nth-child(6) { width: 13%; }
-  .main .student-progress-table th:nth-child(7) { width: 12%; }
+  .main .student-progress-table th:nth-child(4) { width: 10%; }
+  .main .student-progress-table th:nth-child(5) { width: 11%; }
+  .main .student-progress-table th:nth-child(6) { width: 11%; }
+  .main .student-progress-table th:nth-child(7) { width: 13%; }
   .main .student-progress-table th { letter-spacing: .02em; }
+  .main .student-progress-table td[data-label="Subject"] .progress-subject-btn {
+    width: 100%; min-width: 0; justify-content: flex-start; overflow-wrap: normal;
+  }
+  .main .student-progress-table td[data-label="Subject"] .progress-subject-btn strong {
+    min-width: 0; overflow-wrap: normal; word-break: normal; hyphens: none;
+  }
   .main .student-progress-table td:has(.table-act-btn),
   .main .student-progress-table th:last-child { min-width: 0 !important; }
   .main .student-progress-table .table-act-btn { max-width: 100%; padding-inline: 9px; }
