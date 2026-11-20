@@ -343,6 +343,48 @@ app.get('/uploads/chat/:filename', async (req, res) => {
   res.status(404).send('File not found');
 });
 
+// Legacy learning-material links ("/uploads/materials/<file>") may outlive the
+// Railway container that wrote them. Recover the object from Supabase Storage.
+app.get('/uploads/materials/:filename', async (req, res) => {
+  const filename = path.basename(req.params.filename || '');
+  if (!filename) return res.status(404).send('File not found');
+
+  const filePath = path.join(materialsUploadsDir, filename);
+  if (fs.existsSync(filePath)) return res.sendFile(filePath);
+
+  try {
+    const folders = [''];
+    const { data: rootEntries } = await supabaseAdmin.storage
+      .from(LEARNING_BUCKET).list('', { limit: 100 });
+    for (const entry of rootEntries || []) {
+      if (entry?.name && !folders.includes(entry.name)) folders.push(entry.name);
+    }
+    for (const folder of folders.slice(0, 40)) {
+      let entries = [];
+      try {
+        const { data } = await supabaseAdmin.storage
+          .from(LEARNING_BUCKET).list(folder, { limit: 500 });
+        entries = data || [];
+      } catch (_) { entries = []; }
+      const match = entries.find(e => e?.name && (
+        e.name === filename || e.name.endsWith(filename) || e.name.includes(filename)
+      ));
+      if (!match) continue;
+      const key = folder ? `${folder}/${match.name}` : match.name;
+      const { data: blob, error } = await supabaseAdmin.storage
+        .from(LEARNING_BUCKET).download(key);
+      if (error || !blob) continue;
+      const buffer = Buffer.from(await blob.arrayBuffer());
+      try { fs.writeFileSync(filePath, buffer); } catch (_) {}
+      res.setHeader('Content-Type', blob.type || 'application/octet-stream');
+      return res.send(buffer);
+    }
+  } catch (err) {
+    console.warn('[Materials] Static recovery failed:', err.message);
+  }
+  res.status(404).send('File not found');
+});
+
 // Allowed public assets and folders
 app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'ignore' }));
 app.use('/js', express.static(path.join(__dirname, 'js'), { dotfiles: 'ignore' }));
@@ -1519,16 +1561,16 @@ app.post('/api/chat/send', async (req, res) => {
     finalBody = localCheck.profanityFlagged ? localCheck.censoredText : '*'.repeat(Math.min(text.length, 200));
 
     const strikes = (profile.profanity_strikes || 0) + 1;
-    const tier = getMuteForStrikes(strikes);
-    muteUpdate = { profanity_strikes: strikes, ...tier };
+    const { action: muteAction, ...tierFields } = getMuteForStrikes(strikes);
+    muteUpdate = { profanity_strikes: strikes, ...tierFields };
     violationToLog = {
       user_id: profile.id, original_body: text,
       categories: localCheck.profanityFlagged ? ['profanity'] : flaggedCategories,
-      severity: 'normal', strike_number: strikes, action: tier.action
+      severity: 'normal', strike_number: strikes, action: muteAction
     };
-    warning = tier.action === 'muted_permanent'
+    warning = muteAction === 'muted_permanent'
       ? 'Your account has been permanently muted for repeated inappropriate language — please visit or message the Guidance Office to be unmuted.'
-      : 'Your message contained inappropriate content and was censored.';
+      : 'Your message contained inappropriate content and was censored. You have been temporarily muted from chat.';
   }
 
   const dbClient = req.userClient || supabaseAdmin;
@@ -1989,6 +2031,97 @@ app.get('/api/materials', async (req, res) => {
   })));
 });
 
+const LEARNING_BUCKET = 'learning-materials';
+
+function materialStorageCandidates(fileUrl) {
+  const raw = String(fileUrl || '').trim();
+  const result = { externalUrl: null, keys: [] };
+  if (!raw) return result;
+
+  if (/^(https?:)?\/\//i.test(raw)) {
+    const m = raw.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/learning-materials\/([^?#]+)/i);
+    if (m) {
+      result.keys.push(decodeURIComponent(m[1]));
+    } else {
+      result.externalUrl = raw;
+    }
+    return result;
+  }
+
+  let key = raw.replace(/^\/+/, '').replace(/[?#].*$/, '');
+  key = key.replace(/^learning-materials\//i, '');
+  key = key.replace(/^uploads\/(?:materials|chat)\//i, '');
+  if (key) {
+    result.keys.push(key);
+    const base = decodeURIComponent(key.split('/').pop() || '');
+    if (base && base !== key) result.keys.push(base);
+  }
+  return result;
+}
+
+async function findMaterialFile(fileUrl, uploadedBy) {
+  const { externalUrl, keys } = materialStorageCandidates(fileUrl);
+  if (externalUrl) return { url: externalUrl, key: null };
+
+  const tried = new Set();
+  for (const key of keys) {
+    if (!key || tried.has(key)) continue;
+    tried.add(key);
+    const { data, error } = await supabaseAdmin.storage
+      .from(LEARNING_BUCKET).createSignedUrl(key, 60 * 10);
+    if (!error && data?.signedUrl) return { url: data.signedUrl, key };
+  }
+
+  // Old rows may reference a bare filename or a legacy disk path. Locate the
+  // object inside the uploader's folder (uploads use "<userId>/<ts>-<name>")
+  // or at the bucket root, then heal the row with the real storage key.
+  const base = keys.length ? decodeURIComponent(String(keys[keys.length - 1]).split('/').pop() || '') : '';
+  if (base) {
+    const folders = [];
+    if (uploadedBy) folders.push(String(uploadedBy));
+    try {
+      const { data: rootEntries } = await supabaseAdmin.storage
+        .from(LEARNING_BUCKET).list('', { limit: 100 });
+      for (const entry of rootEntries || []) {
+        if (entry?.name && !folders.includes(entry.name)) folders.push(entry.name);
+      }
+    } catch (_) {}
+
+    const visited = new Set();
+    for (const folder of folders.slice(0, 40)) {
+      if (!folder || visited.has(folder)) continue;
+      visited.add(folder);
+      let entries = [];
+      try {
+        const { data } = await supabaseAdmin.storage
+          .from(LEARNING_BUCKET).list(folder, { limit: 500 });
+        entries = data || [];
+      } catch (_) { entries = []; }
+      const match = entries.find(e => e?.name && (
+        e.name === base || e.name.endsWith(base) || e.name.includes(base)
+      ));
+      if (match) {
+        const key = `${folder}/${match.name}`;
+        const { data, error } = await supabaseAdmin.storage
+          .from(LEARNING_BUCKET).createSignedUrl(key, 60 * 10);
+        if (!error && data?.signedUrl) return { url: data.signedUrl, key };
+      }
+    }
+  }
+
+  // Legacy handout rows that point at static files shipped with the app.
+  for (const key of keys) {
+    const name = decodeURIComponent(String(key).split('/').pop() || '');
+    if (!name) continue;
+    try {
+      if (fs.existsSync(path.join(__dirname, name))) {
+        return { url: '/' + encodeURIComponent(name), key: null };
+      }
+    } catch (_) {}
+  }
+  return { url: null, key: null };
+}
+
 app.get('/api/materials/:id/download', async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
@@ -2002,16 +2135,31 @@ app.get('/api/materials/:id/download', async (req, res) => {
     || profile.role === 'admin';
   if (!canView) return res.status(403).json({ error: 'Not available' });
 
-  const { data, error } = await supabaseAdmin.storage
-    .from('learning-materials')
-    .createSignedUrl(material.file_url, 60 * 10);
-  if (error) return res.status(500).json({ error: error.message });
-
-  if (req.query.redirect === '1') {
-    return res.redirect(data.signedUrl);
+  const found = await findMaterialFile(material.file_url, material.uploaded_by);
+  if (!found.url) {
+    return res.status(404).json({
+      error: 'FILE_MISSING',
+      message: 'This file is no longer available in storage. The uploader may need to re-upload it.'
+    });
   }
 
-  res.json({ url: data.signedUrl, title: material.title, file_type: material.file_type });
+  if (found.key && found.key !== material.file_url) {
+    try {
+      const { error: healErr } = await supabaseAdmin
+        .from('materials')
+        .update({ file_url: found.key })
+        .eq('id', material.id);
+      if (healErr) console.warn('[Materials] Could not heal file_url for', material.id, healErr.message);
+    } catch (healCatch) {
+      console.warn('[Materials] Could not heal file_url for', material.id, healCatch.message);
+    }
+  }
+
+  if (req.query.redirect === '1') {
+    return res.redirect(found.url);
+  }
+
+  res.json({ url: found.url, title: material.title, file_type: material.file_type });
 });
 
 app.patch('/api/materials/:id/status', async (req, res) => {

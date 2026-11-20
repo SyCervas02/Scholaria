@@ -382,7 +382,9 @@ function renderRoomsTabContent() {
           <div style="font-size:12px;color:var(--text-muted);padding:8px 12px;">No active sections available. Please create a section first.</div>
         ` : activeSections.map(s => {
           const enrolled = (typeof registeredUsers !== 'undefined' ? registeredUsers : []).filter(u =>
-            u.role === 'student' && u.isActive !== false && (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
+            u.role === 'student' && u.isActive !== false &&
+            (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase() &&
+            (typeof studentStrandMatchesSection === 'function' ? studentStrandMatchesSection(s.name, u.strand) : true)
           ).length;
           return `
             <div class="sec-drag-pill" draggable="true" ondragstart="handleSectionDragStart(event, '${escHtml(s.name)}')" title="Click or drag to assign to a room">

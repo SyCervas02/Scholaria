@@ -608,7 +608,7 @@ function getSubjectLessons(course) {
             submitted: u.date_formatted || "Oct 16, 2026",
             due: u.date_formatted || "Official Handout",
             status: "Completed",
-            file_url: u.file_url || "SURVEY FORMS - Scholaria.pdf"
+            file_url: u.file_url || null
           });
         }
       });
@@ -1206,9 +1206,9 @@ function renderMaterialsList(role) {
                                                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                                 Preview
                                               </button>
-                                              <a href="${it.file_url || 'SURVEY FORMS - Scholaria.pdf'}" target="_blank" download style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;text-decoration:none;" title="Download Handout">
+                                              <button type="button" onclick="event.stopPropagation(); downloadMaterial('${it.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:#f0f9ff;border:1px solid #bae6fd;color:#0284c7;font-size:11.5px;font-weight:700;cursor:pointer;" title="Download Handout">
                                                 <span>⬇</span> Download
-                                              </a>
+                                              </button>
                                               ${(role === 'admin') ? `
                                                 <button type="button" onclick="event.stopPropagation(); deleteMaterial('${it.id}')" style="display:inline-flex;align-items:center;padding:4px 8px;border-radius:6px;background:#fff1f2;border:1px solid #fecdd3;color:#e11d48;font-size:11.5px;font-weight:700;cursor:pointer;" title="Delete Handout">
                                                   🗑
@@ -2833,7 +2833,7 @@ function getStudentFilteredMaterials() {
       dateAdded: m.date_formatted ? `${m.date_formatted} ${m.time_formatted || ''}` : 'Recent',
       status: 'Completed',
       cover: m.cover || 'assets/slide1.jpg',
-      file_url: m.file_url || 'SURVEY FORMS - Scholaria.pdf'
+      file_url: m.file_url || null
     };
   });
 
@@ -3943,7 +3943,7 @@ async function previewSubjectUploadedMaterial(id) {
             title: item.title,
             fileName: item.fileName || item.title,
             subject: c.title,
-            file_url: item.file_url || 'SURVEY FORMS - Scholaria.pdf',
+            file_url: item.file_url || null,
             file_type: 'application/pdf',
             type: item.type || 'PDF',
             date_formatted: item.due || item.submitted || 'Recent',
@@ -3988,6 +3988,7 @@ async function previewSubjectUploadedMaterial(id) {
 
   let fileUrl = null;
   let fileType = (m.file_type || m.type || '').toLowerCase();
+  let serverMissing = false;
 
   try {
     const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
@@ -3995,22 +3996,22 @@ async function previewSubjectUploadedMaterial(id) {
       const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(m.id)}/download`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          fileUrl = data.url;
-          if (data.file_type) fileType = data.file_type.toLowerCase();
-        }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.url) {
+        fileUrl = data.url;
+        if (data.file_type) fileType = data.file_type.toLowerCase();
+      } else if (data.error === 'FILE_MISSING') {
+        serverMissing = true;
       }
     }
 
-    if (!fileUrl && m.file_url) {
-      if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
+    if (!fileUrl && !serverMissing && m.file_url) {
+      if (/^https?:\/\//i.test(m.file_url)) {
         fileUrl = m.file_url;
       } else {
         const { data, error } = await db.storage
           .from('learning-materials')
-          .createSignedUrl(m.file_url, 60 * 15);
+          .createSignedUrl(m.file_url.replace(/^\/+/, ''), 60 * 15);
         if (!error && data?.signedUrl) {
           fileUrl = data.signedUrl;
         }
@@ -4023,23 +4024,17 @@ async function previewSubjectUploadedMaterial(id) {
   const isPdf = fileType.includes('pdf') || (m.fileName && m.fileName.toLowerCase().endsWith('.pdf')) || (m.title && m.title.toLowerCase().endsWith('.pdf')) || m.type === 'PDF';
   const isImage = fileType.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(m.fileName || m.title || '');
 
-  if (!fileUrl) {
-    if (m.file_url || m.url) {
-      fileUrl = m.file_url || m.url;
-    } else if (isPdf) {
-      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
-    }
+  if (!fileUrl && !serverMissing && (m.file_url || m.url)) {
+    const candidate = String(m.file_url || m.url);
+    if (candidate.startsWith('/uploads/') || !candidate.includes('/')) fileUrl = candidate;
   }
 
   if (!fileUrl) {
     bodyEl.innerHTML = `
       <div style="padding:40px 20px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;">
         <div style="font-size:36px;margin-bottom:12px;">⚠️</div>
-        <h4 style="margin:0 0 8px 0;font-size:16px;color:#0f172a;">Unable to load file preview</h4>
-        <p style="margin:0 0 16px 0;font-size:13px;color:#64748b;">The document could not be loaded from storage. Please verify that the file exists or try downloading it directly.</p>
-        <button class="sw-btn primary" onclick="downloadMaterial('${m.id}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;">
-          Download File
-        </button>
+        <h4 style="margin:0 0 8px 0;font-size:16px;color:#0f172a;">File no longer available</h4>
+        <p style="margin:0;font-size:13px;color:#64748b;max-width:460px;">${serverMissing ? 'This document is no longer stored on the server. Ask the uploader to re-upload it.' : 'The document could not be loaded from storage. Please try again later.'}</p>
       </div>
     `;
     return;
@@ -4615,10 +4610,36 @@ async function rejectMaterial(id, reason) {
   loadMaterialsFromDB().catch(() => {});
 }
 
+function findMaterialRecord(id) {
+  const match = (m) => m && String(m.id) === String(id);
+  let m = materialsData.find(match) || getCustomMaterialsFromStorage().find(match) ||
+    (typeof STUDENT_DEFAULT_MATERIALS !== 'undefined' ? STUDENT_DEFAULT_MATERIALS.find(match) : null);
+  if (m) return m;
+
+  if (typeof COURSES_DATABASE !== 'undefined') {
+    for (const c of COURSES_DATABASE) {
+      const lessons = getSubjectLessons(c);
+      for (const l of lessons) {
+        const item = (l.items || []).find(it => String(it.id) === String(id));
+        if (item) {
+          return {
+            id: item.id,
+            title: item.title,
+            fileName: item.fileName || item.title,
+            subject: c.title,
+            file_url: item.file_url || null,
+            file_type: 'application/pdf',
+            type: item.type || 'PDF'
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 async function downloadMaterial(id) {
-  const m = materialsData.find(mat => String(mat.id) === String(id)) || 
-            getCustomMaterialsFromStorage().find(mat => String(mat.id) === String(id)) ||
-            (typeof STUDENT_DEFAULT_MATERIALS !== 'undefined' ? STUDENT_DEFAULT_MATERIALS.find(mat => String(mat.id) === String(id)) : null);
+  const m = findMaterialRecord(id);
 
   let cleanFileName = (m?.fileName || m?.title || 'Learning_Material').replace(/[^\w.\-]+/g, '_');
   if (!cleanFileName.includes('.')) {
@@ -4632,55 +4653,55 @@ async function downloadMaterial(id) {
 
   const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
   let fileUrl = null;
+  let serverError = null;
 
   if (session && session.access_token) {
     try {
       const res = await fetch(`${API_BASE}/api/materials/${encodeURIComponent(id)}/download`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) fileUrl = data.url;
-      }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.url) fileUrl = data.url;
+      else serverError = data.error || `HTTP ${res.status}`;
     } catch (e) {
       console.warn('API download call failed, checking direct storage:', e);
+      serverError = e.message || 'network';
     }
   }
 
-  // Fallback to direct Supabase storage signed URL
-  if (!fileUrl && m?.file_url) {
-    if (m.file_url.includes('/') || m.file_url.endsWith('.pdf')) {
+  if (!fileUrl && serverError !== 'FILE_MISSING' && m?.file_url) {
+    if (/^https?:\/\//i.test(m.file_url)) {
       fileUrl = m.file_url;
     } else {
       try {
+        const storageKey = m.file_url.replace(/^\/+/, '');
         const { data, error } = await db.storage
           .from('learning-materials')
-          .createSignedUrl(m.file_url, 60 * 10);
-        if (!error && data?.signedUrl) {
-          fileUrl = data.signedUrl;
-        }
+          .createSignedUrl(storageKey, 60 * 10);
+        if (!error && data?.signedUrl) fileUrl = data.signedUrl;
       } catch (e) {}
+      // Bare filenames may be static handouts shipped with the app.
+      if (!fileUrl && !m.file_url.includes('/')) fileUrl = m.file_url;
     }
   }
 
   if (!fileUrl) {
-    if (m?.file_url || m?.url) {
-      fileUrl = m.file_url || m.url;
-    } else {
-      fileUrl = 'SURVEY FORMS - Scholaria.pdf';
-    }
-  }
-
-  if (!fileUrl) {
-    showToast('Download failed: File not found in storage.', 'error');
+    showToast(
+      serverError === 'FILE_MISSING'
+        ? 'This file is no longer available in storage — the uploader may need to re-upload it.'
+        : 'Download failed: the file could not be retrieved from storage.',
+      'error'
+    );
     return;
   }
 
-  // Trigger real download by fetching blob so the browser saves actual binary file data
+  // Fetch as a blob so the browser saves real binary data instead of navigating
+  // to the URL (a failed navigation surfaces as "File wasn't available on site").
   try {
     const response = await fetch(fileUrl);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
+    if (!blob || blob.size === 0) throw new Error('Empty file');
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
@@ -4691,15 +4712,8 @@ async function downloadMaterial(id) {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     showToast(`Downloaded "${cleanFileName}" successfully.`, 'success');
   } catch (err) {
-    console.warn('Direct blob download failed, falling back to window.open:', err);
-    const a = document.createElement('a');
-    a.href = fileUrl;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.download = cleanFileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    console.warn('Download fetch failed:', err);
+    showToast('Download failed: the file could not be retrieved from storage.', 'error');
   }
 }
 

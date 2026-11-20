@@ -2276,8 +2276,22 @@ function setQuizManagerFilterSubject(subj) {
 }
 
 function setQuizManagerSearchQuery(q) {
-  quizManagerSearchQuery = (q || '').toLowerCase().trim();
+  const main = document.getElementById('mainContent');
+  const prev = document.getElementById('quizManagerSearchInput');
+  const caret = prev && document.activeElement === prev ? prev.selectionStart : null;
+  const scrollTop = main ? main.scrollTop : 0;
+  const scrollY = window.scrollY || 0;
+  quizManagerSearchQuery = q || '';
   if (typeof renderPage === 'function') renderPage('quiz');
+  // renderPage rebuilds the page HTML, so restore scroll, focus, and caret.
+  if (main) main.scrollTop = scrollTop;
+  window.scrollTo(0, scrollY);
+  const input = document.getElementById('quizManagerSearchInput');
+  if (input) {
+    input.focus();
+    const pos = caret == null ? input.value.length : Math.min(caret, input.value.length);
+    try { input.setSelectionRange(pos, pos); } catch (e) {}
+  }
 }
 
 let quizManagerFilterReview = '';

@@ -953,6 +953,20 @@ function isChatMuted(u) {
   return Boolean(u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
 }
 
+// A section created for a specific strand (e.g. ABM) must only hold students
+// of that strand. "General" (or a missing strand) accepts any student.
+function studentStrandMatchesSection(sectionName, strand) {
+  const sections = (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) ? managedSections : [];
+  const target = String(sectionName || '').trim().toLowerCase();
+  if (!target) return false;
+  const sec = sections.find(s => String(s.name || '').trim().toLowerCase() === target);
+  const secStrand = String(sec?.strand || '').toUpperCase().trim();
+  if (!secStrand || secStrand === 'GENERAL') return true;
+  const uStrand = String(strand || '').toUpperCase();
+  if (!uStrand) return false;
+  return uStrand.includes(secStrand) || secStrand.includes(uStrand);
+}
+
 function muteStatusBadge(u) {
   if (u.permanentlyMuted) {
     return `<span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
@@ -1415,7 +1429,8 @@ function renderSectionCards() {
     const enrolledStudents = registeredUsers.filter(u =>
       u.role === 'student' &&
       u.isActive !== false &&
-      (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase()
+      (u.section || '').trim().toLowerCase() === (s.name || '').trim().toLowerCase() &&
+      studentStrandMatchesSection(s.name, u.strand)
     );
 
     const assignedTeachers = registeredUsers.filter(u =>
@@ -2085,7 +2100,8 @@ function openManageSectionModal(secName) {
   const enrolled = registeredUsers.filter(u =>
     u.role === 'student' &&
     u.isActive !== false &&
-    (u.section || '').trim().toLowerCase() === secName.trim().toLowerCase()
+    (u.section || '').trim().toLowerCase() === secName.trim().toLowerCase() &&
+    studentStrandMatchesSection(secName, u.strand)
   );
 
   const assignedTeachers = registeredUsers.filter(u =>
@@ -2321,7 +2337,10 @@ function filterMassAssignList() {
 }
 
 function getFilteredMassStudents() {
-  let list = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false);
+  // Only students whose strand matches the target section's strand may enroll.
+  let list = registeredUsers.filter(u =>
+    u.role === 'student' && u.isActive !== false && studentStrandMatchesSection(massAssignTargetSection, u.strand)
+  );
 
   if (massAssignFilterMode === 'unassigned') {
     list = list.filter(u => !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—' || (typeof isSectionArchived === 'function' && isSectionArchived(u.section)));
@@ -2373,8 +2392,14 @@ function renderMassAssignContent(isPartial = false) {
   if (!body) return;
 
   const currentList = getFilteredMassStudents();
-  const unassignedCount = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (!u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—')).length;
-  const allEligibleCount = registeredUsers.filter(u => u.role === 'student' && u.isActive !== false && (u.section || '').trim().toLowerCase() !== massAssignTargetSection.trim().toLowerCase()).length;
+  const strandEligible = registeredUsers.filter(u =>
+    u.role === 'student' && u.isActive !== false && studentStrandMatchesSection(massAssignTargetSection, u.strand)
+  );
+  const unassignedCount = strandEligible.filter(u => !u.section || u.section === 'Unassigned' || u.section === 'None' || u.section === '—').length;
+  const allEligibleCount = strandEligible.filter(u => (u.section || '').trim().toLowerCase() !== massAssignTargetSection.trim().toLowerCase()).length;
+  const targetSecMeta = managedSections.find(s => String(s.name || '').trim().toLowerCase() === String(massAssignTargetSection || '').trim().toLowerCase());
+  const targetSecStrand = String(targetSecMeta?.strand || '').toUpperCase().trim();
+  const strandScopeLabel = targetSecStrand && targetSecStrand !== 'GENERAL' ? ` · ${targetSecStrand} strand only` : '';
 
   const allSelectedInView = currentList.length > 0 && currentList.every(u => massAssignSelectedIds.has(u.dbId || u.id));
 
@@ -2385,6 +2410,7 @@ function renderMassAssignContent(isPartial = false) {
         <select id="massTargetSectionSelect" class="user-filter-select" style="width:100%;font-size:14px;font-weight:600;color:var(--blue);" onchange="massAssignTargetSection = this.value; renderMassAssignContent(true);">
           ${managedSections.filter(s => !s.isArchived).map(s => `<option value="${escHtml(s.name)}" ${massAssignTargetSection === s.name ? 'selected' : ''}>${escHtml(s.name)} (${escHtml(s.gradeLevel || 'Grade 11')} · ${escHtml(s.strand || 'General')})</option>`).join('')}
         </select>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Showing only students compatible with this section${escHtml(strandScopeLabel)}.</div>
       </div>
       <div class="mass-selection-count">
         ${iconCheck()} ${massAssignSelectedIds.size} Selected
@@ -2475,10 +2501,15 @@ async function executeMassAssignment() {
 
   const selectedKeys = Array.from(massAssignSelectedIds);
   let updatedCount = 0;
+  let skippedCount = 0;
   const dbIdsToUpdate = [];
 
   registeredUsers.forEach(u => {
     if (selectedKeys.includes(u.dbId) || selectedKeys.includes(u.id)) {
+      if (!studentStrandMatchesSection(targetSection, u.strand)) {
+        skippedCount++;
+        return;
+      }
       u.section = targetSection;
       updatedCount++;
       if (u.id) saveUserSectionToStorage(u.id, targetSection);
@@ -2517,7 +2548,8 @@ async function executeMassAssignment() {
     }
   }
 
-  showToast(`Successfully enrolled ${updatedCount} student${updatedCount !== 1 ? 's' : ''} into ${targetSection}!`, 'success');
+  const skippedNote = skippedCount > 0 ? ` (${skippedCount} skipped — strand does not match this section)` : '';
+  showToast(`Successfully enrolled ${updatedCount} student${updatedCount !== 1 ? 's' : ''} into ${targetSection}!${skippedNote}`, skippedCount > 0 ? 'warning' : 'success');
 
   massAssignSelectedIds.clear();
   closeMassAssignModal();

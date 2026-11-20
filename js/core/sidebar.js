@@ -3340,10 +3340,11 @@ function teacherPage(page) {
 
       // Apply Search and Filters
       if (typeof quizManagerSearchQuery !== 'undefined' && quizManagerSearchQuery) {
+        const qmQuery = String(quizManagerSearchQuery).toLowerCase().trim();
         filtered = filtered.filter(q =>
-          (q.title || '').toLowerCase().includes(quizManagerSearchQuery) ||
-          (q.subject || '').toLowerCase().includes(quizManagerSearchQuery) ||
-          (q.lesson || '').toLowerCase().includes(quizManagerSearchQuery)
+          (q.title || '').toLowerCase().includes(qmQuery) ||
+          (q.subject || '').toLowerCase().includes(qmQuery) ||
+          (q.lesson || '').toLowerCase().includes(qmQuery)
         );
       }
       if (typeof quizManagerFilterStrand !== 'undefined' && quizManagerFilterStrand) {
@@ -3422,7 +3423,7 @@ function teacherPage(page) {
         <!-- SEARCH & FILTER TOOLBAR -->
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc;padding:10px 14px;border-radius:12px;border:1px solid #e2e8f0;">
           <div style="display:flex;gap:8px;flex:1;min-width:min(100%,220px);max-width:360px;align-items:center;">
-            <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
+            <input type="text" id="quizManagerSearchInput" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterStrand(this.value)">

@@ -865,16 +865,81 @@ function toggleChatAttachmentMenu(msgId) {
   menu.classList.toggle('open');
 }
 
-function downloadChatAttachment(msgId) {
-  const entry = window._chatAttachmentMap?.[msgId];
-  if (!entry?.attach) return;
+function getChatAttachmentServerUrl(attach) {
+  let base = window.API_BASE;
+  if (!base || base === 'null' || String(base).startsWith('file:')) {
+    base = (typeof window !== 'undefined' && window.location && window.location.origin &&
+      window.location.origin !== 'null' && !String(window.location.origin).startsWith('file:'))
+      ? window.location.origin
+      : 'http://localhost:3001';
+  }
+  const filename = attach?.url ? String(attach.url).split('/').pop() : (attach?.name || '');
+  const path = (attach?.url && String(attach.url).startsWith('/uploads/'))
+    ? attach.url
+    : `/uploads/chat/${encodeURIComponent(filename)}`;
+  return String(base).replace(/\/+$/, '') + path;
+}
+
+// The server endpoint recovers evicted disk files from Supabase Storage and the
+// message body's base64 payload, so try it before the direct storage CDN.
+async function fetchChatAttachmentBlob(attach) {
+  if (!attach) return null;
+  const urls = [];
+  try { urls.push(getChatAttachmentServerUrl(attach)); } catch (e) {}
+  try {
+    const direct = getChatAttachmentUrl(attach);
+    if (direct && /^https?:\/\//i.test(direct)) urls.push(direct);
+  } catch (e) {}
+
+  for (const url of urls) {
+    if (!url || !/^https?:\/\//i.test(url)) continue;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      if (blob && blob.size > 0) return blob;
+    } catch (e) {}
+  }
+
+  if (attach.data && typeof attach.data === 'string' && attach.data.startsWith('data:')) {
+    try {
+      const res = await fetch(attach.data);
+      if (res.ok) return await res.blob();
+    } catch (e) {}
+  }
+  return null;
+}
+
+function saveChatAttachmentBlob(blob, name) {
+  const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = getChatAttachmentUrl(entry.attach);
-  a.download = entry.attach.name || 'attachment';
+  a.href = blobUrl;
+  a.download = name || 'attachment';
   document.body.appendChild(a);
   a.click();
   a.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+}
+
+async function downloadChatAttachmentFromAttach(attach) {
+  if (!attach) return;
+  const blob = await fetchChatAttachmentBlob(attach);
+  if (!blob) {
+    if (typeof showToast === 'function') showToast('Attachment is no longer available — ask the sender to re-upload it.', 'error');
+    return;
+  }
+  saveChatAttachmentBlob(blob, attach.name);
+}
+window.downloadChatAttachmentFromAttach = downloadChatAttachmentFromAttach;
+
+async function downloadChatAttachment(msgId) {
+  const entry = window._chatAttachmentMap?.[msgId];
   document.getElementById(`chatAttachmentMenu-${msgId}`)?.classList.remove('open');
+  if (!entry?.attach) {
+    if (typeof showToast === 'function') showToast('Attachment is no longer available — ask the sender to re-upload it.', 'error');
+    return;
+  }
+  await downloadChatAttachmentFromAttach(entry.attach);
 }
 window.toggleChatAttachmentMenu = toggleChatAttachmentMenu;
 window.downloadChatAttachment = downloadChatAttachment;
@@ -923,10 +988,10 @@ function messageBubbleHtml(conv, m, isUnread = false) {
               <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               Overview
             </button>
-            <a href="${fileUrl}" download="${escHtml(attach.name)}" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:8px;background:${mine ? '#ffffff' : 'var(--blue, #2563eb)'};color:${mine ? '#2563eb' : '#ffffff'};font-size:11.5px;font-weight:700;text-decoration:none;" title="Download file">
-              <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Download
-            </a>
+        <button type="button" onclick="event.stopPropagation();downloadChatAttachment('${m.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:8px;background:${mine ? '#ffffff' : 'var(--blue, #2563eb)'};color:${mine ? '#2563eb' : '#ffffff'};border:none;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;" title="Download file">
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </button>
           </div>
         </div>
         ${attach.caption ? `<div class="msg-text" style="margin-top:6px;font-size:13px;line-height:1.45;word-break:break-word;">${escHtml(attach.caption)}</div>` : ''}
@@ -1013,20 +1078,14 @@ function openChatAttachmentOverview(msgId) {
   if (subEl) subEl.textContent = `Shared by ${senderName} · ${formatChatFileSize(attach.size)} · ${formatMsgTime(createdAt)}`;
 
   const fileUrl = getChatAttachmentUrl(attach);
+  window._chatOverviewAttachment = attach;
 
   if (dlBtn) {
     dlBtn.innerHTML = `
       <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download ${attach.name.split('.').pop()?.toUpperCase() || 'File'}
     `;
-    dlBtn.onclick = () => {
-      const a = document.createElement('a');
-      a.href = fileUrl;
-      a.download = attach.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    };
+    dlBtn.onclick = () => downloadChatAttachmentFromAttach(attach);
   }
 
   const isImg = (attach.mime || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|svg)$/i.test(attach.name);
@@ -1064,9 +1123,9 @@ function openChatAttachmentOverview(msgId) {
         <div style="font-size:48px;margin-bottom:12px;">📄</div>
         <h4 style="margin:0 0 8px;font-size:16px;color:#0f172a;">${escHtml(attach.name)}</h4>
         <p style="margin:0 0 16px;font-size:13px;color:#64748b;">${formatChatFileSize(attach.size)} · File format: ${attach.name.split('.').pop()?.toUpperCase() || 'Document'}</p>
-        <a href="${fileUrl}" download="${escHtml(attach.name)}" class="sw-btn primary" style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:8px;text-decoration:none;font-weight:700;">
+        <button type="button" onclick="downloadChatAttachmentFromAttach(window._chatOverviewAttachment)" class="sw-btn primary" style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:8px;text-decoration:none;font-weight:700;border:none;cursor:pointer;font-family:inherit;">
           Download File
-        </a>
+        </button>
       </div>
     `;
   }
