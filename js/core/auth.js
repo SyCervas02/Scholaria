@@ -135,6 +135,7 @@ async function guardSessionAndInit() {
   if (typeof initializeAnnouncementSync === 'function') {
     try { await initializeAnnouncementSync(); } catch (err) { console.warn('Shared announcements could not be initialized:', err.message); }
   }
+  if (typeof initializeNotificationRealtime === 'function') initializeNotificationRealtime();
   initDashboardShell();
   startAfkSessionTracker();
 }

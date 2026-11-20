@@ -4,6 +4,9 @@ let pendingNotificationDelete = null;
 let notificationsCache = [];
 let notificationsLoaded = false;
 let notificationsLoadPromise = null;
+let notificationRealtimeChannel = null;
+let notificationRefreshTimer = null;
+let notificationPollTimer = null;
 
 function notifIdentityKeys() {
   if (typeof CURRENT_PROFILE === 'undefined' || !CURRENT_PROFILE) return [];
@@ -62,6 +65,29 @@ async function loadNotificationsFromDB(options = {}) {
     }
   })();
   return notificationsLoadPromise;
+}
+
+function scheduleNotificationRefresh() {
+  clearTimeout(notificationRefreshTimer);
+  notificationRefreshTimer = setTimeout(() => loadNotificationsFromDB({ rerender: true }), 250);
+}
+
+function initializeNotificationRealtime() {
+  if (notificationRealtimeChannel || notificationPollTimer) return;
+  if (typeof db === 'undefined' || !db) return;
+  loadNotificationsFromDB({ rerender: true });
+  if (typeof db.channel === 'function') {
+    try {
+      notificationRealtimeChannel = db.channel('notifications-live')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, scheduleNotificationRefresh)
+        .subscribe();
+    } catch (err) {
+      notificationRealtimeChannel = null;
+      console.warn('Notification realtime subscription unavailable:', err.message);
+    }
+  }
+  // Keep notifications fresh if realtime is temporarily disconnected or unavailable.
+  notificationPollTimer = setInterval(() => loadNotificationsFromDB({ rerender: true }), 15000);
 }
 
 async function postNotificationAction(path, body) {
@@ -652,5 +678,6 @@ window.requestNotificationDelete = requestNotificationDelete;
 window.cancelNotificationDelete = cancelNotificationDelete;
 window.confirmNotificationDelete = confirmNotificationDelete;
 window.loadNotificationsFromDB = loadNotificationsFromDB;
+window.initializeNotificationRealtime = initializeNotificationRealtime;
 window.addNotification = addNotification;
 window.refreshNotificationsUI = refreshNotificationsUI;

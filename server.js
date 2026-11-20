@@ -1943,6 +1943,47 @@ function mapNotificationRow(row, profile) {
   };
 }
 
+async function backfillQuizNotificationSenders(rows) {
+  const legacyRows = (rows || []).filter(row =>
+    row.title === 'New Quiz Available' && (!row.sender_name || row.sender_name === 'System')
+  );
+  if (!legacyRows.length) return;
+
+  const { data: quizzes, error: quizError } = await supabaseAdmin
+    .from('quizzes').select('title, subject, created_by').eq('status', 'active');
+  if (quizError || !quizzes?.length) return;
+
+  const matches = new Map();
+  const creatorIds = new Set();
+  for (const notification of legacyRows) {
+    const byTitle = quizzes.filter(quiz => quiz.title && String(notification.message || '').includes(`"${quiz.title}"`));
+    const bySubject = byTitle.filter(quiz => !quiz.subject || String(notification.message || '').includes(`(${quiz.subject})`));
+    const candidates = bySubject.length ? bySubject : byTitle;
+    const creatorIdsForNotice = [...new Set(candidates.map(quiz => quiz.created_by).filter(Boolean).map(String))];
+    if (creatorIdsForNotice.length !== 1) continue;
+    matches.set(notification.id, creatorIdsForNotice[0]);
+    creatorIds.add(creatorIdsForNotice[0]);
+  }
+  if (!creatorIds.size) return;
+
+  const { data: authors, error: authorError } = await supabaseAdmin
+    .from('users').select('id, full_name').in('id', [...creatorIds]);
+  if (authorError || !authors?.length) return;
+  const authorById = new Map(authors.map(author => [String(author.id), author]));
+  await Promise.all(legacyRows.map(async notification => {
+    const author = authorById.get(matches.get(notification.id));
+    const senderName = String(author?.full_name || '').trim();
+    if (!senderName) return;
+    const senderAvatar = senderName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase();
+    const { error } = await supabaseAdmin.from('notifications')
+      .update({ sender_name: senderName, sender_avatar: senderAvatar || 'TC' }).eq('id', notification.id);
+    if (!error) {
+      notification.sender_name = senderName;
+      notification.sender_avatar = senderAvatar || 'TC';
+    }
+  }));
+}
+
 async function loadVisibleNotifications(profile) {
   const { data, error } = await supabaseAdmin
     .from('notifications')
@@ -1950,6 +1991,7 @@ async function loadVisibleNotifications(profile) {
     .order('created_at', { ascending: false })
     .limit(500);
   if (error) throw error;
+  await backfillQuizNotificationSenders(data || []);
   const readKeys = notificationReadKeys(profile);
   return (data || []).filter(row => {
     if (!isNotificationVisibleTo(row, profile)) return false;
@@ -2350,9 +2392,31 @@ app.patch('/api/quizzes/:id/status', async (req, res) => {
 
   // 'approved' or 'active' or 'closed'
   const newStatus = status === 'approved' ? 'active' : status;
+  const { data: quizBeforeUpdate, error: quizLookupError } = await supabaseAdmin
+    .from('quizzes').select('id, title, subject, status, created_by').eq('id', req.params.id).single();
+  if (quizLookupError || !quizBeforeUpdate) return res.status(404).json({ error: 'Quiz not found' });
+
   const { data, error } = await supabaseAdmin
     .from('quizzes').update({ status: newStatus }).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
+
+  // Notify students as the teacher who uploaded the quiz, once when it first goes live.
+  if (newStatus === 'active' && quizBeforeUpdate.status !== 'active' && quizBeforeUpdate.created_by) {
+    const { data: author } = await supabaseAdmin
+      .from('users').select('full_name').eq('id', quizBeforeUpdate.created_by).maybeSingle();
+    const senderName = String(author?.full_name || 'Teacher').trim();
+    const senderAvatar = senderName.split(/\s+/).filter(Boolean).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'TC';
+    const { error: notificationError } = await supabaseAdmin.from('notifications').insert({
+      target_role: 'student',
+      title: 'New Quiz Available',
+      message: `New quiz "${quizBeforeUpdate.title || 'Quiz'}" (${quizBeforeUpdate.subject || 'General'}) is now available under Quizzes.`,
+      type: 'quiz',
+      sender_name: senderName,
+      sender_avatar: senderAvatar
+    });
+    if (notificationError) console.warn('Approved quiz notification could not be saved:', notificationError.message);
+  }
+
   res.json(data);
 });
 

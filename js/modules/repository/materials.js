@@ -4419,12 +4419,6 @@ async function approveQuiz(id) {
         type: 'quiz'
       });
     }
-    addNotification({
-      targetRole: 'student',
-      title: 'New Quiz Available',
-      message: `A new quiz "${quiz?.title || 'Quiz'}" is now available.`,
-      type: 'quiz'
-    });
   }
 
   if (typeof loadQuizzesFromDB === 'function') loadQuizzesFromDB().catch(() => {});

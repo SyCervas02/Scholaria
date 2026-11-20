@@ -2140,8 +2140,23 @@ async function saveQuiz() {
 
 async function approveQuiz(id) {
   const quiz = customQuizzes.find(q => q.id === id);
-  const { error } = await db.from('quizzes').update({ status: 'active' }).eq('id', id);
-  if (error) { showToast('Failed to approve quiz: ' + error.message, 'error'); return; }
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  if (!session?.access_token) { showToast('Please sign in again to approve this quiz.', 'error'); return; }
+  try {
+    const response = await fetch(`${API_BASE}/api/quizzes/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ status: 'approved' })
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      showToast('Failed to approve quiz: ' + (result.error || response.status), 'error');
+      return;
+    }
+  } catch (error) {
+    showToast('Failed to approve quiz: ' + error.message, 'error');
+    return;
+  }
   showToast('Quiz approved', 'success');
   if (quiz && typeof addNotification === 'function') {
     const approverName = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'School Administrator';
@@ -2151,14 +2166,6 @@ async function approveQuiz(id) {
       targetRole: 'teacher',
       title: 'Quiz Approved',
       message: `Your quiz "${quiz.title}" has been approved by the Admin and is now live.`,
-      type: 'quiz',
-      senderName: approverName,
-      senderAvatar: approverAvatar
-    });
-    addNotification({
-      targetRole: 'student',
-      title: 'New Quiz Available',
-      message: `New quiz "${quiz.title}" (${quiz.subject || 'General'}) is now available under Quizzes.`,
       type: 'quiz',
       senderName: approverName,
       senderAvatar: approverAvatar
