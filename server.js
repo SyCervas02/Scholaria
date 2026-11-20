@@ -1391,10 +1391,10 @@ app.post('/api/auth/demo-login', async (req, res) => {
 });
 
 function getMuteForStrikes(strikes) {
-  if (strikes <= 3) {
+  if (strikes === 1) {
     return { action: 'muted_short', muted_until: new Date(Date.now() + 5 * 60000).toISOString() };
   }
-  if (strikes <= 6) {
+  if (strikes === 2) {
     return { action: 'muted_long', muted_until: new Date(Date.now() + 30 * 60000).toISOString() };
   }
   return { action: 'muted_permanent', permanently_muted: true, muted_until: null };
@@ -1555,7 +1555,7 @@ app.post('/api/chat/send', async (req, res) => {
     };
     warning = muteAction === 'muted_permanent'
       ? 'Your account has been permanently muted for repeated inappropriate language — please visit or message the Guidance Office to be unmuted.'
-      : 'Your message contained inappropriate content and was censored. You have been temporarily muted from chat.';
+      : `Your message contained inappropriate content and was censored. You are muted for ${strikes === 1 ? '5 minutes' : '30 minutes'}. ${strikes >= 2 ? 'Your next violation permanently mutes your account.' : 'One more violation will mute you again.'}`;
   }
 
   const dbClient = req.userClient || supabaseAdmin;

@@ -358,11 +358,25 @@
   .gc-member-actions { flex-direction: column; }
 }
 
-/* Keep every conversation filter on one compact row at every role and viewport. */
-.scholaria-chat .chat-filters { display: grid; grid-template-columns: repeat(5, max-content); gap: 3px; width: 100%; }
+/* Keep every conversation filter on one row at every role and viewport, but
+   size the chips for comfortable clicking/tapping instead of 9.5px text. */
+.scholaria-chat .chat-filters {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+}
 .scholaria-chat .chat-filters button {
+  flex: 0 1 auto;
   min-width: 0;
-  padding: 4px;
-  font-size: 9.5px;
+  padding: 7px 6px;
+  font-size: 11px;
+  line-height: 1.15;
+  text-align: center;
   white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .scholaria-chat .chat-filters { gap: 3px; }
+  .scholaria-chat .chat-filters button { padding: 6px 5px; font-size: 10.5px; }
 }
