@@ -1593,6 +1593,8 @@ function gcOpenModal(title, bodyHtml, footHtml, variant = '') {
 function closeGroupChatModal() {
   const overlay = document.getElementById('gcModalOverlay');
   if (!overlay) return;
+  const previewUrl = overlay.querySelector('.gc-photo-preview')?.dataset.previewUrl;
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
   overlay.classList.remove('active');
   overlay.innerHTML = '';
 }
@@ -1900,6 +1902,14 @@ function gcSelectPhoto(file) {
   }
   const label = document.getElementById('gcPhotoFilename');
   const button = document.getElementById('gcPhotoUpdate');
+  const preview = document.querySelector('#gcModalOverlay .gc-photo-preview');
+  if (preview) {
+    const previousUrl = preview.dataset.previewUrl;
+    if (previousUrl) URL.revokeObjectURL(previousUrl);
+    const previewUrl = URL.createObjectURL(file);
+    preview.dataset.previewUrl = previewUrl;
+    preview.innerHTML = `<img src="${previewUrl}" alt="Selected group photo preview">`;
+  }
   if (label) label.textContent = file.name;
   if (button) button.disabled = false;
   if (status) status.textContent = '';
