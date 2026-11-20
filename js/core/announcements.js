@@ -1127,9 +1127,7 @@ function submitCreateAnnouncement(isDraft = false) {
     isArchived: false,
     isDraft: !!isDraft,
     status: isDraft ? 'draft' : 'active',
-    hotlines: ROLE === 'admin'
-      ? (selectedHotlines.length ? selectedHotlines : (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).slice(0, 4))
-      : []
+    hotlines: ROLE === 'admin' ? selectedHotlines : []
   };
 
   const all = getStoredAnnouncements();
