@@ -1008,7 +1008,7 @@ function renderCurrentInteractiveQuestion() {
     </div>
 
     <!-- Arena Body -->
-    <div class="iq-body ${q.type === 'identification' ? 'iq-identification-body' : ''}">
+    <div class="iq-body ${q.type === 'identification' ? 'iq-identification-body' : ''} ${q.type === 'multiple_choice' ? 'iq-multiple-choice-body' : ''}">
       <div class="iq-match-hero-header">
         <div class="iq-match-hero-left">
           <span class="iq-match-kcheck">Knowledge Check</span>
@@ -2150,7 +2150,7 @@ function renderMultipleChoiceView(q) {
   }
 
   return `
-    <div class="iq-mc-container">
+    <div class="iq-mc-container ${q.type === 'multiple_choice' ? 'iq-mc-student-design' : ''}">
       <div class="iq-mc-question-banner">
         ${escHtml(q.question)}
       </div>
