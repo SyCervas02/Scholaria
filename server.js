@@ -1270,6 +1270,52 @@ app.post('/api/admin/sections', async (req, res) => {
   }
 });
 
+// Campus rooms shared by admin, teachers and section modals. Stored as a JSON
+// object in the existing Supabase Storage bucket so the list survives Railway
+// container rebuilds and logins from other devices.
+const ROOMS_STORAGE_OBJECT = 'admin-rooms.json';
+
+app.get('/api/admin/rooms', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const { data, error } = await supabaseAdmin.storage
+      .from('chat-attachments')
+      .download(ROOMS_STORAGE_OBJECT);
+    if (error || !data) return res.json({ rooms: [], updatedAt: '' });
+    const parsed = JSON.parse(await data.text());
+    const rooms = Array.isArray(parsed?.rooms) ? parsed.rooms : [];
+    return res.json({ rooms, updatedAt: parsed?.updatedAt || '' });
+  } catch (err) {
+    console.warn('[Rooms] Could not read shared rooms:', err.message);
+    return res.json({ rooms: [], updatedAt: '' });
+  }
+});
+
+app.post('/api/admin/rooms', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only admins can manage rooms' });
+
+  const rooms = Array.isArray(req.body?.rooms) ? req.body.rooms : null;
+  if (!rooms) return res.status(400).json({ error: 'Expected an array of rooms' });
+  if (rooms.length > 500) return res.status(400).json({ error: 'Too many rooms' });
+
+  try {
+    const payload = JSON.stringify({ rooms, updatedAt: new Date().toISOString() });
+    const { error } = await supabaseAdmin.storage
+      .from('chat-attachments')
+      .upload(ROOMS_STORAGE_OBJECT, Buffer.from(payload, 'utf8'), {
+        contentType: 'application/json',
+        upsert: true
+      });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ success: true, count: rooms.length });
+  } catch (err) {
+    console.error('[Rooms] Failed to persist shared rooms:', err.message);
+    return res.status(500).json({ error: 'Failed to persist rooms' });
+  }
+});
+
 app.post('/api/auth/demo-login', async (req, res) => {
   if (process.env.DEMO_MODE !== 'true') {
     return res.status(404).json({ error: 'Not found' });

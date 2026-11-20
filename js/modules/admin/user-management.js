@@ -1516,7 +1516,7 @@ function getAvailableCampusRooms() {
         // Apply the same placeholder filter as rooms-management.js
         return parsed.filter(r => {
           if (['room-301', 'room-302', 'room-401', 'room-402', 'room-avr', 'room-comlab1'].includes(r.id)) return false;
-          return r.id && /^room-\d{13}$/.test(r.id);
+          return r.id && /^room-\d{10,16}$/.test(String(r.id));
         });
       }
     }

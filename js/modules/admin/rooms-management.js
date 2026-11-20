@@ -7,19 +7,21 @@ const ROOMS_STORAGE_KEY = 'scholaria_managed_rooms';
 
 const DEFAULT_MANAGED_ROOMS = [];
 
+function sanitizeRoomsList(list) {
+  return (Array.isArray(list) ? list : []).filter(r => {
+    if (!r || !r.id) return false;
+    if (['room-301', 'room-302', 'room-401', 'room-402', 'room-avr', 'room-comlab1'].includes(r.id)) return false;
+    // Real rooms created by users have id = 'room-' + Date.now() (epoch ms)
+    return /^room-\d{10,16}$/.test(String(r.id));
+  }).map(r => ({ ...r, schedule: Array.isArray(r.schedule) ? r.schedule : [] }));
+}
+
 let managedRooms = (() => {
   try {
     const raw = localStorage.getItem(ROOMS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        // Filter out legacy placeholder seeds and any room with a non-timestamp ID
-        return parsed.filter(r => {
-          if (['room-301', 'room-302', 'room-401', 'room-402', 'room-avr', 'room-comlab1'].includes(r.id)) return false;
-          // Real rooms created by users have id = 'room-' + Date.now() (13-digit epoch)
-          return r.id && /^room-\d{13}$/.test(r.id);
-        });
-      }
+      return sanitizeRoomsList(parsed);
     }
   } catch (e) {
     console.warn('Could not read saved rooms:', e);
@@ -27,12 +29,70 @@ let managedRooms = (() => {
   return [];
 })();
 
-function saveManagedRooms() {
+function persistManagedRoomsLocal() {
   try {
     localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(managedRooms));
   } catch (e) {
     console.warn('Could not save rooms:', e);
   }
+}
+
+function roomsApiBase() {
+  return (typeof window !== 'undefined' && window.API_BASE) ? window.API_BASE : '';
+}
+
+async function syncManagedRoomsToServer() {
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session?.access_token) return false;
+    const res = await fetch(`${roomsApiBase()}/api/admin/rooms`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({ rooms: managedRooms })
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('Could not sync rooms to server:', e);
+    return false;
+  }
+}
+
+async function loadManagedRoomsFromServer() {
+  try {
+    const res = await fetch(`${roomsApiBase()}/api/admin/rooms`, { cache: 'no-store' });
+    if (!res.ok) return false;
+    const payload = await res.json();
+    const serverRooms = sanitizeRoomsList(payload?.rooms);
+    if (!serverRooms.length && !managedRooms.length) return false;
+
+    const merged = new Map();
+    serverRooms.forEach(r => merged.set(String(r.id), r));
+    let hasLocalOnly = false;
+    managedRooms.forEach(r => {
+      if (!merged.has(String(r.id))) {
+        merged.set(String(r.id), r);
+        hasLocalOnly = true;
+      }
+    });
+
+    const next = [...merged.values()];
+    const changed = JSON.stringify(next) !== JSON.stringify(managedRooms);
+    managedRooms = next;
+    persistManagedRoomsLocal();
+    if (hasLocalOnly) syncManagedRoomsToServer();
+    return changed;
+  } catch (e) {
+    console.warn('Could not load shared rooms:', e);
+    return false;
+  }
+}
+
+function saveManagedRooms() {
+  persistManagedRoomsLocal();
+  syncManagedRoomsToServer();
 }
 
 /* ── 12-HOUR AM / PM TIME CATALOG (STRICTLY NO MILITARY TIME) ── */
@@ -1058,4 +1118,5 @@ if (typeof window !== 'undefined') {
   window.setRoomFilter = setRoomFilter;
   window.validateAssignTimesLive = validateAssignTimesLive;
   window.handleSectionSelectChange = handleSectionSelectChange;
+  window.loadManagedRoomsFromServer = loadManagedRoomsFromServer;
 }
