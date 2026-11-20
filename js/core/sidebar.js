@@ -3283,10 +3283,10 @@ function teacherPage(page) {
         <div class="td-grid">
           <section class="td-panel td-subjects"><div id="coursesWidgetContainer">${typeof renderCoursesWidgetHTML==='function'?renderCoursesWidgetHTML():empty('No subjects assigned.')}</div></section>
           ${panel('Pending Submissions / To Review',iconRecord(),pending,'classrec','td-pending')}
-          ${panel('Latest Class Announcements',iconAnnouncement(),announcements,'announcements','td-announcements')}
+          ${panel('Upcoming School Events',iconCalendar(),events,'announcements','td-events')}
           ${panel('My Class Sections',iconUsers(),sections,'classrec','td-sections')}
           ${panel('Recently Added Materials',iconFolder(),recent,'materials','td-materials')}
-          ${panel('Upcoming School Events',iconCalendar(),events,'announcements','td-events')}
+          ${panel('Latest Class Announcements',iconAnnouncement(),announcements,'announcements','td-announcements')}
           ${panel('Active Quizzes & Assessments',iconQuiz(),`<button type="button" class="td-create" onclick="openQuizModal()">+ Create Quiz</button>${assessments}`,'quiz','td-assessments')}
         </div></div>`;
     }
