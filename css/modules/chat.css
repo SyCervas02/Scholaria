@@ -307,7 +307,52 @@
 .gc-mini-btn.danger { color: #b91c1c; border-color: #fecaca; }
 .gc-mini-btn.danger:hover { background: #fef2f2; }
 .gc-you-tag { display: inline-block; margin-left: 5px; padding: 1px 6px; border-radius: 999px; background: #e3ecff; color: #1455f5; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.gc-modal-card.gc-photo-modal { max-width: 720px; border-radius: 26px; background: #f8faff; }
+.gc-photo-modal .gc-modal-head,.gc-members-modal .gc-modal-head { position: absolute; z-index: 2; top: 14px; right: 14px; display: block; padding: 0; border: 0; background: transparent; }
+.gc-photo-modal .gc-modal-head h3,.gc-members-modal .gc-modal-head h3 { display: none; }
+.gc-photo-modal .gc-modal-body { padding: 30px 38px 22px; text-align: center; }
+.gc-photo-title { display: flex; align-items: center; gap: 16px; text-align: left; }
+.gc-photo-title > span { display: grid; place-items: center; width: 62px; height: 62px; border-radius: 18px; background: #e5efff; color: #1761e9; font-size: 32px; }
+.gc-photo-title h3,.gc-members-banner h3 { margin: 0; color: #101b3b; font-size: 27px; font-weight: 800; }
+.gc-photo-title p,.gc-members-banner p { margin: 4px 0 0; color: #687592; font-size: 16px; }
+.gc-photo-preview { display: grid; place-items: center; width: 190px; height: 190px; margin: 28px auto 20px; overflow: hidden; border: 7px solid #fff; border-radius: 50%; background: linear-gradient(145deg,#ffcf22,#dc9400); box-shadow: 0 12px 28px #1a315229; color: white; font-size: 70px; }
+.gc-photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.gc-photo-upload { display: flex; flex-direction: column; align-items: center; gap: 7px; color: #66728f; cursor: pointer; }
+.gc-photo-upload.dragging { color: #1455f5; }
+.gc-photo-upload strong { color: #101b3b; font-size: 25px; }
+.gc-photo-cloud { color: #1761e9; font-size: 45px; line-height: 1; }
+.gc-choose-photo { margin-top: 7px; padding: 14px 34px; border-radius: 18px; background: #e2edff; color: #1455e8; font-size: 19px; font-weight: 800; }
+.gc-photo-upload small { margin-top: 9px; font-size: 14px; }
+.gc-file-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.gc-photo-modal .gc-modal-foot { padding: 16px 34px 24px; background: transparent; border: 0; }
+.gc-photo-modal .gc-modal-foot .gc-btn { min-width: 150px; padding: 13px 20px; font-size: 16px; }
+.gc-photo-modal .gc-modal-foot .gc-btn.primary { background: linear-gradient(120deg,#2173ff,#064dcc); }
+.gc-modal-card.gc-members-modal { max-width: 700px; border: 1px solid #e1e8f3; border-radius: 22px; }
+.gc-members-modal .gc-modal-body { padding: 0 26px; }
+.gc-members-banner { display: flex; align-items: center; gap: 15px; margin: 0 -26px 18px; padding: 18px 26px; background: linear-gradient(110deg,#edf4ff,#f8faff 70%,#eaf1ff); }
+.gc-members-icon { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 18px; background: #e3edff; color: #3476ee; font-size: 32px; }
+.gc-members-banner h3 { font-size: 24px; }
+.gc-members-banner p { font-size: 15px; }
+.gc-members-modal .gc-member-list { max-height: 52vh; gap: 3px; margin: 0; }
+.gc-members-modal .gc-member-row { min-height: 60px; padding: 8px 12px; }
+.gc-members-modal .gc-member-row:first-child { background: #edf4ff; }
+.gc-members-modal .gc-member-row .contact-avatar { width: 48px !important; height: 48px !important; border-radius: 50%; background: #5b96ef; color: white; font-size: 14px !important; }
+.gc-members-modal .gc-member-row .contact-info h4 { font-size: 15px; color: #111c3b; }
+.gc-members-modal .gc-member-row .contact-info span { color: #6d7892; font-size: 13px; }
+.gc-members-modal .gc-member-actions { gap: 8px; }
+.gc-members-modal .gc-mini-btn { padding: 9px 12px; font-size: 12px; }
+.gc-members-modal .gc-mini-btn.danger { background: #fff4f4; }
+.gc-members-note { margin: 14px 0 !important; padding: 8px 0; color: #687592; font-size: 13px; }
+.gc-members-modal .gc-modal-foot { margin: 0 26px; padding: 14px 0 20px; background: white; }
+.gc-members-modal .gc-modal-foot .gc-btn { min-width: 100px; background: #2056cb; }
 @media (max-width: 480px) {
+  .gc-photo-modal .gc-modal-body { padding: 22px 18px 16px; }
+  .gc-photo-title h3 { font-size: 21px; }
+  .gc-photo-title p { font-size: 13px; }
+  .gc-photo-preview { width: 145px; height: 145px; }
+  .gc-members-modal .gc-modal-body { padding: 0 14px; }
+  .gc-members-banner { margin: 0 -14px 12px; padding: 14px; }
+  .gc-members-modal .gc-member-actions { flex-direction: column; }
   .scholaria-chat .chat-filters { gap: 6px; }
   .scholaria-chat .chat-filters button { padding: 6px 10px; font-size: 11px; }
   .gc-member-actions { flex-direction: column; }

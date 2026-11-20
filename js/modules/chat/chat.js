@@ -1572,7 +1572,7 @@ function toggleGroupChatMenu(e) {
   menu.style.display = 'block';
 }
 
-function gcOpenModal(title, bodyHtml, footHtml) {
+function gcOpenModal(title, bodyHtml, footHtml, variant = '') {
   const groupMenu = document.getElementById('cwGroupMenu');
   if (groupMenu) groupMenu.style.display = 'none';
   let overlay = document.getElementById('gcModalOverlay');
@@ -1582,7 +1582,7 @@ function gcOpenModal(title, bodyHtml, footHtml) {
     overlay.className = 'gc-modal-overlay';
     document.body.appendChild(overlay);
   }
-  overlay.innerHTML = `<div class="gc-modal-card" role="dialog" aria-modal="true" aria-label="${escHtml(title)}">
+  overlay.innerHTML = `<div class="gc-modal-card ${variant}" role="dialog" aria-modal="true" aria-label="${escHtml(title)}">
     <header class="gc-modal-head"><h3>${escHtml(title)}</h3><button type="button" class="gc-modal-close" aria-label="Close" onclick="closeGroupChatModal()">&times;</button></header>
     <div class="gc-modal-body">${bodyHtml}</div>
     <footer class="gc-modal-foot">${footHtml || ''}</footer>
@@ -1828,9 +1828,10 @@ function gcRenderMembersModal(conv) {
   }).join('');
 
   gcOpenModal('Group members',
-    `<div class="gc-member-list">${rowsHtml || '<div class="gc-empty-note">No members found.</div>'}</div>
-     ${manager ? '<p class="gc-empty-note">Managers can rename the group, change its photo, and add or remove members.</p>' : ''}`,
-    `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Close</button>`);
+    `<div class="gc-members-banner"><span class="gc-members-icon">♟</span><div><h3>Group members</h3><p>Manage the members of this group.</p></div></div>
+     <div class="gc-member-list">${rowsHtml || '<div class="gc-empty-note">No members found.</div>'}</div>
+     ${manager ? '<p class="gc-members-note">ⓘ &nbsp; Managers can rename the group, change its photo, and add or remove members.</p>' : ''}`,
+    `<button type="button" class="gc-btn primary" onclick="closeGroupChatModal()">Close</button>`, 'gc-members-modal');
 }
 
 function gcMemberDisplayName(conv, userId) {
@@ -1865,19 +1866,53 @@ function gcOpenPhotoModal() {
   const conv = gcCurrentGroup();
   if (!conv) return;
   gcOpenModal('Change group photo',
-    `<p class="gc-empty-note">Upload a square image for the best result (max 5MB).</p>
-     <input type="file" id="gcPhotoInput" class="gc-file-input" accept="image/*" onchange="gcUploadPhoto(event)">
-     <div id="gcPhotoStatus" class="gc-empty-note"></div>`,
-    `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Cancel</button>`);
+    `<div class="gc-photo-title"><span>♧</span><div><h3>Change group photo</h3><p>Update the group photo for this conversation.</p></div></div>
+     <div class="gc-photo-preview">${conv.photoUrl ? `<img src="${escHtml(conv.photoUrl)}" alt="Current group photo">` : '👥'}</div>
+     <label class="gc-photo-upload" id="gcPhotoDrop" for="gcPhotoInput" ondragover="event.preventDefault();this.classList.add('dragging')" ondragleave="this.classList.remove('dragging')" ondrop="gcDropPhoto(event)">
+       <span class="gc-photo-cloud">⇧</span><strong>Upload a photo</strong><span>Drag and drop your photo here, or</span><span class="gc-choose-photo">▧ &nbsp; Choose Image</span><small id="gcPhotoFilename">PNG, JPG or JPEG &nbsp;•&nbsp; Max 5MB</small>
+     </label><input type="file" id="gcPhotoInput" class="gc-file-hidden" accept="image/png,image/jpeg" onchange="gcUploadPhoto(event)"><div id="gcPhotoStatus" class="gc-empty-note"></div>`,
+    `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Cancel</button><button type="button" id="gcPhotoUpdate" class="gc-btn primary" disabled onclick="gcSubmitPhoto()">✓ &nbsp; Update Photo</button>`, 'gc-photo-modal');
 }
 
-async function gcUploadPhoto(event) {
+function gcUploadPhoto(event) {
   const file = event.target.files && event.target.files[0];
+  gcSelectPhoto(file);
+}
+
+function gcDropPhoto(event) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('dragging');
+  const input = document.getElementById('gcPhotoInput');
+  if (input && event.dataTransfer.files?.length) input.files = event.dataTransfer.files;
+  gcSelectPhoto(event.dataTransfer.files && event.dataTransfer.files[0]);
+}
+
+function gcSelectPhoto(file) {
+  if (!file) return;
+  const status = document.getElementById('gcPhotoStatus');
+  if (!['image/png', 'image/jpeg'].includes(file.type)) {
+    if (status) status.textContent = 'Please choose a PNG or JPG image.';
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    if (typeof showToast === 'function') showToast('Group photo must be under 5MB.', 'error');
+    return;
+  }
+  const label = document.getElementById('gcPhotoFilename');
+  const button = document.getElementById('gcPhotoUpdate');
+  if (label) label.textContent = file.name;
+  if (button) button.disabled = false;
+  if (status) status.textContent = '';
+}
+
+async function gcSubmitPhoto() {
+  const input = document.getElementById('gcPhotoInput');
+  const file = input?.files?.[0];
   const conv = gcCurrentGroup();
   if (!file || !conv) return;
   if (file.size > 5 * 1024 * 1024) {
     if (typeof showToast === 'function') showToast('Group photo must be under 5MB.', 'error');
-    event.target.value = '';
+    input.value = '';
     return;
   }
   const status = document.getElementById('gcPhotoStatus');
@@ -1908,7 +1943,7 @@ async function gcUploadPhoto(event) {
   }
   if (!url) {
     if (status) status.textContent = 'Upload failed. Please try again.';
-    event.target.value = '';
+    input.value = '';
     return;
   }
   closeGroupChatModal();
