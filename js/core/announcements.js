@@ -204,10 +204,25 @@ function extendAnnouncementDeadline(id, days = 2) {
   if (typeof renderPage === 'function') renderPage('announcements');
 }
 
+// Admins manage every advisory; teachers only manage the ones they authored.
+function canManageAnnouncement(anc) {
+  if (!anc) return false;
+  if (typeof ROLE !== 'undefined' && ROLE === 'admin') return true;
+  if (typeof ROLE !== 'undefined' && ROLE === 'teacher') {
+    const myId = String(CURRENT_PROFILE?.id || '');
+    return !!myId && String(anc.createdBy || '') === myId;
+  }
+  return false;
+}
+
 function toggleArchiveAnnouncement(id) {
   const all = getStoredAnnouncements();
   const anc = all.find(a => a.id === id);
   if (!anc) return;
+  if (!canManageAnnouncement(anc)) {
+    if (typeof showToast === 'function') showToast('You can only manage your own announcements', 'error');
+    return;
+  }
   anc.isArchived = !anc.isArchived;
   saveAnnouncements(all);
   showToast(anc.isArchived ? 'Announcement moved to Archive' : 'Announcement restored to Active', 'success');
@@ -411,7 +426,7 @@ function openAnnouncementDetailModal(id) {
 
   const adminActionsEl = document.getElementById('ancDetailModalAdminActions');
   if (adminActionsEl) {
-    const canManage = (typeof ROLE !== 'undefined') && (ROLE === 'admin' || (ROLE === 'teacher' && anc.authorRole === 'Teacher'));
+    const canManage = canManageAnnouncement(anc);
     if (canManage) {
       const isArch = isAnnouncementExpired(anc);
       adminActionsEl.innerHTML = `
@@ -468,6 +483,11 @@ function setAncArchiveView(view) {
 
 function deleteAnnouncement(id) {
   let all = getStoredAnnouncements();
+  const target = all.find(a => a.id === id);
+  if (!canManageAnnouncement(target)) {
+    if (typeof showToast === 'function') showToast('You can only delete your own announcements', 'error');
+    return;
+  }
   if (typeof db !== 'undefined' && db?.from && CURRENT_PROFILE?.id) {
     db.from('school_announcements').delete().eq('id', String(id))
       .then(({ error }) => { if (error) console.warn('Announcement delete sync notice:', error.message); })
@@ -577,7 +597,7 @@ function buildAnnouncementsPage() {
             catLabel = '📢 General';
           }
           const dateStr = formatSentDate(anc.timestamp);
-          const canManage = ROLE === 'admin' || (ROLE === 'teacher' && anc.authorRole === 'Teacher');
+          const canManage = canManageAnnouncement(anc);
           const isDraft = anc.status === 'draft' || anc.isDraft;
           const isExpired = !isDraft && isAnnouncementExpired(anc);
           const remainingText = isDraft ? null : getRemainingTimeText(anc.expiresAt);
@@ -716,16 +736,45 @@ function buildAnnouncementsPage() {
 
 const ANC_STRAND_AUDIENCES = ['STEM Strand', 'HUMSS Strand', 'ABM Strand', 'TVL Strand'];
 
-function handleAncAudienceToggle(event) {
-  // Every audience option stays selectable at all times; no cross-locking.
+function teacherStrandAudienceLabels() {
+  if (typeof CURRENT_PROFILE === 'undefined' || !CURRENT_PROFILE) return [];
+  return String(CURRENT_PROFILE.strand || '')
+    .split(/[,/|]/)
+    .map(part => part.trim().toUpperCase())
+    .filter(code => ['STEM', 'HUMSS', 'ABM', 'TVL'].includes(code))
+    .map(code => `${code} Strand`);
+}
+
+// Teachers may only broadcast to the strand they handle, so lock every other
+// audience option instead of just unchecking it.
+function applyAudienceRoleLocks() {
+  const isTeacher = typeof ROLE !== 'undefined' && ROLE === 'teacher';
+  const allowedStrands = isTeacher ? teacherStrandAudienceLabels() : [];
+  const lockAllForTeacher = isTeacher && allowedStrands.length > 0;
+
   document.querySelectorAll('input[name="ancAudience"]').forEach(cb => {
-    cb.disabled = false;
+    const isStrandOption = ANC_STRAND_AUDIENCES.includes(cb.value);
+    let locked = false;
+    if (lockAllForTeacher) {
+      locked = isStrandOption ? !allowedStrands.includes(cb.value) : true;
+    }
+    cb.disabled = locked;
+    if (locked) cb.checked = false;
     const label = cb.closest('.anc-checkbox-label');
     if (label) {
-      label.style.opacity = '1';
-      label.style.cursor = 'pointer';
+      label.style.opacity = locked ? '0.45' : '1';
+      label.style.cursor = locked ? 'not-allowed' : 'pointer';
+      label.title = locked
+        ? (isStrandOption
+          ? `You can only post to your assigned strand: ${allowedStrands.join(', ')}`
+          : 'Teachers can only post to their assigned strand')
+        : '';
     }
   });
+}
+
+function handleAncAudienceToggle(event) {
+  applyAudienceRoleLocks();
 
   const allStudentsCb = document.querySelector('input[name="ancAudience"][value="All Students"]');
   if (!allStudentsCb) return;
@@ -733,18 +782,30 @@ function handleAncAudienceToggle(event) {
     .map(value => document.querySelector(`input[name="ancAudience"][value="${value}"]`))
     .filter(Boolean);
   if (!strandBoxes.length) return;
+  const selectableStrands = strandBoxes.filter(cb => !cb.disabled);
+  if (!selectableStrands.length) return;
 
   const source = event && event.target;
+  if (allStudentsCb.disabled) {
+    // Teacher view: All Students is never a valid target; keep it off and
+    // make sure their own strand stays selected.
+    allStudentsCb.checked = false;
+    const allowedStrands = teacherStrandAudienceLabels();
+    if (!selectableStrands.some(cb => cb.checked)) {
+      selectableStrands.forEach(cb => { if (allowedStrands.includes(cb.value)) cb.checked = true; });
+    }
+    return;
+  }
   if (source === allStudentsCb) {
-    strandBoxes.forEach(cb => { cb.checked = allStudentsCb.checked; });
+    selectableStrands.forEach(cb => { cb.checked = allStudentsCb.checked; });
   } else if (source && strandBoxes.includes(source)) {
     // All four strands ticked means the whole student body is covered.
-    allStudentsCb.checked = strandBoxes.every(cb => cb.checked);
+    allStudentsCb.checked = selectableStrands.every(cb => cb.checked);
   } else if (allStudentsCb.checked) {
     // Restoring an older advisory that only lists "All Students".
-    strandBoxes.forEach(cb => { cb.checked = true; });
+    selectableStrands.forEach(cb => { cb.checked = true; });
   } else {
-    allStudentsCb.checked = strandBoxes.every(cb => cb.checked);
+    allStudentsCb.checked = selectableStrands.every(cb => cb.checked);
   }
 }
 
@@ -904,6 +965,8 @@ function openCreateAnnouncementModal() {
   const criticalRadio = document.querySelector('input[name="ancPriority"][value="critical"]');
   const importantRadio = document.querySelector('input[name="ancPriority"][value="important"]');
 
+  applyAudienceRoleLocks();
+
   if (ROLE === 'teacher') {
     if (emergencyOpt) {
       emergencyOpt.disabled = true;
@@ -919,19 +982,15 @@ function openCreateAnnouncementModal() {
     if (importantRadio) importantRadio.checked = true;
     resetAncCategorySelect('academic');
 
-    const allTeachersCb = document.querySelector('input[name="ancAudience"][value="All Teachers"]');
-    if (allTeachersCb) {
-      allTeachersCb.checked = false;
-      allTeachersCb.disabled = false;
-      if (allTeachersCb.closest('.anc-checkbox-label')) {
-        allTeachersCb.closest('.anc-checkbox-label').style.opacity = '1';
-        allTeachersCb.closest('.anc-checkbox-label').style.cursor = 'pointer';
-      }
-    }
-
-    const allStudentsCb = document.querySelector('input[name="ancAudience"][value="All Students"]');
-    if (allStudentsCb) {
-      allStudentsCb.checked = false;
+    const allowedStrands = teacherStrandAudienceLabels();
+    if (allowedStrands.length) {
+      ANC_STRAND_AUDIENCES.forEach(label => {
+        const cb = document.querySelector(`input[name="ancAudience"][value="${label}"]`);
+        if (cb && allowedStrands.includes(label)) cb.checked = true;
+      });
+    } else {
+      const allStudentsCb = document.querySelector('input[name="ancAudience"][value="All Students"]');
+      if (allStudentsCb) allStudentsCb.checked = false;
     }
   } else {
     if (emergencyOpt) {
@@ -1036,6 +1095,15 @@ function submitCreateAnnouncement(isDraft = false) {
       if (ANC_STRAND_AUDIENCES.includes(selectedAudience[i])) selectedAudience.splice(i, 1);
     }
   }
+  // Teachers can only broadcast to the strand they handle.
+  if (ROLE === 'teacher') {
+    const allowedStrands = teacherStrandAudienceLabels();
+    if (allowedStrands.length) {
+      const kept = selectedAudience.filter(value => allowedStrands.includes(value));
+      selectedAudience.length = 0;
+      selectedAudience.push(...(kept.length ? kept : allowedStrands));
+    }
+  }
 
   const expiresAtVal = (expiryInput && expiryInput.value)
     ? new Date(expiryInput.value).toISOString()
@@ -1099,6 +1167,10 @@ function publishAnnouncementDraft(id) {
   const all = getStoredAnnouncements();
   const anc = all.find(a => String(a.id) === String(id));
   if (!anc) return;
+  if (!canManageAnnouncement(anc)) {
+    if (typeof showToast === 'function') showToast('You can only publish your own announcements', 'error');
+    return;
+  }
 
   anc.isDraft = false;
   anc.status = 'active';
