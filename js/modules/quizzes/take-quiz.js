@@ -252,10 +252,12 @@ function gradeItem(item, given) {
   return compareAnswers(given, item.correct || '');
 }
 
-function startTakeQuizTimer() {
+function startTakeQuizTimer(initialSeconds) {
   clearInterval(takeQuizState.timerInterval);
   if (takeQuizState.timeLimitMinutes <= 0) return;
-  takeQuizState.secondsLeft = takeQuizState.timeLimitMinutes * 60;
+  takeQuizState.secondsLeft = typeof initialSeconds === 'number'
+    ? Math.max(0, Math.round(initialSeconds))
+    : takeQuizState.timeLimitMinutes * 60;
   updateTakeQuizTimerDisplay();
 
   takeQuizState.timerInterval = setInterval(() => {
@@ -287,6 +289,134 @@ function handleTakeQuizTimeout() {
   }
   submitQuizAttempt(true);
 }
+
+/* ── ACTIVE QUIZ SESSION (SURVIVES PAGE REFRESH) ──
+   The in-progress quiz is mirrored into sessionStorage so a refresh,
+   navigation, or crash drops the student back into the same attempt
+   instead of the dashboard. Cleared on submit, exit, or review. */
+const ACTIVE_QUIZ_SESSION_KEY = 'scholaria_active_quiz_v1';
+
+function readActiveQuizSession() {
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_QUIZ_SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
+function clearActiveQuizSession() {
+  try { sessionStorage.removeItem(ACTIVE_QUIZ_SESSION_KEY); } catch (_) {}
+}
+
+function saveActiveQuizSession() {
+  const { quiz, responses, timeLimitMinutes } = takeQuizState;
+  if (!quiz || !quiz.id || takeQuizState.reviewMode || takeQuizState.submitting) return;
+  const startedAt = Number(takeQuizState.startTime) || Date.now();
+  const limit = Number(timeLimitMinutes) || 0;
+  const payload = {
+    mode: 'standard',
+    quizId: quiz.id,
+    quizTitle: quiz.title || '',
+    responses: responses || {},
+    startedAt,
+    timeLimitMinutes: limit,
+    deadlineAt: limit > 0 ? startedAt + limit * 60000 : 0,
+    isPreview: !!quiz.is_preview,
+    savedAt: Date.now()
+  };
+  try { sessionStorage.setItem(ACTIVE_QUIZ_SESSION_KEY, JSON.stringify(payload)); } catch (_) {}
+}
+
+function findQuizForRestore(saved) {
+  const quizList = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
+  return quizList.find(q => String(q.id) === String(saved.quizId)) || null;
+}
+
+function restoreTakeQuizSession() {
+  const saved = readActiveQuizSession();
+  if (!saved || saved.mode !== 'standard' || !saved.quizId) return false;
+  if (Date.now() - Number(saved.savedAt || 0) > 12 * 60 * 60 * 1000) {
+    clearActiveQuizSession();
+    return false;
+  }
+
+  let quiz = findQuizForRestore(saved);
+  if (!quiz) return 'pending';
+
+  const items = buildQuizItems(quiz);
+  if (!items.length) { clearActiveQuizSession(); return false; }
+  if (saved.isPreview) quiz = { ...quiz, is_preview: true };
+
+  const timeLimit = Number(saved.timeLimitMinutes) || 0;
+  let remaining = 0;
+  if (timeLimit > 0) {
+    const deadline = Number(saved.deadlineAt) || (Number(saved.startedAt) || Date.now()) + timeLimit * 60000;
+    remaining = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+  }
+
+  clearInterval(takeQuizState.timerInterval);
+  Object.assign(takeQuizState, {
+    quiz,
+    items,
+    responses: (saved.responses && typeof saved.responses === 'object') ? saved.responses : {},
+    submitting: false,
+    reviewMode: false,
+    reviewAnswers: [],
+    startTime: Number(saved.startedAt) || Date.now(),
+    timeLimitMinutes: timeLimit,
+    secondsLeft: remaining
+  });
+
+  const modal = document.getElementById('takeQuizModal');
+  if (modal) modal.classList.add('active', 'sq-take-quiz-overlay');
+  renderTakeQuizModal();
+
+  const isStudent = String(typeof ROLE !== 'undefined' ? ROLE : '').toLowerCase() === 'student';
+  const rawDue = quiz.dueDate || quiz.due_date;
+  const duePassed = isStudent && rawDue && !isNaN(new Date(rawDue).getTime()) && new Date(rawDue).getTime() < Date.now();
+
+  if (duePassed) {
+    if (typeof showToast === 'function') showToast('This assessment deadline has passed — submitting your saved answers.', 'warning');
+    setTimeout(() => submitQuizAttempt(true), 400);
+  } else if (timeLimit > 0) {
+    if (remaining <= 0) {
+      setTimeout(() => submitQuizAttempt(true), 400);
+    } else {
+      startTakeQuizTimer(remaining);
+    }
+  }
+
+  if (!duePassed && typeof showToast === 'function') {
+    showToast('Your quiz was restored — continue where you left off.', 'info');
+  }
+  return true;
+}
+
+function restoreActiveQuizOnBoot() {
+  if (!readActiveQuizSession()) return;
+  let tries = 0;
+  const tick = () => {
+    const stdModal = document.getElementById('takeQuizModal');
+    const intModal = document.getElementById('interactiveQuizModal');
+    if ((stdModal && stdModal.classList.contains('active')) || (intModal && intModal.classList.contains('active'))) return;
+
+    const std = restoreTakeQuizSession();
+    if (std === true) return;
+
+    const inter = typeof restoreInteractiveQuizSession === 'function' ? restoreInteractiveQuizSession() : false;
+    if (inter === true) return;
+
+    if ((std === 'pending' || inter === 'pending') && tries++ < 40) {
+      const quizList = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
+      if (!quizList.length && typeof loadQuizzesFromDB === 'function') {
+        try { loadQuizzesFromDB(); } catch (_) {}
+      }
+      setTimeout(tick, 500);
+    }
+  };
+  setTimeout(tick, 400);
+}
+window.restoreActiveQuizOnBoot = restoreActiveQuizOnBoot;
+
 
 function openTakeQuizModal(quizId) {
   let quiz = null;
@@ -356,6 +486,7 @@ function openTakeQuizModal(quizId) {
     modal.classList.add('active', 'sq-take-quiz-overlay');
   }
   renderTakeQuizModal();
+  saveActiveQuizSession();
 
   if (timeLimitMins > 0) {
     startTakeQuizTimer();
@@ -376,6 +507,7 @@ function takeQuizAsTeacher(quizId) {
 
 async function openReviewAttempt(quizIdOrAttemptId, optionalAttemptId) {
   clearInterval(takeQuizState.timerInterval);
+  clearActiveQuizSession();
   const quizList = typeof customQuizzes !== 'undefined' && Array.isArray(customQuizzes) ? customQuizzes : [];
   const targetId = String(quizIdOrAttemptId || '').toLowerCase().trim();
   const targetAttemptId = String(optionalAttemptId || '').toLowerCase().trim();
@@ -571,6 +703,7 @@ function confirmExitQuiz() {
 
 function closeTakeQuizModal() {
   clearInterval(takeQuizState.timerInterval);
+  clearActiveQuizSession();
   const modal = document.getElementById('takeQuizModal');
   if (modal) {
     modal.classList.remove('active');
@@ -585,6 +718,7 @@ function isItemResponseAnswered(val) {
 
 function setTQAnswer(itemId, value) {
   takeQuizState.responses[itemId] = value;
+  saveActiveQuizSession();
   // Update selected state visually without full re-render
   const { items, responses } = takeQuizState;
   
@@ -628,6 +762,7 @@ function toggleTQMultiAnswer(itemId, value) {
     list.push(valStr);
   }
   takeQuizState.responses[itemId] = list;
+  saveActiveQuizSession();
 
   const { items, responses } = takeQuizState;
 

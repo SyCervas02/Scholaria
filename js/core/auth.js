@@ -31,6 +31,43 @@ window.API_BASE = API_BASE;
 let ROLE = null;
 let CURRENT_PROFILE = null;
 
+// Persists self-service profile columns through the API because RLS on
+// public.users only permits admins to UPDATE rows. Returns true when the
+// server confirms at least one row was saved.
+async function persistProfileToServer(fields, accessToken) {
+  if (!fields || typeof fields !== 'object') return false;
+  try {
+    let token = accessToken;
+    if (!token) {
+      const { data: { session } } = await db.auth.getSession();
+      token = session?.access_token;
+    }
+    if (!token) return false;
+    const res = await fetch(`${API_BASE}/api/me/profile`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(fields)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('Profile server save failed:', err.error || res.status);
+      return false;
+    }
+    const result = await res.json().catch(() => ({}));
+    if (result.success && result.profile && CURRENT_PROFILE) {
+      Object.assign(CURRENT_PROFILE, result.profile);
+    }
+    return Boolean(result.success);
+  } catch (err) {
+    console.warn('Profile server save notice:', err.message);
+    return false;
+  }
+}
+window.persistProfileToServer = persistProfileToServer;
+
 async function guardSessionAndInit() {
   const { data: { session } } = await db.auth.getSession();
   if (!session) { window.location.href = 'login.html'; return; }
@@ -58,6 +95,16 @@ async function guardSessionAndInit() {
   ROLE = profile.role;
   CURRENT_PROFILE = profile;
 
+  // Self-service profile fields are also mirrored into Supabase Auth metadata
+  // because the public.users RLS policies only allow admins to UPDATE rows.
+  // Prefer the metadata value: it is what the owner last saved.
+  const selfServiceMeta = session.user.user_metadata || {};
+  ['online_status', 'status_message', 'bio', 'contact_number'].forEach(field => {
+    if (Object.prototype.hasOwnProperty.call(selfServiceMeta, field) && selfServiceMeta[field] !== undefined && selfServiceMeta[field] !== null) {
+      profile[field] = selfServiceMeta[field];
+    }
+  });
+
   // Restore an avatar that was only kept locally when an earlier save failed,
   // then push it back to the database so it survives the next sign-out.
   if (!profile.avatar_url) {
@@ -66,9 +113,8 @@ async function guardSessionAndInit() {
       const cachedAvatar = cached && cached.id === profile.id ? cached.avatar_url : '';
       if (cachedAvatar && cachedAvatar.length <= 500000) {
         profile.avatar_url = cachedAvatar;
-        db.from('users').update({ avatar_url: cachedAvatar }).eq('id', profile.id).then(({ error }) => {
-          if (error) console.warn('Avatar sync failed:', error.message);
-          else localStorage.setItem('scholaria_cached_profile', JSON.stringify(profile));
+        persistProfileToServer({ avatar_url: cachedAvatar }, session.access_token).then(ok => {
+          if (ok) localStorage.setItem('scholaria_cached_profile', JSON.stringify(profile));
         });
       }
     } catch (_) {}

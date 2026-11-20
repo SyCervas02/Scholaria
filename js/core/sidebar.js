@@ -109,6 +109,7 @@ function initDashboardShell() {
     ? 'chats'
     : (requestedValid ? requestedPage : (savedPage || 'dashboard'));
   renderPage(initialPage);
+  if (typeof restoreActiveQuizOnBoot === 'function') restoreActiveQuizOnBoot();
   if (attachmentReturn?.conversationId) {
     setTimeout(async () => {
       if (currentPage !== 'chats') renderPage('chats');
@@ -1244,33 +1245,56 @@ async function saveUserProfile() {
       avatar_url: avatarUrl
     };
 
-    // 5. Save to the DB and stop on failure instead of reporting a false success
+    // 5. Save through the API (service role) because RLS blocks self-updates.
     let saveError = null;
+    let savedToCloud = false;
     try {
-      const { error } = await db
-        .from('users')
-        .update(updatePayload)
-        .eq('id', CURRENT_PROFILE.id);
-      if (error) saveError = error;
+      if (typeof window.persistProfileToServer === 'function') {
+        savedToCloud = await window.persistProfileToServer(updatePayload);
+      }
     } catch (err) {
       saveError = err;
     }
+
+    // Fallback: update with the caller's own token and verify a row came back,
+    // because Supabase resolves a blocked UPDATE with zero rows and no error.
+    if (!savedToCloud) {
+      try {
+        const { data, error } = await db
+          .from('users')
+          .update(updatePayload)
+          .eq('id', CURRENT_PROFILE.id)
+          .select('id');
+        if (error) {
+          saveError = error;
+        } else if (Array.isArray(data) && data.length > 0) {
+          savedToCloud = true;
+        } else if (!saveError) {
+          saveError = new Error('The database restricted this profile update.');
+        }
+      } catch (err) {
+        saveError = err;
+      }
+    }
     if (saveError) {
       console.warn('Profile update failed:', saveError);
-      showToast('Could not save your profile: ' + (saveError.message || 'please try again.'), 'error');
-      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = 'Save Changes'; }
-      return;
     }
 
-    // 7. Persist in Supabase Auth user metadata
+    // 7. Persist in Supabase Auth user metadata. This always belongs to the user
+    // and is merged back on login, so status/motto survive even if RLS blocks
+    // the users-table write.
+    let savedToMetadata = false;
     try {
-      await db.auth.updateUser({
+      const { error: metaError } = await db.auth.updateUser({
         data: {
           first_name: firstName,
           last_name: lastName,
           middle_initial: middleInitial,
           full_name: fullName,
           contact_number: contactNumber,
+          bio: bio,
+          online_status: onlineStatus,
+          status_message: statusMessage,
           emergency_contact_name: emergencyName,
           emergency_contact_relation: emergencyRelation,
           emergency_contact_phone: emergencyPhone,
@@ -1279,7 +1303,14 @@ async function saveUserProfile() {
           gender: gender
         }
       });
+      savedToMetadata = !metaError;
     } catch (_) {}
+
+    if (!savedToCloud && !savedToMetadata) {
+      showToast('Could not save your profile: ' + (saveError?.message || 'please try again.'), 'error');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = 'Save Changes'; }
+      return;
+    }
 
     // 8. Update local CURRENT_PROFILE and localStorage
     Object.assign(CURRENT_PROFILE, localProfileUpdate);
@@ -1294,7 +1325,10 @@ async function saveUserProfile() {
 
     // 10. Refresh profile page to reflect newly saved data
     renderPage('profile');
-    showToast('Profile updated successfully!', 'success');
+    showToast(
+      savedToCloud ? 'Profile updated successfully!' : 'Profile saved to your account (cloud sync pending).',
+      savedToCloud ? 'success' : 'info'
+    );
 
   } catch (err) {
     console.error('Error saving profile:', err);
@@ -1322,6 +1356,14 @@ function buildProfilePage(role) {
   const idLabel = role === 'student' ? 'Student ID / LRN' : role === 'teacher' ? 'Faculty Teacher ID' : 'Institutional Admin ID';
   const schoolIdVal = p.school_id || (p.id ? p.id.slice(0, 8).toUpperCase() : 'HWA-2026');
   const joinDateFormatted = formatJoinDate(p.created_at);
+
+  // Archived sections must not appear on a teacher's profile as classes they
+  // still handle, even if the stored assignment is stale.
+  const rawProfileSections = String(p.section || '').split(',').map(s => s.trim()).filter(Boolean);
+  const visibleProfileSections = role === 'teacher'
+    ? rawProfileSections.filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec))
+    : rawProfileSections;
+  const visibleSectionText = visibleProfileSections.join(', ');
 
   // Parse separated name components
   const nameParts = typeof parseFullNameParts === 'function' ? parseFullNameParts(p.full_name || '') : { firstName: '', lastName: '', middleInitial: '' };
@@ -1362,7 +1404,7 @@ function buildProfilePage(role) {
           <span class="profile-tag-pill">${roleIcon} ${roleTitle}</span>
           <span class="profile-tag-pill gold">🆔 ${escHtml(schoolIdVal)}</span>
           ${p.strand ? `<span class="profile-tag-pill">📚 ${escHtml(p.strand)}</span>` : ''}
-          ${p.section ? `<span class="profile-tag-pill">🏫 ${escHtml(p.section)}</span>` : ''}
+          ${visibleProfileSections.length ? `<span class="profile-tag-pill">🏫 ${escHtml(visibleSectionText)}</span>` : (role === 'teacher' ? `<span class="profile-tag-pill" style="opacity:.75;">🏫 No active section</span>` : '')}
         </div>
 
         <div style="font-size:13px;color:rgba(255,255,255,0.9);margin-top:6px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
@@ -5519,6 +5561,8 @@ function buildChatPage(role) {
           <button class="active" aria-pressed="true" data-chat-filter="all" onclick="setChatFilter('all')">All</button>
           <button aria-pressed="false" data-chat-filter="teacher" onclick="setChatFilter('teacher')">Teachers</button>
           ${role === 'student' ? '' : '<button aria-pressed="false" data-chat-filter="student" onclick="setChatFilter(\'student\')">Students</button>'}
+          <button aria-pressed="false" data-chat-filter="group" onclick="setChatFilter('group')">Group Chats</button>
+          <button aria-pressed="false" data-chat-filter="archived" onclick="setChatFilter('archived')">Archived GC's</button>
         </div>
         <div class="contact-list" id="chatContactList">
           <div class="contact-empty">Loading conversations…</div>
@@ -5531,6 +5575,13 @@ function buildChatPage(role) {
           <div>
             <div class="cw-name" id="cwName">Your conversations</div>
             <div class="cw-role" id="cwRole">Stay connected, keep learning.</div>
+          </div>
+          <div class="cw-header-actions">
+            <span class="cw-archived-pill" id="cwArchivedPill" style="display:none;">Archived</span>
+            <button class="cw-group-menu-btn" id="cwGroupMenuBtn" type="button" title="Group chat options" aria-label="Group chat options" style="display:none;" onclick="toggleGroupChatMenu(event)">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+            </button>
+            <div class="cw-group-menu" id="cwGroupMenu"></div>
           </div>
         </div>
         <div class="cw-messages" id="cwMessages">

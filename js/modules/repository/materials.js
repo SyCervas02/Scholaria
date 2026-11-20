@@ -1781,8 +1781,14 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
       handledSections = SECTIONS.slice();
     }
   } else if (CURRENT_PROFILE && CURRENT_PROFILE.section) {
-    const raw = CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean);
+    const raw = CURRENT_PROFILE.section.split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+      // Archived sections must never surface as handled classes, even if the
+      // stored teacher assignment has not been cleaned up yet.
+      .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
     if (raw.length > 0) handledSections = raw;
+    else handledSections = [];
   }
 
   handledSections.forEach(sec => {
@@ -4722,7 +4728,10 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
     : [];
 
   const teacherSections = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.section)
-    ? CURRENT_PROFILE.section.split(',').map(s => s.trim()).filter(Boolean)
+    ? CURRENT_PROFILE.section.split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec))
     : [];
 
   const targetCourseId = courseId || activeSubjectFilter;
@@ -4746,9 +4755,13 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
     initialStrand = (ROLE === 'teacher') ? 'STEM, HUMSS' : 'All Strands';
   }
 
-  const initialSectionsSet = chosenSection
+  const teacherHasSectionField = ROLE === 'teacher' && !!(CURRENT_PROFILE && CURRENT_PROFILE.section);
+  const chosenSectionActive = chosenSection && (typeof isSectionArchived !== 'function' || !isSectionArchived(chosenSection));
+  const initialSectionsSet = chosenSectionActive
     ? new Set([chosenSection])
-    : (teacherSections.length ? new Set(teacherSections) : (ROLE === 'teacher' ? new Set(['Section A', 'Section B']) : new Set()));
+    : (teacherSections.length
+        ? new Set(teacherSections)
+        : (ROLE === 'teacher' ? (teacherHasSectionField ? new Set() : new Set(['Section A', 'Section B'])) : new Set()));
 
   const courseLessons = targetCourse ? getSubjectLessons(targetCourse) : [];
   let initialLessonId = ROLE === 'teacher' ? null : (targetLessonId || null);
@@ -4929,7 +4942,10 @@ function renderMaterialModal() {
     ? CURRENT_PROFILE.grade_level.split(',').map(g => g.trim()).filter(Boolean)
     : [];
   const teacherSections = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.section)
-    ? CURRENT_PROFILE.section.split(',').map(sec => sec.trim()).filter(Boolean)
+    ? CURRENT_PROFILE.section.split(',')
+        .map(sec => sec.trim())
+        .filter(Boolean)
+        .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec))
     : [];
 
   const availableStrands = (ROLE === 'teacher' && teacherStrands.length) ? teacherStrands : STRANDS;
@@ -4939,7 +4955,10 @@ function renderMaterialModal() {
     ? sortSectionsNaturally
     : (list) => [...list].sort((a,b) => (typeof a === 'string' ? a : (a?.name || '')).localeCompare(typeof b === 'string' ? b : (b?.name || ''), undefined, { numeric: true, sensitivity: 'base' }));
 
-  const rawSections = (ROLE === 'teacher' && teacherSections.length) ? teacherSections : SECTIONS;
+  // A teacher with only archived assignments must not fall back to the full
+  // school section list; that leaked archived sections into the upload form.
+  const teacherHasSectionField = ROLE === 'teacher' && !!(CURRENT_PROFILE && CURRENT_PROFILE.section);
+  const rawSections = (ROLE === 'teacher' && teacherHasSectionField) ? teacherSections : SECTIONS;
   const availableSections = sortFn(rawSections);
 
   const isGradeLocked  = ROLE === 'teacher' && teacherGrades.length === 1;
@@ -4982,10 +5001,10 @@ function renderMaterialModal() {
     <div class="gen-field">
       <label>Target Sections <span style="text-transform:none;font-weight:500;color:var(--text-muted);">${ROLE === 'teacher' ? '(Limited to your handled sections)' : '(select multiple or leave blank for all sections)'}</span></label>
       <div class="format-grid">
-        ${availableSections.map(sec => {
+        ${availableSections.length ? availableSections.map(sec => {
           const isSelected = s.sections.has(sec);
           return `<div class="format-chip ${isSelected ? 'on' : ''}" onclick="toggleMaterialSection('${sec}')">${sec}</div>`;
-        }).join('')}
+        }).join('') : `<div style="font-size:12.5px;color:#b91c1c;font-weight:600;padding:6px 2px;">No active handled sections. Please ask an administrator to assign you to a section.</div>`}
       </div>
     </div>
     <div class="gen-row">

@@ -402,6 +402,147 @@ function buildInteractiveQuestions(quiz) {
 }
 
 /**
+ * Interactive Arena session persistence (survives page refresh).
+ * Snapshots live in the same sessionStorage slot as the standard quiz
+ * so only one attempt can be active per browser tab.
+ */
+let pendingRestoredTimerSeconds = null;
+let interactiveSessionAutosaveTimer = null;
+
+function saveInteractiveSession() {
+  const s = interactivePlayerState;
+  if (!s.quiz || !s.quiz.id || s.isSubmitted || !Array.isArray(s.questions) || !s.questions.length) return;
+  if (typeof ACTIVE_QUIZ_SESSION_KEY === 'undefined') return;
+  const payload = {
+    mode: 'interactive',
+    quizId: s.quiz.id,
+    quizTitle: s.quiz.title || '',
+    currentIndex: s.currentIndex,
+    userResponses: s.userResponses || {},
+    score: s.score || 0,
+    totalItems: s.totalItems || 0,
+    timerPerQuestion: s.timerPerQuestion || 0,
+    timerSecondsLeft: Math.max(0, Number(s.timerSecondsLeft) || 0),
+    questionDeadlineAt: Date.now() + Math.max(0, Number(s.timerSecondsLeft) || 0) * 1000,
+    usedPowerups: s.usedPowerups || {},
+    doubleScoreQuestionIndex: s.doubleScoreQuestionIndex,
+    matchingSelections: s.matchingSelections || {},
+    isWaitingFeedback: !!s.isWaitingFeedback,
+    isPreview: !!s.quiz.is_preview,
+    startTime: s.startTime || Date.now(),
+    savedAt: Date.now()
+  };
+  try { sessionStorage.setItem(ACTIVE_QUIZ_SESSION_KEY, JSON.stringify(payload)); } catch (_) {}
+}
+
+function stopInteractiveSessionAutosave() {
+  if (interactiveSessionAutosaveTimer) {
+    clearInterval(interactiveSessionAutosaveTimer);
+    interactiveSessionAutosaveTimer = null;
+  }
+}
+
+function startInteractiveSessionAutosave() {
+  stopInteractiveSessionAutosave();
+  interactiveSessionAutosaveTimer = setInterval(() => {
+    const modal = document.getElementById('interactiveQuizModal');
+    if (!modal || !modal.classList.contains('active')) { stopInteractiveSessionAutosave(); return; }
+    saveInteractiveSession();
+  }, 2000);
+}
+
+function restoreInteractiveQuizSession() {
+  const saved = readActiveQuizSession();
+  if (!saved || saved.mode !== 'interactive' || !saved.quizId) return false;
+  if (Date.now() - Number(saved.savedAt || 0) > 12 * 60 * 60 * 1000) {
+    clearActiveQuizSession();
+    return false;
+  }
+
+  let quiz = findQuizForRestore(saved);
+  if (!quiz) return 'pending';
+
+  const questions = buildInteractiveQuestions(quiz);
+  if (!questions.length) { clearActiveQuizSession(); return false; }
+  if (saved.isPreview) quiz = { ...quiz, is_preview: true };
+
+  let totalItemsCount = 0;
+  questions.forEach(q => {
+    totalItemsCount += q.type === 'matching' ? (q.pairs || []).length : 1;
+  });
+
+  const wasFeedback = !!saved.isWaitingFeedback;
+  let restoredIndex = Math.max(0, Number(saved.currentIndex) || 0);
+  if (wasFeedback) restoredIndex += 1;
+  restoredIndex = Math.min(restoredIndex, questions.length);
+
+  lastActiveTimerIndex = -1;
+  const startTime = Number(saved.startTime) || Date.now();
+  Object.assign(interactivePlayerState, {
+    quiz,
+    questions,
+    currentIndex: restoredIndex,
+    userResponses: (saved.userResponses && typeof saved.userResponses === 'object') ? saved.userResponses : {},
+    score: Number(saved.score) || 0,
+    totalItems: Number(saved.totalItems) || totalItemsCount,
+    doubleScoreQuestionIndex: Number(saved.doubleScoreQuestionIndex) >= 0 ? Number(saved.doubleScoreQuestionIndex) : -1,
+    timerSecondsLeft: Math.max(0, Number(saved.timerSecondsLeft) || 0),
+    timerPerQuestion: Number(saved.timerPerQuestion) || 0,
+    startTime,
+    elapsedSeconds: 0,
+    matchingSelections: (saved.matchingSelections && typeof saved.matchingSelections === 'object') ? saved.matchingSelections : {},
+    selectedMatchingChoice: null,
+    isSubmitted: false,
+    isWaitingFeedback: false,
+    matchingEvaluated: false,
+    matchingFeedback: null,
+    lastMatchingPointsEarned: 0,
+    secondChanceActive: false,
+    mcSecondChanceActive: false,
+    usedPowerups: (saved.usedPowerups && typeof saved.usedPowerups === 'object') ? saved.usedPowerups : {}
+  });
+
+  const modal = document.getElementById('interactiveQuizModal');
+
+  if (restoredIndex >= questions.length) {
+    interactivePlayerState.isSubmitted = true;
+    interactivePlayerState.elapsedSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+    clearActiveQuizSession();
+    if (modal) {
+      modal.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+    renderCompletedInteractiveScreen();
+    return true;
+  }
+
+  const isStudent = String(typeof ROLE !== 'undefined' ? ROLE : '').toLowerCase() === 'student';
+  const rawDue = quiz.dueDate || quiz.due_date;
+  const duePassed = isStudent && rawDue && !isNaN(new Date(rawDue).getTime()) && new Date(rawDue).getTime() < Date.now();
+
+  if (modal) {
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  if (duePassed) {
+    interactivePlayerState.isSubmitted = true;
+    if (typeof showToast === 'function') showToast('This assessment deadline has passed — submitting your saved answers.', 'warning');
+    setTimeout(() => finishInteractiveQuiz(), 400);
+    return true;
+  }
+
+  pendingRestoredTimerSeconds = saved.questionDeadlineAt
+    ? Math.max(0, Math.ceil((Number(saved.questionDeadlineAt) - Date.now()) / 1000))
+    : Math.max(0, Number(saved.timerSecondsLeft) || 0);
+  renderCurrentInteractiveQuestion();
+  startInteractiveSessionAutosave();
+  if (typeof showToast === 'function') showToast('Your quiz was restored — continue where you left off.', 'info');
+  return true;
+}
+window.restoreInteractiveQuizSession = restoreInteractiveQuizSession;
+
+/**
  * Opens and initializes the Interactive Quiz Arena
  */
 function openInteractiveQuiz(quizId) {
@@ -483,6 +624,8 @@ function openInteractiveQuiz(quizId) {
 
   playInteractiveBGM();
   renderCurrentInteractiveQuestion();
+  saveInteractiveSession();
+  startInteractiveSessionAutosave();
 }
 
 function openQuizQuestionsPreview(quizId) {
@@ -627,6 +770,8 @@ function closeInteractiveQuiz(confirmFirst = false) {
   stopConfetti();
   closeInteractiveHandoutModal();
   clearInterval(interactivePlayerState.timerInterval);
+  stopInteractiveSessionAutosave();
+  if (typeof clearActiveQuizSession === 'function') clearActiveQuizSession();
   const modal = document.getElementById('interactiveQuizModal');
   if (modal) {
     modal.classList.remove('active');
@@ -651,7 +796,7 @@ let lastActiveTimerIndex = -1;
 /**
  * Starts countdown timer for the current question
  */
-function startQuestionTimer() {
+function startQuestionTimer(initialSeconds) {
   if (lastActiveTimerIndex === interactivePlayerState.currentIndex && interactivePlayerState.timerInterval) {
     return;
   }
@@ -667,8 +812,15 @@ function startQuestionTimer() {
 
   if (timerVal <= 0) return;
 
-  interactivePlayerState.timerSecondsLeft = timerVal;
+  const override = typeof initialSeconds === 'number'
+    ? initialSeconds
+    : pendingRestoredTimerSeconds;
+  pendingRestoredTimerSeconds = null;
+  interactivePlayerState.timerSecondsLeft = override != null
+    ? Math.max(0, Math.round(override))
+    : timerVal;
   updateTimerUI();
+  saveInteractiveSession();
 
   interactivePlayerState.timerInterval = setInterval(() => {
     interactivePlayerState.timerSecondsLeft--;
@@ -1039,6 +1191,7 @@ function submitIdentificationAnswer(val, isTimeout = false) {
 
   if (isCorrect) interactivePlayerState.score++;
   interactivePlayerState.userResponses[q.id] = { label: q.question || '', given, correct, isCorrect };
+  saveInteractiveSession();
 
   const inputBox = document.querySelector('.iq-id-input-box');
   const inputField = document.getElementById('iqIdAnswerInput');
@@ -1413,6 +1566,7 @@ function submitMatchingAnswer() {
   interactivePlayerState.matchingEvaluated = true;
   interactivePlayerState.matchingFeedback = feedbackMap;
   interactivePlayerState.lastMatchingPointsEarned = matchesCorrect;
+  saveInteractiveSession();
 
   // Render board to show green/red per row
   renderMatchingBoardOnly();
@@ -1476,6 +1630,7 @@ function forceSubmitMatchingOnTimeout() {
   interactivePlayerState.matchingEvaluated = true;
   interactivePlayerState.matchingFeedback = feedbackMap;
   interactivePlayerState.lastMatchingPointsEarned = matchesCorrect;
+  saveInteractiveSession();
 
   renderMatchingBoardOnly();
 
@@ -2129,6 +2284,7 @@ function submitInteractiveMultiChoiceAnswer(isTimeout = false) {
     isCorrect,
     multipleAnswers: true
   };
+  saveInteractiveSession();
 
   // Color code cards
   const cards = document.querySelectorAll('.iq-mc-card');
@@ -2223,6 +2379,7 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
     ...(isTf ? { scoreMultiplier: multiplier, leaderboardPoints: isCorrect ? multiplier : 0 } : {})
   };
   if (isTf) interactivePlayerState.doubleScoreQuestionIndex = -1;
+  saveInteractiveSession();
 
   // Color-code the cards
   const cards = document.querySelectorAll('.iq-mc-card');
@@ -2373,6 +2530,7 @@ function advanceToNextQuestion() {
   interactivePlayerState.mcSecondChanceActive = false;
   closeInteractiveHandoutModal();
   interactivePlayerState.currentIndex++;
+  saveInteractiveSession();
   if (interactivePlayerState.currentIndex >= interactivePlayerState.questions.length) {
     interactivePlayerState.isSubmitted = true;
     finishInteractiveQuiz();
@@ -2387,6 +2545,8 @@ function advanceToNextQuestion() {
 async function finishInteractiveQuiz() {
   stopInteractiveBGM();
   clearInterval(interactivePlayerState.timerInterval);
+  stopInteractiveSessionAutosave();
+  if (typeof clearActiveQuizSession === 'function') clearActiveQuizSession();
   const { quiz, score, totalItems, startTime } = interactivePlayerState;
 
   const elapsedMs = Date.now() - (startTime || Date.now());

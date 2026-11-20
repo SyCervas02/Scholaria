@@ -71,10 +71,11 @@ async function refreshTeacherUnreadMessageCount() {
   const conversationIds = [...new Set((rows || []).map(row => row.conversation_id).filter(Boolean))];
   if (!conversationIds.length) { badge.textContent = '0'; lastTeacherUnreadMessageCount = 0; return; }
   const { data: messages, error: messageError } = await db.from('messages')
-    .select('conversation_id,sender_id,created_at').in('conversation_id', conversationIds);
+    .select('conversation_id,sender_id,created_at,body').in('conversation_id', conversationIds);
   if (messageError) { console.error('Could not load unread chat messages:', messageError.message); return; }
   const unreadCount = (messages || []).filter(message => {
     if (String(message.sender_id) === String(CURRENT_PROFILE.id)) return false;
+    if (parseChatEvent(message.body)) return false;
     const marker = getChatReadMarker(message.conversation_id);
     return !marker || new Date(message.created_at).getTime() > new Date(marker).getTime();
   }).length;
@@ -197,25 +198,68 @@ async function loadConversationsFromDB() {
   const unreadByConv = {};
   (lastMsgs || []).forEach(m => {
     if (String(m.sender_id) === String(CURRENT_PROFILE.id)) return;
+    if (parseChatEvent(m.body)) return;
     const marker = getChatReadMarker(m.conversation_id);
     if (!marker || new Date(m.created_at).getTime() > new Date(marker).getTime()) {
       unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id] || 0) + 1;
     }
   });
 
+  const msgsByConv = {};
+  (lastMsgs || []).forEach(m => {
+    (msgsByConv[m.conversation_id] = msgsByConv[m.conversation_id] || []).push(m);
+  });
+
   chatConversations = validPartRows.map(r => {
     const conv = Array.isArray(r.conversations) ? r.conversations[0] : r.conversations;
     if (!conv) return null;
-    const participants = (allParts || []).filter(p => p.conversation_id === conv.id);
-    const last = lastByConv[conv.id];
+    const convMsgs = msgsByConv[conv.id] || [];
+    const groupMeta = conv.is_group ? computeGroupMeta(conv, convMsgs) : null;
+
+    // A member removed through the three-dots menu keeps their history but is
+    // routed into Archived GCs until an add_members event brings them back.
+    if (groupMeta) {
+      const archivedAt = getGroupArchivedAt(conv.id);
+      const removedIsCurrent = groupMeta.removedMeAt &&
+        (!groupMeta.addedMeAt || new Date(groupMeta.removedMeAt).getTime() > new Date(groupMeta.addedMeAt).getTime());
+      if (removedIsCurrent && (!archivedAt || new Date(groupMeta.removedMeAt).getTime() >= new Date(archivedAt).getTime())) {
+        setGroupArchivedAt(conv.id, groupMeta.removedMeAt);
+      } else if (archivedAt && groupMeta.addedMeAt && new Date(groupMeta.addedMeAt).getTime() > new Date(archivedAt).getTime()) {
+        clearGroupArchivedAt(conv.id);
+      }
+    }
+
+    const participants = (allParts || []).filter(p => p.conversation_id === conv.id && !(groupMeta && groupMeta.removed[String(p.user_id)]));
+    if (groupMeta) {
+      Object.values(groupMeta.members).forEach(member => {
+        if (groupMeta.removed[member.user_id]) return;
+        if (!participants.some(p => String(p.user_id) === String(member.user_id))) {
+          participants.push(member);
+        }
+      });
+    }
+
+    const archivedAt = conv.is_group ? getGroupArchivedAt(conv.id) : '';
+    let last = lastByConv[conv.id];
+    if (archivedAt) {
+      // Archived chats must not leak messages sent after the archive point.
+      const cutoff = new Date(archivedAt).getTime();
+      last = convMsgs
+        .filter(m => new Date(m.created_at).getTime() <= cutoff)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+    }
     return {
       id: conv.id,
       isGroup: Boolean(conv.is_group),
-      title: conv.title,
+      title: (groupMeta && groupMeta.title) || conv.title,
+      photoUrl: (groupMeta && groupMeta.photoUrl) || '',
+      groupMeta,
+      createdBy: conv.created_by,
       participants,
       lastMessage: last ? last.body : '',
       lastMessageAt: last ? last.created_at : conv.created_at,
-      unread: conv.id === activeConversationId ? 0 : (unreadByConv[conv.id] || 0)
+      archivedAt,
+      unread: (conv.id === activeConversationId || archivedAt) ? 0 : (unreadByConv[conv.id] || 0)
     };
   }).filter(Boolean).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
 }
@@ -271,8 +315,173 @@ function parseChatAttachment(body) {
   return null;
 }
 
+/* ── GROUP CHAT EVENTS ──
+   Group metadata (name, photo, membership, permissions) is stored as
+   group_event messages because the client cannot update conversations rows
+   under RLS. Events replay chronologically into a per-conversation meta object. */
+function parseChatEvent(body) {
+  if (typeof body !== 'string') return null;
+  const trimmed = body.trim();
+  if (!trimmed.startsWith('{"type":"group_event"')) return null;
+  try {
+    const data = JSON.parse(trimmed);
+    return data && data.type === 'group_event' ? data : null;
+  } catch (e) { return null; }
+}
+
+function getArchivedGroupsStore() {
+  try {
+    const raw = localStorage.getItem('scholaria_archived_groups_v1');
+    const map = raw ? JSON.parse(raw) : {};
+    return map && typeof map === 'object' ? map : {};
+  } catch (e) { return {}; }
+}
+
+function getMyArchivedGroups() {
+  const store = getArchivedGroupsStore();
+  const uid = String(CURRENT_PROFILE?.id || 'guest');
+  return (store[uid] && typeof store[uid] === 'object') ? store[uid] : {};
+}
+
+function getGroupArchivedAt(convId) {
+  return getMyArchivedGroups()[convId] || '';
+}
+
+function setGroupArchivedAt(convId, iso) {
+  if (!convId) return;
+  const store = getArchivedGroupsStore();
+  const uid = String(CURRENT_PROFILE?.id || 'guest');
+  store[uid] = store[uid] || {};
+  store[uid][convId] = iso || new Date().toISOString();
+  try { localStorage.setItem('scholaria_archived_groups_v1', JSON.stringify(store)); } catch (e) {}
+}
+
+function clearGroupArchivedAt(convId) {
+  const store = getArchivedGroupsStore();
+  const uid = String(CURRENT_PROFILE?.id || 'guest');
+  if (!store[uid] || !store[uid][convId]) return;
+  delete store[uid][convId];
+  try { localStorage.setItem('scholaria_archived_groups_v1', JSON.stringify(store)); } catch (e) {}
+}
+
+function isGroupChatArchived(conv) {
+  return Boolean(conv && conv.isGroup && getGroupArchivedAt(conv.id));
+}
+
+function applyGroupEventToMeta(meta, ev, msg) {
+  if (!meta || !ev) return;
+  const at = msg?.created_at || ev.at || new Date().toISOString();
+  switch (ev.action) {
+    case 'rename':
+      if (ev.title) meta.title = String(ev.title).slice(0, 120);
+      break;
+    case 'photo':
+      meta.photoUrl = ev.url || '';
+      break;
+    case 'add_members':
+      (ev.members || []).forEach(member => {
+        const uid = String(member?.user_id || '');
+        if (!uid) return;
+        delete meta.removed[uid];
+        meta.members[uid] = {
+          user_id: uid,
+          full_name: member.full_name || 'Member',
+          role: member.role || 'student'
+        };
+        if (uid === String(CURRENT_PROFILE?.id || '')) meta.addedMeAt = at;
+      });
+      break;
+    case 'remove_member': {
+      const uid = String(ev.user_id || '');
+      if (!uid) break;
+      meta.removed[uid] = true;
+      delete meta.managers[uid];
+      if (uid === String(CURRENT_PROFILE?.id || '')) meta.removedMeAt = at;
+      break;
+    }
+    case 'permission': {
+      const uid = String(ev.user_id || '');
+      if (!uid) break;
+      if (ev.canManage) meta.managers[uid] = true;
+      else delete meta.managers[uid];
+      break;
+    }
+  }
+}
+
+function computeGroupMeta(conv, msgs) {
+  const meta = {
+    title: conv.title || '',
+    photoUrl: '',
+    managers: {},
+    removed: {},
+    members: {},
+    addedMeAt: '',
+    removedMeAt: ''
+  };
+  if (conv.created_by) meta.managers[String(conv.created_by)] = true;
+  [...(msgs || [])]
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .forEach(m => {
+      const ev = parseChatEvent(m.body);
+      if (ev) applyGroupEventToMeta(meta, ev, m);
+    });
+  return meta;
+}
+
+function ensureGroupMeta(conv) {
+  if (!conv || !conv.isGroup) return null;
+  if (!conv.groupMeta) {
+    conv.groupMeta = {
+      title: conv.title || '',
+      photoUrl: conv.photoUrl || '',
+      managers: {},
+      removed: {},
+      members: {},
+      addedMeAt: '',
+      removedMeAt: ''
+    };
+    if (conv.created_by) conv.groupMeta.managers[String(conv.created_by)] = true;
+  }
+  return conv.groupMeta;
+}
+
+function applyLiveGroupEvent(conv, ev, msg) {
+  const meta = ensureGroupMeta(conv);
+  if (!meta) return;
+  applyGroupEventToMeta(meta, ev, msg);
+  if (meta.title) conv.title = meta.title;
+  conv.photoUrl = meta.photoUrl || '';
+}
+
+function isGroupManager(conv) {
+  if (!conv || !conv.isGroup) return false;
+  const me = String(CURRENT_PROFILE?.id || '');
+  return String(conv.created_by || '') === me || Boolean(conv.groupMeta?.managers?.[me]);
+}
+
+function isConversationReadOnly(conv) {
+  if (!conv || !conv.isGroup) return false;
+  if (isGroupChatArchived(conv)) return true;
+  return Boolean(conv.groupMeta?.removed?.[String(CURRENT_PROFILE?.id || '')]);
+}
+
+function chatEventSummary(ev, senderName) {
+  const who = senderName || 'Someone';
+  switch (ev.action) {
+    case 'rename': return `${who} renamed the group to “${ev.title || 'Untitled'}”`;
+    case 'photo': return `${who} changed the group photo`;
+    case 'add_members': return `${who} added ${(ev.members || []).map(m => m.full_name || 'a member').join(', ')}`;
+    case 'remove_member': return `${who} removed ${ev.full_name || 'a member'}`;
+    case 'permission': return `${who} ${ev.canManage ? 'granted' : 'revoked'} group-management permission ${ev.canManage ? 'to' : 'from'} ${ev.full_name || 'a member'}`;
+    default: return `${who} updated the group`;
+  }
+}
+
 function conversationPreview(c) {
   if (!c || !c.lastMessage) return 'No messages yet';
+  const event = parseChatEvent(c.lastMessage);
+  if (event) return '📣 Group update';
   const attach = parseChatAttachment(c.lastMessage);
   if (attach) return `📎 Attachment: ${attach.name || 'File'}`;
   return c.lastMessage;
@@ -285,26 +494,49 @@ function renderContactsList() {
     box.innerHTML = `<div class="contact-empty chat-list-empty">${chatEmptyIllustration()}<h3>No conversations yet</h3><p>Tap the + button to message a teacher,<br>student, or start a group.</p><button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New conversation</button></div>`;
     return;
   }
+  const me = String(CURRENT_PROFILE?.id || '');
   const query = chatListState.search.trim().toLowerCase();
-  const filtered = chatConversations.filter(c =>
-    (!query || conversationLabel(c).toLowerCase().includes(query) || conversationPreview(c).toLowerCase().includes(query)) &&
-    (chatListState.role === 'all' || c.participants.some(p => p.user_id !== CURRENT_PROFILE.id && p.role === chatListState.role)));
+  const archivedMap = getMyArchivedGroups();
+  const filtered = chatConversations.filter(c => {
+    const archivedAt = c.isGroup ? (archivedMap[c.id] || '') : '';
+    if (chatListState.role === 'archived') {
+      if (!archivedAt) return false;
+    } else if (archivedAt) {
+      return false;
+    } else if (chatListState.role === 'group') {
+      if (!c.isGroup) return false;
+    } else if (chatListState.role !== 'all') {
+      if (c.isGroup) return false;
+      if (!c.participants.some(p => String(p.user_id) !== me && p.role === chatListState.role)) return false;
+    }
+    if (!query) return true;
+    return conversationLabel(c).toLowerCase().includes(query) || conversationPreview(c).toLowerCase().includes(query);
+  });
   if (!filtered.length) {
-    box.innerHTML = '<div class="contact-empty">No matching conversations.</div>';
+    const emptyMsg = chatListState.role === 'archived'
+      ? 'No archived group chats.'
+      : (chatListState.role === 'group' ? 'No group chats yet. Tap + to start one.' : 'No matching conversations.');
+    box.innerHTML = `<div class="contact-empty">${emptyMsg}</div>`;
     return;
   }
-  box.innerHTML = filtered.map(c => `
-    <div class="contact-row ${c.id === activeConversationId ? 'active-contact' : ''}" data-conv="${c.id}" onclick="openConversation('${c.id}')">
-      <div class="contact-avatar ${c.isGroup ? 'group-avatar' : ''}">${conversationInitials(c)}</div>
+  box.innerHTML = filtered.map(c => {
+    const archivedAt = c.isGroup ? (archivedMap[c.id] || '') : '';
+    const avatarInner = (c.isGroup && c.photoUrl)
+      ? `<img src="${escHtml(c.photoUrl)}" alt="Group photo" onerror="this.style.display='none';this.parentElement.textContent='👥';"/>`
+      : conversationInitials(c);
+    return `
+    <div class="contact-row ${c.id === activeConversationId ? 'active-contact' : ''} ${archivedAt ? 'contact-row-archived' : ''}" data-conv="${c.id}" onclick="openConversation('${c.id}')">
+      <div class="contact-avatar ${c.isGroup ? 'group-avatar' : ''} ${c.photoUrl ? 'has-photo' : ''}">${avatarInner}</div>
       <div class="contact-info">
-        <h4>${escHtml(conversationLabel(c))}</h4>
+        <h4>${escHtml(conversationLabel(c))}${archivedAt ? '<span class="contact-archived-tag">Archived</span>' : ''}</h4>
         <span>${escHtml(conversationPreview(c))}</span>
       </div>
       <div class="contact-meta">
         <span class="contact-time">${formatMsgTime(c.lastMessageAt, true)}</span>
         ${c.unread > 0 ? `<span class="contact-unread">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function openConversation(id) {
@@ -322,28 +554,39 @@ async function openConversation(id) {
   const name = document.getElementById('cwName');
   const role = document.getElementById('cwRole');
   const msgsBox = document.getElementById('cwMessages');
+  const archivedAt = conv.isGroup ? getGroupArchivedAt(conv.id) : '';
 
   if (avatar) {
-    avatar.className = 'contact-avatar' + (conv.isGroup ? ' group-avatar' : '');
-    avatar.textContent = conversationInitials(conv);
+    avatar.className = 'contact-avatar' + (conv.isGroup ? ' group-avatar' : '') + (conv.photoUrl ? ' has-photo' : '');
+    if (conv.isGroup && conv.photoUrl) {
+      avatar.innerHTML = `<img src="${escHtml(conv.photoUrl)}" alt="Group photo" onerror="this.style.display='none';this.parentElement.textContent='👥';"/>`;
+    } else {
+      avatar.textContent = conversationInitials(conv);
+    }
   }
   if (name) name.textContent = conversationLabel(conv);
   if (role) role.textContent = conversationSub(conv);
+  updateGroupChatHeaderControls(conv);
   renderInputArea();
   if (msgsBox) msgsBox.innerHTML = '<div class="cw-loading">Loading messages…</div>';
 
   const { data, error } = await db.from('messages')
     .select('*').eq('conversation_id', id).order('created_at', { ascending: true });
   if (error) { console.error('Failed to load messages:', error.message); return; }
-  (data || []).forEach(m => seenMessageIds.add(m.id));
-  const latestIncoming = (data || []).filter(m => String(m.sender_id) !== String(CURRENT_PROFILE?.id)).at(-1);
-  if (latestIncoming) setChatReadMarker(id, latestIncoming.created_at);
+  let visibleMsgs = data || [];
+  if (archivedAt) {
+    const cutoff = new Date(archivedAt).getTime();
+    visibleMsgs = visibleMsgs.filter(m => new Date(m.created_at).getTime() <= cutoff);
+  }
+  visibleMsgs.forEach(m => seenMessageIds.add(m.id));
+  const latestIncoming = visibleMsgs.filter(m => String(m.sender_id) !== String(CURRENT_PROFILE?.id)).at(-1);
+  if (latestIncoming && !archivedAt) setChatReadMarker(id, latestIncoming.created_at);
   conv.unread = 0;
   if (currentPage === 'dashboard' && ROLE === 'teacher') refreshTeacherUnreadMessageCount();
-  renderMessages(conv, data || [], prevReadMarker);
+  renderMessages(conv, visibleMsgs, prevReadMarker);
 
-  const lastMsg = (data && data.length) ? data[data.length - 1] : null;
-  markConversationSeen(id, lastMsg?.id, lastMsg?.created_at);
+  const lastMsg = visibleMsgs.length ? visibleMsgs[visibleMsgs.length - 1] : null;
+  if (!archivedAt) markConversationSeen(id, lastMsg?.id, lastMsg?.created_at);
   fetchChatSeenReceipts(id);
   startChatReceiptPolling(id);
 }
@@ -370,7 +613,29 @@ function closeConversation() {
     msgsBox.innerHTML = `<div class="cw-empty chat-welcome">${chatEmptyIllustration()}<h3>Start a conversation</h3><p>${isTeacher ? 'Message a student, connect with fellow teachers,<br>or create a class group.' : 'Message a teacher, connect with classmates,<br>or create a study group.'}</p><button class="chat-primary-btn" onclick="openNewChatModal()">${iconPlus()} New message</button></div>`;
   }
   renderInputArea();
+  updateGroupChatHeaderControls(null);
   renderContactsList();
+}
+
+function updateGroupChatHeaderControls(conv) {
+  const menuBtn = document.getElementById('cwGroupMenuBtn');
+  const pill = document.getElementById('cwArchivedPill');
+  if (menuBtn) menuBtn.style.display = (conv && conv.isGroup) ? 'inline-flex' : 'none';
+  if (pill) pill.style.display = (conv && conv.isGroup && getGroupArchivedAt(conv.id)) ? 'inline-flex' : 'none';
+  const menu = document.getElementById('cwGroupMenu');
+  if (menu) { menu.style.display = 'none'; menu.innerHTML = ''; }
+}
+
+function chatArchiveNoticeHtml(conv) {
+  if (!conv || !conv.isGroup) return '';
+  const me = String(CURRENT_PROFILE?.id || '');
+  if (conv.groupMeta?.removed?.[me]) {
+    return `<div class="cw-archive-notice is-removed">🚫 <span>You are no longer a member of this group. Your history stays viewable up to your removal; new messages are hidden until someone adds you back.</span></div>`;
+  }
+  const archivedAt = getGroupArchivedAt(conv.id);
+  if (!archivedAt) return '';
+  const when = new Date(archivedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return `<div class="cw-archive-notice">📦 <span>Archived ${escHtml(when)}. History is frozen here and new messages stay hidden.</span><button type="button" onclick="unarchiveActiveGroupChat()">Unarchive</button></div>`;
 }
 
 window._chatSeenReceipts = window._chatSeenReceipts || {};
@@ -490,7 +755,7 @@ function renderMessages(conv, msgs, prevReadMarker) {
   const box = document.getElementById('cwMessages');
   if (!box) return;
   if (!msgs.length) {
-    box.innerHTML = '<div class="cw-empty">No messages yet — say hi!</div>';
+    box.innerHTML = '<div class="cw-empty">No messages yet — say hi!</div>' + chatArchiveNoticeHtml(conv);
     updateSeenReceiptsUI(conv.id);
     box.scrollTop = box.scrollHeight;
     return;
@@ -513,7 +778,7 @@ function renderMessages(conv, msgs, prevReadMarker) {
     parts.push(messageBubbleHtml(conv, m, unread));
   });
 
-  box.innerHTML = parts.join('');
+  box.innerHTML = parts.join('') + chatArchiveNoticeHtml(conv);
   updateSeenReceiptsUI(conv.id);
   box.scrollTop = box.scrollHeight;
 }
@@ -618,6 +883,10 @@ window.toggleChatAttachmentMenu = toggleChatAttachmentMenu;
 window.downloadChatAttachment = downloadChatAttachment;
 
 function messageBubbleHtml(conv, m, isUnread = false) {
+  const groupEvent = parseChatEvent(m.body);
+  if (groupEvent) {
+    return `<div class="msg-group-event" data-mid="${m.id}"><span class="msg-group-event-icon">📣</span><span>${escHtml(chatEventSummary(groupEvent, m.sender_name || 'Someone'))}</span><span class="msg-group-event-time">${formatMsgTime(m.created_at)}</span></div>`;
+  }
   const mine = String(m.sender_id) === String(CURRENT_PROFILE?.id);
   const showName = (conv.isGroup || !mine) && m.sender_name && !mine;
   const attach = parseChatAttachment(m.body);
@@ -831,6 +1100,16 @@ function renderInputArea() {
     return;
   }
 
+  const activeConv = chatConversations.find(c => c.id === activeConversationId);
+  if (activeConv && activeConv.isGroup && isConversationReadOnly(activeConv)) {
+    const me = String(CURRENT_PROFILE?.id || '');
+    const removed = Boolean(activeConv.groupMeta?.removed?.[me]);
+    area.innerHTML = removed
+      ? `<div class="cw-readonly-notice is-removed">🚫 You were removed from this group. History stays viewable, but new messages are hidden until a manager adds you back.</div>`
+      : `<div class="cw-readonly-notice">📦 This group chat is archived. History is frozen and new messages stay hidden.<button type="button" onclick="unarchiveActiveGroupChat()">Unarchive</button></div>`;
+    return;
+  }
+
   const isImg = pendingChatAttachment && ((pendingChatAttachment.mime || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|svg)$/i.test(pendingChatAttachment.name));
   const previewImgSrc = pendingChatAttachment ? (pendingChatAttachment.previewUrl || getChatAttachmentUrl(pendingChatAttachment)) : '';
 
@@ -1030,7 +1309,7 @@ async function handleChatFileUpload(event) {
 
 // Profanity & severe content sanitizer for instant optimistic client rendering
 function censorProfanityText(rawText) {
-  if (!rawText || typeof rawText !== 'string' || rawText.trim().startsWith('{"type":"attachment"')) return rawText;
+  if (!rawText || typeof rawText !== 'string' || rawText.trim().startsWith('{"type":"attachment"') || rawText.trim().startsWith('{"type":"group_event"')) return rawText;
   const badWords = [
     'fuck', 'fucking', 'fucker', 'fuckin', 'motherfucker',
     'shit', 'shitty', 'bullshit',
@@ -1178,6 +1457,515 @@ async function sendChatMsg() {
   if (currentPage === 'chats') renderInputArea();
 }
 
+/* ── GROUP CHAT MANAGEMENT (THREE-DOTS MENU) ── */
+function handleIncomingGroupEvent(msg, ev) {
+  const conv = chatConversations.find(c => c.id === msg.conversation_id);
+  if (!conv) {
+    loadConversationsFromDB().then(() => renderContactsList());
+    return;
+  }
+
+  const meId = String(CURRENT_PROFILE?.id || '');
+  const wasArchived = isGroupChatArchived(conv);
+  const addedMe = ev.action === 'add_members' && (ev.members || []).some(member => String(member.user_id) === meId);
+  const removedMe = ev.action === 'remove_member' && String(ev.user_id) === meId;
+
+  applyLiveGroupEvent(conv, ev, msg);
+
+  if (wasArchived && addedMe) {
+    clearGroupArchivedAt(conv.id);
+    conv.archivedAt = '';
+    if (typeof showToast === 'function') showToast(`You were added back to ${conversationLabel(conv)}.`, 'success');
+    loadConversationsFromDB().then(() => {
+      renderContactsList();
+      if (activeConversationId === conv.id) openConversation(conv.id);
+    });
+    return;
+  }
+
+  if (removedMe) {
+    setGroupArchivedAt(conv.id, new Date().toISOString());
+    conv.archivedAt = getGroupArchivedAt(conv.id);
+    if (typeof showToast === 'function') showToast('You were removed from this group. It now lives in Archived GCs.', 'info');
+    if (activeConversationId === conv.id) openConversation(conv.id);
+    renderContactsList();
+    return;
+  }
+
+  if (isGroupChatArchived(conv)) {
+    renderContactsList();
+    return;
+  }
+
+  conv.lastMessage = msg.body;
+  conv.lastMessageAt = msg.created_at;
+
+  const isOpen = currentPage === 'chats' && activeConversationId === conv.id;
+  if (isOpen) {
+    const box = document.getElementById('cwMessages');
+    if (box) {
+      const empty = box.querySelector('.cw-empty');
+      if (empty) empty.remove();
+      if (!box.querySelector(`[data-mid="${msg.id}"]`)) {
+        box.insertAdjacentHTML('beforeend', messageBubbleHtml(conv, msg));
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+    refreshGroupChatUI(conv);
+  }
+
+  chatConversations.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+  if (currentPage === 'chats') renderContactsList();
+}
+
+function refreshGroupChatUI(conv) {
+  if (!conv) return;
+  if (activeConversationId === conv.id) {
+    const name = document.getElementById('cwName');
+    const role = document.getElementById('cwRole');
+    const avatar = document.getElementById('cwAvatar');
+    if (name) name.textContent = conversationLabel(conv);
+    if (role) role.textContent = conversationSub(conv);
+    if (avatar) {
+      avatar.className = 'contact-avatar' + (conv.isGroup ? ' group-avatar' : '') + (conv.photoUrl ? ' has-photo' : '');
+      if (conv.isGroup && conv.photoUrl) {
+        avatar.innerHTML = `<img src="${escHtml(conv.photoUrl)}" alt="Group photo" onerror="this.style.display='none';this.parentElement.textContent='👥';"/>`;
+      } else {
+        avatar.textContent = conversationInitials(conv);
+      }
+    }
+    updateGroupChatHeaderControls(conv);
+    renderInputArea();
+  }
+  if (currentPage === 'chats') renderContactsList();
+}
+
+function toggleGroupChatMenu(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  const conv = chatConversations.find(c => c.id === activeConversationId);
+  const menu = document.getElementById('cwGroupMenu');
+  if (!conv || !conv.isGroup || !menu) return;
+  if (menu.style.display === 'block') {
+    menu.style.display = 'none';
+    return;
+  }
+
+  const me = String(CURRENT_PROFILE?.id || '');
+  const manager = isGroupManager(conv);
+  const archived = Boolean(getGroupArchivedAt(conv.id));
+  const removed = Boolean(conv.groupMeta?.removed?.[me]);
+
+  const manageItems = manager ? `
+    <button type="button" onclick="gcOpenRenameModal()"><span>✏️</span> Change group name</button>
+    <button type="button" onclick="gcOpenPhotoModal()"><span>🖼️</span> Change group photo</button>
+    <button type="button" onclick="gcOpenAddMembersModal()"><span>➕</span> Add users</button>
+    <button type="button" onclick="gcOpenMembersModal()"><span>🛡️</span> Members &amp; permissions</button>
+  ` : `
+    <button type="button" onclick="gcOpenMembersModal()"><span>👥</span> View members</button>
+  `;
+
+  menu.innerHTML = `${manageItems}
+    ${archived
+      ? `<button type="button" class="gc-menu-primary" onclick="unarchiveActiveGroupChat()"><span>📤</span> Unarchive group chat</button>`
+      : (removed ? '' : `<button type="button" class="gc-menu-danger" onclick="gcArchiveActiveGroupChat()"><span>📦</span> Archive group chat</button>`)}
+  `;
+  menu.style.display = 'block';
+}
+
+function gcOpenModal(title, bodyHtml, footHtml) {
+  const groupMenu = document.getElementById('cwGroupMenu');
+  if (groupMenu) groupMenu.style.display = 'none';
+  let overlay = document.getElementById('gcModalOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'gcModalOverlay';
+    overlay.className = 'gc-modal-overlay';
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = `<div class="gc-modal-card" role="dialog" aria-modal="true" aria-label="${escHtml(title)}">
+    <header class="gc-modal-head"><h3>${escHtml(title)}</h3><button type="button" class="gc-modal-close" aria-label="Close" onclick="closeGroupChatModal()">&times;</button></header>
+    <div class="gc-modal-body">${bodyHtml}</div>
+    <footer class="gc-modal-foot">${footHtml || ''}</footer>
+  </div>`;
+  overlay.classList.add('active');
+}
+
+function closeGroupChatModal() {
+  const overlay = document.getElementById('gcModalOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  overlay.innerHTML = '';
+}
+
+function gcCurrentGroup() {
+  const conv = chatConversations.find(c => c.id === activeConversationId);
+  if (!conv || !conv.isGroup) {
+    if (typeof showToast === 'function') showToast('Open a group chat first.', 'info');
+    return null;
+  }
+  if (!isGroupManager(conv)) {
+    if (typeof showToast === 'function') showToast('Only group managers can do that.', 'warning');
+    return null;
+  }
+  return conv;
+}
+
+async function sendGroupEvent(event) {
+  const conv = chatConversations.find(c => c.id === activeConversationId);
+  if (!conv || !conv.isGroup) return false;
+  const payload = {
+    type: 'group_event',
+    ...event,
+    actor_id: CURRENT_PROFILE.id,
+    actor_name: CURRENT_PROFILE.full_name,
+    at: new Date().toISOString()
+  };
+  applyLiveGroupEvent(conv, payload, { sender_id: CURRENT_PROFILE.id, sender_name: CURRENT_PROFILE.full_name, created_at: payload.at });
+  conv.lastMessage = JSON.stringify(payload);
+  conv.lastMessageAt = payload.at;
+  await sendChatRawMessage(JSON.stringify(payload));
+  refreshGroupChatUI(conv);
+  return true;
+}
+
+function gcOpenRenameModal() {
+  const conv = gcCurrentGroup();
+  if (!conv) return;
+  gcOpenModal('Change group name',
+    `<label class="gc-label" for="gcRenameInput">Group name</label>
+     <input type="text" id="gcRenameInput" class="gc-input" maxlength="120" value="${escHtml(conv.title || '')}" placeholder="e.g. Grade 12 STEM Study Group">`,
+    `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Cancel</button>
+     <button type="button" class="gc-btn primary" onclick="gcSaveRename()">Save name</button>`);
+  setTimeout(() => document.getElementById('gcRenameInput')?.focus(), 60);
+}
+
+async function gcSaveRename() {
+  const conv = gcCurrentGroup();
+  const input = document.getElementById('gcRenameInput');
+  const title = (input?.value || '').trim();
+  if (!conv || !title) {
+    if (!title && typeof showToast === 'function') showToast('Enter a group name.', 'warning');
+    return;
+  }
+  closeGroupChatModal();
+  conv.title = title;
+  refreshGroupChatUI(conv);
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (session?.access_token) {
+      await fetch(`${window.API_BASE || ''}/api/chat/group-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ conversationId: conv.id, title })
+      });
+    }
+  } catch (_) {}
+  await sendGroupEvent({ action: 'rename', title });
+  if (typeof showToast === 'function') showToast('Group name updated.', 'success');
+}
+
+/* ── ADD MEMBERS ── */
+let gcAddState = { selected: new Set(), search: '' };
+
+async function gcEnsureDirectory() {
+  if (!newChatState.loaded || !newChatState.directory.length) {
+    try {
+      const { data, error } = await db.rpc('list_contacts');
+      if (!error) {
+        newChatState.directory = (data || []).filter(u => String(u.id) !== String(CURRENT_PROFILE?.id) && u.is_active !== false && u.isActive !== false);
+        newChatState.loaded = true;
+      }
+    } catch (_) {}
+  }
+  return newChatState.directory;
+}
+
+async function gcOpenAddMembersModal() {
+  const conv = gcCurrentGroup();
+  if (!conv) return;
+  gcAddState = { selected: new Set(), search: '' };
+  gcOpenModal('Add users to group',
+    `<div id="gcAddMembersWrap"><div class="gc-empty-note">Loading contacts…</div></div>`,
+    `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Cancel</button>
+     <button type="button" class="gc-btn primary" id="gcAddMembersBtn" onclick="gcConfirmAddMembers()" disabled>Add selected</button>`);
+  await gcEnsureDirectory();
+  gcRenderAddMembersList();
+}
+
+function gcRenderAddMembersList() {
+  const wrap = document.getElementById('gcAddMembersWrap');
+  const conv = chatConversations.find(c => c.id === activeConversationId);
+  if (!wrap || !conv) return;
+  const isStudent = typeof ROLE !== 'undefined' && ROLE === 'student';
+  const existingIds = new Set((conv.participants || []).map(p => String(p.user_id)));
+  const members = Object.entries(conv.groupMeta?.members || {}).filter(([uid]) => !conv.groupMeta?.removed?.[uid]).map(([, m]) => m);
+  members.forEach(m => existingIds.add(String(m.user_id)));
+
+  const q = gcAddState.search.trim().toLowerCase();
+  const candidates = newChatState.directory.filter(c => {
+    if (existingIds.has(String(c.id))) return false;
+    if (isStudent && String(c.role || '').toLowerCase() !== 'student') return false;
+    return !q || c.full_name.toLowerCase().includes(q) || String(c.role || '').toLowerCase().includes(q);
+  });
+
+  const rowsHtml = candidates.length ? candidates.map(c => {
+    const id = String(c.id);
+    const picked = gcAddState.selected.has(id);
+    return `<label class="gc-member-row ${picked ? 'picked' : ''}" data-gc-add="${escHtml(id)}">
+      <input type="checkbox" ${picked ? 'checked' : ''} onchange="gcToggleAddMember('${id}')">
+      <div class="contact-avatar" style="width:32px;height:32px;font-size:11px;">${initialsFor(c.full_name)}</div>
+      <div class="contact-info"><h4>${escHtml(c.full_name)}</h4><span>${escHtml(String(c.role || '').charAt(0).toUpperCase() + String(c.role || '').slice(1))}${c.school_id ? ' · ' + escHtml(c.school_id) : ''}</span></div>
+    </label>`;
+  }).join('') : '<div class="gc-empty-note">No eligible people to add.</div>';
+
+  wrap.innerHTML = `
+    <input type="search" class="gc-input" placeholder="Search people…" value="${escHtml(gcAddState.search)}" oninput="gcFilterAddMembers(this.value)">
+    <div class="gc-member-list">${rowsHtml}</div>
+    ${isStudent ? '<p class="gc-empty-note">Students can only add fellow students to group chats.</p>' : ''}`;
+
+  const btn = document.getElementById('gcAddMembersBtn');
+  if (btn) {
+    btn.disabled = gcAddState.selected.size === 0;
+    btn.textContent = gcAddState.selected.size ? `Add ${gcAddState.selected.size} selected` : 'Add selected';
+  }
+}
+
+function gcToggleAddMember(id) {
+  if (gcAddState.selected.has(id)) gcAddState.selected.delete(id);
+  else gcAddState.selected.add(id);
+  gcRenderAddMembersList();
+}
+
+function gcFilterAddMembers(value) {
+  gcAddState.search = value;
+  gcRenderAddMembersList();
+  const input = document.querySelector('#gcAddMembersWrap input[type="search"]');
+  if (input) {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+}
+
+async function gcConfirmAddMembers() {
+  const conv = gcCurrentGroup();
+  if (!conv || !gcAddState.selected.size) return;
+  const members = newChatState.directory
+    .filter(c => gcAddState.selected.has(String(c.id)))
+    .map(c => ({ user_id: String(c.id), full_name: c.full_name, role: String(c.role || 'student') }));
+  if (!members.length) return;
+
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    let serverAdded = false;
+    if (session?.access_token) {
+      const res = await fetch(`${window.API_BASE || ''}/api/chat/group-members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+        body: JSON.stringify({ conversationId: conv.id, members })
+      });
+      serverAdded = res.ok;
+    }
+    if (!serverAdded) {
+      await db.from('conversation_participants').insert(
+        members.map(member => ({ conversation_id: conv.id, user_id: member.user_id, full_name: member.full_name, role: member.role }))
+      );
+    }
+  } catch (_) {
+    try {
+      await db.from('conversation_participants').insert(
+        members.map(member => ({ conversation_id: conv.id, user_id: member.user_id, full_name: member.full_name, role: member.role }))
+      );
+    } catch (_) {}
+  }
+
+  closeGroupChatModal();
+  await sendGroupEvent({ action: 'add_members', members });
+  await loadConversationsFromDB();
+  const updated = chatConversations.find(c => c.id === conv.id);
+  if (updated) refreshGroupChatUI(updated);
+  if (typeof showToast === 'function') showToast(`${members.length} member${members.length > 1 ? 's' : ''} added.`, 'success');
+}
+
+/* ── MEMBERS & PERMISSIONS ── */
+function gcOpenMembersModal() {
+  const conv = chatConversations.find(c => c.id === activeConversationId);
+  if (!conv || !conv.isGroup) return;
+  gcRenderMembersModal(conv);
+}
+
+function gcRenderMembersModal(conv) {
+  const me = String(CURRENT_PROFILE?.id || '');
+  const manager = isGroupManager(conv);
+  const meta = conv.groupMeta || {};
+  const seen = new Set();
+  const rows = [];
+
+  (conv.participants || []).forEach(p => {
+    const uid = String(p.user_id);
+    if (seen.has(uid) || meta.removed?.[uid]) return;
+    seen.add(uid);
+    rows.push({ user_id: uid, full_name: p.full_name || 'Member', role: p.role || 'student' });
+  });
+  Object.entries(meta.members || {}).forEach(([uid, member]) => {
+    if (seen.has(uid) || meta.removed?.[uid]) return;
+    seen.add(uid);
+    rows.push({ user_id: uid, full_name: member.full_name || 'Member', role: member.role || 'student' });
+  });
+
+  const rowsHtml = rows.map(row => {
+    const isMe = row.user_id === me;
+    const isManager = Boolean(meta.managers?.[row.user_id]) || String(conv.createdBy || '') === row.user_id;
+    const actions = (manager && !isMe) ? `
+      <div class="gc-member-actions">
+        <button type="button" class="gc-mini-btn" onclick="gcTogglePermission('${row.user_id}', ${!isManager})">${isManager ? 'Revoke manage' : 'Make manager'}</button>
+        <button type="button" class="gc-mini-btn danger" onclick="gcRemoveMember('${row.user_id}')">Remove</button>
+      </div>` : '';
+    return `<div class="gc-member-row">
+      <div class="contact-avatar" style="width:34px;height:34px;font-size:12px;">${initialsFor(row.full_name)}</div>
+      <div class="contact-info"><h4>${escHtml(row.full_name)}${isMe ? ' <span class="gc-you-tag">you</span>' : ''}</h4><span>${escHtml(String(row.role || '').charAt(0).toUpperCase() + String(row.role || '').slice(1))}${isManager ? ' · Manager' : ''}</span></div>
+      ${actions}
+    </div>`;
+  }).join('');
+
+  gcOpenModal('Group members',
+    `<div class="gc-member-list">${rowsHtml || '<div class="gc-empty-note">No members found.</div>'}</div>
+     ${manager ? '<p class="gc-empty-note">Managers can rename the group, change its photo, and add or remove members.</p>' : ''}`,
+    `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Close</button>`);
+}
+
+function gcMemberDisplayName(conv, userId) {
+  const uid = String(userId);
+  const fromParts = (conv?.participants || []).find(p => String(p.user_id) === uid);
+  if (fromParts?.full_name) return fromParts.full_name;
+  return conv?.groupMeta?.members?.[uid]?.full_name || 'Member';
+}
+
+async function gcTogglePermission(userId, canManage) {
+  const conv = gcCurrentGroup();
+  if (!conv) return;
+  const fullName = gcMemberDisplayName(conv, userId);
+  closeGroupChatModal();
+  await sendGroupEvent({ action: 'permission', user_id: String(userId), full_name: fullName, canManage: Boolean(canManage) });
+  gcOpenMembersModal();
+  if (typeof showToast === 'function') showToast(canManage ? `${fullName} can now manage the group.` : `${fullName} is no longer a group manager.`, 'success');
+}
+
+async function gcRemoveMember(userId) {
+  const conv = gcCurrentGroup();
+  if (!conv) return;
+  const fullName = gcMemberDisplayName(conv, userId);
+  closeGroupChatModal();
+  await sendGroupEvent({ action: 'remove_member', user_id: String(userId), full_name: fullName });
+  gcOpenMembersModal();
+  if (typeof showToast === 'function') showToast(`${fullName} was removed from the group.`, 'info');
+}
+
+/* ── GROUP PHOTO ── */
+function gcOpenPhotoModal() {
+  const conv = gcCurrentGroup();
+  if (!conv) return;
+  gcOpenModal('Change group photo',
+    `<p class="gc-empty-note">Upload a square image for the best result (max 5MB).</p>
+     <input type="file" id="gcPhotoInput" class="gc-file-input" accept="image/*" onchange="gcUploadPhoto(event)">
+     <div id="gcPhotoStatus" class="gc-empty-note"></div>`,
+    `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Cancel</button>`);
+}
+
+async function gcUploadPhoto(event) {
+  const file = event.target.files && event.target.files[0];
+  const conv = gcCurrentGroup();
+  if (!file || !conv) return;
+  if (file.size > 5 * 1024 * 1024) {
+    if (typeof showToast === 'function') showToast('Group photo must be under 5MB.', 'error');
+    event.target.value = '';
+    return;
+  }
+  const status = document.getElementById('gcPhotoStatus');
+  if (status) status.textContent = 'Uploading photo…';
+  let url = '';
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (session?.access_token) {
+      const formData = new FormData();
+      formData.append('file', file);
+      const upRes = await fetch(`${window.API_BASE || ''}/api/chat/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        body: formData
+      });
+      if (upRes.ok) {
+        const upData = await upRes.json();
+        url = upData.storageUrl || upData.url || '';
+      }
+    }
+  } catch (_) {}
+  if (!url && window.db?.storage) {
+    try {
+      const cleanName = `${Date.now()}-${Math.random().toString(16).slice(2, 10)}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const { error } = await window.db.storage.from('chat-attachments').upload(cleanName, file, { contentType: file.type || 'image/png', upsert: true });
+      if (!error) url = `https://qxpsbewbgdwkermxeeso.supabase.co/storage/v1/object/public/chat-attachments/${encodeURIComponent(cleanName)}`;
+    } catch (_) {}
+  }
+  if (!url) {
+    if (status) status.textContent = 'Upload failed. Please try again.';
+    event.target.value = '';
+    return;
+  }
+  closeGroupChatModal();
+  conv.photoUrl = url;
+  refreshGroupChatUI(conv);
+  await sendGroupEvent({ action: 'photo', url, name: file.name });
+  if (typeof showToast === 'function') showToast('Group photo updated.', 'success');
+}
+
+/* ── ARCHIVE / UNARCHIVE ── */
+function gcArchiveActiveGroupChat() {
+  const conv = chatConversations.find(c => c.id === activeConversationId);
+  if (!conv || !conv.isGroup) return;
+  gcOpenModal('Archive group chat',
+    `<p>Archive <strong>${escHtml(conversationLabel(conv))}</strong>?</p>
+     <p class="gc-empty-note">You'll keep the history up to this point in Archived GCs. New messages stay hidden until someone adds you back, or until you unarchive it yourself.</p>`,
+    `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Cancel</button>
+     <button type="button" class="gc-btn danger" onclick="gcConfirmArchive()">Archive group chat</button>`);
+}
+
+function gcConfirmArchive() {
+  const conv = chatConversations.find(c => c.id === activeConversationId);
+  closeGroupChatModal();
+  if (!conv) return;
+  setGroupArchivedAt(conv.id, new Date().toISOString());
+  conv.archivedAt = getGroupArchivedAt(conv.id);
+  if (typeof showToast === 'function') showToast('Group chat archived. Find it under Archived GCs.', 'info');
+  chatListState.role = 'archived';
+  setChatFilter('archived');
+  closeConversation();
+}
+
+function unarchiveActiveGroupChat() {
+  const convId = activeConversationId;
+  if (!convId) return;
+  const conv = chatConversations.find(c => c.id === convId);
+  const me = String(CURRENT_PROFILE?.id || '');
+  if (conv?.groupMeta?.removed?.[me]) {
+    if (typeof showToast === 'function') showToast('You were removed from this group. A manager must add you back.', 'warning');
+    return;
+  }
+  clearGroupArchivedAt(convId);
+  if (conv) conv.archivedAt = '';
+  if (typeof showToast === 'function') showToast('Group chat unarchived — you can continue messaging.', 'success');
+  chatListState.role = 'group';
+  setChatFilter('group');
+  if (conv) openConversation(conv.id);
+}
+
+document.addEventListener('click', e => {
+  const menu = document.getElementById('cwGroupMenu');
+  const btn = document.getElementById('cwGroupMenuBtn');
+  if (menu && menu.style.display === 'block' && !menu.contains(e.target) && !(btn && btn.contains(e.target))) {
+    menu.style.display = 'none';
+  }
+});
+
 function ensureChatRealtimeSubscription() {
   if (chatRealtimeChannel) return;
   chatRealtimeChannel = db.channel('messages-listener')
@@ -1192,6 +1980,12 @@ function handleIncomingMessage(msg) {
   if (seenMessageIds.has(msg.id)) return;
   seenMessageIds.add(msg.id);
 
+  const incomingEvent = parseChatEvent(msg.body);
+  if (incomingEvent) {
+    handleIncomingGroupEvent(msg, incomingEvent);
+    return;
+  }
+
   const conv = chatConversations.find(c => c.id === msg.conversation_id);
   if (!conv) {
     loadConversationsFromDB().then(() => {
@@ -1200,6 +1994,8 @@ function handleIncomingMessage(msg) {
     });
     return;
   }
+
+  if (conv.isGroup && isConversationReadOnly(conv)) return;
 
   conv.lastMessage = msg.body;
   conv.lastMessageAt = msg.created_at;

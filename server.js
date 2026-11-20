@@ -168,8 +168,12 @@ app.use((req, res, next) => {
 });
 
 // --- Supabase client for token validation & admin operations ---
-const activeAdminKey = (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY.startsWith('eyJ')) 
-  ? process.env.SUPABASE_SERVICE_ROLE_KEY 
+// Supabase now issues service keys in the new `sb_secret_...` format as well as
+// the legacy `eyJ...` JWT format. Accept both instead of silently downgrading
+// admin operations to the anon key (which made RLS-protected writes no-ops).
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const activeAdminKey = (serviceRoleKey.startsWith('eyJ') || serviceRoleKey.startsWith('sb_secret_'))
+  ? serviceRoleKey
   : process.env.SUPABASE_ANON_KEY;
 
 const supabaseAdmin = createClient(
@@ -1075,6 +1079,62 @@ app.get('/api/admin/user-credential', async (req, res) => {
 
 // A holder who sets their own password clears the admin-side copy of the old
 // temporary key. The client calls this right after a successful password update.
+// Profile self-service fields. The public.users table only grants UPDATE to
+// admins, so a browser-side update silently affects zero rows. Verify the
+// caller's session and persist through the service-role client instead.
+app.post('/api/me/profile', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const allowedFields = ['full_name', 'email', 'contact_number', 'bio', 'online_status', 'status_message', 'avatar_url'];
+  const payload = {};
+  allowedFields.forEach(field => {
+    if (req.body && req.body[field] !== undefined) payload[field] = req.body[field];
+  });
+  if (!Object.keys(payload).length) {
+    return res.status(400).json({ error: 'No profile fields provided' });
+  }
+  const validStatuses = ['online', 'away', 'busy', 'offline'];
+  if (payload.online_status !== undefined && !validStatuses.includes(payload.online_status)) {
+    payload.online_status = 'online';
+  }
+  payload.last_active_at = new Date().toISOString();
+
+  const returnColumns = 'id, full_name, email, contact_number, bio, online_status, status_message, avatar_url, last_active_at';
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update(payload)
+      .eq('id', profile.id)
+      .select(returnColumns);
+    if (error) return res.status(500).json({ error: error.message });
+    if (Array.isArray(data) && data.length) {
+      return res.json({ success: true, profile: data[0] });
+    }
+
+    // Fall back to the caller's token in case a self-update RLS policy exists.
+    try {
+      const userRes = await req.userClient
+        .from('users')
+        .update(payload)
+        .eq('id', profile.id)
+        .select(returnColumns);
+      if (!userRes.error && Array.isArray(userRes.data) && userRes.data.length) {
+        return res.json({ success: true, profile: userRes.data[0] });
+      }
+    } catch (_) {}
+
+    return res.status(409).json({
+      success: false,
+      code: 'PROFILE_UPDATE_BLOCKED',
+      error: 'The database rejected the profile update. Please contact an administrator.'
+    });
+  } catch (err) {
+    console.error('Profile update error:', err.message);
+    return res.status(500).json({ error: 'Could not save profile' });
+  }
+});
+
 app.post('/api/me/password-set', async (req, res) => {
   const profile = await requireUser(req, res);
   if (!profile) return;
@@ -1300,6 +1360,7 @@ app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
 
   const relativeUrl = `/uploads/chat/${req.file.filename}`;
   let base64Data = null;
+  let storageUrl = null;
   try {
     const fileBuf = fs.readFileSync(req.file.path);
     base64Data = `data:${req.file.mimetype};base64,${fileBuf.toString('base64')}`;
@@ -1315,6 +1376,8 @@ app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
       if (storageErr) {
         console.warn('[Chat] Supabase Storage upload error:', storageErr.message);
       } else {
+        const sbUrl = (process.env.SUPABASE_URL || 'https://qxpsbewbgdwkermxeeso.supabase.co').replace(/\/+$/, '');
+        storageUrl = `${sbUrl}/storage/v1/object/public/chat-attachments/${encodeURIComponent(req.file.filename)}`;
         console.log('[Chat] Successfully uploaded attachment to Supabase Storage:', req.file.filename);
       }
     }
@@ -1324,6 +1387,7 @@ app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
 
   res.json({
     url: relativeUrl,
+    storageUrl,
     name: req.file.originalname,
     size: req.file.size,
     mime: req.file.mimetype,
@@ -1348,6 +1412,7 @@ app.post('/api/chat/send', async (req, res) => {
   }
 
   const isAttachment = typeof text === 'string' && text.trim().startsWith('{"type":"attachment"');
+  const isGroupEvent = typeof text === 'string' && text.trim().startsWith('{"type":"group_event"');
   let textToCheck = text;
   let parsedAttachment = null;
   if (isAttachment) {
@@ -1359,10 +1424,10 @@ app.post('/api/chat/send', async (req, res) => {
     }
   }
 
-  const localCheck = checkLocalContent(textToCheck);
+  const localCheck = checkLocalContent(isGroupEvent ? '' : textToCheck);
 
   let modResult = { flagged: false, categories: {} };
-  if (!isAttachment && textToCheck && textToCheck.trim().length > 0) {
+  if (!isAttachment && !isGroupEvent && textToCheck && textToCheck.trim().length > 0) {
     try {
       const modRes = await fetch('https://api.openai.com/v1/moderations', {
         method: 'POST',
@@ -1387,8 +1452,8 @@ app.post('/api/chat/send', async (req, res) => {
     .map(([k]) => k);
 
   const severeCategories = ['hate', 'hate/threatening', 'harassment/threatening', 'violence/graphic', 'self-harm', 'self-harm/intent', 'self-harm/instructions'];
-  const isSevere = !isAttachment && (localCheck.severeFlagged || flaggedCategories.some(c => severeCategories.includes(c)));
-  const isProfanity = !isAttachment && !isSevere && (localCheck.profanityFlagged || modResult.flagged);
+  const isSevere = !isAttachment && !isGroupEvent && (localCheck.severeFlagged || flaggedCategories.some(c => severeCategories.includes(c)));
+  const isProfanity = !isAttachment && !isGroupEvent && !isSevere && (localCheck.profanityFlagged || modResult.flagged);
 
   let finalBody = text;
   let warning = null;
@@ -1484,6 +1549,94 @@ app.post('/api/chat/send', async (req, res) => {
   }
 
   res.json({ ...message, warning });
+});
+
+// Group chat membership: participants are only appended (never deleted), and
+// the service role is used because conversation_participants RLS is scoped to
+// the conversation creator. Conversation metadata lives in group_event
+// messages as well, so a failed write here still degrades gracefully.
+app.post('/api/chat/group-members', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const conversationId = req.body?.conversationId;
+  const members = Array.isArray(req.body?.members) ? req.body.members : [];
+  if (!conversationId || !members.length) {
+    return res.status(400).json({ error: 'Missing conversationId or members' });
+  }
+
+  try {
+    const { data: membership } = await supabaseAdmin
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationId)
+      .eq('user_id', profile.id)
+      .limit(1);
+    if (!membership || !membership.length) {
+      return res.status(403).json({ error: 'You are not part of this conversation' });
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationId);
+    const existingIds = new Set((existing || []).map(row => String(row.user_id)));
+
+    const rows = members
+      .filter(m => m && m.user_id && !existingIds.has(String(m.user_id)))
+      .slice(0, 50)
+      .map(m => ({
+        conversation_id: conversationId,
+        user_id: String(m.user_id),
+        full_name: String(m.full_name || 'Member'),
+        role: String(m.role || 'student')
+      }));
+
+    if (!rows.length) return res.json({ success: true, added: 0 });
+
+    const { error } = await supabaseAdmin.from('conversation_participants').insert(rows);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ success: true, added: rows.length });
+  } catch (err) {
+    console.error('Group member add error:', err.message);
+    return res.status(500).json({ error: 'Could not add group members' });
+  }
+});
+
+// Renames the group in the conversations table. The client also records a
+// group_event message so every member's UI converges even when this is blocked.
+app.post('/api/chat/group-update', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+
+  const conversationId = req.body?.conversationId;
+  const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 120) : '';
+  if (!conversationId || !title) {
+    return res.status(400).json({ error: 'Missing conversationId or title' });
+  }
+
+  try {
+    const { data: membership } = await supabaseAdmin
+      .from('conversation_participants')
+      .select('user_id')
+      .eq('conversation_id', conversationId)
+      .eq('user_id', profile.id)
+      .limit(1);
+    if (!membership || !membership.length) {
+      return res.status(403).json({ error: 'You are not part of this conversation' });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('conversations')
+      .update({ title })
+      .eq('id', conversationId)
+      .eq('is_group', true);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Group rename error:', err.message);
+    return res.status(500).json({ error: 'Could not rename group' });
+  }
 });
 
 // Persists the per-conversation read marker. Without this the client's

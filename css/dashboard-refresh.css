@@ -1505,11 +1505,19 @@ body { background: #f1f7ff; }
 }
 .main[data-role="teacher"][data-page="analysis"] .analysis-correct-answer {
   display: inline-block;
+  max-width: 100%;
   padding: 3px 9px;
   border-radius: 50px;
   background: #d1fae5;
   color: #059669;
   font-weight: 700;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
+  text-align: left;
+  vertical-align: middle;
+  box-sizing: border-box;
 }
 
 /* Keep the Item Analysis tabs and filters aligned in one row on desktop. */

@@ -1304,6 +1304,13 @@ let sectionViewTab = 'active'; // 'active' | 'archived'
 
 function setSectionViewTab(tab) {
   sectionViewTab = tab;
+  // The tab strip is rendered once with the section list; sync the active
+  // class here so the clicked pill visibly highlights immediately.
+  document.querySelectorAll('.anc-archive-tab').forEach(btn => {
+    const isActive = btn.dataset.sectionTab === sectionViewTab;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-selected', String(isActive));
+  });
   filterSectionsView();
 }
 
@@ -1317,10 +1324,10 @@ function renderSectionsTabContent() {
     <!-- ── ACTIVE VS ARCHIVED SECTION TABS ── -->
     <div style="display:flex;align-items:center;margin-bottom:16px;">
       <div style="display:inline-flex;background:#f1f5f9;padding:4px;border-radius:12px;gap:6px;border:1px solid #e2e8f0;">
-        <button type="button" class="anc-archive-tab ${sectionViewTab === 'active' ? 'active' : ''}" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="setSectionViewTab('active')">
+        <button type="button" class="anc-archive-tab ${sectionViewTab === 'active' ? 'active' : ''}" data-section-tab="active" aria-selected="${sectionViewTab === 'active'}" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="setSectionViewTab('active')">
           🏫 Active Sections (${activeCount})
         </button>
-        <button type="button" class="anc-archive-tab ${sectionViewTab === 'archived' ? 'active' : ''}" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="setSectionViewTab('archived')">
+        <button type="button" class="anc-archive-tab ${sectionViewTab === 'archived' ? 'active' : ''}" data-section-tab="archived" aria-selected="${sectionViewTab === 'archived'}" style="padding:7px 16px;font-size:13px;font-weight:700;border-radius:8px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="setSectionViewTab('archived')">
           📦 Archived Sections (${archivedCount})
         </button>
       </div>
