@@ -2342,7 +2342,12 @@ function studentPage(page) {
       );
       const latestAttempt = myQuizAttempts[0] || null;
       const latestQuizTitle = latestAttempt ? ((typeof customQuizzes !== 'undefined' ? customQuizzes : []).find(q => q.id === latestAttempt.quiz_id)?.title || 'Quiz') : null;
-      const latestScorePct = latestAttempt && latestAttempt.total_items ? Math.round((latestAttempt.score / latestAttempt.total_items) * 100) : 63;
+      const latestAttemptPct = latestAttempt && Number(latestAttempt.total_items) > 0
+        ? (Number(latestAttempt.score) / Number(latestAttempt.total_items)) * 100
+        : NaN;
+      const latestScorePct = Number.isFinite(latestAttemptPct)
+        ? Math.max(0, Math.min(100, Math.round(latestAttemptPct)))
+        : null;
 
       const enrolledCoursesCount = typeof isCourseOpenForStudent === 'function'
         ? getStudentDashboardSubjects('enrolled').length
@@ -2351,7 +2356,7 @@ function studentPage(page) {
       const completedQuizzesCount = myQuizAttempts.length;
       const pendingQuizzesCount = availableQuizzes.length;
       const totalQuizzesTracked = completedQuizzesCount + pendingQuizzesCount;
-      const progressPct = totalQuizzesTracked > 0 ? Math.round((completedQuizzesCount / totalQuizzesTracked) * 100) : 44;
+      const progressPct = totalQuizzesTracked > 0 ? Math.round((completedQuizzesCount / totalQuizzesTracked) * 100) : 0;
       const C = 238.76;
       const qCompLen = totalQuizzesTracked > 0 ? (completedQuizzesCount / totalQuizzesTracked) * C : 0;
       const qPendLen = totalQuizzesTracked > 0 ? (pendingQuizzesCount / totalQuizzesTracked) * C : 0;
@@ -2362,8 +2367,8 @@ function studentPage(page) {
       const activeAnnouncements = allAnc.filter(a => !a.isArchived && a.status !== 'draft' && !a.isDraft && !(a.expiresAt && new Date(a.expiresAt).getTime() <= Date.now()));
       const unreadCount = activeAnnouncements.filter(a => !readAnc.has(String(a.id))).length;
 
-      const studentName = (CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || 'Michael').trim();
-      const firstName = studentName.split(/\s+/)[0] || 'Michael';
+      const studentName = (CURRENT_PROFILE?.full_name || CURRENT_PROFILE?.name || 'Student').trim();
+      const firstName = studentName.split(/\s+/)[0] || 'Student';
 
       // Greeting based on time of day
       const hour = new Date().getHours();
@@ -2433,8 +2438,8 @@ function studentPage(page) {
           </div>
           <div class="stat-card-info">
             <div class="stat-card-label">Latest Score</div>
-            <div class="stat-card-num green">${latestScorePct}%</div>
-            <div class="stat-card-desc">Your current average</div>
+            <div class="stat-card-num green">${latestScorePct === null ? '—' : latestScorePct + '%'}</div>
+            <div class="stat-card-desc">${latestScorePct === null ? 'No quizzes completed yet' : 'Your current average'}</div>
           </div>
           <span class="stat-card-arrow">›</span>
         </div>
@@ -2485,13 +2490,12 @@ function studentPage(page) {
                 if (!activeNews.length) {
                   return `
                     <div class="news-bulletin-item" onclick="renderPage('announcements')">
-                      <span class="dashboard-news-icon academic">${dashboardIcon('book')}</span>
+                      <span class="dashboard-news-icon academic">${dashboardIcon('news')}</span>
                       <div class="news-item-top">
-                        <span class="news-tag academic">ACADEMIC</span>
-                        <span class="news-time">Today</span>
+                        <span class="news-tag">NO ANNOUNCEMENTS</span>
                       </div>
-                      <div class="news-item-title">Welcome to Scholaria Portal</div>
-                      <div class="news-item-snippet">Check back here for official school announcements, typhoon class suspensions, and department bulletins.</div>
+                      <div class="news-item-title">No school announcements yet</div>
+                      <div class="news-item-snippet">Official bulletins, class suspensions, and school events will appear here.</div>
                     </div>
                   `;
                 }
@@ -2579,7 +2583,7 @@ function studentPage(page) {
                 </div>
                 <div class="progress-breakdown-item total">
                   <span class="pbi-label"><span class="pbi-dot purple"></span> Current Average</span>
-                  <strong style="color:#7c3aed;">${latestScorePct}%</strong>
+                  <strong style="color:#7c3aed;">${latestScorePct === null ? '—' : latestScorePct + '%'}</strong>
                 </div>
               </div>
             </div>
@@ -4836,9 +4840,9 @@ function renderAdminAcademicReportsContent() {
   const allEntries = typeof buildRealClassRecordEntries === 'function' ? buildRealClassRecordEntries() : [];
   const students = registeredUsers.filter(u => u.role === 'student');
   const validAvgs = allEntries.map(e => e.avg).filter(a => a !== null && !isNaN(a));
-  const overallAvg = validAvgs.length ? (validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length).toFixed(2) : '82.50';
+  const overallAvg = validAvgs.length ? (validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length).toFixed(2) : null;
   const passingCount = validAvgs.filter(a => a >= 75).length;
-  const passRate = validAvgs.length ? Math.round((passingCount / validAvgs.length) * 100) : 88;
+  const passRate = validAvgs.length ? Math.round((passingCount / validAvgs.length) * 100) : null;
 
   const secSummaries = (managedSections || []).map(sec => {
     const secStudents = allEntries.filter(e => (e.section || '').trim().toLowerCase() === sec.name.trim().toLowerCase());
@@ -4878,11 +4882,11 @@ function renderAdminAcademicReportsContent() {
       <p>Total active student body</p>
     </div>
     <div class="info-card">
-      <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Institutional Average</div><div class="ic-num green">${overallAvg}%</div></div></div>
+      <div class="ic-head"><div class="ic-icon green">${iconProgress()}</div><div><div class="ic-sub">Institutional Average</div><div class="ic-num green">${overallAvg !== null ? overallAvg + '%' : '—'}</div></div></div>
       <p>Combined academic grade average</p>
     </div>
     <div class="info-card">
-      <div class="ic-head"><div class="ic-icon gold">${iconChart()}</div><div><div class="ic-sub">Passing Rate</div><div class="ic-num gold">${passRate}%</div></div></div>
+      <div class="ic-head"><div class="ic-icon gold">${iconChart()}</div><div><div class="ic-sub">Passing Rate</div><div class="ic-num gold">${passRate !== null ? passRate + '%' : '—'}</div></div></div>
       <p>Achieving 75% or higher</p>
     </div>
     <div class="info-card">
