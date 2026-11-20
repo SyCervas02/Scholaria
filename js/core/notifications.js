@@ -1,103 +1,135 @@
 /* ── PERSISTENT ROLE-AWARE NOTIFICATIONS MODULE ── */
 
-const NOTIF_STORAGE_KEY = 'scholaria_notifications_v1';
 let pendingNotificationDelete = null;
+let notificationsCache = [];
+let notificationsLoaded = false;
+let notificationsLoadPromise = null;
 
-const DEFAULT_SEED_NOTIFICATIONS = [];
+function notifIdentityKeys() {
+  if (typeof CURRENT_PROFILE === 'undefined' || !CURRENT_PROFILE) return [];
+  return [CURRENT_PROFILE.id, CURRENT_PROFILE.school_id].filter(Boolean).map(String);
+}
+
+function isNotificationRead(n) {
+  if (!n) return false;
+  if (typeof n.isRead === 'boolean') return n.isRead;
+  const readKeys = notifIdentityKeys();
+  return (n.readBy || []).some(key => readKeys.includes(String(key)));
+}
 
 function getStoredNotifications() {
-  try {
-    const raw = localStorage.getItem(NOTIF_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed.filter(n => !(n.id && n.id.startsWith('notif_seed_')));
+  return Array.isArray(notificationsCache) ? notificationsCache : [];
+}
+
+function notifFingerprint(list) {
+  return JSON.stringify((list || []).map(n => [String(n.id), isNotificationRead(n)]));
+}
+
+async function notifAuthToken() {
+  if (typeof db === 'undefined' || !db || !db.auth) return null;
+  const { data } = await db.auth.getSession().catch(() => ({ data: {} }));
+  return data?.session?.access_token || null;
+}
+
+async function loadNotificationsFromDB(options = {}) {
+  if (notificationsLoadPromise) return notificationsLoadPromise;
+  notificationsLoadPromise = (async () => {
+    try {
+      const token = await notifAuthToken();
+      if (!token) return false;
+      const res = await fetch(`${typeof API_BASE !== 'undefined' ? API_BASE : ''}/api/notifications`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return false;
+      const list = await res.json();
+      if (!Array.isArray(list)) return false;
+      const wasLoaded = notificationsLoaded;
+      const previous = notifFingerprint(notificationsCache);
+      notificationsCache = list;
+      notificationsLoaded = true;
+      const changed = !wasLoaded || previous !== notifFingerprint(notificationsCache);
+      refreshNotificationsUI();
+      if (options.rerender && changed && isNotificationsPageActive() && typeof renderPage === 'function') {
+        renderPage('notifications');
+      }
+      return true;
+    } catch (err) {
+      console.warn('Notifications load failed:', err);
+      notificationsLoaded = true;
+      return false;
+    } finally {
+      notificationsLoadPromise = null;
     }
-  } catch (e) {
-    return [];
-  }
-  return [];
+  })();
+  return notificationsLoadPromise;
 }
 
-function saveNotifications(list) {
+async function postNotificationAction(path, body) {
   try {
-    localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(list));
-  } catch (e) {}
-}
-
-function seedLocalNotificationTestSamples() {
-  if (!['localhost', '127.0.0.1'].includes(window.location.hostname)) return;
-  const seedKey = 'scholaria_local_notification_samples_v1';
-  if (localStorage.getItem(seedKey) || !CURRENT_PROFILE) return;
-
-  const now = Date.now();
-  const sampleItems = [
-    ['Sample: New announcement', 'A new school announcement is available. Open this notification to review its full details.'],
-    ['Sample: Quiz reminder', 'Reminder: your assigned quiz is available in the Quizzes section. Please review the instructions before starting.'],
-    ['Sample: Materials update', 'A new learning material has been added for your subject. Visit My Materials to read it.'],
-    ['Sample: Schedule update', 'There has been an update to an upcoming academic schedule. Check the announcement details for more information.'],
-    ['Sample: Important school notice', 'This is a longer sample announcement to test how full notification details appear in the expanded popup. It includes extra context and a reminder to check the appropriate section for any related materials or actions.']
-  ];
-  const samples = sampleItems.map(([title, message], index) => ({
-    id: `notif_sample_${now}_${index + 1}`,
-    targetRole: null,
-    targetUserId: CURRENT_PROFILE.id || null,
-    title,
-    message,
-    senderName: 'Sample Notification',
-    senderAvatar: 'SN',
-    timestamp: new Date(now - index * 60 * 60 * 1000).toISOString(),
-    readBy: [],
-    type: index === 1 ? 'quiz' : 'announcement',
-    isLocalTestSample: true
-  }));
-
-  saveNotifications([...samples, ...getStoredNotifications()]);
-  localStorage.setItem(seedKey, 'true');
+    const token = await notifAuthToken();
+    if (!token) return false;
+    const res = await fetch(`${typeof API_BASE !== 'undefined' ? API_BASE : ''}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body || {})
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Notification action failed:', err);
+    return false;
+  }
 }
 
 /**
  * Dispatch a new notification to a specific role or user
  */
-function addNotification({ targetRole, targetUserId, title, message, type = 'info', senderName = 'System', senderAvatar = 'SYS' }) {
-  const list = getStoredNotifications();
-  const newNotif = {
-    id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-    targetRole: targetRole || null,
-    targetUserId: targetUserId || null,
-    title: title || 'Notification',
-    message: message || '',
-    senderName: senderName,
-    senderAvatar: senderAvatar,
-    timestamp: new Date().toISOString(),
-    readBy: [],
-    type: type // 'approval' | 'material' | 'quiz' | 'info'
-  };
-  list.unshift(newNotif);
-  saveNotifications(list);
-  refreshNotificationsUI();
+async function addNotification({ targetRole, targetUserId, title, message, type = 'info', senderName = 'System', senderAvatar = 'SYS' }) {
+  try {
+    const token = await notifAuthToken();
+    if (!token) return null;
+    const res = await fetch(`${typeof API_BASE !== 'undefined' ? API_BASE : ''}/api/notifications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        targetRole: targetRole || null,
+        targetUserId: targetUserId || null,
+        title: title || 'Notification',
+        message: message || '',
+        type,
+        senderName,
+        senderAvatar
+      })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      console.warn('Notification send failed:', data.error || res.status);
+      return null;
+    }
+    const created = await res.json().catch(() => null);
+    loadNotificationsFromDB({ rerender: true });
+    return created;
+  } catch (err) {
+    console.warn('Notification send error:', err);
+    return null;
+  }
 }
 
 /**
  * Get filtered notifications for current profile/role
  */
 function getNotificationsForCurrentUser() {
-  const all = getStoredNotifications();
-  const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
+  const keys = notifIdentityKeys();
   const myRole = typeof ROLE !== 'undefined' ? ROLE : (typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.role : '');
 
-  return all.filter(n => {
-    if (n.targetUserId && n.targetUserId === myId) return true;
-    if (n.targetUserId && n.targetUserId !== myId) return false;
-    if (n.targetRole === myRole || n.targetRole === 'all' || !n.targetRole) return true;
-    return false;
+  return getStoredNotifications().filter(n => {
+    if (n.targetUserId) return keys.includes(String(n.targetUserId));
+    const targetRole = String(n.targetRole || '').toLowerCase();
+    return !targetRole || targetRole === 'all' || targetRole === String(myRole || '').toLowerCase();
   });
 }
 
 function getUnreadNotificationsCount() {
-  const myNotifs = getNotificationsForCurrentUser();
-  const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
-  return myNotifs.filter(n => !(n.readBy || []).includes(myId)).length;
+  return getNotificationsForCurrentUser().filter(n => !isNotificationRead(n)).length;
 }
 
 /**
@@ -108,8 +140,7 @@ function refreshNotificationsUI() {
   const notifList = document.getElementById('notifList');
 
   const myNotifs = getNotificationsForCurrentUser();
-  const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
-  const unreadCount = myNotifs.filter(n => !(n.readBy || []).includes(myId)).length;
+  const unreadCount = myNotifs.filter(n => !isNotificationRead(n)).length;
 
   if (badge) {
     if (unreadCount > 0) {
@@ -134,12 +165,13 @@ function refreshNotificationsUI() {
   if (!notifList) return;
 
   if (myNotifs.length === 0) {
-    notifList.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No notifications right now.</div>`;
+    const emptyMsg = notificationsLoaded ? 'No notifications right now.' : 'Loading notifications…';
+    notifList.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">${emptyMsg}</div>`;
     return;
   }
 
   notifList.innerHTML = myNotifs.slice(0, 15).map(n => {
-    const isUnread = !(n.readBy || []).includes(myId);
+    const isUnread = !isNotificationRead(n);
     const timeAgo = formatTimeAgo(n.timestamp);
     const iconStr = n.type === 'approval' ? '📌' : n.type === 'material' ? '📄' : n.type === 'quiz' ? '🎉' : '📢';
     return `
@@ -185,20 +217,22 @@ function ensureNotificationDetailModal() {
   return modal;
 }
 
-function openNotificationDetailModal(id) {
+async function openNotificationDetailModal(id) {
   const all = getStoredNotifications();
-  const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
   const item = all.find(n => n.id === id);
   if (!item) return;
 
-  // Mark as read
-  if (!item.readBy) item.readBy = [];
-  if (!item.readBy.includes(myId)) {
-    item.readBy.push(myId);
-    saveNotifications(all);
-    refreshNotificationsUI();
-    if (isNotificationsPageActive() && typeof renderPage === 'function') {
-      renderPage('notifications');
+  // Mark as read on the server so every device sees the same state
+  if (!isNotificationRead(item)) {
+    const ok = await postNotificationAction('/api/notifications/read', { ids: [String(item.id)] });
+    if (ok) {
+      item.isRead = true;
+      if (!Array.isArray(item.readBy)) item.readBy = [];
+      notifIdentityKeys().forEach(key => { if (!item.readBy.includes(key)) item.readBy.push(key); });
+      refreshNotificationsUI();
+      if (isNotificationsPageActive() && typeof renderPage === 'function') {
+        renderPage('notifications');
+      }
     }
   }
 
@@ -297,6 +331,7 @@ function toggleNotif() {
     const isOpen = dropdown.classList.toggle('open');
     document.getElementById('notifBtn')?.setAttribute('aria-expanded', String(isOpen));
     refreshNotificationsUI();
+    if (isOpen) loadNotificationsFromDB({ rerender: false });
   }
 }
 
@@ -338,8 +373,8 @@ function toggleNotifSelection(id) {
 
 function toggleSelectAllNotifs(checked) {
   const myNotifs = getNotificationsForCurrentUser();
-  const filtered = notifTabFilter === 'unread' 
-    ? myNotifs.filter(n => !(n.readBy || []).includes(CURRENT_PROFILE?.id))
+  const filtered = notifTabFilter === 'unread'
+    ? myNotifs.filter(n => !isNotificationRead(n))
     : myNotifs;
     
   if (checked) {
@@ -350,14 +385,18 @@ function toggleSelectAllNotifs(checked) {
   if (isNotificationsPageActive() && typeof renderPage === 'function') renderPage('notifications');
 }
 
-function markAllRead() {
-  const all = getStoredNotifications();
-  const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
-  all.forEach(n => {
-    if (!n.readBy) n.readBy = [];
-    if (!n.readBy.includes(myId)) n.readBy.push(myId);
-  });
-  saveNotifications(all);
+async function markAllRead() {
+  const ok = await postNotificationAction('/api/notifications/read', { all: true });
+  if (!ok) {
+    if (typeof showToast === 'function') showToast('Could not mark notifications as read. Please try again.', 'error');
+    return;
+  }
+  const keys = notifIdentityKeys();
+  notificationsCache = notificationsCache.map(n => ({
+    ...n,
+    isRead: true,
+    readBy: [...new Set([...(n.readBy || []), ...keys])]
+  }));
   refreshNotificationsUI();
   if (typeof showToast === 'function') showToast('All notifications marked as read', 'success');
   if (isNotificationsPageActive() && typeof renderPage === 'function') {
@@ -365,20 +404,22 @@ function markAllRead() {
   }
 }
 
-function markSelectedNotifsRead() {
+async function markSelectedNotifsRead() {
   if (selectedNotifIds.size === 0) {
     if (typeof showToast === 'function') showToast('No notifications selected', 'error');
     return;
   }
-  const all = getStoredNotifications();
-  const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
-  all.forEach(n => {
-    if (selectedNotifIds.has(n.id)) {
-      if (!n.readBy) n.readBy = [];
-      if (!n.readBy.includes(myId)) n.readBy.push(myId);
-    }
-  });
-  saveNotifications(all);
+  const ids = [...selectedNotifIds].map(String);
+  const ok = await postNotificationAction('/api/notifications/read', { ids });
+  if (!ok) {
+    if (typeof showToast === 'function') showToast('Could not mark the selected notifications as read. Please try again.', 'error');
+    return;
+  }
+  const selected = new Set(ids);
+  const keys = notifIdentityKeys();
+  notificationsCache = notificationsCache.map(n => selected.has(String(n.id))
+    ? { ...n, isRead: true, readBy: [...new Set([...(n.readBy || []), ...keys])] }
+    : n);
   selectedNotifIds.clear();
   refreshNotificationsUI();
   if (typeof showToast === 'function') showToast('Selected notifications marked as read', 'success');
@@ -442,12 +483,16 @@ function cancelNotificationDelete() {
   document.getElementById('notificationDeleteConfirm')?.classList.remove('active');
 }
 
-function confirmNotificationDelete() {
+async function confirmNotificationDelete() {
   if (!pendingNotificationDelete) return;
   const { action, id, ids = [] } = pendingNotificationDelete;
   const deleteIds = new Set(action === 'single' ? [id] : ids.map(String));
-  const all = getStoredNotifications();
-  saveNotifications(all.filter(item => !deleteIds.has(String(item.id))));
+  const ok = await postNotificationAction('/api/notifications/delete', { ids: [...deleteIds] });
+  if (!ok) {
+    if (typeof showToast === 'function') showToast('Could not delete the notification. Please try again.', 'error');
+    return;
+  }
+  notificationsCache = notificationsCache.filter(item => !deleteIds.has(String(item.id)));
   deleteIds.forEach(deleteId => selectedNotifIds.delete(deleteId));
   pendingNotificationDelete = null;
   document.getElementById('notificationDeleteConfirm')?.classList.remove('active');
@@ -471,9 +516,8 @@ function clearAllNotifs() {
 
 function buildNotificationsPage() {
   const myNotifs = getNotificationsForCurrentUser();
-  const myId = typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE?.id : '';
-  
-  const unreadList = myNotifs.filter(n => !(n.readBy || []).includes(myId));
+
+  const unreadList = myNotifs.filter(n => !isNotificationRead(n));
   const filteredList = notifTabFilter === 'unread' ? unreadList : myNotifs;
   
   const allSelected = filteredList.length > 0 && filteredList.every(n => selectedNotifIds.has(n.id));
@@ -539,7 +583,7 @@ function buildNotificationsPage() {
             </thead>
             <tbody>
               ${filteredList.map((n, idx) => {
-                const isUnread = !(n.readBy || []).includes(myId);
+                const isUnread = !isNotificationRead(n);
                 const isSelected = selectedNotifIds.has(n.id);
                 const iconStr = n.type === 'approval' ? '📌' : n.type === 'material' ? '📄' : n.type === 'quiz' ? '🎉' : '📢';
                 const senderAvatar = n.senderAvatar || (n.senderName ? n.senderName.split(' ').map(w => w[0]).join('').slice(0,2) : 'SY');
@@ -584,7 +628,7 @@ function buildNotificationsPage() {
         </div>
       ` : `
         <div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13.5px;">
-          No notifications found in this view.
+          ${notificationsLoaded ? 'No notifications found in this view.' : 'Loading notifications…'}
         </div>
       `}
     </div>
@@ -607,3 +651,6 @@ window.handleNotifItemClick = handleNotifItemClick;
 window.requestNotificationDelete = requestNotificationDelete;
 window.cancelNotificationDelete = cancelNotificationDelete;
 window.confirmNotificationDelete = confirmNotificationDelete;
+window.loadNotificationsFromDB = loadNotificationsFromDB;
+window.addNotification = addNotification;
+window.refreshNotificationsUI = refreshNotificationsUI;

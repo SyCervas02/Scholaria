@@ -1907,6 +1907,142 @@ app.post('/api/curriculum-subjects', async (req, res) => {
   res.status(201).json(data);
 });
 
+// --- Persistent notifications (Supabase `notifications` table) ---
+const NOTIF_TARGET_ROLES = new Set(['student', 'teacher', 'admin', 'all']);
+
+function notificationIdentityKeys(profile) {
+  return [profile.id, profile.school_id].filter(Boolean).map(String);
+}
+
+function notificationReadKeys(profile) {
+  return [profile.id, profile.school_id].filter(Boolean).map(String);
+}
+
+function isNotificationVisibleTo(row, profile) {
+  const targetUserId = row.target_user_id ? String(row.target_user_id) : '';
+  if (targetUserId) return notificationIdentityKeys(profile).includes(targetUserId);
+  const targetRole = String(row.target_role || '').toLowerCase();
+  return !targetRole || targetRole === 'all' || targetRole === String(profile.role || '').toLowerCase();
+}
+
+function mapNotificationRow(row, profile) {
+  const readBy = Array.isArray(row.read_by) ? row.read_by.map(String) : [];
+  const readKeys = notificationReadKeys(profile);
+  return {
+    id: row.id,
+    targetRole: row.target_role || null,
+    targetUserId: row.target_user_id || null,
+    title: row.title || 'Notification',
+    message: row.message || '',
+    type: row.type || 'info',
+    senderName: row.sender_name || 'System',
+    senderAvatar: row.sender_avatar || null,
+    timestamp: row.created_at,
+    readBy,
+    isRead: readBy.some(key => readKeys.includes(key))
+  };
+}
+
+async function loadVisibleNotifications(profile) {
+  const { data, error } = await supabaseAdmin
+    .from('notifications')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  const readKeys = notificationReadKeys(profile);
+  return (data || []).filter(row => {
+    if (!isNotificationVisibleTo(row, profile)) return false;
+    const deletedBy = Array.isArray(row.deleted_by) ? row.deleted_by.map(String) : [];
+    return !deletedBy.some(key => readKeys.includes(key));
+  });
+}
+
+app.get('/api/notifications', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  try {
+    const rows = await loadVisibleNotifications(profile);
+    res.json(rows.map(row => mapNotificationRow(row, profile)));
+  } catch (err) {
+    res.status(500).json({ error: 'Unable to load notifications', details: err.message });
+  }
+});
+
+app.post('/api/notifications', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (!['teacher', 'admin'].includes(profile.role)) {
+    return res.status(403).json({ error: 'Only faculty and administrators can send notifications' });
+  }
+
+  const title = String(req.body.title || '').trim().slice(0, 200);
+  if (!title) return res.status(400).json({ error: 'A notification title is required' });
+  const targetRole = String(req.body.targetRole || '').trim().toLowerCase() || null;
+  if (targetRole && !NOTIF_TARGET_ROLES.has(targetRole)) {
+    return res.status(400).json({ error: 'Invalid target role' });
+  }
+
+  const { data, error } = await supabaseAdmin.from('notifications').insert({
+    target_role: targetRole,
+    target_user_id: req.body.targetUserId ? String(req.body.targetUserId).slice(0, 120) : null,
+    title,
+    message: String(req.body.message || '').slice(0, 2000),
+    type: String(req.body.type || 'info').slice(0, 40),
+    sender_name: String(req.body.senderName || profile.full_name || 'System').slice(0, 120),
+    sender_avatar: req.body.senderAvatar ? String(req.body.senderAvatar).slice(0, 4) : null
+  }).select('*').single();
+
+  if (error) return res.status(500).json({ error: 'Unable to save notification', details: error.message });
+  res.status(201).json(mapNotificationRow(data, profile));
+});
+
+app.post('/api/notifications/read', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  try {
+    const rows = await loadVisibleNotifications(profile);
+    const markAll = req.body.all === true;
+    const wantedIds = new Set((Array.isArray(req.body.ids) ? req.body.ids : []).map(String));
+    const readKey = String(profile.id || profile.school_id || '');
+    let updated = 0;
+    for (const row of rows) {
+      if (!markAll && !wantedIds.has(String(row.id))) continue;
+      const readBy = Array.isArray(row.read_by) ? row.read_by.map(String) : [];
+      if (readBy.includes(readKey)) continue;
+      readBy.push(readKey);
+      const { error } = await supabaseAdmin.from('notifications').update({ read_by: readBy }).eq('id', row.id);
+      if (!error) updated++;
+    }
+    res.json({ ok: true, updated });
+  } catch (err) {
+    res.status(500).json({ error: 'Unable to update notifications', details: err.message });
+  }
+});
+
+app.post('/api/notifications/delete', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  try {
+    const rows = await loadVisibleNotifications(profile);
+    const deleteAll = req.body.all === true;
+    const wantedIds = new Set((Array.isArray(req.body.ids) ? req.body.ids : []).map(String));
+    const hideKey = String(profile.id || profile.school_id || '');
+    let deleted = 0;
+    for (const row of rows) {
+      if (!deleteAll && !wantedIds.has(String(row.id))) continue;
+      const deletedBy = Array.isArray(row.deleted_by) ? row.deleted_by.map(String) : [];
+      if (deletedBy.includes(hideKey)) continue;
+      deletedBy.push(hideKey);
+      const { error } = await supabaseAdmin.from('notifications').update({ deleted_by: deletedBy }).eq('id', row.id);
+      if (!error) deleted++;
+    }
+    res.json({ ok: true, deleted });
+  } catch (err) {
+    res.status(500).json({ error: 'Unable to delete notifications', details: err.message });
+  }
+});
+
 const MATERIAL_STRANDS = new Set(['STEM', 'HUMSS', 'ABM', 'TVL']);
 function normalizeMaterialStrand(value) {
   const raw = String(value || '').trim().toUpperCase();

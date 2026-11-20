@@ -99,7 +99,6 @@ function initDashboardShell() {
     sessionStorage.removeItem('scholaria_chat_attachment_return');
   } catch (_) {}
   if (typeof resetChatState === 'function') resetChatState();
-  if (typeof seedLocalNotificationTestSamples === 'function') seedLocalNotificationTestSamples();
   const navPages = (SIDEBAR[ROLE] || []).map(i => i.page);
   let savedPage = null;
   try { savedPage = sessionStorage.getItem(`scholaria_active_page_${ROLE || 'user'}`); } catch (_) {}
@@ -118,6 +117,7 @@ function initDashboardShell() {
     }, 450);
   }
   refreshNotificationsUI();
+  if (typeof loadNotificationsFromDB === 'function') loadNotificationsFromDB({ rerender: true });
   if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
   if (typeof showNewsAlertIfNeeded === 'function') showNewsAlertIfNeeded();
   if (typeof ensureChatRealtimeSubscription === 'function') ensureChatRealtimeSubscription();
@@ -5675,6 +5675,7 @@ function renderPage(page) {
   const fab = document.getElementById('chatFab');
   if (fab) fab.style.display = (page === 'chats') ? 'none' : 'flex';
 
+  if (page === 'notifications' && typeof loadNotificationsFromDB === 'function') loadNotificationsFromDB({ rerender: true });
   if (page === 'users' || page === 'classrec') loadUsersFromDB();
   if (page === 'classrec') loadClassRecAttempts();
   if (page === 'quiz') {
