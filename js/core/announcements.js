@@ -251,7 +251,9 @@ function reuseAnnouncement(id) {
     if (catSelect) catSelect.value = 'others';
     if (customCatInput) customCatInput.value = anc.customCategory || '';
   } else if (catSelect) {
-    if (ROLE === 'teacher' && anc.category === 'emergency') {
+    const isTeacher = (typeof ROLE !== 'undefined' && String(ROLE).toLowerCase() === 'teacher') ||
+                      (typeof CURRENT_PROFILE !== 'undefined' && String(CURRENT_PROFILE?.role || '').toLowerCase() === 'teacher');
+    if (isTeacher && anc.category === 'emergency') {
       catSelect.value = 'academic';
     } else {
       catSelect.value = anc.category || 'emergency';
@@ -260,8 +262,10 @@ function reuseAnnouncement(id) {
   }
 
   if (anc.priority) {
+    const isTeacher = (typeof ROLE !== 'undefined' && String(ROLE).toLowerCase() === 'teacher') ||
+                      (typeof CURRENT_PROFILE !== 'undefined' && String(CURRENT_PROFILE?.role || '').toLowerCase() === 'teacher');
     const prioRadio = document.querySelector(`input[name="ancPriority"][value="${anc.priority}"]`);
-    if (prioRadio && !prioRadio.disabled) {
+    if (prioRadio && !prioRadio.disabled && (!isTeacher || anc.priority !== 'critical')) {
       prioRadio.checked = true;
     } else {
       const fallbackRadio = document.querySelector('input[name="ancPriority"][value="important"]');
@@ -276,6 +280,7 @@ function reuseAnnouncement(id) {
     }
   });
   handleAncAudienceToggle();
+  handleAncPriorityChange();
 
   const hlCheckboxes = document.querySelectorAll('input[name="ancHotline"]');
   hlCheckboxes.forEach(cb => {
@@ -745,69 +750,71 @@ function teacherStrandAudienceLabels() {
     .map(code => `${code} Strand`);
 }
 
-// Teachers may only broadcast to the strand they handle, so lock every other
-// audience option instead of just unchecking it.
 function applyAudienceRoleLocks() {
-  const isTeacher = typeof ROLE !== 'undefined' && ROLE === 'teacher';
-  const allowedStrands = isTeacher ? teacherStrandAudienceLabels() : [];
-  const lockAllForTeacher = isTeacher && allowedStrands.length > 0;
-
-  document.querySelectorAll('input[name="ancAudience"]').forEach(cb => {
-    const isStrandOption = ANC_STRAND_AUDIENCES.includes(cb.value);
-    let locked = false;
-    if (lockAllForTeacher) {
-      locked = isStrandOption ? !allowedStrands.includes(cb.value) : true;
-    }
-    cb.disabled = locked;
-    if (locked) cb.checked = false;
-    const label = cb.closest('.anc-checkbox-label');
-    if (label) {
-      label.style.opacity = locked ? '0.45' : '1';
-      label.style.cursor = locked ? 'not-allowed' : 'pointer';
-      label.title = locked
-        ? (isStrandOption
-          ? `You can only post to your assigned strand: ${allowedStrands.join(', ')}`
-          : 'Teachers can only post to their assigned strand')
-        : '';
-    }
-  });
+  // Audience selection rule is uniform: when All Students is checked, only All Teachers can be checked.
+  // This is also applicable to teachers.
+  handleAncAudienceToggle();
 }
 
 function handleAncAudienceToggle(event) {
-  applyAudienceRoleLocks();
-
   const allStudentsCb = document.querySelector('input[name="ancAudience"][value="All Students"]');
-  if (!allStudentsCb) return;
+  const allTeachersCb = document.querySelector('input[name="ancAudience"][value="All Teachers"]');
   const strandBoxes = ANC_STRAND_AUDIENCES
     .map(value => document.querySelector(`input[name="ancAudience"][value="${value}"]`))
     .filter(Boolean);
-  if (!strandBoxes.length) return;
-  const selectableStrands = strandBoxes.filter(cb => !cb.disabled);
-  if (!selectableStrands.length) return;
+
+  // All Teachers is ALWAYS enabled and checkable (for both teachers and admins)
+  if (allTeachersCb) {
+    allTeachersCb.disabled = false;
+    const tLabel = allTeachersCb.closest('.anc-checkbox-label');
+    if (tLabel) {
+      tLabel.style.opacity = '1';
+      tLabel.style.cursor = 'pointer';
+      tLabel.title = '';
+    }
+  }
+
+  if (!allStudentsCb) return;
 
   const source = event && event.target;
-  if (allStudentsCb.disabled) {
-    // Teacher view: All Students is never a valid target; keep it off and
-    // make sure their own strand stays selected.
-    allStudentsCb.checked = false;
-    const allowedStrands = teacherStrandAudienceLabels();
-    if (!selectableStrands.some(cb => cb.checked)) {
-      selectableStrands.forEach(cb => { if (allowedStrands.includes(cb.value)) cb.checked = true; });
+
+  // If a strand was checked by clicking it directly, uncheck All Students
+  if (source && strandBoxes.includes(source)) {
+    if (source.checked) {
+      allStudentsCb.checked = false;
     }
-    return;
   }
-  if (source === allStudentsCb) {
-    selectableStrands.forEach(cb => { cb.checked = allStudentsCb.checked; });
-  } else if (source && strandBoxes.includes(source)) {
-    // All four strands ticked means the whole student body is covered.
-    allStudentsCb.checked = selectableStrands.every(cb => cb.checked);
-  } else if (allStudentsCb.checked) {
-    // Restoring an older advisory that only lists "All Students".
-    selectableStrands.forEach(cb => { cb.checked = true; });
+
+  const isAllStudentsChecked = allStudentsCb.checked;
+
+  if (isAllStudentsChecked) {
+    // When All Students is checked:
+    // Strands are unchecked and disabled, leaving ONLY All Teachers checkable!
+    strandBoxes.forEach(cb => {
+      cb.checked = false;
+      cb.disabled = true;
+      const label = cb.closest('.anc-checkbox-label');
+      if (label) {
+        label.style.opacity = '0.45';
+        label.style.cursor = 'not-allowed';
+        label.title = 'All Students is checked. Uncheck All Students to select specific strands.';
+      }
+    });
   } else {
-    allStudentsCb.checked = selectableStrands.every(cb => cb.checked);
+    // When All Students is NOT checked:
+    // Strands are enabled so specific strands can be selected
+    strandBoxes.forEach(cb => {
+      cb.disabled = false;
+      const label = cb.closest('.anc-checkbox-label');
+      if (label) {
+        label.style.opacity = '1';
+        label.style.cursor = 'pointer';
+        label.title = '';
+      }
+    });
   }
 }
+window.handleAncAudienceToggle = handleAncAudienceToggle;
 
 function handleAncCategoryChange(val) {
   const catSelect = document.getElementById('ancCategoryInput');
@@ -826,9 +833,7 @@ function handleAncCategoryChange(val) {
     if (resetBtn) resetBtn.style.display = 'none';
   }
 
-  // Emergency advisories attach every hotline by default; authors can still
-  // untick individual hotlines before broadcasting.
-  if (val === 'emergency') autoCheckAncHotlines();
+  handleAncPriorityChange();
 }
 
 function ancCompositionIsCritical() {
@@ -841,12 +846,37 @@ function autoCheckAncHotlines() {
   document.querySelectorAll('input[name="ancHotline"]').forEach(cb => { cb.checked = true; });
 }
 
+function handleAncPriorityChange() {
+  const isTeacher = (typeof ROLE !== 'undefined' && String(ROLE).toLowerCase() === 'teacher') ||
+                    (typeof CURRENT_PROFILE !== 'undefined' && String(CURRENT_PROFILE?.role || '').toLowerCase() === 'teacher');
+  const hotlineAttachmentField = document.getElementById('ancHotlineAttachmentField');
+  if (!hotlineAttachmentField) return;
+
+  if (isTeacher) {
+    hotlineAttachmentField.style.display = 'none';
+    document.querySelectorAll('input[name="ancHotline"]').forEach(cb => { cb.checked = false; });
+    return;
+  }
+
+  const selectedPriority = document.querySelector('input[name="ancPriority"]:checked')?.value;
+  const catSelect = document.getElementById('ancCategoryInput');
+  const isCritical = selectedPriority === 'critical' || catSelect?.value === 'emergency';
+
+  if (isCritical) {
+    hotlineAttachmentField.style.display = '';
+    autoCheckAncHotlines();
+  } else {
+    hotlineAttachmentField.style.display = 'none';
+    document.querySelectorAll('input[name="ancHotline"]').forEach(cb => { cb.checked = false; });
+  }
+}
+window.handleAncPriorityChange = handleAncPriorityChange;
+
 function resetAncHotlineDefaults() {
-  document.querySelectorAll('input[name="ancHotline"]').forEach(cb => { cb.checked = false; });
-  if (ancCompositionIsCritical()) autoCheckAncHotlines();
+  handleAncPriorityChange();
   document.querySelectorAll('input[name="ancPriority"]').forEach(radio => {
     radio.onchange = () => {
-      if (radio.checked && radio.value === 'critical') autoCheckAncHotlines();
+      handleAncPriorityChange();
     };
   });
 }
@@ -975,8 +1005,10 @@ function ancFormat(action) {
 function openCreateAnnouncementModal() {
   const modal = document.getElementById('ancModal');
   if (modal) modal.classList.add('active');
-  const hotlineAttachmentField = document.getElementById('ancHotlineAttachmentField');
-  if (hotlineAttachmentField) hotlineAttachmentField.style.display = '';
+
+  const isTeacher = (typeof ROLE !== 'undefined' && String(ROLE).toLowerCase() === 'teacher') ||
+                    (typeof CURRENT_PROFILE !== 'undefined' && String(CURRENT_PROFILE?.role || '').toLowerCase() === 'teacher');
+
   const msgInput = document.getElementById('ancMessageInput');
   if (msgInput) msgInput.value = '';
   updateAncCharCount();
@@ -984,38 +1016,33 @@ function openCreateAnnouncementModal() {
   const catSelect = document.getElementById('ancCategoryInput');
   const emergencyOpt = catSelect ? catSelect.querySelector('option[value="emergency"]') : null;
   const criticalRadio = document.querySelector('input[name="ancPriority"][value="critical"]');
+  const criticalLabel = document.getElementById('ancPriorityCriticalLabel') || criticalRadio?.closest('.anc-radio-label');
   const importantRadio = document.querySelector('input[name="ancPriority"][value="important"]');
+  const hotlineAttachmentField = document.getElementById('ancHotlineAttachmentField');
 
-  applyAudienceRoleLocks();
-
-  if (ROLE === 'teacher') {
+  if (isTeacher) {
+    // Teachers cannot announce the priority of critical and emergency
     if (emergencyOpt) {
       emergencyOpt.disabled = true;
       emergencyOpt.hidden = true;
     }
     if (criticalRadio) {
-      criticalRadio.disabled = false;
+      criticalRadio.disabled = true;
       criticalRadio.checked = false;
-      if (criticalRadio.closest('.anc-radio-label')) {
-        criticalRadio.closest('.anc-radio-label').style.display = '';
-        criticalRadio.closest('.anc-radio-label').style.opacity = '1';
-        criticalRadio.closest('.anc-radio-label').style.cursor = 'pointer';
-      }
+    }
+    if (criticalLabel) {
+      criticalLabel.style.display = 'none';
     }
     if (importantRadio) importantRadio.checked = true;
     resetAncCategorySelect('academic');
 
-    const allowedStrands = teacherStrandAudienceLabels();
-    if (allowedStrands.length) {
-      ANC_STRAND_AUDIENCES.forEach(label => {
-        const cb = document.querySelector(`input[name="ancAudience"][value="${label}"]`);
-        if (cb && allowedStrands.includes(label)) cb.checked = true;
-      });
-    } else {
-      const allStudentsCb = document.querySelector('input[name="ancAudience"][value="All Students"]');
-      if (allStudentsCb) allStudentsCb.checked = false;
+    // Remove hotlines for teacher
+    if (hotlineAttachmentField) {
+      hotlineAttachmentField.style.display = 'none';
     }
+    document.querySelectorAll('input[name="ancHotline"]').forEach(cb => { cb.checked = false; });
   } else {
+    // Admin view
     if (emergencyOpt) {
       emergencyOpt.disabled = false;
       emergencyOpt.hidden = false;
@@ -1023,21 +1050,33 @@ function openCreateAnnouncementModal() {
     if (criticalRadio) {
       criticalRadio.disabled = false;
       criticalRadio.checked = true;
-      if (criticalRadio.closest('.anc-radio-label')) {
-        criticalRadio.closest('.anc-radio-label').style.display = '';
-        criticalRadio.closest('.anc-radio-label').style.opacity = '1';
-        criticalRadio.closest('.anc-radio-label').style.cursor = 'pointer';
-      }
+    }
+    if (criticalLabel) {
+      criticalLabel.style.display = '';
+      criticalLabel.style.opacity = '1';
+      criticalLabel.style.cursor = 'pointer';
     }
     resetAncCategorySelect('emergency');
-    
-    const allTeachersCb = document.querySelector('input[name="ancAudience"][value="All Teachers"]');
-    if (allTeachersCb) {
-      allTeachersCb.disabled = false;
-      if (allTeachersCb.closest('.anc-checkbox-label')) {
-        allTeachersCb.closest('.anc-checkbox-label').style.opacity = '1';
-        allTeachersCb.closest('.anc-checkbox-label').style.cursor = 'pointer';
-      }
+
+    // Hotlines show if priority is critical
+    if (hotlineAttachmentField) {
+      hotlineAttachmentField.style.display = '';
+    }
+    autoCheckAncHotlines();
+  }
+
+  // Audience setup: default All Students checked, All Teachers checked (enabled for both teacher and admin)
+  const allStudentsCb = document.querySelector('input[name="ancAudience"][value="All Students"]');
+  const allTeachersCb = document.querySelector('input[name="ancAudience"][value="All Teachers"]');
+  if (allStudentsCb) allStudentsCb.checked = true;
+  if (allTeachersCb) {
+    allTeachersCb.disabled = false;
+    allTeachersCb.checked = true;
+    const tLabel = allTeachersCb.closest('.anc-checkbox-label');
+    if (tLabel) {
+      tLabel.style.opacity = '1';
+      tLabel.style.cursor = 'pointer';
+      tLabel.title = '';
     }
   }
 
@@ -1052,7 +1091,7 @@ function openCreateAnnouncementModal() {
     const mi = String(now.getMinutes()).padStart(2, '0');
     expiryInput.min = `${yr}-${mo}-${dy}T${hr}:${mi}`;
   }
-  resetAncHotlineDefaults();
+  handleAncPriorityChange();
   handleAncAudienceToggle();
 }
 
@@ -1074,11 +1113,22 @@ function submitCreateAnnouncement(isDraft = false) {
     return;
   }
 
+  const isTeacher = (typeof ROLE !== 'undefined' && String(ROLE).toLowerCase() === 'teacher') ||
+                    (typeof CURRENT_PROFILE !== 'undefined' && String(CURRENT_PROFILE?.role || '').toLowerCase() === 'teacher');
+
   let categoryValue = catInput ? catInput.value : 'emergency';
 
-  if (!isDraft && ROLE === 'teacher' && categoryValue === 'emergency') {
-    showToast('Only Admins can broadcast Emergency & Class Suspensions', 'error');
-    return;
+  if (isTeacher && categoryValue === 'emergency') {
+    if (!isDraft) {
+      showToast('Only Admins can broadcast Emergency & Class Suspensions', 'error');
+      return;
+    }
+    categoryValue = 'academic';
+  }
+
+  let finalPriority = priorityInput ? priorityInput.value : 'normal';
+  if (isTeacher && finalPriority === 'critical') {
+    finalPriority = 'important';
   }
 
   if (expiryInput && expiryInput.value) {
@@ -1095,18 +1145,20 @@ function submitCreateAnnouncement(isDraft = false) {
     if (!customCategoryName) customCategoryName = 'General Advisory';
   }
 
-  // Get selected hotlines
+  // Get selected hotlines (only admin can attach emergency hotlines when priority is critical or category is emergency)
   const selectedHotlines = [];
-  document.querySelectorAll('input[name="ancHotline"]:checked').forEach(cb => {
-    const hl = (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).find(h => h.id === cb.value);
-    if (hl) selectedHotlines.push(hl);
-  });
+  if (!isTeacher && (finalPriority === 'critical' || categoryValue === 'emergency')) {
+    document.querySelectorAll('input[name="ancHotline"]:checked').forEach(cb => {
+      const hl = (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).find(h => h.id === cb.value);
+      if (hl) selectedHotlines.push(hl);
+    });
+  }
 
   // Get selected audience
   const selectedAudience = [];
   const audCheckboxes = document.querySelectorAll('input[name="ancAudience"]:checked');
   audCheckboxes.forEach(cb => {
-    if (!cb.disabled || cb.value === 'All Students') {
+    if (!cb.disabled) {
       selectedAudience.push(cb.value);
     }
   });
@@ -1114,15 +1166,6 @@ function submitCreateAnnouncement(isDraft = false) {
   if (selectedAudience.includes('All Students')) {
     for (let i = selectedAudience.length - 1; i >= 0; i--) {
       if (ANC_STRAND_AUDIENCES.includes(selectedAudience[i])) selectedAudience.splice(i, 1);
-    }
-  }
-  // Teachers can only broadcast to the strand they handle.
-  if (ROLE === 'teacher') {
-    const allowedStrands = teacherStrandAudienceLabels();
-    if (allowedStrands.length) {
-      const kept = selectedAudience.filter(value => allowedStrands.includes(value));
-      selectedAudience.length = 0;
-      selectedAudience.push(...(kept.length ? kept : allowedStrands));
     }
   }
 
@@ -1136,11 +1179,11 @@ function submitCreateAnnouncement(isDraft = false) {
     title: titleInput.value.trim(),
     category: categoryValue,
     customCategory: customCategoryName,
-    priority: priorityInput ? priorityInput.value : 'normal',
+    priority: finalPriority,
     audience: selectedAudience.length ? selectedAudience : ['All Students', 'All Teachers'],
     message: msgInput.value.trim(),
     authorName: CURRENT_PROFILE ? CURRENT_PROFILE.full_name : 'School Administration',
-    authorRole: ROLE === 'admin' ? 'Admin' : 'Teacher',
+    authorRole: isTeacher ? 'Teacher' : 'Admin',
     timestamp: new Date().toISOString(),
     expiresAt: expiresAtVal,
     isArchived: false,

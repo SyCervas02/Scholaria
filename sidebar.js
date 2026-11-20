@@ -3428,6 +3428,10 @@ function teacherPage(page) {
         : (analysisAttemptsCache[analysisSelectedQuizId] || []);
 
       const rows = buildAnalysisRows(selectedQuiz, attempts);
+      const activeDifficulty = (typeof analysisDifficultyFilter !== 'undefined' ? analysisDifficultyFilter : (window.analysisDifficultyFilter || ''));
+      const filteredRows = activeDifficulty
+        ? rows.filter(r => String(r.difficulty || '').toLowerCase() === String(activeDifficulty).toLowerCase())
+        : rows;
       const attemptCount = attempts.length;
       const validScores = attempts.map(a => a.total_items ? (a.score / a.total_items) * 100 : (a.score_percentage || 0));
       const avgScore = validScores.length
@@ -3493,7 +3497,7 @@ function teacherPage(page) {
       <div class="analysis-filter-container">
         <div class="analysis-tab-bar" role="tablist" aria-label="Item analysis views">
           <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('questions')">
-            <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${rows.length}</span>
+            <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${filteredRows.length}</span>
           </button>
           <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('students')">
             <span class="analysis-tab-icon" aria-hidden="true">${iconUsers()}</span> Student Submissions <span class="analysis-tab-count">${attemptCount}</span>
@@ -3503,6 +3507,13 @@ function teacherPage(page) {
           <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)">
             <option value="">All Handled Sections</option>
             ${analysisFilteredSections.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+          </select>
+          <select class="user-filter-select" aria-label="Filter by difficulty" onchange="setAnalysisDifficultyFilter(this.value)">
+            <option value="">All Difficulty Levels</option>
+            <option value="Easy" ${String(activeDifficulty).toLowerCase() === 'easy' ? 'selected' : ''}>Easy</option>
+            <option value="Average" ${String(activeDifficulty).toLowerCase() === 'average' ? 'selected' : ''}>Average</option>
+            <option value="Difficult" ${String(activeDifficulty).toLowerCase() === 'difficult' ? 'selected' : ''}>Difficult</option>
+            <option value="No Data" ${String(activeDifficulty).toLowerCase() === 'no data' ? 'selected' : ''}>No Data</option>
           </select>
           <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)">
             ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
@@ -3565,9 +3576,9 @@ function teacherPage(page) {
             </tr>
           </thead>
           <tbody>
-            ${rows.length ? rows.map((r, i) => `
+            ${filteredRows.length ? filteredRows.map((r, i) => `
               <tr>
-                <td style="font-weight:700;color:var(--blue);">${i + 1}</td>
+                <td style="font-weight:700;color:var(--blue);">${(r.index != null ? r.index + 1 : i + 1)}</td>
                 <td>
                   <div style="font-weight:600;color:#0f172a;margin-bottom:2px;">${escHtml(r.label)}</div>
                   <span style="font-size:11px;color:var(--text-muted);text-transform:capitalize;">Type: ${escHtml(r.type.replace('_', ' '))}</span>
@@ -3589,7 +3600,7 @@ function teacherPage(page) {
                   ${escHtml(r.correctAnswer || '—')}
                 </td>
               </tr>`).join('')
-              : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">No question items found in this quiz.</td></tr>`}
+              : `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:30px;">${activeDifficulty ? `No questions found with difficulty "${escHtml(activeDifficulty)}".` : 'No question items found in this quiz.'}</td></tr>`}
           </tbody>
         </table>
       </div>`}`;

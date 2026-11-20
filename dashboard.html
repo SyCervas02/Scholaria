@@ -410,18 +410,18 @@
         <div class="anc-form-field">
           <label>Select Priority</label>
           <div class="anc-radio-group" style="margin-top:4px;">
-            <label class="anc-radio-label">
-              <input type="radio" name="ancPriority" value="critical" checked/>
+            <label class="anc-radio-label" id="ancPriorityCriticalLabel">
+              <input type="radio" name="ancPriority" value="critical" onchange="handleAncPriorityChange()"/>
               <span class="priority-choice-icon critical" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.8 19a1.5 1.5 0 0 0 1.3 2.2h15.8a1.5 1.5 0 0 0 1.3-2.2L12 3Z"/><path d="M12 9v5m0 3h.01"/></svg></span>
               <span>Critical Emergency (Sticky Top Banner)</span>
             </label>
-            <label class="anc-radio-label">
-              <input type="radio" name="ancPriority" value="important"/>
+            <label class="anc-radio-label" id="ancPriorityImportantLabel">
+              <input type="radio" name="ancPriority" value="important" checked onchange="handleAncPriorityChange()"/>
               <span class="priority-choice-icon important" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v5c0 5 3.4 8.3 8 10 4.6-1.7 8-5 8-10V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></span>
               <span>Important</span>
             </label>
-            <label class="anc-radio-label">
-              <input type="radio" name="ancPriority" value="normal"/>
+            <label class="anc-radio-label" id="ancPriorityNormalLabel">
+              <input type="radio" name="ancPriority" value="normal" onchange="handleAncPriorityChange()"/>
               <span class="priority-choice-icon normal" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg></span>
               <span>Normal</span>
             </label>
@@ -433,11 +433,11 @@
           <label>Select Audience</label>
           <div class="anc-checkbox-group" style="margin-top:4px;display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;">
             <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="All Students" checked onchange="handleAncAudienceToggle(event)"/> All Students</label>
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="All Teachers" checked/> All Teachers</label>
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="STEM Strand" checked onchange="handleAncAudienceToggle(event)"/> STEM Strand</label>
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="HUMSS Strand" checked onchange="handleAncAudienceToggle(event)"/> HUMSS Strand</label>
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="ABM Strand" checked onchange="handleAncAudienceToggle(event)"/> ABM Strand</label>
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="TVL Strand" checked onchange="handleAncAudienceToggle(event)"/> TVL Strand</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="All Teachers" checked onchange="handleAncAudienceToggle(event)"/> All Teachers</label>
+            <label class="anc-checkbox-label" style="opacity:0.45;cursor:not-allowed;"><input type="checkbox" name="ancAudience" value="STEM Strand" disabled onchange="handleAncAudienceToggle(event)"/> STEM Strand</label>
+            <label class="anc-checkbox-label" style="opacity:0.45;cursor:not-allowed;"><input type="checkbox" name="ancAudience" value="HUMSS Strand" disabled onchange="handleAncAudienceToggle(event)"/> HUMSS Strand</label>
+            <label class="anc-checkbox-label" style="opacity:0.45;cursor:not-allowed;"><input type="checkbox" name="ancAudience" value="ABM Strand" disabled onchange="handleAncAudienceToggle(event)"/> ABM Strand</label>
+            <label class="anc-checkbox-label" style="opacity:0.45;cursor:not-allowed;"><input type="checkbox" name="ancAudience" value="TVL Strand" disabled onchange="handleAncAudienceToggle(event)"/> TVL Strand</label>
           </div>
         </div>
 
@@ -799,18 +799,18 @@
   <script src="js/core/dashboard-calendar.js?v=1"></script>
   <script src="js/core/notifications.js?v=20153"></script>
   <script src="js/core/hotlines.js?v=20061"></script>
-  <script src="js/core/announcements.js?v=20157"></script>
+  <script src="js/core/announcements.js?v=20158"></script>
   <script src="js/modules/repository/materials.js?v=20152"></script>
   <script src="js/modules/quizzes/take-quiz.js?v=20099"></script>
   <script src="js/modules/quizzes/interactive-player.js?v=20105"></script>
-  <script src="js/modules/quizzes/item-analysis.js?v=20075"></script>
+  <script src="js/modules/quizzes/item-analysis.js?v=20076"></script>
   <script src="js/modules/quizzes/quiz-generator.js?v=20151"></script>
   <script src="js/modules/chat/chat.js?v=20151"></script>
   <script src="js/modules/admin/user-management.js?v=20153"></script>
   <script src="js/modules/admin/report-generator.js?v=20090"></script>
   <script src="js/modules/admin/rooms-management.js?v=20110"></script>
   <script src="js/modules/courses.js?v=20005"></script>
-  <script src="js/core/sidebar.js?v=20118"></script>
+  <script src="js/core/sidebar.js?v=20119"></script>
   <script src="js/core/search.js?v=20015"></script>
   <script src="js/core/auth.js?v=20104"></script>
 </body>

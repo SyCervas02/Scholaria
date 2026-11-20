@@ -2,6 +2,8 @@
 
 let analysisSelectedQuizId = null;
 let analysisSectionFilter = '';
+let analysisDifficultyFilter = '';
+window.analysisDifficultyFilter = '';
 let analysisSearchQuery = '';
 let analysisActiveTab = 'questions';
 let analysisAttemptsCache = {};
@@ -42,10 +44,20 @@ function setAnalysisSectionFilter(sec) {
   analysisSectionFilter = sec;
   if (typeof renderPage === 'function') renderPage('analysis');
 }
+window.setAnalysisSectionFilter = setAnalysisSectionFilter;
+
+function setAnalysisDifficultyFilter(diff) {
+  analysisDifficultyFilter = diff || '';
+  window.analysisDifficultyFilter = analysisDifficultyFilter;
+  if (typeof renderPage === 'function') renderPage('analysis');
+}
+window.setAnalysisDifficultyFilter = setAnalysisDifficultyFilter;
 
 function refreshAnalysisReport(quizId) {
   if (!quizId) return;
   analysisSectionFilter = '';
+  analysisDifficultyFilter = '';
+  window.analysisDifficultyFilter = '';
   analysisSearchQuery = '';
   delete analysisAttemptsCache[quizId];
   loadAttemptsForAnalysis(quizId, true);
@@ -394,6 +406,7 @@ function buildAnalysisRows(quiz, attempts) {
 
     return {
       itemId: t.itemId,
+      index: t.index,
       label: t.label,
       type: t.type,
       correctAnswer: t.correctAnswer,
