@@ -884,6 +884,11 @@ function ancFormat(action) {
 function openCreateAnnouncementModal() {
   const modal = document.getElementById('ancModal');
   if (modal) modal.classList.add('active');
+  const hotlineAttachmentField = document.getElementById('ancHotlineAttachmentField');
+  if (hotlineAttachmentField) hotlineAttachmentField.style.display = ROLE === 'admin' ? '' : 'none';
+  if (ROLE !== 'admin') {
+    document.querySelectorAll('input[name="ancHotline"]').forEach(cb => { cb.checked = false; });
+  }
   const msgInput = document.getElementById('ancMessageInput');
   if (msgInput) msgInput.value = '';
   updateAncCharCount();
@@ -1003,11 +1008,13 @@ function submitCreateAnnouncement(isDraft = false) {
 
   // Get selected hotlines
   const selectedHotlines = [];
-  const hlCheckboxes = document.querySelectorAll('input[name="ancHotline"]:checked');
-  hlCheckboxes.forEach(cb => {
-    const hl = (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).find(h => h.id === cb.value);
-    if (hl) selectedHotlines.push(hl);
-  });
+  if (ROLE === 'admin') {
+    const hlCheckboxes = document.querySelectorAll('input[name="ancHotline"]:checked');
+    hlCheckboxes.forEach(cb => {
+      const hl = (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).find(h => h.id === cb.value);
+      if (hl) selectedHotlines.push(hl);
+    });
+  }
 
   // Get selected audience
   const selectedAudience = [];
@@ -1040,7 +1047,9 @@ function submitCreateAnnouncement(isDraft = false) {
     isArchived: false,
     isDraft: !!isDraft,
     status: isDraft ? 'draft' : 'active',
-    hotlines: selectedHotlines.length ? selectedHotlines : (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).slice(0, 4)
+    hotlines: ROLE === 'admin'
+      ? (selectedHotlines.length ? selectedHotlines : (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).slice(0, 4))
+      : []
   };
 
   const all = getStoredAnnouncements();
