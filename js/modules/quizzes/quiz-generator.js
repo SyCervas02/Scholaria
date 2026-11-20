@@ -1323,7 +1323,6 @@ async function generateQuiz() {
       const qCount = data.questions.length;
       let sourceLabel = source;
       if (source.startsWith('gemini:')) sourceLabel = '🤖 Gemini AI (' + source.split(':')[1] + ')';
-      else if (source.startsWith('openai:')) sourceLabel = '🤖 OpenAI (' + source.split(':')[1] + ')';
       else if (source === 'offline-fallback') sourceLabel = '⚠️ Offline Extraction (AI unavailable — quota or network)';
 
       showToast(`✅ Generated ${qCount} questions in ${elapsed}s via ${sourceLabel}`, source === 'offline-fallback' ? 'warning' : 'success');

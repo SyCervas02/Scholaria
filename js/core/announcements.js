@@ -715,29 +715,13 @@ function buildAnnouncementsPage() {
 }
 
 function handleAncAudienceToggle() {
-  const allStudentsCb = document.querySelector('input[name="ancAudience"][value="All Students"]');
-  if (!allStudentsCb) return;
-
-  const isAllStudentsChecked = allStudentsCb.checked;
-  const strandValues = ['STEM Strand', 'HUMSS Strand', 'ABM Strand', 'TVL Strand'];
-
-  strandValues.forEach(val => {
-    const strandCb = document.querySelector(`input[name="ancAudience"][value="${val}"]`);
-    if (strandCb) {
-      strandCb.disabled = isAllStudentsChecked;
-      if (isAllStudentsChecked) {
-        strandCb.checked = true;
-      }
-      const label = strandCb.closest('.anc-checkbox-label');
-      if (label) {
-        if (isAllStudentsChecked) {
-          label.style.opacity = '0.5';
-          label.style.cursor = 'not-allowed';
-        } else {
-          label.style.opacity = '1';
-          label.style.cursor = 'pointer';
-        }
-      }
+  // Every audience option stays selectable at all times; no cross-locking.
+  document.querySelectorAll('input[name="ancAudience"]').forEach(cb => {
+    cb.disabled = false;
+    const label = cb.closest('.anc-checkbox-label');
+    if (label) {
+      label.style.opacity = '1';
+      label.style.cursor = 'pointer';
     }
   });
 }
@@ -916,10 +900,10 @@ function openCreateAnnouncementModal() {
     const allTeachersCb = document.querySelector('input[name="ancAudience"][value="All Teachers"]');
     if (allTeachersCb) {
       allTeachersCb.checked = false;
-      allTeachersCb.disabled = true;
+      allTeachersCb.disabled = false;
       if (allTeachersCb.closest('.anc-checkbox-label')) {
-        allTeachersCb.closest('.anc-checkbox-label').style.opacity = '0.45';
-        allTeachersCb.closest('.anc-checkbox-label').style.cursor = 'not-allowed';
+        allTeachersCb.closest('.anc-checkbox-label').style.opacity = '1';
+        allTeachersCb.closest('.anc-checkbox-label').style.cursor = 'pointer';
       }
     }
 

@@ -58,7 +58,6 @@ app.use(helmet({
         "https://*.supabase.co",
         "wss://*.supabase.co",
         "https://generativelanguage.googleapis.com",
-        "https://api.openai.com",
         "https://cdn.jsdelivr.net",
         "https://cdnjs.cloudflare.com"
       ],
@@ -1421,7 +1420,7 @@ const ALLOWED_UPLOAD_EXTS = new Set([
 
 const chatUpload = multer({
   storage: chatStorage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   fileFilter: function (req, file, cb) {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_UPLOAD_EXTS.has(ext)) {
@@ -1451,7 +1450,10 @@ app.post('/api/chat/upload', chatUpload.single('file'), async (req, res) => {
   let storageUrl = null;
   try {
     const fileBuf = fs.readFileSync(req.file.path);
-    base64Data = `data:${req.file.mimetype};base64,${fileBuf.toString('base64')}`;
+    // Only inline small files; 50MB attachments would balloon the JSON payload.
+    if (req.file.size <= 10 * 1024 * 1024) {
+      base64Data = `data:${req.file.mimetype};base64,${fileBuf.toString('base64')}`;
+    }
 
     // Upload immediately to permanent Supabase Storage 'chat-attachments' bucket
     if (supabaseAdmin && supabaseAdmin.storage) {
@@ -1514,26 +1516,9 @@ app.post('/api/chat/send', async (req, res) => {
 
   const localCheck = checkLocalContent(isGroupEvent ? '' : textToCheck);
 
-  let modResult = { flagged: false, categories: {} };
-  if (!isAttachment && !isGroupEvent && textToCheck && textToCheck.trim().length > 0) {
-    try {
-      const modRes = await fetch('https://api.openai.com/v1/moderations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-        },
-        body: JSON.stringify({ input: textToCheck })
-      });
-      const modData = await modRes.json();
-
-      if (modRes.ok && modData.results) {
-        modResult = modData.results[0];
-      }
-    } catch (err) {
-      console.error('Moderation API request failed:', err.message);
-    }
-  }
+  // Moderation is handled entirely by the local content checker; no external
+  // AI provider is used anywhere in the app anymore.
+  const modResult = { flagged: localCheck.profanityFlagged || localCheck.severeFlagged, categories: {} };
 
   const flaggedCategories = Object.entries(modResult.categories || {})
     .filter(([, v]) => v)
@@ -2316,7 +2301,6 @@ function collectGeminiApiKeys() {
 }
 
 const GEMINI_API_KEYS = collectGeminiApiKeys();
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 // A key that reports quota exhaustion is parked so later requests skip it
 // briefly and use the remaining keys first.
@@ -3254,47 +3238,7 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
     }
   }
 
-  // 2. Try OpenAI AI if API key is provided
-  if (prompt && OPENAI_API_KEY && OPENAI_API_KEY.startsWith('sk-')) {
-    try {
-      console.log('[QuizGen] Calling OpenAI (gpt-4o-mini)...');
-      const oaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`
-        },
-        signal: AbortSignal.timeout(45000),
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'You are an educational quiz generation assistant. Return ONLY valid raw JSON with schema {"questions": [...]}' },
-            { role: 'user', content: prompt }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.7
-        })
-      });
-
-      if (oaiResponse.ok) {
-        const data = await oaiResponse.json();
-        const content = data?.choices?.[0]?.message?.content || '{}';
-        const parsed = JSON.parse(content);
-        const questions = sanitizeQuestions(parsed.questions, req.body.files, req.body.fileName);
-        if (questions.length > 0) {
-          console.log(`[QuizGen] OpenAI returned ${questions.length} questions`);
-          return res.json({ questions, _source: 'openai:gpt-4o-mini' });
-        }
-      } else {
-        const oaiErrText = await oaiResponse.text();
-        console.warn(`[QuizGen] OpenAI failed HTTP ${oaiResponse.status}:`, oaiErrText.slice(0, 180));
-      }
-    } catch (err) {
-      console.warn('OpenAI quiz generation attempt error:', err.message);
-    }
-  }
-
-  // 3. Fast & resilient fallback: extract real questions from uploaded source text
+  // 2. Fast & resilient fallback: extract real questions from uploaded source text
   console.log('[QuizGen] Using offline fallback extractor');
   try {
     const extracted = extractQuestionsFromText(req.body);

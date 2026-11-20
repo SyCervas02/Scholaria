@@ -611,7 +611,7 @@ function renderUserManagementContent() {
   const teachers = registeredUsers.filter(u => u.role === 'teacher' && u.isActive !== false);
   const admins = registeredUsers.filter(u => u.role === 'admin' && u.isActive !== false);
   const deactivated = registeredUsers.filter(u => u.isActive === false);
-  const muted = registeredUsers.filter(isChatMuted);
+  const muted = registeredUsers.filter(hasMuteRecord);
   const canManageMutes = typeof ROLE !== 'undefined' && ROLE === 'admin';
   const isStudentTab = adminUserTab === 'students';
   const isTeacherTab = adminUserTab === 'teachers';
@@ -699,7 +699,7 @@ function renderUserManagementContent() {
         <select class="user-filter-select" id="userSectionFilter" onchange="filterUserTable()">
           <option value="">All Sections</option>
           <option value="Unassigned">Unassigned Only</option>
-          ${managedSections.map(s => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('')}
+          ${managedSections.filter(s => !s.isArchived).map(s => `<option value="${escHtml(s.name)}">${escHtml(s.name)}</option>`).join('')}
         </select>
       ` : ''}
 
@@ -953,6 +953,14 @@ function isChatMuted(u) {
   return Boolean(u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
 }
 
+// The Muted Accounts tab keeps accounts with any mute record (active,
+// expired, or strike history) visible instead of silently dropping them the
+// moment a temporary mute lapses.
+function hasMuteRecord(u) {
+  if (!u) return false;
+  return isChatMuted(u) || Boolean(u.mutedUntil) || Number(u.strikes) > 0;
+}
+
 // A section created for a specific strand (e.g. ABM) must only hold students
 // of that strand. "General" (or a missing strand) accepts any student.
 function studentStrandMatchesSection(sectionName, strand) {
@@ -972,6 +980,12 @@ function muteStatusBadge(u) {
     return `<span class="sec-badge" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       Permanently muted
+    </span>`;
+  }
+  if (!isChatMuted(u)) {
+    return `<span class="sec-badge" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Mute expired
     </span>`;
   }
   const until = new Date(u.mutedUntil);
@@ -1013,6 +1027,7 @@ function renderMutedRow(u) {
     <td style="white-space:nowrap;"><span style="font-size:12px;color:${strikes > 0 ? '#b45309' : 'var(--text-muted)'};font-weight:${strikes > 0 ? '700' : '500'};white-space:nowrap;">${strikes} strike${strikes === 1 ? '' : 's'}</span></td>
     <td style="white-space:nowrap;">
       <div style="display:inline-flex;align-items:center;gap:12px;white-space:nowrap;">
+        <span class="action-link" style="color:#ea580c;font-weight:700;cursor:pointer;white-space:nowrap;" onclick="viewUserCredentialSlip('${escHtml(u.id)}')">View Slip</span>
         <span class="action-link" style="color:#2563eb;font-weight:700;cursor:pointer;white-space:nowrap;" onclick="openMuteChatLog('${escHtml(targetId)}')">View Chat Log</span>
         ${unmuteHtml}
       </div>
@@ -1220,7 +1235,7 @@ function filterUserTable() {
   let list = [];
 
   if (isMutedTab) {
-    list = registeredUsers.filter(isChatMuted);
+    list = registeredUsers.filter(hasMuteRecord);
     if (mutedRole) {
       list = list.filter(u => u.role === mutedRole);
     }

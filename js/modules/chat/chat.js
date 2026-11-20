@@ -1197,7 +1197,7 @@ function renderInputArea() {
     <div style="display:flex;flex-direction:column;width:100%;gap:8px;">
       ${pendingAttachmentHtml}
       <div style="display:flex;align-items:center;gap:10px;width:100%;">
-        <button type="button" class="cw-attachment-btn" id="cwAttachmentBtn" title="Attach file (max 5MB)" aria-label="Attach file" onclick="event.preventDefault();event.stopPropagation();triggerChatAttachment()" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l8-8a4 4 0 0 1 5.7 5.7l-8 8a2 2 0 0 1-2.8-2.8L15 6"/></svg></button>
+        <button type="button" class="cw-attachment-btn" id="cwAttachmentBtn" title="Attach file (max 50MB)" aria-label="Attach file" onclick="event.preventDefault();event.stopPropagation();triggerChatAttachment()" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 11-8 8a6 6 0 0 1-8.5-8.5l8-8a4 4 0 0 1 5.7 5.7l-8 8a2 2 0 0 1-2.8-2.8L15 6"/></svg></button>
         <button type="button" class="cw-emoji-btn" id="cwEmojiBtn" title="Emoji" aria-label="Choose emoji" onclick="toggleEmojiPicker(event)" ${activeConversationId ? '' : 'disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 8h.01M16 8h.01"/></svg></button>
         <div class="emoji-picker" id="cwEmojiPicker"></div>
         <input type="text" id="cwInput" aria-label="Message" placeholder="${pendingChatAttachment ? 'Add an optional caption…' : (activeConversationId ? 'Type a message…' : 'Select a conversation to start messaging')}" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChatMsg();}" ${activeConversationId ? '' : 'disabled'}>
@@ -1258,9 +1258,9 @@ async function handleChatFileUpload(event) {
   const file = event.target.files && event.target.files[0];
   if (!file || !activeConversationId) return;
 
-  const MAX_SIZE = 5 * 1024 * 1024; // 5 MB limit
+  const MAX_SIZE = 50 * 1024 * 1024; // 50 MB limit
   if (file.size > MAX_SIZE) {
-    showToast(`Attachment exceeds the 5MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB). Please select a file under 5MB.`, 'error');
+    showToast(`Attachment exceeds the 50MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB). Please select a file under 50MB.`, 'error');
     event.target.value = '';
     return;
   }
@@ -1311,7 +1311,7 @@ async function handleChatFileUpload(event) {
 
       if (upRes.ok) {
         const upData = await upRes.json();
-        cloudUrl = upData.url || '';
+        cloudUrl = upData.storageUrl || upData.url || '';
         fallbackUrl = upData.fallbackUrl || '';
       }
     } catch (upErr) {
@@ -1927,7 +1927,7 @@ function gcOpenPhotoModal() {
     `<div class="gc-photo-title"><span>♧</span><div><h3>Change group photo</h3><p>Update the group photo for this conversation.</p></div></div>
      <div class="gc-photo-preview">${conv.photoUrl ? `<img src="${escHtml(conv.photoUrl)}" alt="Current group photo">` : '👥'}</div>
      <label class="gc-photo-upload" id="gcPhotoDrop" for="gcPhotoInput" ondragover="event.preventDefault();this.classList.add('dragging')" ondragleave="this.classList.remove('dragging')" ondrop="gcDropPhoto(event)">
-       <span class="gc-photo-cloud">⇧</span><strong>Upload a photo</strong><span>Drag and drop your photo here, or</span><span class="gc-choose-photo">▧ &nbsp; Choose Image</span><small id="gcPhotoFilename">PNG, JPG or JPEG &nbsp;•&nbsp; Max 5MB</small>
+       <span class="gc-photo-cloud">⇧</span><strong>Upload a photo</strong><span>Drag and drop your photo here, or</span><span class="gc-choose-photo">▧ &nbsp; Choose Image</span><small id="gcPhotoFilename">PNG, JPG or JPEG &nbsp;•&nbsp; Max 50MB</small>
      </label><input type="file" id="gcPhotoInput" class="gc-file-hidden" accept="image/png,image/jpeg" onchange="gcUploadPhoto(event)"><div id="gcPhotoStatus" class="gc-empty-note"></div>`,
     `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Cancel</button><button type="button" id="gcPhotoUpdate" class="gc-btn primary" disabled onclick="gcSubmitPhoto()">✓ &nbsp; Update Photo</button>`, 'gc-photo-modal');
 }
@@ -1952,8 +1952,8 @@ function gcSelectPhoto(file) {
     if (status) status.textContent = 'Please choose a PNG or JPG image.';
     return;
   }
-  if (file.size > 5 * 1024 * 1024) {
-    if (typeof showToast === 'function') showToast('Group photo must be under 5MB.', 'error');
+  if (file.size > 50 * 1024 * 1024) {
+    if (typeof showToast === 'function') showToast('Group photo must be under 50MB.', 'error');
     return;
   }
   const label = document.getElementById('gcPhotoFilename');
@@ -1976,8 +1976,8 @@ async function gcSubmitPhoto() {
   const file = input?.files?.[0];
   const conv = gcCurrentGroup();
   if (!file || !conv) return;
-  if (file.size > 5 * 1024 * 1024) {
-    if (typeof showToast === 'function') showToast('Group photo must be under 5MB.', 'error');
+  if (file.size > 50 * 1024 * 1024) {
+    if (typeof showToast === 'function') showToast('Group photo must be under 50MB.', 'error');
     input.value = '';
     return;
   }
