@@ -5183,8 +5183,8 @@ button,
     word-break: normal !important;
     line-height: 1.4;
   }
-  .main .student-progress-table th:nth-child(1) { width: 18%; }
-  .main .student-progress-table th:nth-child(2) { width: 23%; }
+  .main .student-progress-table th:nth-child(1) { width: 21%; }
+  .main .student-progress-table th:nth-child(2) { width: 21%; }
   .main .student-progress-table th:nth-child(3) { width: 14%; }
   .main .student-progress-table th:nth-child(4) { width: 10%; }
   .main .student-progress-table th:nth-child(5) { width: 11%; }
