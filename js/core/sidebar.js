@@ -1744,8 +1744,20 @@ function setStudentQuizFilterStatus(st) {
 }
 
 function setStudentQuizSearchQuery(q) {
-  studentQuizSearchQuery = (q || '').trim().toLowerCase();
-  if (typeof renderPage === 'function') renderPage('quizzes');
+  const searchInput = document.getElementById('studentQuizSearchInput');
+  const selectionStart = searchInput?.selectionStart ?? null;
+  const selectionEnd = searchInput?.selectionEnd ?? null;
+  studentQuizSearchQuery = String(q || '');
+  if (typeof renderPage === 'function') {
+    renderPage('quizzes');
+    const updatedSearchInput = document.getElementById('studentQuizSearchInput');
+    if (updatedSearchInput) {
+      updatedSearchInput.focus({ preventScroll: true });
+      if (selectionStart !== null && selectionEnd !== null) {
+        updatedSearchInput.setSelectionRange(selectionStart, selectionEnd);
+      }
+    }
+  }
 }
 
 function resetStudentQuizFilters() {
@@ -2635,12 +2647,13 @@ function studentPage(page) {
       let filtered = visibleQuizzes.slice();
 
       // 1. Search Query filter
-      if (studentQuizSearchQuery) {
+      const searchQuery = studentQuizSearchQuery.trim().toLowerCase();
+      if (searchQuery) {
         filtered = filtered.filter(q => {
           const t = (q.title || '').toLowerCase();
           const s = (q.subject || '').toLowerCase();
           const l = (q.lesson || '').toLowerCase();
-          return t.includes(studentQuizSearchQuery) || s.includes(studentQuizSearchQuery) || l.includes(studentQuizSearchQuery);
+          return t.includes(searchQuery) || s.includes(searchQuery) || l.includes(searchQuery);
         });
       }
 
@@ -2749,7 +2762,7 @@ function studentPage(page) {
         <!-- SEARCH, SORT & FILTER TOOLBAR -->
         <div style="background:#f8fafc;padding:10px 14px;border-radius:12px;border:1.5px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;">
           <div style="display:flex;gap:8px;flex:1;min-width:min(100%,220px);max-width:380px;align-items:center;">
-            <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:9px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(studentQuizSearchQuery)}" oninput="setStudentQuizSearchQuery(this.value)"/>
+            <input id="studentQuizSearchInput" type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:9px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(studentQuizSearchQuery)}" oninput="setStudentQuizSearchQuery(this.value)"/>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <!-- QUIZ SORT MENU -->
