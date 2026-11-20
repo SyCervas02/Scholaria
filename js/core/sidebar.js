@@ -3311,11 +3311,11 @@ function teacherPage(page) {
       <div id="materialsListWrap">${renderMaterialsList('teacher')}</div>`;
 
     case 'quiz': {
-      let filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).slice();
+      let filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => q.status !== 'archived');
       if (ROLE === 'teacher') {
         const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
         const teacherSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-        filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => {
+        filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => q.status !== 'archived').filter(q => {
           const isCreator = (q.createdBy && (
             q.createdBy === CURRENT_PROFILE?.id || 
             q.createdBy === CURRENT_PROFILE?.dbId || 

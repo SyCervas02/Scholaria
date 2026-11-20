@@ -1343,6 +1343,11 @@
   color: #dc2626;
 }
 
+.mm-status-pill.archived {
+  background: #e2e8f0;
+  color: #475569;
+}
+
 /* Date Cell */
 .mm-date-cell {
   display: flex;

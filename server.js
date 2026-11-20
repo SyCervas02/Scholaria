@@ -2153,11 +2153,11 @@ app.patch('/api/materials/:id/status', async (req, res) => {
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
 
   const { status } = req.body;
-  if (!['approved', 'rejected'].includes(status)) {
-    return res.status(400).json({ error: 'status must be approved or rejected' });
+  if (!['pending', 'approved', 'rejected', 'archived'].includes(status)) {
+    return res.status(400).json({ error: 'status must be pending, approved, rejected, or archived' });
   }
 
-  if (status === 'approved') {
+  if (status === 'pending' || status === 'approved' || status === 'archived') {
     const { data, error } = await supabaseAdmin
       .from('materials').update({ status }).eq('id', req.params.id).select().single();
     if (error) return res.status(500).json({ error: error.message });
@@ -2200,7 +2200,7 @@ app.patch('/api/quizzes/:id/status', async (req, res) => {
   if (profile.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
 
   const { status } = req.body;
-  if (!['approved', 'active', 'rejected', 'closed'].includes(status)) {
+  if (!['pending', 'approved', 'active', 'rejected', 'closed', 'archived'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
 

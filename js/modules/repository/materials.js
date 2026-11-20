@@ -3793,7 +3793,7 @@ function renderMaterialsManagerPage(role) {
                       <!-- 5. Status -->
                       <td>
                         <span class="mm-status-pill ${statusClass}">
-                          ${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : 'Rejected'}
+                          ${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : m.status === 'archived' ? 'Archived' : 'Rejected'}
                         </span>
                       </td>
 
@@ -3878,7 +3878,7 @@ function renderMaterialsManagerPage(role) {
                         getFileTypeSvg(m.type)}
                     </div>
                     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-                      <span class="mm-status-pill ${statusClass}">${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : 'Rejected'}</span>
+                      <span class="mm-status-pill ${statusClass}">${m.status === 'approved' ? 'Approved' : m.status === 'pending' ? 'Pending' : m.status === 'archived' ? 'Archived' : 'Rejected'}</span>
                       <span class="mm-handout-badge" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #fde68a;padding:1px 6px;border-radius:4px;white-space:nowrap;">
                         Handout
                       </span>
@@ -4099,62 +4099,59 @@ async function previewSubjectUploadedMaterial(id) {
 
 // Content Approval presentation state; approval and denial use the existing handlers.
 const approvalView = { tab: 'pending', search: '', type: '', subject: '', page: 1 };
-const APPROVAL_ARCHIVE_KEY = 'scholaria_archived_approvals';
-const APPROVAL_UNARCHIVE_KEY = 'scholaria_unarchived_approvals';
 
-function getArchivedApprovalIds() {
-  try {
-    return JSON.parse(localStorage.getItem(APPROVAL_ARCHIVE_KEY) || '[]');
-  } catch (e) {
-    return [];
-  }
+function isEntryArchived(dbStatus) {
+  return String(dbStatus || '').toLowerCase() === 'archived';
 }
 
-function getUnarchivedApprovalIds() {
-  try {
-    return JSON.parse(localStorage.getItem(APPROVAL_UNARCHIVE_KEY) || '[]');
-  } catch (e) {
-    return [];
-  }
-}
-
-function isEntryArchived(kind, id, dbStatus) {
-  const key = `${kind}:${id}`;
-  const unarchived = getUnarchivedApprovalIds();
-  if (unarchived.includes(key)) return false;
-  const archived = getArchivedApprovalIds();
-  if (archived.includes(key)) return true;
-  return dbStatus === 'archived';
-}
-
-function toggleArchiveApprovalEntry(kind, id) {
-  const key = `${kind}:${id}`;
-  let archived = getArchivedApprovalIds();
-  let unarchived = getUnarchivedApprovalIds();
-  
+async function toggleArchiveApprovalEntry(kind, id) {
   const strId = String(id);
-  const isCurrentlyArchived = approvalView.tab === 'archived' || isEntryArchived(kind, id);
-  
-  if (isCurrentlyArchived) {
-    archived = archived.filter(k => k !== key && k !== strId && !k.endsWith(`:${strId}`));
-    if (!unarchived.includes(key)) unarchived.push(key);
-    if (!unarchived.includes(strId)) unarchived.push(strId);
-    localStorage.setItem(APPROVAL_ARCHIVE_KEY, JSON.stringify(archived));
-    localStorage.setItem(APPROVAL_UNARCHIVE_KEY, JSON.stringify(unarchived));
-    showToast('Item unarchived', 'success');
-  } else {
-    unarchived = unarchived.filter(k => k !== key && k !== strId && !k.endsWith(`:${strId}`));
-    if (!archived.includes(key)) archived.push(key);
-    localStorage.setItem(APPROVAL_ARCHIVE_KEY, JSON.stringify(archived));
-    localStorage.setItem(APPROVAL_UNARCHIVE_KEY, JSON.stringify(unarchived));
-    showToast('Item moved to Archive', 'success');
-  }
-  
+  const list = kind === 'quiz'
+    ? (typeof customQuizzes !== 'undefined' ? customQuizzes : [])
+    : (Array.isArray(materialsData) ? materialsData : []);
+  const item = list.find(entry => String(entry.id) === strId);
+  const wasArchived = isEntryArchived(item?.status);
+  const nextStatus = wasArchived ? 'pending' : 'archived';
+
   document.querySelectorAll('.ca-more-menu.show').forEach(m => m.classList.remove('show'));
+
+  const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
+  if (!session || !session.access_token) {
+    showToast('Your session expired. Please log in again.', 'error');
+    return;
+  }
+
+  const url = kind === 'quiz'
+    ? `${API_BASE}/api/quizzes/${encodeURIComponent(strId)}/status`
+    : `${API_BASE}/api/materials/${encodeURIComponent(strId)}/status`;
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({ status: nextStatus })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showToast(data.error || 'Could not update the archive. Please try again.', 'error');
+      return;
+    }
+  } catch (err) {
+    console.warn('Archive update failed:', err);
+    showToast('Could not update the archive. Please check your connection.', 'error');
+    return;
+  }
+
+  if (item) item.status = nextStatus;
+  showToast(wasArchived ? 'Item unarchived and returned to the review queue' : 'Item moved to Archive', 'success');
 
   const wrap = document.getElementById('approvalListWrap');
   if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
+  if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
 }
+window.toggleArchiveApprovalEntry = toggleArchiveApprovalEntry;
 
 function toggleApprovalMenu(event) {
   event.stopPropagation();
@@ -4198,7 +4195,7 @@ function approvalEntries() {
 
   return [
     ...allMaterials.map(m => {
-      const isArchived = isEntryArchived('material', m.id, m.status);
+      const isArchived = isEntryArchived(m.status);
       const status = isArchived ? 'archived' : (m.status || 'pending');
       return {
         id: m.id,
@@ -4213,7 +4210,7 @@ function approvalEntries() {
       };
     }),
     ...allQuizzes.map(q => {
-      const isArchived = isEntryArchived('quiz', q.id, q.status);
+      const isArchived = isEntryArchived(q.status);
       const status = isArchived ? 'archived' : (q.status === 'active' ? 'approved' : (q.status || 'pending'));
       const authorUser = users.find(u => u.dbId === q.createdBy || u.id === q.createdBy || (q.createdBy && String(u.dbId).toLowerCase() === String(q.createdBy).toLowerCase()));
       const uploaderName = q.createdByName || q.author || q.uploaded_by_name || authorUser?.name || authorUser?.full_name || 'Teacher';
