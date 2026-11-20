@@ -582,7 +582,7 @@ function iconInfo()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="cu
     '🏆':'trophy','🎮':'grid','📚':'book','💡':'spark','➕':'check','✏️':'file','✍️':'file','🎯':'pin',
     '😀':'smile','😃':'smile','😄':'smile','😁':'smile','😆':'smile','😅':'smile','😂':'smile','🤣':'smile','😊':'smile','😇':'smile','🙂':'smile','🙃':'smile','😉':'smile','😌':'smile','😍':'heart','🥰':'heart','😘':'heart','😋':'smile','😎':'smile','🤔':'help','😐':'smile','😬':'smile','🙄':'smile','😢':'smile','😭':'smile','😤':'alert','😡':'alert','🥳':'spark','🤗':'hands','🙌':'hands','🙏':'hands','👏':'hands','👍':'thumbs','👎':'thumbs','💪':'thumbs','👋':'hands','🤝':'hands','✌️':'check','🔥':'flame','🚒':'hospital','🚓':'shield','🏥':'hospital','⚕️':'hospital','🧑‍🏫':'person','👨‍🏫':'person','👩‍🏫':'person'
   };
-  const ignored = 'script,style,textarea,input,select,option,[contenteditable="true"],#cwEmojiPicker,.chat-message,.message-body,.anc-body,.announcement-content,.quiz-question,.quiz-option,.user-content';
+  const ignored = 'script,style,textarea,input,select,option,[contenteditable="true"],#cwEmojiPicker,.scholaria-chat,.chat-message,.message-body,.anc-body,.announcement-content,.quiz-question,.quiz-option,.user-content';
   const emojiPattern = /\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?)*(?:\u{1F3FB}-\u{1F3FF})?/gu;
   const symbolPattern = /[✓✔✕✖❌✅⚠☑🔴⚪]/gu;
   function makeIcon(emoji) {

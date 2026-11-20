@@ -1722,6 +1722,17 @@ function setStudentQuizSort(sortBy) {
   if (typeof renderPage === 'function') renderPage('quizzes');
 }
 
+function studentQuizSortIcon(sortBy) {
+  const paths = {
+    pending: '<path d="M13 2 4 14h7l-1 8 10-12h-7l1-8Z"/>',
+    subject: '<path d="M4 5h16M4 12h16M4 19h16"/><path d="m7 3-3 2 3 2m10 3 3 2-3 2m-7 3 2 2 2-2"/>',
+    deadline: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    newest: '<path d="M12 3v12m-5-5 5 5 5-5"/><path d="M5 17v4h14v-4"/>',
+    title: '<path d="M4 6h16M4 12h10M4 18h7"/><path d="m18 15 2 4 2-4m-2 4v2"/>'
+  };
+  return `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[sortBy] || paths.pending}</svg>`;
+}
+
 function setStudentQuizFilterSubject(subj) {
   studentQuizFilterSubject = subj;
   if (typeof renderPage === 'function') renderPage('quizzes');
@@ -2741,16 +2752,19 @@ function studentPage(page) {
             <input type="text" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:9px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(studentQuizSearchQuery)}" oninput="setStudentQuizSearchQuery(this.value)"/>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <!-- SORT SELECT -->
+            <!-- QUIZ SORT MENU -->
             <div style="display:flex;align-items:center;gap:5px;">
               <label style="font-size:11.5px;font-weight:700;color:#64748b;margin:0;">Sort:</label>
-              <select class="user-filter-select" style="font-weight:600;padding:6px 10px;font-size:12px;border-radius:8px;" onchange="setStudentQuizSort(this.value)">
-                <option value="pending" ${studentQuizSortBy === 'pending' ? 'selected' : ''}>⚡ Pending to Take First</option>
-                <option value="subject" ${studentQuizSortBy === 'subject' ? 'selected' : ''}>📚 Subject (A – Z)</option>
-                <option value="deadline" ${studentQuizSortBy === 'deadline' ? 'selected' : ''}>⏰ Due Date (Earliest First)</option>
-                <option value="newest" ${studentQuizSortBy === 'newest' ? 'selected' : ''}>🆕 Newest Added</option>
-                <option value="title" ${studentQuizSortBy === 'title' ? 'selected' : ''}>🔤 Title (A – Z)</option>
-              </select>
+              <details style="position:relative;">
+                <summary style="list-style:none;display:flex;align-items:center;gap:7px;font-weight:600;padding:7px 10px;font-size:12px;border-radius:8px;border:1.5px solid var(--blue-light);background:#f8fbff;color:var(--text-primary);cursor:pointer;white-space:nowrap;">
+                  ${studentQuizSortIcon(studentQuizSortBy)}
+                  ${({pending:'Pending to Take First',subject:'Subject (A – Z)',deadline:'Due Date (Earliest First)',newest:'Newest Added',title:'Title (A – Z)'})[studentQuizSortBy] || 'Pending to Take First'}
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+                </summary>
+                <div role="group" aria-label="Sort quizzes" style="position:absolute;z-index:20;top:calc(100% + 4px);left:0;min-width:220px;padding:4px;background:#fff;border:1px solid #dbe4f0;border-radius:9px;box-shadow:0 8px 24px #0f172a20;">
+                  ${[['pending','Pending to Take First'],['subject','Subject (A – Z)'],['deadline','Due Date (Earliest First)'],['newest','Newest Added'],['title','Title (A – Z)']].map(([value,label]) => `<button type="button" aria-pressed="${studentQuizSortBy === value}" onclick="setStudentQuizSort('${value}')" style="width:100%;display:flex;align-items:center;gap:8px;padding:8px;border:0;border-radius:6px;background:${studentQuizSortBy === value ? '#eff6ff' : 'transparent'};color:#172554;font-family:inherit;font-size:12px;font-weight:600;text-align:left;cursor:pointer;">${studentQuizSortIcon(value)}${label}</button>`).join('')}
+                </div>
+              </details>
             </div>
 
             <!-- SUBJECT FILTER -->
