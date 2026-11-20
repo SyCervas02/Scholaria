@@ -534,10 +534,10 @@ body { background: #f1f7ff; }
 
 .teacher-reference-dashboard .td-subjects { grid-area:subjects; }
 .teacher-reference-dashboard .td-pending { grid-area:pending; }
-.teacher-reference-dashboard .td-events { grid-area:events; }
+.teacher-reference-dashboard .td-events { grid-area:announcements; }
 .teacher-reference-dashboard .td-sections { grid-area:sections; }
 .teacher-reference-dashboard .td-materials { grid-area:materials; }
-.teacher-reference-dashboard .td-announcements { grid-area:announcements; }
+.teacher-reference-dashboard .td-announcements { grid-area:events; }
 .teacher-reference-dashboard .td-assessments { grid-area:assessments; }
 .teacher-reference-dashboard .td-metric>.td-icon { background:linear-gradient(135deg,var(--td-color),color-mix(in srgb,var(--td-color),#fff 20%)); color:#fff; border-radius:17px; box-shadow:inset 0 0 0 4px #ffffff0c; }
 .teacher-reference-dashboard .td-event { display:flex; align-items:center; gap:16px; width:100%; padding:10px 0; border:0; border-bottom:1px solid #edf2fa; background:none; text-align:left; color:#12346e; }
