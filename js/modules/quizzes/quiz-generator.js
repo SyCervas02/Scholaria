@@ -55,7 +55,24 @@ async function loadQuizzesFromDB(force = false) {
   if (typeof currentPage !== 'undefined' && (currentPage === 'dashboard' || currentPage === 'quizzes' || currentPage === 'progress' || currentPage === 'quiz' || currentPage === 'analysis' || currentPage === 'approval')) {
     const mainContent = document.getElementById('mainContent');
     if (mainContent && typeof getPageContent === 'function') {
+      const active = document.activeElement;
+      const searchInput = document.getElementById('quizManagerSearchInput');
+      const wasSearchFocused = active === searchInput;
+      const caret = wasSearchFocused ? searchInput.selectionStart : null;
+      const scrollTop = mainContent.scrollTop;
       mainContent.innerHTML = getPageContent(ROLE, currentPage);
+      mainContent.scrollTop = scrollTop;
+      if (currentPage === 'quiz' && typeof applyQuizManagerSearchVisibility === 'function') {
+        applyQuizManagerSearchVisibility();
+      }
+      if (wasSearchFocused) {
+        const next = document.getElementById('quizManagerSearchInput');
+        if (next) {
+          next.focus();
+          const pos = Math.min(caret ?? next.value.length, next.value.length);
+          try { next.setSelectionRange(pos, pos); } catch (e) {}
+        }
+      }
     }
   }
   if (typeof updateApprovalBadge === 'function') updateApprovalBadge();
@@ -2275,23 +2292,30 @@ function setQuizManagerFilterSubject(subj) {
   if (typeof renderPage === 'function') renderPage('quiz');
 }
 
+// Filter the rendered quiz rows in place by the bold quiz title only. This
+// avoids re-rendering the page on every keystroke, which used to drop focus
+// from the search input after each character.
+function applyQuizManagerSearchVisibility() {
+  const list = document.getElementById('quizManagerListWrap');
+  if (!list) return;
+  const query = String(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')
+    .toLowerCase().trim();
+  const rows = list.querySelectorAll('.quiz-row');
+  let visibleCount = 0;
+  rows.forEach(row => {
+    const title = (row.querySelector('.qz-title')?.textContent || '').toLowerCase();
+    const matches = !query || title.includes(query);
+    row.style.display = matches ? '' : 'none';
+    if (matches) visibleCount++;
+  });
+  const empty = document.getElementById('quizManagerSearchEmpty');
+  if (empty) empty.style.display = (rows.length > 0 && visibleCount === 0) ? 'flex' : 'none';
+}
+window.applyQuizManagerSearchVisibility = applyQuizManagerSearchVisibility;
+
 function setQuizManagerSearchQuery(q) {
-  const main = document.getElementById('mainContent');
-  const prev = document.getElementById('quizManagerSearchInput');
-  const caret = prev && document.activeElement === prev ? prev.selectionStart : null;
-  const scrollTop = main ? main.scrollTop : 0;
-  const scrollY = window.scrollY || 0;
   quizManagerSearchQuery = q || '';
-  if (typeof renderPage === 'function') renderPage('quiz');
-  // renderPage rebuilds the page HTML, so restore scroll, focus, and caret.
-  if (main) main.scrollTop = scrollTop;
-  window.scrollTo(0, scrollY);
-  const input = document.getElementById('quizManagerSearchInput');
-  if (input) {
-    input.focus();
-    const pos = caret == null ? input.value.length : Math.min(caret, input.value.length);
-    try { input.setSelectionRange(pos, pos); } catch (e) {}
-  }
+  applyQuizManagerSearchVisibility();
 }
 
 let quizManagerFilterReview = '';

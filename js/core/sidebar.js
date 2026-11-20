@@ -3338,15 +3338,8 @@ function teacherPage(page) {
       // Extract unique subjects
       const availableSubjects = [...new Set(filtered.map(q => q.subject).filter(Boolean))];
 
-      // Apply Search and Filters
-      if (typeof quizManagerSearchQuery !== 'undefined' && quizManagerSearchQuery) {
-        const qmQuery = String(quizManagerSearchQuery).toLowerCase().trim();
-        filtered = filtered.filter(q =>
-          (q.title || '').toLowerCase().includes(qmQuery) ||
-          (q.subject || '').toLowerCase().includes(qmQuery) ||
-          (q.lesson || '').toLowerCase().includes(qmQuery)
-        );
-      }
+      // Search is applied in place by setQuizManagerSearchQuery() so typing
+      // never rebuilds the page (or the input element) under the cursor.
       if (typeof quizManagerFilterStrand !== 'undefined' && quizManagerFilterStrand) {
         filtered = filtered.filter(q => (q.strand || '').toLowerCase().includes(quizManagerFilterStrand.toLowerCase()));
       }
@@ -3423,7 +3416,7 @@ function teacherPage(page) {
         <!-- SEARCH & FILTER TOOLBAR -->
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc;padding:10px 14px;border-radius:12px;border:1px solid #e2e8f0;">
           <div style="display:flex;gap:8px;flex:1;min-width:min(100%,220px);max-width:360px;align-items:center;">
-            <input type="text" id="quizManagerSearchInput" placeholder="Search quiz title, subject, or lesson..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
+            <input type="text" id="quizManagerSearchInput" placeholder="Search quiz title..." style="width:100%;border:1.5px solid var(--blue-light);border-radius:8px;padding:7px 12px;font-size:12.5px;background:#fff;" value="${escHtml(typeof quizManagerSearchQuery !== 'undefined' ? quizManagerSearchQuery : '')}" oninput="setQuizManagerSearchQuery(this.value)"/>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <select class="user-filter-select" style="font-size:12px;padding:6px 10px;" onchange="setQuizManagerFilterStrand(this.value)">
@@ -3450,7 +3443,12 @@ function teacherPage(page) {
         </div>
 
         <!-- QUIZ LIST -->
-        <div class="quiz-list" style="display:flex;flex:1;flex-direction:column;gap:8px;">
+        <div class="quiz-list" id="quizManagerListWrap" style="display:flex;flex:1;flex-direction:column;gap:8px;">
+        <div id="quizManagerSearchEmpty" style="display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;min-height:200px;text-align:center;padding:32px 20px;background:#fff;border-radius:14px;border:1px dashed #cbd5e1;">
+          <div style="font-size:32px;margin-bottom:10px;">🔍</div>
+          <h3 style="font-size:15px;font-weight:700;color:#0f172a;margin:0 0 6px;">No quizzes match your search</h3>
+          <p style="color:var(--text-muted);font-size:13px;margin:0;">Try a different quiz title.</p>
+        </div>
         ${filtered.length ? filtered.map(q => {
           const isInter = q.type === 'interactive' || q.quiz_type === 'interactive';
           const itemsCount = (q.questions || []).length;
@@ -5661,6 +5659,9 @@ function renderPage(page) {
   mainContent.dataset.page = page;
   mainContent.dataset.role = ROLE || '';
   mainContent.innerHTML = getPageContent(ROLE, page);
+  if (page === 'quiz' && typeof applyQuizManagerSearchVisibility === 'function') {
+    applyQuizManagerSearchVisibility();
+  }
   if (typeof refreshTeacherUnreadOnPageChange === 'function') refreshTeacherUnreadOnPageChange();
   mainContent.scrollTop = 0;
   window.scrollTo(0, 0);
