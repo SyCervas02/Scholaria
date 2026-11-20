@@ -2548,7 +2548,12 @@ async function finishInteractiveQuiz() {
   clearInterval(interactivePlayerState.timerInterval);
   stopInteractiveSessionAutosave();
   if (typeof clearActiveQuizSession === 'function') clearActiveQuizSession();
-  const { quiz, score, totalItems, startTime } = interactivePlayerState;
+  const { quiz, totalItems, startTime } = interactivePlayerState;
+  const score = Math.min(
+    Math.max(0, Number(totalItems) || 0),
+    Math.max(0, Number(interactivePlayerState.score) || 0)
+  );
+  interactivePlayerState.score = score;
 
   const elapsedMs = Date.now() - (startTime || Date.now());
   const totalSeconds = Math.max(1, Math.round(elapsedMs / 1000));
