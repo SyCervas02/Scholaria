@@ -528,7 +528,7 @@ function renderContactsList() {
     <div class="contact-row ${c.id === activeConversationId ? 'active-contact' : ''} ${archivedAt ? 'contact-row-archived' : ''}" data-conv="${c.id}" onclick="openConversation('${c.id}')">
       <div class="contact-avatar ${c.isGroup ? 'group-avatar' : ''} ${c.photoUrl ? 'has-photo' : ''}">${avatarInner}</div>
       <div class="contact-info">
-        <h4>${escHtml(conversationLabel(c))}${archivedAt ? '<span class="contact-archived-tag">Archived</span>' : ''}</h4>
+        <h4>${escHtml(conversationLabel(c))}</h4>
         <span>${escHtml(conversationPreview(c))}</span>
       </div>
       <div class="contact-meta">
@@ -619,9 +619,7 @@ function closeConversation() {
 
 function updateGroupChatHeaderControls(conv) {
   const menuBtn = document.getElementById('cwGroupMenuBtn');
-  const pill = document.getElementById('cwArchivedPill');
   if (menuBtn) menuBtn.style.display = (conv && conv.isGroup) ? 'inline-flex' : 'none';
-  if (pill) pill.style.display = (conv && conv.isGroup && getGroupArchivedAt(conv.id)) ? 'inline-flex' : 'none';
   const menu = document.getElementById('cwGroupMenu');
   if (menu) { menu.style.display = 'none'; menu.innerHTML = ''; }
 }
@@ -634,8 +632,7 @@ function chatArchiveNoticeHtml(conv) {
   }
   const archivedAt = getGroupArchivedAt(conv.id);
   if (!archivedAt) return '';
-  const when = new Date(archivedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  return `<div class="cw-archive-notice">📦 <span>Archived ${escHtml(when)}. History is frozen here and new messages stay hidden.</span><button type="button" onclick="unarchiveActiveGroupChat()">Unarchive</button></div>`;
+  return '';
 }
 
 window._chatSeenReceipts = window._chatSeenReceipts || {};
@@ -1486,7 +1483,7 @@ function handleIncomingGroupEvent(msg, ev) {
   if (removedMe) {
     setGroupArchivedAt(conv.id, new Date().toISOString());
     conv.archivedAt = getGroupArchivedAt(conv.id);
-    if (typeof showToast === 'function') showToast('You were removed from this group. It now lives in Archived GCs.', 'info');
+    if (typeof showToast === 'function') showToast('You were removed from this group. It now lives in Archive.', 'info');
     if (activeConversationId === conv.id) openConversation(conv.id);
     renderContactsList();
     return;
@@ -1566,8 +1563,8 @@ function toggleGroupChatMenu(e) {
 
   menu.innerHTML = `${manageItems}
     ${archived
-      ? `<button type="button" class="gc-menu-primary" onclick="unarchiveActiveGroupChat()"><span>📤</span> Unarchive group chat</button>`
-      : (removed ? '' : `<button type="button" class="gc-menu-danger" onclick="gcArchiveActiveGroupChat()"><span>📦</span> Archive group chat</button>`)}
+      ? `<button type="button" class="gc-menu-primary" onclick="unarchiveActiveGroupChat()"><span>📤</span> Unarchive</button>`
+      : (removed ? '' : `<button type="button" class="gc-menu-danger" onclick="gcArchiveActiveGroupChat()"><span>📦</span> Hide group chat</button>`)}
   `;
   menu.style.display = 'block';
 }
@@ -1969,7 +1966,7 @@ function gcArchiveActiveGroupChat() {
   if (!conv || !conv.isGroup) return;
   gcOpenModal('Archive group chat',
     `<p>Archive <strong>${escHtml(conversationLabel(conv))}</strong>?</p>
-     <p class="gc-empty-note">You'll keep the history up to this point in Archived GCs. New messages stay hidden until someone adds you back, or until you unarchive it yourself.</p>`,
+     <p class="gc-empty-note">You'll keep the history up to this point in Archive. New messages stay hidden until someone adds you back, or until you unarchive it yourself.</p>`,
     `<button type="button" class="gc-btn ghost" onclick="closeGroupChatModal()">Cancel</button>
      <button type="button" class="gc-btn danger" onclick="gcConfirmArchive()">Archive group chat</button>`);
 }
@@ -1980,7 +1977,7 @@ function gcConfirmArchive() {
   if (!conv) return;
   setGroupArchivedAt(conv.id, new Date().toISOString());
   conv.archivedAt = getGroupArchivedAt(conv.id);
-  if (typeof showToast === 'function') showToast('Group chat archived. Find it under Archived GCs.', 'info');
+  if (typeof showToast === 'function') showToast('Group chat moved to Archive.', 'info');
   chatListState.role = 'archived';
   setChatFilter('archived');
   closeConversation();

@@ -5562,7 +5562,7 @@ function buildChatPage(role) {
           <button aria-pressed="false" data-chat-filter="teacher" onclick="setChatFilter('teacher')">Teachers</button>
           ${role === 'student' ? '' : '<button aria-pressed="false" data-chat-filter="student" onclick="setChatFilter(\'student\')">Students</button>'}
           <button aria-pressed="false" data-chat-filter="group" onclick="setChatFilter('group')">Group Chats</button>
-          <button aria-pressed="false" data-chat-filter="archived" onclick="setChatFilter('archived')">Archived GC's</button>
+          <button aria-pressed="false" data-chat-filter="archived" onclick="setChatFilter('archived')">Archive</button>
         </div>
         <div class="contact-list" id="chatContactList">
           <div class="contact-empty">Loading conversations…</div>
@@ -5577,7 +5577,6 @@ function buildChatPage(role) {
             <div class="cw-role" id="cwRole">Stay connected, keep learning.</div>
           </div>
           <div class="cw-header-actions">
-            <span class="cw-archived-pill" id="cwArchivedPill" style="display:none;">Archived</span>
             <button class="cw-group-menu-btn" id="cwGroupMenuBtn" type="button" title="Group chat options" aria-label="Group chat options" style="display:none;" onclick="toggleGroupChatMenu(event)">
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
             </button>
