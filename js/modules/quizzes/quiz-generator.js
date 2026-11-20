@@ -664,7 +664,10 @@ function getAvailableSubjectsForQuizGen() {
   // If COURSES_DATABASE exists, pull from courses database
   if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
     COURSES_DATABASE.forEach(c => {
-      if (selectedStrands.length === 0 || selectedStrands.includes(c.strand) || c.track === 'Core' || c.track === 'Applied') {
+      const strandHit = typeof subjectStrandMatches === 'function'
+        ? selectedStrands.some(st => subjectStrandMatches(c.strand, c.strands, st))
+        : selectedStrands.includes(c.strand);
+      if (selectedStrands.length === 0 || strandHit || c.track === 'Core' || c.track === 'Applied') {
         if (c.title) subjectsSet.add(c.title);
       }
     });

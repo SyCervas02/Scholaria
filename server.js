@@ -1865,46 +1865,113 @@ app.post('/api/curriculum-subjects', async (req, res) => {
   const title = String(req.body.title || '').trim();
   const code = String(req.body.code || '').trim().toUpperCase();
   const gradeLevel = String(req.body.gradeLevel || '').trim();
-  const strand = String(req.body.strand || '').trim().toUpperCase();
   const track = String(req.body.track || '').trim();
   const section = String(req.body.section || '').trim();
-  if (!title || !code || !['Grade 11', 'Grade 12'].includes(gradeLevel) || !['STEM', 'HUMSS', 'ABM', 'TVL'].includes(strand) || !['Core', 'Applied', 'Specialized', 'Elective'].includes(track) || !section) {
-    return res.status(400).json({ error: 'Please provide a valid title, code, grade, strand, track, and section' });
+  const requested = Array.isArray(req.body.strands) ? req.body.strands : (req.body.strand ? [req.body.strand] : []);
+  const strands = [...new Set(requested.map(s => String(s || '').trim().toUpperCase()))].filter(s => ['STEM', 'HUMSS', 'ABM', 'TVL'].includes(s));
+  if (!title || !code || !['Grade 11', 'Grade 12'].includes(gradeLevel) || !strands.length || !['Core', 'Applied', 'Specialized', 'Elective'].includes(track)) {
+    return res.status(400).json({ error: 'Please provide a valid title, code, grade, strand(s), and track' });
   }
 
-  const { data, error } = await supabaseAdmin.from('curriculum_subjects').insert({
+  const insertStrand = async strand => supabaseAdmin.from('curriculum_subjects').insert({
     title, code, grade_level: gradeLevel, strand, track, section,
     description: `${gradeLevel} ${strand} ${track} subject.`,
     created_by: profile.id
   }).select('*').single();
 
-  if (error) {
-    // If the table doesn't exist (42P01) or is inaccessible, return a local-only record
-    // so the front-end can still persist the subject in localStorage without blocking the user.
-    if (error.code === '42P01' || error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-      return res.status(200).json({
+  const inserted = [];
+  const skipped = [];
+  let firstError = null;
+  for (const strand of strands) {
+    const { data, error } = await insertStrand(strand);
+    if (!error && data) inserted.push(data);
+    else {
+      firstError = firstError || error;
+      if (error?.code === '23505') skipped.push(strand);
+    }
+  }
+
+  if (inserted.length > 0) {
+    return res.status(201).json({ subjects: inserted, strands, skipped });
+  }
+
+  const missingTable = firstError && (firstError.code === '42P01' || firstError.code === 'PGRST116' || firstError.message?.includes('relation') || firstError.message?.includes('does not exist'));
+  if (missingTable) {
+    // Table unavailable: return a local-only record so the front-end can still
+    // persist the subject in localStorage without blocking the user.
+    return res.status(200).json({
+      subjects: [{
         id: `local_${Date.now()}`,
-        title, code, grade_level: gradeLevel, strand, track, section,
-        description: `${gradeLevel} ${strand} ${track} subject.`,
+        title, code, grade_level: gradeLevel, strand: strands[0], strands, track, section,
+        description: `${gradeLevel} ${strands.join('/')} ${track} subject.`,
         created_by: profile.id,
         created_at: new Date().toISOString(),
         local_only: true
-      });
-    }
-    if (error.code === '23505') {
-      return res.status(409).json({ error: 'A subject with this code already exists in that section.' });
-    }
-    // For any other DB error, still return a local-only record so the UI doesn't break
-    return res.status(200).json({
-      id: `local_${Date.now()}`,
-      title, code, grade_level: gradeLevel, strand, track, section,
-      description: `${gradeLevel} ${strand} ${track} subject.`,
-      created_by: profile.id,
-      created_at: new Date().toISOString(),
+      }],
+      strands,
       local_only: true
     });
   }
-  res.status(201).json(data);
+  if (skipped.length === strands.length) {
+    return res.status(409).json({ error: 'A subject with this code already exists for the selected strand(s).' });
+  }
+  return res.status(500).json({ error: firstError?.message || 'Unable to add subject.' });
+});
+
+// Archived curriculum subjects are shared through Supabase Storage so the
+// admin archive is honored by every teacher/student device, not just the
+// browser that archived it.
+const CURRICULUM_ARCHIVE_OBJECT = 'curriculum-archive.json';
+
+app.get('/api/curriculum-subjects/archived', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const { data, error } = await supabaseAdmin.storage
+      .from('chat-attachments')
+      .download(CURRICULUM_ARCHIVE_OBJECT);
+    if (error || !data) return res.json({ archives: [], updatedAt: '' });
+    const parsed = JSON.parse(await data.text());
+    return res.json({
+      archives: Array.isArray(parsed?.archives) ? parsed.archives : [],
+      updatedAt: parsed?.updatedAt || ''
+    });
+  } catch (err) {
+    console.warn('[Curriculum] Could not read archived subjects:', err.message);
+    return res.json({ archives: [], updatedAt: '' });
+  }
+});
+
+app.put('/api/curriculum-subjects/archived', async (req, res) => {
+  const profile = await requireUser(req, res);
+  if (!profile) return;
+  if (profile.role !== 'admin') return res.status(403).json({ error: 'Only administrators can archive curriculum subjects' });
+
+  const archives = Array.isArray(req.body?.archives) ? req.body.archives : null;
+  if (!archives) return res.status(400).json({ error: 'Expected an array of archived subjects' });
+  if (archives.length > 2000) return res.status(400).json({ error: 'Too many archived subjects' });
+
+  const cleaned = archives.map(item => ({
+    key: String(item?.key || '').trim(),
+    title: String(item?.title || '').trim(),
+    strand: String(item?.strand || '').trim().toUpperCase(),
+    gradeLevel: String(item?.gradeLevel || item?.grade_level || '').trim(),
+    archived_at: item?.archived_at || new Date().toISOString()
+  })).filter(item => item.title);
+
+  try {
+    const payload = JSON.stringify({ archives: cleaned, updatedAt: new Date().toISOString() });
+    const { error } = await supabaseAdmin.storage
+      .from('chat-attachments')
+      .upload(CURRICULUM_ARCHIVE_OBJECT, Buffer.from(payload, 'utf8'), {
+        contentType: 'application/json',
+        upsert: true
+      });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ success: true, count: cleaned.length });
+  } catch (err) {
+    console.error('[Curriculum] Failed to persist archived subjects:', err.message);
+    return res.status(500).json({ error: 'Failed to persist archived subjects' });
+  }
 });
 
 // --- Persistent notifications (Supabase `notifications` table) ---

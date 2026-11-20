@@ -162,8 +162,9 @@ const SUBJECTS_BY_STRAND_AND_GRADE = {
 
 /* ── CURRICULUM SUBJECT ARCHIVE SYSTEM ── */
 const ARCHIVED_SUBJECTS_STORAGE_KEY = 'scholaria_archived_subjects_v1';
+let sharedArchivedSubjects = null;
 
-function getArchivedSubjectsList() {
+function readArchivedSubjectsCache() {
   try {
     const raw = localStorage.getItem(ARCHIVED_SUBJECTS_STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
@@ -172,35 +173,104 @@ function getArchivedSubjectsList() {
   }
 }
 
+function getArchivedSubjectsList() {
+  if (Array.isArray(sharedArchivedSubjects)) return sharedArchivedSubjects;
+  return readArchivedSubjectsCache();
+}
+
 function saveArchivedSubjectsList(list) {
+  sharedArchivedSubjects = list;
   try {
     localStorage.setItem(ARCHIVED_SUBJECTS_STORAGE_KEY, JSON.stringify(list));
   } catch (e) {}
+  if (typeof ROLE !== 'undefined' && ROLE === 'admin') persistArchivedSubjectsToServer(list);
 }
+
+async function persistArchivedSubjectsToServer(list) {
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session?.access_token) return;
+    const response = await fetch(`${API_BASE}/api/curriculum-subjects/archived`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ archives: list })
+    });
+    if (!response.ok) console.warn('Archived subjects could not be synced to the server.');
+  } catch (err) {
+    console.warn('Archived subjects could not be synced to the server:', err.message);
+  }
+}
+
+async function loadSharedCurriculumArchive() {
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session?.access_token) return;
+    const response = await fetch(`${API_BASE}/api/curriculum-subjects/archived`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: 'no-store'
+    });
+    if (!response.ok) return;
+    const payload = await response.json();
+    const serverList = Array.isArray(payload.archives) ? payload.archives : [];
+    const localList = readArchivedSubjectsCache();
+    // First run after upgrading: keep archives that only exist in this browser
+    // and seed the shared copy with them.
+    if (!payload.updatedAt && localList.length && !serverList.length) {
+      sharedArchivedSubjects = localList;
+      if (typeof ROLE !== 'undefined' && ROLE === 'admin') persistArchivedSubjectsToServer(localList);
+      return;
+    }
+    sharedArchivedSubjects = serverList;
+    try {
+      localStorage.setItem(ARCHIVED_SUBJECTS_STORAGE_KEY, JSON.stringify(serverList));
+    } catch (e) {}
+  } catch (err) {
+    console.warn('Archived subjects could not be loaded:', err.message);
+  }
+}
+window.loadSharedCurriculumArchive = loadSharedCurriculumArchive;
 
 function isSubjectArchived(title, strand, gradeLevel) {
   if (!title) return false;
   const list = getArchivedSubjectsList();
   if (!list.length) return false;
   const tNorm = String(title).trim().toLowerCase();
-  const sNorm = strand ? String(strand).trim().toUpperCase() : '';
+  const sTokens = String(strand || '').toUpperCase().split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
   const gNorm = gradeLevel ? String(gradeLevel).trim() : '';
+  const strandMatches = itemStrand => {
+    const itemTokens = String(itemStrand || '').toUpperCase().split(/[,/&]+/).map(s => s.trim()).filter(s => s && s !== 'ALL');
+    if (!sTokens.length || !itemTokens.length) return true;
+    return itemTokens.some(token => sTokens.includes(token));
+  };
 
   return list.some(item => {
     if (typeof item === 'string') {
       const iNorm = item.trim().toLowerCase();
       if (iNorm === tNorm) return true;
-      if (sNorm && gNorm && iNorm === `${sNorm}::${gNorm}::${tNorm}`.toLowerCase()) return true;
+      if (sTokens.length && gNorm && iNorm === `${sTokens[0]}::${gNorm}::${tNorm}`.toLowerCase()) return true;
       return false;
     }
     const itemTitle = String(item.title || '').trim().toLowerCase();
     if (itemTitle !== tNorm) return false;
-    if (sNorm && item.strand && item.strand !== 'all' && item.strand.toUpperCase() !== sNorm) return false;
+    if (!strandMatches(item.strand)) return false;
     if (gNorm && item.gradeLevel && item.gradeLevel !== 'all' && item.gradeLevel !== gNorm) return false;
     return true;
   });
 }
 window.isSubjectArchived = isSubjectArchived;
+
+function splitSubjectStrands(strandValue, strandsList) {
+  const raw = Array.isArray(strandsList) && strandsList.length ? strandsList : String(strandValue || '').split(/[,/&]+/);
+  return [...new Set(raw.map(s => String(s || '').trim().toUpperCase()).filter(Boolean))]
+    .filter(s => s !== 'ALL' && s !== 'ALL STRANDS' && s !== 'GENERAL');
+}
+
+function subjectStrandMatches(courseStrand, strandsList, targetStrand) {
+  const courseTokens = splitSubjectStrands(courseStrand, strandsList);
+  const targetTokens = splitSubjectStrands(targetStrand);
+  if (!courseTokens.length || !targetTokens.length) return true;
+  return targetTokens.some(token => courseTokens.includes(token));
+}
 
 function getFilteredSubjects(strand, gradeLevel) {
   let targetStrands = [];
@@ -978,12 +1048,13 @@ function renderMaterialsList(role) {
   }
   let enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
     ? (role === 'teacher'
-        ? (materialsStrandFilter ? COURSES_DATABASE.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase()) : COURSES_DATABASE.slice())
+        ? (materialsStrandFilter ? COURSES_DATABASE.filter(c => subjectStrandMatches(c.strand, c.strands, materialsStrandFilter)) : COURSES_DATABASE.slice())
         : COURSES_DATABASE.filter(c => typeof isCourseAssignedToStudent === 'function'
             ? isCourseAssignedToStudent(c, CURRENT_PROFILE)
             : (c.strand || '').toUpperCase() === studentStrand &&
               String(c.gradeLevel || '').match(/\d+/)?.[0] === String(CURRENT_PROFILE?.grade_level || CURRENT_PROFILE?.gradeLevel || '').match(/\d+/)?.[0]))
     : [];
+  enrolledCourses = enrolledCourses.filter(c => !isSubjectArchived(c.title, c.strand, c.gradeLevel));
 
   if (role === 'teacher' && typeof materialsStrandFilter !== 'undefined' && materialsStrandFilter) {
     enrolledCourses = enrolledCourses.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase());
@@ -1800,9 +1871,13 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
     const officialTitles = (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined' && SUBJECTS_BY_STRAND_AND_GRADE[secStrand]?.[secGrade])
       ? SUBJECTS_BY_STRAND_AND_GRADE[secStrand][secGrade].filter(title => !isSubjectArchived(title, secStrand, secGrade))
       : [];
-    const customSubjects = currentRole === 'admin' 
-      ? getCustomMaterialsSubjects().filter(c => c.strand === secStrand && c.gradeLevel === secGrade && c.section === sec && !isSubjectArchived(c.title, c.strand, c.gradeLevel)) 
-      : [];
+    const customSubjects = getCustomMaterialsSubjects().filter(c => {
+      if (!subjectStrandMatches(c.strand, c.strands, secStrand)) return false;
+      if (String(c.gradeLevel || c.grade_level || '').trim() !== secGrade) return false;
+      const sections = String(c.section || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (sections.length && !sections.includes(sec.toLowerCase()) && !sections.includes('all sections')) return false;
+      return !isSubjectArchived(c.title, c.strand, c.gradeLevel || c.grade_level);
+    });
     const subjectTitles = [...officialTitles, ...customSubjects.map(c => c.title).filter(title => !officialTitles.some(t => t.toLowerCase() === title.toLowerCase()))];
 
     if (subjectTitles.length > 0) {
@@ -1851,7 +1926,7 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
       });
     } else {
       // Fallback in case of custom strand
-      (courses || []).forEach(course => {
+      (courses || []).filter(course => !isSubjectArchived(course.title, course.strand, course.gradeLevel)).forEach(course => {
         let secCode = course.code || 'SUBJ-1101';
         classCards.push({
           ...course,
@@ -1872,14 +1947,72 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
 }
 
 const CUSTOM_MATERIALS_SUBJECTS_KEY = 'scholaria_custom_materials_subjects';
+
+function mergeCurriculumSubjectRows(rows) {
+  const groups = new Map();
+  (rows || []).forEach(row => {
+    if (!row) return;
+    const title = String(row.title || '').trim();
+    if (!title) return;
+    const gradeLevel = String(row.grade_level || row.gradeLevel || 'Grade 11').trim();
+    const code = String(row.code || '').trim();
+    const key = `${code.toLowerCase()}::${gradeLevel.toLowerCase()}::${title.toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, { rows: [], strands: [], sections: [] });
+    const group = groups.get(key);
+    group.rows.push(row);
+    splitSubjectStrands(row.strand, row.strands).forEach(st => {
+      if (!group.strands.includes(st)) group.strands.push(st);
+    });
+    const section = String(row.section || '').trim();
+    if (section && !group.sections.includes(section)) group.sections.push(section);
+  });
+  return [...groups.values()].map(group => {
+    const first = group.rows[0];
+    const strands = group.strands.length ? group.strands : splitSubjectStrands(first.strand);
+    const tracks = [...new Set(group.rows.map(r => String(r.track || '').trim()).filter(Boolean))];
+    const covers = group.rows.map(r => r.cover).filter(Boolean);
+    const gradeLevel = String(first.grade_level || first.gradeLevel || 'Grade 11').trim();
+    const track = tracks[0] || first.track || 'Specialized';
+    return {
+      ...first,
+      id: first.id,
+      courseIds: [...new Set(group.rows.flatMap(r => (Array.isArray(r.courseIds) && r.courseIds.length) ? r.courseIds : (r.id ? [r.id] : [])))],
+      gradeLevel,
+      strand: strands.join(', ') || 'General',
+      strands,
+      track,
+      section: group.sections.join(', '),
+      description: `${gradeLevel} ${strands.join('/')} ${track} subject.`,
+      isCustomSubject: true,
+      cover: covers[0] || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80'
+    };
+  });
+}
+
 function getCustomMaterialsSubjects() {
   let localSubjects = [];
   try { localSubjects = JSON.parse(localStorage.getItem(CUSTOM_MATERIALS_SUBJECTS_KEY) || '[]'); }
   catch (_) {}
+  if (!Array.isArray(localSubjects)) localSubjects = [];
   const sharedSubjects = (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE))
     ? COURSES_DATABASE.filter(course => course.isCustomSubject)
     : [];
-  return [...localSubjects, ...sharedSubjects.filter(shared => !localSubjects.some(local => local.id === shared.id))];
+  return mergeCurriculumSubjectRows([...localSubjects, ...sharedSubjects]);
+}
+
+function upsertCustomCourseSubject(subject) {
+  if (typeof COURSES_DATABASE === 'undefined' || !Array.isArray(COURSES_DATABASE) || !subject) return;
+  const ids = Array.isArray(subject.courseIds) ? subject.courseIds : [];
+  const index = COURSES_DATABASE.findIndex(course =>
+    (course.id && ids.includes(course.id)) ||
+    course.id === subject.id ||
+    (course.isCustomSubject &&
+      String(course.code || '').toLowerCase() === String(subject.code || '').toLowerCase() &&
+      String(course.gradeLevel || '').trim() === subject.gradeLevel &&
+      String(course.title || '').trim().toLowerCase() === String(subject.title || '').trim().toLowerCase())
+  );
+  if (index === -1) COURSES_DATABASE.push(subject);
+  else COURSES_DATABASE[index] = { ...COURSES_DATABASE[index], ...subject };
 }
 
 async function loadSharedCurriculumSubjects() {
@@ -1891,43 +2024,43 @@ async function loadSharedCurriculumSubjects() {
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || 'Unable to load subjects');
-  payload.forEach(row => {
-    const subject = {
-      ...row,
-      id: row.id,
-      gradeLevel: row.grade_level,
-      isCustomSubject: true,
-      cover: row.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80'
-    };
-    const index = COURSES_DATABASE.findIndex(course => course.id === subject.id);
-    if (index === -1) COURSES_DATABASE.push(subject);
-    else COURSES_DATABASE[index] = { ...COURSES_DATABASE[index], ...subject };
-  });
+  // One admin subject can be stored as one row per strand; merge those rows so
+  // the platform shows a single subject that targets every selected strand.
+  mergeCurriculumSubjectRows(Array.isArray(payload) ? payload : []).forEach(upsertCustomCourseSubject);
 }
 window.loadSharedCurriculumSubjects = loadSharedCurriculumSubjects;
 
 function openAddSubjectModal() {
   if (ROLE !== 'admin') return;
-  const sections = (typeof managedSections !== 'undefined' && Array.isArray(managedSections))
-    ? managedSections.filter(s => !s.isArchived).map(s => s.name)
-    : (typeof SECTIONS !== 'undefined' && Array.isArray(SECTIONS) ? SECTIONS : []);
-  const sectionOptions = (sections.length ? sections : ['Section A', 'Section B']).map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
   closeAddSubjectModal();
-  const html = `<div class="modal-overlay active" id="addSubjectModal" onclick="if(event.target===this)closeAddSubjectModal()"><form class="modal-card" onsubmit="saveCustomMaterialsSubject(event)" style="max-width:560px" onclick="event.stopPropagation()"><div class="modal-head"><div><h3 style="margin:0">Add Subject</h3><span>Add a subject to the master curriculum repository.</span></div><button type="button" class="modal-x" aria-label="Close" onclick="closeAddSubjectModal()">&times;</button></div><div class="modal-body"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject name<input name="title" required maxlength="100" placeholder="e.g. Practical Research 1" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject code<input name="code" required maxlength="30" placeholder="e.g. PR1-1101" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Grade level<select name="gradeLevel" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option value="Grade 11">Grade 11</option><option value="Grade 12">Grade 12</option></select></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Strand<select name="strand" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option>STEM</option><option>HUMSS</option><option>ABM</option><option>TVL</option></select></label></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Track<select name="track" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option>Core</option><option>Applied</option><option>Specialized</option><option>Elective</option></select></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Section<select name="section" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px">${sectionOptions}</select></label></div></div><div class="modal-foot" style="justify-content:flex-end"><button type="button" class="foot-btn-secondary" onclick="closeAddSubjectModal()">Cancel</button><button type="submit" class="add-btn" style="background:#4338ca;color:white">Add Subject</button></div></form></div>`;
+  const strandChoices = ['STEM', 'HUMSS', 'ABM', 'TVL'].map(st => `<label style="display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border:1.5px solid #cbd5e1;border-radius:999px;font-size:12.5px;font-weight:700;color:#334155;cursor:pointer;background:#fff;">
+      <input type="checkbox" name="strands" value="${st}" style="accent-color:#4338ca;width:14px;height:14px;"> ${st}
+    </label>`).join('');
+  const html = `<div class="modal-overlay active" id="addSubjectModal" onclick="if(event.target===this)closeAddSubjectModal()"><form class="modal-card" onsubmit="saveCustomMaterialsSubject(event)" style="max-width:560px" onclick="event.stopPropagation()"><div class="modal-head"><div><h3 style="margin:0">Add Subject</h3><span>Add a subject to the master curriculum repository.</span></div><button type="button" class="modal-x" aria-label="Close" onclick="closeAddSubjectModal()">&times;</button></div><div class="modal-body"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject name<input name="title" required maxlength="100" placeholder="e.g. Practical Research 1" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject code<input name="code" required maxlength="30" placeholder="e.g. PR1-1101" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Grade level<select name="gradeLevel" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option value="Grade 11">Grade 11</option><option value="Grade 12">Grade 12</option></select></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Track<select name="track" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option>Core</option><option>Applied</option><option>Specialized</option><option>Elective</option></select></label></div><div style="display:grid;gap:8px;font-size:13px;font-weight:700;">Strands <span style="font-weight:500;color:#64748b;font-size:12px;">(select every strand this subject applies to)</span><div id="addSubjectStrands" style="display:flex;gap:8px;flex-wrap:wrap;">${strandChoices}</div><span style="font-size:11.5px;font-weight:500;color:#94a3b8;">Students and teachers in the selected strands will see this subject. Handouts uploaded to a specific section stay limited to that section.</span></div></div><div class="modal-foot" style="justify-content:flex-end"><button type="button" class="foot-btn-secondary" onclick="closeAddSubjectModal()">Cancel</button><button type="submit" class="add-btn" style="background:#4338ca;color:white">Add Subject</button></div></form></div>`;
   document.body.insertAdjacentHTML('beforeend', html);
 }
 function closeAddSubjectModal() { document.getElementById('addSubjectModal')?.remove(); }
 async function saveCustomMaterialsSubject(event) {
   event.preventDefault();
   const submitButton = event.currentTarget.querySelector('[type="submit"]');
+  const resetButton = () => {
+    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Add Subject'; }
+  };
   if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Saving…'; }
   const form = event.currentTarget;
-  const values = Object.fromEntries(new FormData(form).entries());
+  const formData = new FormData(form);
+  const values = Object.fromEntries(formData.entries());
+  const strands = formData.getAll('strands').map(v => String(v || '').trim().toUpperCase()).filter(Boolean);
+  if (!strands.length) {
+    if (typeof showToast === 'function') showToast('Select at least one strand for this subject.', 'error');
+    resetButton();
+    return;
+  }
   const subjects = getCustomMaterialsSubjects();
-  if (subjects.some(s => s.code.toLowerCase() === values.code.trim().toLowerCase() && s.section === values.section)) {
-    if (typeof showToast === 'function') showToast('A subject with this code already exists in that section.', 'error');
-    else alert('A subject with this code already exists in that section.');
-    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Add Subject'; }
+  if (subjects.some(s => String(s.code || '').toLowerCase() === values.code.trim().toLowerCase() && String(s.gradeLevel || '').trim() === values.gradeLevel)) {
+    if (typeof showToast === 'function') showToast('A subject with this code already exists for that grade.', 'error');
+    else alert('A subject with this code already exists for that grade.');
+    resetButton();
     return;
   }
   try {
@@ -1936,19 +2069,35 @@ async function saveCustomMaterialsSubject(event) {
     const response = await fetch(`${API_BASE}/api/curriculum-subjects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ title: values.title.trim(), code: values.code.trim(), gradeLevel: values.gradeLevel, strand: values.strand, track: values.track, section: values.section })
+      body: JSON.stringify({ title: values.title.trim(), code: values.code.trim(), gradeLevel: values.gradeLevel, track: values.track, strands })
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'Unable to add subject.');
-    const subject = { ...payload, gradeLevel: payload.grade_level, isCustomSubject: true, cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80' };
-    if (typeof COURSES_DATABASE !== 'undefined' && !COURSES_DATABASE.some(course => course.id === subject.id)) COURSES_DATABASE.push(subject);
+    const rows = Array.isArray(payload.subjects) ? payload.subjects : (payload.id ? [payload] : []);
+    if (!rows.length) throw new Error('The subject could not be saved.');
+    if (payload.local_only) {
+      try {
+        const localRows = JSON.parse(localStorage.getItem(CUSTOM_MATERIALS_SUBJECTS_KEY) || '[]');
+        const list = Array.isArray(localRows) ? localRows : [];
+        rows.forEach(row => {
+          const normalized = { ...row, gradeLevel: row.grade_level || row.gradeLevel };
+          const existing = list.findIndex(item => String(item.code || '').toLowerCase() === String(normalized.code || '').toLowerCase() && String(item.strand || '').toUpperCase() === String(normalized.strand || '').toUpperCase() && String(item.gradeLevel || item.grade_level || '') === String(normalized.gradeLevel || ''));
+          if (existing >= 0) list[existing] = normalized;
+          else list.push(normalized);
+        });
+        localStorage.setItem(CUSTOM_MATERIALS_SUBJECTS_KEY, JSON.stringify(list));
+      } catch (_) {}
+    }
+    const subject = mergeCurriculumSubjectRows(rows)[0];
+    upsertCustomCourseSubject(subject);
     closeAddSubjectModal();
-    renderPage('materials');
-    if (typeof showToast === 'function') showToast('Subject added and shared with matching students.', 'success');
+    if (typeof renderPage === 'function') renderPage('materials');
+    const skipped = Array.isArray(payload.skipped) && payload.skipped.length ? ` (already existed for ${payload.skipped.join(', ')})` : '';
+    if (typeof showToast === 'function') showToast(`Subject added for ${strands.join(', ')}${skipped}.`, 'success');
   } catch (error) {
     if (typeof showToast === 'function') showToast(error.message || 'Unable to add subject.', 'error');
     else alert(error.message || 'Unable to add subject.');
-    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Add Subject'; }
+    resetButton();
   }
 }
 window.openAddSubjectModal = openAddSubjectModal;
@@ -1960,60 +2109,62 @@ const archiveSubjectModalState = {
   strand: 'all',
   grade: 'all',
   tab: 'all',
-  search: ''
+  search: '',
+  rows: []
 };
 
 function getAllCurriculumSubjectsList() {
-  const subjects = [];
-  const seen = new Set();
+  const groups = new Map();
+  const addRow = row => {
+    const title = String(row.title || '').trim();
+    if (!title) return;
+    const gradeLevel = String(row.gradeLevel || row.grade_level || 'Grade 11').trim();
+    const key = `${gradeLevel.toLowerCase()}::${title.toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, { title, gradeLevel, strands: [], tracks: [], codes: [], ids: [], isOfficial: false });
+    const group = groups.get(key);
+    splitSubjectStrands(row.strand, row.strands).forEach(st => {
+      if (!group.strands.includes(st)) group.strands.push(st);
+    });
+    const track = String(row.track || '').trim();
+    if (track && !group.tracks.includes(track)) group.tracks.push(track);
+    const code = String(row.code || '').trim();
+    if (code && !group.codes.includes(code)) group.codes.push(code);
+    if (row.id) group.ids.push(row.id);
+    if (row.isOfficial) group.isOfficial = true;
+  };
 
   if (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined') {
     ['STEM', 'HUMSS', 'ABM', 'TVL'].forEach(st => {
       const grades = SUBJECTS_BY_STRAND_AND_GRADE[st] || {};
       ['Grade 11', 'Grade 12'].forEach(gr => {
         (grades[gr] || []).forEach(title => {
-          const key = `${st}::${gr}::${title.toLowerCase().trim()}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            const isArch = isSubjectArchived(title, st, gr);
-            const track = (typeof getTrackForSubjectTitle === 'function') ? getTrackForSubjectTitle(title, st) : 'Core';
-            subjects.push({
-              title,
-              strand: st,
-              gradeLevel: gr,
-              track,
-              isOfficial: true,
-              isArchived: isArch
-            });
-          }
+          const track = (typeof getTrackForSubjectTitle === 'function') ? getTrackForSubjectTitle(title, st) : 'Core';
+          addRow({ title, strand: st, gradeLevel: gr, track, isOfficial: true });
         });
       });
     });
   }
 
   const custom = (typeof getCustomMaterialsSubjects === 'function') ? getCustomMaterialsSubjects() : [];
-  custom.forEach(c => {
-    const st = c.strand || 'General';
-    const gr = c.gradeLevel || c.grade_level || 'Grade 11';
-    const key = `${st}::${gr}::${(c.title || '').toLowerCase().trim()}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      const isArch = isSubjectArchived(c.title, st, gr);
-      subjects.push({
-        id: c.id,
-        title: c.title,
-        code: c.code,
-        strand: st,
-        gradeLevel: gr,
-        track: c.track || 'Specialized',
-        section: c.section,
-        isOfficial: false,
-        isArchived: isArch
-      });
-    }
-  });
+  custom.forEach(c => addRow({ ...c, strand: c.strand, strands: c.strands, gradeLevel: c.gradeLevel || c.grade_level }));
 
-  return subjects;
+  const strandOrder = ['STEM', 'HUMSS', 'ABM', 'TVL'];
+  return [...groups.values()].map(group => {
+    const strands = group.strands.slice().sort((a, b) => strandOrder.indexOf(a) - strandOrder.indexOf(b));
+    return {
+      title: group.title,
+      gradeLevel: group.gradeLevel,
+      strands: strands.length ? strands : ['General'],
+      strand: strands.join(', ') || 'General',
+      tracks: group.tracks.length ? group.tracks : ['Core'],
+      track: group.tracks.join(' / ') || 'Core',
+      codes: group.codes,
+      code: group.codes.join(', '),
+      ids: group.ids,
+      isOfficial: group.isOfficial,
+      isArchived: isSubjectArchived(group.title, '', group.gradeLevel)
+    };
+  });
 }
 
 function openArchiveSubjectModal() {
@@ -2078,36 +2229,36 @@ function setArchiveSubjectSearch(val) {
 function toggleArchiveSubject(title, strand, gradeLevel, shouldArchive) {
   let list = getArchivedSubjectsList();
   const tNorm = String(title).trim().toLowerCase();
-  const sNorm = strand ? String(strand).trim().toUpperCase() : '';
   const gNorm = gradeLevel ? String(gradeLevel).trim() : '';
-  const fullKey = `${sNorm}::${gNorm}::${tNorm}`;
+  // Subjects are archived as a single unit across every strand, so the stored
+  // entry intentionally has no strand value.
+  const fullKey = `::${gNorm}::${tNorm}`;
 
   if (shouldArchive) {
     const exists = list.some(item => {
       if (typeof item === 'string') return item.toLowerCase() === fullKey.toLowerCase() || item.toLowerCase() === tNorm;
-      return (item.title || '').toLowerCase() === tNorm && (!item.strand || item.strand === sNorm) && (!item.gradeLevel || item.gradeLevel === gNorm);
+      return (item.title || '').trim().toLowerCase() === tNorm && (!item.gradeLevel || item.gradeLevel === 'all' || item.gradeLevel === gNorm);
     });
     if (!exists) {
       list.push({
         key: fullKey,
         title,
-        strand: sNorm,
+        strand: '',
         gradeLevel: gNorm,
         archived_at: new Date().toISOString()
       });
       saveArchivedSubjectsList(list);
     }
-    if (typeof showToast === 'function') showToast(`"${title}" (${sNorm} · ${gNorm}) archived. It will no longer appear in future assignments.`, 'info');
+    if (typeof showToast === 'function') showToast(`"${title}" (${gNorm}) archived for all strands. It will no longer appear for students or teachers.`, 'info');
   } else {
     list = list.filter(item => {
       if (typeof item === 'string') return item.toLowerCase() !== fullKey.toLowerCase() && item.toLowerCase() !== tNorm;
-      const matchTitle = (item.title || '').toLowerCase() === tNorm;
-      const matchStrand = !item.strand || item.strand === 'all' || item.strand.toUpperCase() === sNorm;
+      const matchTitle = (item.title || '').trim().toLowerCase() === tNorm;
       const matchGrade = !item.gradeLevel || item.gradeLevel === 'all' || item.gradeLevel === gNorm;
-      return !(matchTitle && matchStrand && matchGrade);
+      return !(matchTitle && matchGrade);
     });
     saveArchivedSubjectsList(list);
-    if (typeof showToast === 'function') showToast(`"${title}" (${sNorm} · ${gNorm}) restored to active curriculum.`, 'success');
+    if (typeof showToast === 'function') showToast(`"${title}" (${gNorm}) restored to the active curriculum.`, 'success');
   }
 
   renderArchiveSubjectModalContent();
@@ -2115,6 +2266,15 @@ function toggleArchiveSubject(title, strand, gradeLevel, shouldArchive) {
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
   if (typeof applyTeacherClassFilter === 'function') applyTeacherClassFilter();
 }
+
+function toggleArchiveSubjectRow(index, shouldArchive) {
+  const row = (archiveSubjectModalState.rows || [])[index];
+  if (!row) return;
+  archiveSubjectModalState.page = archiveSubjectModalState.page || 1;
+  toggleArchiveSubject(row.title, '', row.gradeLevel, shouldArchive);
+}
+window.toggleArchiveSubjectRow = toggleArchiveSubjectRow;
+window.toggleArchiveSubject = toggleArchiveSubject;
 
 function renderArchiveSubjectModalContent() {
   const body = document.getElementById('archiveSubjectModalBody');
@@ -2130,18 +2290,19 @@ function renderArchiveSubjectModalContent() {
   const q = archiveSubjectModalState.search;
 
   let filtered = allSubjects.filter(s => {
-    if (currentStrand !== 'all' && s.strand !== currentStrand) return false;
+    if (currentStrand !== 'all' && !(s.strands || []).includes(currentStrand)) return false;
     if (currentGrade !== 'all' && s.gradeLevel !== currentGrade) return false;
     if (currentTab === 'active' && s.isArchived) return false;
     if (currentTab === 'archived' && !s.isArchived) return false;
     if (q) {
-      const haystack = `${s.title} ${s.code || ''} ${s.strand} ${s.gradeLevel} ${s.track || ''}`.toLowerCase();
+      const haystack = `${s.title} ${s.code || ''} ${(s.strands || []).join(' ')} ${s.gradeLevel} ${s.track || ''}`.toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;
   });
 
   filtered.sort((a, b) => a.title.localeCompare(b.title));
+  archiveSubjectModalState.rows = filtered;
 
   body.innerHTML = `
     <!-- NOTICE BANNER -->
@@ -2202,7 +2363,7 @@ function renderArchiveSubjectModalContent() {
           </tr>
         </thead>
         <tbody>
-          ${filtered.length > 0 ? filtered.map(s => {
+          ${filtered.length > 0 ? filtered.map((s, idx) => {
             return `
               <tr style="border-bottom:1px solid #f1f5f9;${s.isArchived ? 'background:#fffafa;' : ''}">
                 <td style="padding:10px 14px;">
@@ -2210,11 +2371,15 @@ function renderArchiveSubjectModalContent() {
                   ${s.code ? `<div style="font-size:11px;color:#94a3b8;font-family:monospace;">${escHtml(s.code)}</div>` : ''}
                 </td>
                 <td style="padding:10px 14px;">
-                  <span style="background:#e0f2fe;color:#0369a1;font-weight:700;font-size:11px;padding:2px 8px;border-radius:6px;">${escHtml(s.strand)}</span>
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    ${(s.strands || ['General']).map(st => `<span style="background:#e0f2fe;color:#0369a1;font-weight:700;font-size:11px;padding:2px 8px;border-radius:6px;">${escHtml(st)}</span>`).join('')}
+                  </div>
                 </td>
                 <td style="padding:10px 14px;font-weight:600;color:#334155;">${escHtml(s.gradeLevel)}</td>
                 <td style="padding:10px 14px;">
-                  <span style="font-size:11.5px;color:#64748b;background:#f1f5f9;padding:2px 6px;border-radius:4px;">${escHtml(s.track || 'Core')}</span>
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    ${(s.tracks || [s.track || 'Core']).map(track => `<span style="font-size:11.5px;color:#64748b;background:#f1f5f9;padding:2px 6px;border-radius:4px;">${escHtml(track)}</span>`).join('')}
+                  </div>
                 </td>
                 <td style="padding:10px 14px;">
                   ${s.isArchived ? `
@@ -2229,11 +2394,11 @@ function renderArchiveSubjectModalContent() {
                 </td>
                 <td style="padding:10px 14px;text-align:right;">
                   ${s.isArchived ? `
-                    <button type="button" onclick="toggleArchiveSubject('${escHtml(s.title)}', '${escHtml(s.strand)}', '${escHtml(s.gradeLevel)}', false)" style="background:#ecfdf5;color:#047857;border:1.5px solid #a7f3d0;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                    <button type="button" onclick="toggleArchiveSubjectRow(${idx}, false)" style="background:#ecfdf5;color:#047857;border:1.5px solid #a7f3d0;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
                       ↺ Restore
                     </button>
                   ` : `
-                    <button type="button" onclick="toggleArchiveSubject('${escHtml(s.title)}', '${escHtml(s.strand)}', '${escHtml(s.gradeLevel)}', true)" style="background:#fff1f2;color:#be123c;border:1.5px solid #fecdd3;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                    <button type="button" onclick="toggleArchiveSubjectRow(${idx}, true)" style="background:#fff1f2;color:#be123c;border:1.5px solid #fecdd3;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
                       📦 Archive
                     </button>
                   `}
@@ -2261,7 +2426,6 @@ window.setArchiveSubjectFilterStrand = setArchiveSubjectFilterStrand;
 window.setArchiveSubjectFilterGrade = setArchiveSubjectFilterGrade;
 window.setArchiveSubjectFilterTab = setArchiveSubjectFilterTab;
 window.setArchiveSubjectSearch = setArchiveSubjectSearch;
-window.toggleArchiveSubject = toggleArchiveSubject;
 window.renderArchiveSubjectModalContent = renderArchiveSubjectModalContent;
 
 

@@ -123,6 +123,9 @@ async function guardSessionAndInit() {
   if (typeof loadSharedCurriculumSubjects === 'function') {
     await loadSharedCurriculumSubjects().catch(err => console.warn('Shared curriculum subjects could not be loaded:', err.message));
   }
+  if (typeof loadSharedCurriculumArchive === 'function') {
+    await loadSharedCurriculumArchive().catch(err => console.warn('Archived subjects could not be loaded:', err.message));
+  }
   if (typeof loadSharedManagedSections === 'function') {
     await loadSharedManagedSections().catch(err => console.warn('Shared managed sections could not be loaded:', err.message));
   }

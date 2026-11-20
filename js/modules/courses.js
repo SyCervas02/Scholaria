@@ -2284,12 +2284,17 @@ function isCourseAssignedToStudent(course, profile = CURRENT_PROFILE) {
     return normalized === 'TVL-ICT' || normalized === 'TVL ICT' ? 'TVL' : normalized;
   };
   const gradeNumber = value => Number(String(value || '').match(/\d+/)?.[0]) || null;
+  const splitStrands = value => String(value || '').split(/[,/&]+/).map(normalizeStrand).filter(Boolean);
   const studentStrand = normalizeStrand(profile?.strand);
-  const courseStrand = normalizeStrand(course.strand);
+  const studentStrands = splitStrands(profile?.strand);
+  const courseStrands = (Array.isArray(course.strands) && course.strands.length ? course.strands : splitStrands(course.strand)).map(normalizeStrand).filter(Boolean);
   const studentGrade = gradeNumber(profile?.grade_level || profile?.gradeLevel);
   const courseGrade = gradeNumber(course.gradeLevel || course.grade_level);
-  const strandMatches = !studentStrand || courseStrand === studentStrand || ['ALL', 'ALL STRANDS', 'GENERAL'].includes(courseStrand);
+  const strandMatches = !studentStrand || !courseStrands.length || courseStrands.some(cs =>
+    cs === studentStrand || ['ALL', 'ALL STRANDS', 'GENERAL'].includes(cs) || studentStrands.includes(cs)
+  );
   const gradeMatches = !studentGrade || !courseGrade || courseGrade === studentGrade;
+  if (typeof isSubjectArchived === 'function' && isSubjectArchived(course.title, course.strand, course.gradeLevel || course.grade_level)) return false;
   return strandMatches && gradeMatches;
 }
 
@@ -2331,12 +2336,19 @@ function renderCoursesWidgetHTML() {
   let enrolledList = [];
   if (isTeacher) {
     if (teacherStrands.length > 0) {
-      enrolledList = COURSES_DATABASE.filter(c => teacherStrands.includes((c.strand || '').toUpperCase()) || (c.track || '').toLowerCase() === 'core');
+      enrolledList = COURSES_DATABASE.filter(c => {
+        const courseStrands = (Array.isArray(c.strands) && c.strands.length ? c.strands : String(c.strand || '').split(/[,/&]+/))
+          .map(s => String(s || '').trim().toUpperCase()).filter(Boolean);
+        return teacherStrands.some(st => courseStrands.includes(st)) || (c.track || '').toLowerCase() === 'core';
+      });
     } else {
       enrolledList = COURSES_DATABASE.slice();
     }
   } else {
     enrolledList = COURSES_DATABASE.filter(c => isCourseAssignedToStudent(c, CURRENT_PROFILE));
+  }
+  if (typeof isSubjectArchived === 'function') {
+    enrolledList = enrolledList.filter(c => !isSubjectArchived(c.title, c.strand, c.gradeLevel || c.grade_level));
   }
 
   return `
