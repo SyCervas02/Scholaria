@@ -1744,20 +1744,25 @@ function setStudentQuizFilterStatus(st) {
 }
 
 function setStudentQuizSearchQuery(q) {
-  const searchInput = document.getElementById('studentQuizSearchInput');
-  const selectionStart = searchInput?.selectionStart ?? null;
-  const selectionEnd = searchInput?.selectionEnd ?? null;
   studentQuizSearchQuery = String(q || '');
-  if (typeof renderPage === 'function') {
-    renderPage('quizzes');
-    const updatedSearchInput = document.getElementById('studentQuizSearchInput');
-    if (updatedSearchInput) {
-      updatedSearchInput.focus({ preventScroll: true });
-      if (selectionStart !== null && selectionEnd !== null) {
-        updatedSearchInput.setSelectionRange(selectionStart, selectionEnd);
-      }
-    }
-  }
+  applyStudentQuizSearchFilter();
+}
+
+function applyStudentQuizSearchFilter() {
+  const list = document.querySelector('.quiz-list');
+  if (!list) return;
+  const query = studentQuizSearchQuery.trim().toLowerCase();
+  const rows = list.querySelectorAll('.quiz-row[data-search-text]');
+  let visibleCount = 0;
+  rows.forEach(row => {
+    const matches = !query || (row.dataset.searchText || '').includes(query);
+    row.style.display = matches ? 'flex' : 'none';
+    if (matches) visibleCount++;
+  });
+  const emptyState = list.querySelector('.student-quiz-empty-state');
+  if (emptyState && rows.length) emptyState.hidden = visibleCount > 0;
+  const noSearchResults = list.querySelector('.student-quiz-search-empty');
+  if (noSearchResults) noSearchResults.hidden = !query || visibleCount > 0;
 }
 
 function resetStudentQuizFilters() {
@@ -2647,16 +2652,6 @@ function studentPage(page) {
       let filtered = visibleQuizzes.slice();
 
       // 1. Search Query filter
-      const searchQuery = studentQuizSearchQuery.trim().toLowerCase();
-      if (searchQuery) {
-        filtered = filtered.filter(q => {
-          const t = (q.title || '').toLowerCase();
-          const s = (q.subject || '').toLowerCase();
-          const l = (q.lesson || '').toLowerCase();
-          return t.includes(searchQuery) || s.includes(searchQuery) || l.includes(searchQuery);
-        });
-      }
-
       // 2. Subject filter
       if (studentQuizFilterSubject) {
         filtered = filtered.filter(q => String(q.subject || '').toLowerCase() === studentQuizFilterSubject.toLowerCase());
@@ -2820,7 +2815,7 @@ function studentPage(page) {
             const itemsCount = (q.questions || []).length;
             const isUrgent = !attempt && dueMs && (dueMs - nowMs < 86400000) && (dueMs > nowMs); // Due within 24h
 
-            return `<div class="quiz-row" style="${isExpired ? 'opacity:0.75;background:#fcfcfc;' : ''}display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;margin:0;gap:14px;flex-wrap:wrap;transition:all 0.2s ease;">
+            return `<div class="quiz-row" data-search-text="${escHtml([q.title, q.subject, q.lesson].filter(Boolean).join(' ').toLowerCase())}" style="${isExpired ? 'opacity:0.75;background:#fcfcfc;' : ''}display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;margin:0;gap:14px;flex-wrap:wrap;transition:all 0.2s ease;">
               <div class="qz-info" style="flex:1;min-width:min(100%,220px);">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
                   <span style="display:inline-block;padding:2px 8px;border-radius:6px;background:#eff6ff;color:#2563eb;font-size:11px;font-weight:700;">📚 ${escHtml(q.subject || 'General Academic')}</span>
@@ -2853,7 +2848,7 @@ function studentPage(page) {
             </div>`;
           }).join('')
             : `
-            <div style="text-align:center;padding:32px 16px;background:#fff;border-radius:12px;border:1px dashed #cbd5e1;">
+            <div class="student-quiz-empty-state" style="text-align:center;padding:32px 16px;background:#fff;border-radius:12px;border:1px dashed #cbd5e1;">
               <div style="font-size:32px;margin-bottom:8px;">🔍</div>
               <h3 style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px;">No Quizzes Found</h3>
               <p style="color:var(--text-muted);font-size:12.5px;max-width:380px;margin:0 auto 12px;">
@@ -2862,6 +2857,9 @@ function studentPage(page) {
               ${hasActiveFilters ? `<button onclick="resetStudentQuizFilters()" class="add-btn" style="margin:0 auto;">Clear All Filters</button>` : ''}
             </div>
             `}
+          <div class="student-quiz-search-empty" hidden style="text-align:center;padding:24px 16px;background:#fff;border-radius:12px;border:1px dashed #cbd5e1;color:var(--text-muted);font-size:12.5px;">
+            No quizzes match your search. Try another keyword or clear the search.
+          </div>
         </div>
       </div>`;
     }
@@ -5690,6 +5688,7 @@ function renderPage(page) {
   mainContent.dataset.page = page;
   mainContent.dataset.role = ROLE || '';
   mainContent.innerHTML = getPageContent(ROLE, page);
+  if (page === 'quizzes') applyStudentQuizSearchFilter();
   if (page === 'quiz' && typeof applyQuizManagerSearchVisibility === 'function') {
     applyQuizManagerSearchVisibility();
   }
