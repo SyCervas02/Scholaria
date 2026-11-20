@@ -24,7 +24,141 @@ function saveAnnouncements(list) {
   try {
     localStorage.setItem(ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify(list));
   } catch (e) {}
+  syncOwnedAnnouncements(list);
 }
+
+let announcementRealtimeChannel = null;
+let announcementSyncPoll = null;
+let announcementSyncUserId = '';
+let announcementSyncBusy = false;
+let announcementSyncPending = null;
+
+function announcementRowToRecord(row) {
+  const payload = row?.payload && typeof row.payload === 'object' ? row.payload : {};
+  return { ...payload, id: String(row.id || payload.id || ''), createdBy: row.created_by || payload.createdBy || '' };
+}
+
+function saveAnnouncementCache(list) {
+  try { localStorage.setItem(ANNOUNCEMENTS_STORAGE_KEY, JSON.stringify(list)); } catch (_) {}
+}
+
+function syncOwnedAnnouncements(list) {
+  if (!CURRENT_PROFILE?.id || typeof db === 'undefined' || !db?.from) return;
+  const ownerId = String(CURRENT_PROFILE.id);
+  const rows = (Array.isArray(list) ? list : []).filter(a => String(a.createdBy || '') === ownerId || ROLE === 'admin').map(a => ({
+    id: String(a.id), created_by: String(a.createdBy || ownerId), payload: a, updated_at: new Date().toISOString()
+  }));
+  if (!rows.length) return;
+  if (announcementSyncBusy) {
+    announcementSyncPending = list;
+    return;
+  }
+  announcementSyncBusy = true;
+  db.from('school_announcements').upsert(rows, { onConflict: 'id' })
+    .then(({ error }) => { if (error) console.warn('Announcement sync notice:', error.message); })
+    .catch(error => console.warn('Announcement sync notice:', error?.message || error))
+    .finally(() => {
+      announcementSyncBusy = false;
+      if (announcementSyncPending) {
+        const pending = announcementSyncPending;
+        announcementSyncPending = null;
+        syncOwnedAnnouncements(pending);
+      }
+    });
+}
+
+function refreshAnnouncementSurfaces(isNew = false) {
+  if (typeof renderEmergencyTopBanner === 'function') renderEmergencyTopBanner();
+  if (typeof updateSidebarBadges === 'function') updateSidebarBadges();
+  const page = typeof currentPage !== 'undefined' ? currentPage : '';
+  if ((page === 'announcements' || page === 'dashboard') && typeof renderPage === 'function') renderPage(page);
+  if (isNew && ROLE === 'student' && typeof showNewsAlertIfNeeded === 'function') showNewsAlertIfNeeded();
+}
+
+function applyAnnouncementRealtimeRow(row, eventType = 'INSERT') {
+  const incoming = announcementRowToRecord(row);
+  if (!incoming.id) return;
+  const all = getStoredAnnouncements();
+  const index = all.findIndex(a => String(a.id) === incoming.id);
+  if (eventType === 'DELETE') {
+    if (index >= 0) all.splice(index, 1);
+  } else if (index >= 0) {
+    all[index] = incoming;
+  } else {
+    all.unshift(incoming);
+  }
+  saveAnnouncementCache(all);
+  refreshAnnouncementSurfaces(eventType === 'INSERT' && !incoming.isDraft && incoming.status !== 'draft');
+}
+
+async function loadAnnouncementsFromServer() {
+  if (typeof db === 'undefined' || !db?.from) return false;
+  const { data, error } = await db.from('school_announcements').select('id,created_by,payload,created_at,updated_at').order('created_at', { ascending: false });
+  if (error) {
+    console.warn('Shared announcements could not be loaded:', error.message);
+    return false;
+  }
+  const serverRows = (data || []).map(announcementRowToRecord).filter(a => a.id);
+  const serverIds = new Set(serverRows.map(a => String(a.id)));
+  let combined = serverRows;
+  if (ROLE === 'teacher' || ROLE === 'admin') {
+    const ownerId = String(CURRENT_PROFILE?.id || '');
+    const localOwned = getStoredAnnouncements().filter(a => String(a.createdBy || '') === ownerId && !serverIds.has(String(a.id)));
+    combined = [...serverRows, ...localOwned];
+  }
+  saveAnnouncementCache(combined);
+  return true;
+}
+
+async function initializeAnnouncementSync() {
+  if (!CURRENT_PROFILE?.id || typeof db === 'undefined' || !db?.from) return;
+  const userId = String(CURRENT_PROFILE.id);
+  if (announcementSyncUserId === userId && announcementRealtimeChannel) return;
+  announcementSyncUserId = userId;
+  if (announcementRealtimeChannel && db.removeChannel) {
+    try { await db.removeChannel(announcementRealtimeChannel); } catch (_) {}
+  }
+  clearInterval(announcementSyncPoll);
+  announcementRealtimeChannel = null;
+
+  // Adopt this user's legacy local posts once so existing announcements are
+  // carried into shared storage after the database migration is installed.
+  const local = getStoredAnnouncements();
+  let adopted = false;
+  local.forEach(anc => {
+    if (!anc.createdBy && String(anc.authorName || '') === String(CURRENT_PROFILE.full_name || '') &&
+        (ROLE === 'admin' || String(anc.authorRole || '').toLowerCase() === ROLE)) {
+      anc.createdBy = userId;
+      adopted = true;
+    }
+  });
+  if (adopted) saveAnnouncementCache(local);
+  const ownedRows = local.filter(a => String(a.createdBy || '') === userId).map(a => ({
+    id: String(a.id), created_by: userId, payload: a, updated_at: new Date().toISOString()
+  }));
+  if (ownedRows.length) {
+    const { error } = await db.from('school_announcements').upsert(ownedRows, { onConflict: 'id' });
+    if (error) console.warn('Legacy announcements could not be migrated:', error.message);
+  }
+  const serverReady = await loadAnnouncementsFromServer();
+  if (!serverReady) return;
+
+  if (typeof db.channel === 'function') {
+    announcementRealtimeChannel = db.channel('school-announcements-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'school_announcements' }, payload => {
+        const eventType = payload.eventType || payload.event || 'INSERT';
+        applyAnnouncementRealtimeRow(eventType === 'DELETE' ? payload.old : payload.new, eventType);
+      })
+      .subscribe();
+  }
+  announcementSyncPoll = setInterval(async () => {
+    if (announcementSyncBusy) return;
+    const before = JSON.stringify(getStoredAnnouncements());
+    const changed = await loadAnnouncementsFromServer();
+    if (changed && before !== JSON.stringify(getStoredAnnouncements())) refreshAnnouncementSurfaces(false);
+  }, 20000);
+}
+window.initializeAnnouncementSync = initializeAnnouncementSync;
 
 function isAnnouncementExpired(anc) {
   if (!anc) return false;
@@ -328,6 +462,11 @@ function setAncArchiveView(view) {
 
 function deleteAnnouncement(id) {
   let all = getStoredAnnouncements();
+  if (typeof db !== 'undefined' && db?.from && CURRENT_PROFILE?.id) {
+    db.from('school_announcements').delete().eq('id', String(id))
+      .then(({ error }) => { if (error) console.warn('Announcement delete sync notice:', error.message); })
+      .catch(error => console.warn('Announcement delete sync notice:', error?.message || error));
+  }
   all = all.filter(a => a.id !== id);
   saveAnnouncements(all);
   showToast('Announcement deleted', 'success');
@@ -879,6 +1018,7 @@ function submitCreateAnnouncement(isDraft = false) {
 
   const newAnc = {
     id: 'anc_' + Date.now(),
+    createdBy: CURRENT_PROFILE?.id || '',
     title: titleInput.value.trim(),
     category: categoryValue,
     customCategory: customCategoryName,
