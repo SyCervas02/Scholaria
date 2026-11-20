@@ -3498,7 +3498,7 @@ function teacherPage(page) {
 
                 ${q.status === 'active' ? `
                   <button class="table-act-btn" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;" onclick="toggleQuizStatus('${q.id}', 'closed')" title="Close Quiz submissions">
-                    Close
+                    Hide
                   </button>
                 ` : q.status === 'closed' ? `
                   <button class="table-act-btn" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;" onclick="toggleQuizStatus('${q.id}', 'active')" title="Re-open Quiz submissions">
