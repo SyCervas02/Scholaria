@@ -358,25 +358,26 @@
   .gc-member-actions { flex-direction: column; }
 }
 
-/* Keep every conversation filter on one row at every role and viewport, but
-   size the chips for comfortable clicking/tapping instead of 9.5px text. */
+/* Keep every conversation filter on one row at every role and viewport.
+   Chips stretch to fill the row so they stay easy to click and tap. */
 .scholaria-chat .chat-filters {
   display: flex;
   flex-wrap: nowrap;
   align-items: stretch;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
 }
 .scholaria-chat .chat-filters button {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 0;
-  padding: 7px 6px;
-  font-size: 11px;
+  padding: 9px 4px;
+  font-size: 12.5px;
   line-height: 1.15;
   text-align: center;
   white-space: nowrap;
 }
+.scholaria-chat .chat-filters button[data-chat-filter="group"] { flex-grow: 1.6; }
 @media (max-width: 480px) {
-  .scholaria-chat .chat-filters { gap: 3px; }
-  .scholaria-chat .chat-filters button { padding: 6px 5px; font-size: 10.5px; }
+  .scholaria-chat .chat-filters { gap: 4px; }
+  .scholaria-chat .chat-filters button { padding: 8px 3px; font-size: 11.5px; }
 }
