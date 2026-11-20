@@ -599,6 +599,22 @@ function ensureQuizManagerAttemptRealtime() {
     .subscribe();
 }
 
+let teacherDashboardMaterialsRealtimeChannel = null;
+let teacherDashboardMaterialsRefreshTimer = null;
+function ensureTeacherDashboardMaterialsRealtime() {
+  if (teacherDashboardMaterialsRealtimeChannel || typeof db === 'undefined' || !db?.channel) return;
+  teacherDashboardMaterialsRealtimeChannel = db.channel('teacher-dashboard-published-materials')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'materials' }, () => {
+      clearTimeout(teacherDashboardMaterialsRefreshTimer);
+      teacherDashboardMaterialsRefreshTimer = setTimeout(() => {
+        if (ROLE === 'teacher' && currentPage === 'dashboard' && typeof loadMaterialsFromDB === 'function') {
+          loadMaterialsFromDB({ force: true });
+        }
+      }, 400);
+    })
+    .subscribe();
+}
+
 function refreshQuizAttemptCountLabels() {
   document.querySelectorAll('[data-quiz-attempt-count]').forEach(label => {
     const count = getQuizUniqueStudentAttemptCount(label.dataset.quizAttemptCount, label.dataset.quizTitle || '');
@@ -5680,7 +5696,10 @@ function renderPage(page) {
     if (ROLE === 'teacher' || ROLE === 'admin') {
       loadMaterialsFromDB();
       loadQuizzesFromDB();
-      if (ROLE === 'teacher' && typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
+      if (ROLE === 'teacher') {
+        ensureTeacherDashboardMaterialsRealtime();
+        if (typeof loadClassRecAttempts === 'function') loadClassRecAttempts();
+      }
       if (ROLE === 'teacher' && typeof ensureChatRealtimeSubscription === 'function') ensureChatRealtimeSubscription();
     }
     if (typeof loadUsersFromDB === 'function') loadUsersFromDB();

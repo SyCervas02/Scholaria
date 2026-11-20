@@ -1975,11 +1975,18 @@ app.get('/api/materials', async (req, res) => {
   let namesById = {};
   if (uploaderIds.length) {
     const { data: uploaders } = await supabaseAdmin
-      .from('users').select('id, full_name').in('id', uploaderIds);
-    namesById = Object.fromEntries((uploaders || []).map(u => [u.id, u.full_name]));
+      .from('users').select('id, full_name, role').in('id', uploaderIds);
+    namesById = Object.fromEntries((uploaders || []).map(u => [u.id, {
+      name: u.full_name,
+      role: u.role
+    }]));
   }
 
-  res.json((data || []).map(m => ({ ...m, uploaded_by_name: namesById[m.uploaded_by] || null })));
+  res.json((data || []).map(m => ({
+    ...m,
+    uploaded_by_name: namesById[m.uploaded_by]?.name || null,
+    uploader_role: namesById[m.uploaded_by]?.role || null
+  })));
 });
 
 app.get('/api/materials/:id/download', async (req, res) => {
