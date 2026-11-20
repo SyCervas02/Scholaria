@@ -1631,10 +1631,10 @@ function buildProfilePage(role) {
             <span class="pf-meta-val">${escHtml(p.grade_level)}</span>
           </div>` : ''}
 
-          ${p.section ? `
+          ${visibleSectionText ? `
           <div class="pf-meta-row">
             <span class="pf-meta-label">${role === 'teacher' ? 'Advisory / Handled Section' : 'Assigned Section'}</span>
-            <span class="pf-meta-val">${escHtml(p.section)}</span>
+            <span class="pf-meta-val">${escHtml(visibleSectionText)}</span>
           </div>` : ''}
 
           ${p.subjects ? `
