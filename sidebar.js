@@ -3494,29 +3494,25 @@ function teacherPage(page) {
         </div>
       </div>
 
-      <div class="analysis-filter-container" style="display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;overflow-x:auto;padding:8px 0;">
-        <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('questions')" style="flex-shrink:0;white-space:nowrap;">
-          <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${filteredRows.length}</span>
-        </button>
-        <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('students')" style="flex-shrink:0;white-space:nowrap;">
-          <span class="analysis-tab-icon" aria-hidden="true">${iconUsers()}</span> Student Submissions <span class="analysis-tab-count">${attemptCount}</span>
-        </button>
-        <div style="width:1px;height:28px;background:#e2e8f0;flex-shrink:0;"></div>
-        <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)" style="flex:1;min-width:120px;max-width:200px;">
+      <div class="analysis-filter-container" style="display:flex;flex-wrap:nowrap;align-items:center;gap:10px;overflow-x:auto;padding:10px 0;">
+        <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions?'active':''}" onclick="setAnalysisTab('questions')" style="flex-shrink:0;white-space:nowrap;font-size:14px;padding:8px 14px;">${iconQuiz()} Question Psychometrics <span class="analysis-tab-count">${filteredRows.length}</span></button>
+        <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions?'active':''}" onclick="setAnalysisTab('students')" style="flex-shrink:0;white-space:nowrap;font-size:14px;padding:8px 14px;">${iconUsers()} Student Submissions <span class="analysis-tab-count">${attemptCount}</span></button>
+        <div style="width:1px;height:32px;background:#e2e8f0;flex-shrink:0;"></div>
+        <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)" style="flex:1;min-width:130px;max-width:210px;font-size:13px;padding:7px 10px;height:38px;">
           <option value="">All Handled Sections</option>
-          ${analysisFilteredSections.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
+          ${analysisFilteredSections.map(sec=>`<option value="${sec}"${analysisSectionFilter===sec?' selected':''}>${sec}</option>`).join('')}
         </select>
-        <select class="user-filter-select" aria-label="Filter by difficulty" onchange="setAnalysisDifficultyFilter(this.value)" style="flex:1;min-width:110px;max-width:170px;">
+        <select class="user-filter-select" aria-label="Filter by difficulty" onchange="setAnalysisDifficultyFilter(this.value)" style="flex:1;min-width:130px;max-width:180px;font-size:13px;padding:7px 10px;height:38px;">
           <option value="">All Difficulty Levels</option>
-          <option value="Easy" ${String(activeDifficulty).toLowerCase() === 'easy' ? 'selected' : ''}>Easy</option>
-          <option value="Average" ${String(activeDifficulty).toLowerCase() === 'average' ? 'selected' : ''}>Average</option>
-          <option value="Difficult" ${String(activeDifficulty).toLowerCase() === 'difficult' ? 'selected' : ''}>Difficult</option>
-          <option value="No Data" ${String(activeDifficulty).toLowerCase() === 'no data' ? 'selected' : ''}>No Data</option>
+          <option value="Easy"${String(activeDifficulty).toLowerCase()==='easy'?' selected':''}>Easy</option>
+          <option value="Average"${String(activeDifficulty).toLowerCase()==='average'?' selected':''}>Average</option>
+          <option value="Difficult"${String(activeDifficulty).toLowerCase()==='difficult'?' selected':''}>Difficult</option>
+          <option value="No Data"${String(activeDifficulty).toLowerCase()==='no data'?' selected':''}>No Data</option>
         </select>
-        <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)" style="flex:2;min-width:140px;">
-          ${displayQuizzes.map(q => `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(q.title)}</option>`).join('')}
+        <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)" style="flex:2;min-width:150px;font-size:13px;padding:7px 10px;height:38px;">
+          ${displayQuizzes.map(q=>`<option value="${q.id}"${String(q.id)===String(analysisSelectedQuizId)?' selected':''}>${escHtml(q.title)}</option>`).join('')}
         </select>
-        <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')" style="flex-shrink:0;white-space:nowrap;">${iconRefresh()} Refresh</button>
+        <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')" style="flex-shrink:0;white-space:nowrap;font-size:13px;padding:8px 16px;">${iconRefresh()} Refresh</button>
       </div>
 
       <!-- QUIZ OVERVIEW CARD -->
