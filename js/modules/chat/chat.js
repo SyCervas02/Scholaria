@@ -1564,7 +1564,7 @@ function toggleGroupChatMenu(e) {
   menu.innerHTML = `${manageItems}
     ${archived
       ? `<button type="button" class="gc-menu-primary" onclick="unarchiveActiveGroupChat()"><span>📤</span> Unarchive</button>`
-      : (removed ? '' : `<button type="button" class="gc-menu-danger" onclick="gcArchiveActiveGroupChat()"><span>📦</span> Hide group chat</button>`)}
+      : (removed ? '' : `<button type="button" class="gc-menu-danger" onclick="gcArchiveActiveGroupChat()"><span>📦</span> Archive group chat</button>`)}
   `;
   menu.style.display = 'block';
 }
