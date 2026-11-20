@@ -2788,6 +2788,7 @@ function studentPage(page) {
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:10px;">
+                ${!attempt && !isExpired ? `<button type="button" onclick="openInteractiveQuizTutorial(event)" style="background:#eef4ff;color:#2457c5;border:1px solid #cbdafe;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;"><span aria-hidden="true">▶</span> Play Tutorial</button>` : ''}
                 <span class="status-pill ${attempt ? 'done' : isExpired ? 'low' : 'pending'}" style="${isExpired ? 'background:#fee2e2;color:#991b1b;' : ''}">${attempt ? 'Completed' : isExpired ? 'Expired' : 'Pending'}</span>
                 ${attempt ? `
                   <button class="sw-btn outline" onclick="openReviewAttempt('${q.id}')" style="padding:6px 14px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;border-radius:8px;border:1.5px solid #0284c7;color:#0284c7;background:#fff;cursor:pointer;">
@@ -3466,9 +3467,12 @@ function teacherPage(page) {
             <div class="quiz-row-actions">
               <!-- TOP STACK: Attempts, Review toggle, Preview, Take/Play -->
               <div class="quiz-actions-stack">
-                <div class="quiz-attempt-count" data-quiz-attempt-count="${escHtml(q.id)}" data-quiz-title="${escHtml(q.title || '')}">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                  <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
+                <div style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;">
+                  <button type="button" onclick="openInteractiveQuizTutorial(event)" style="padding:6px 10px;border:1px solid #cbdafe;border-radius:9px;background:#eef4ff;color:#2457c5;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;"><span aria-hidden="true">▶</span> Play Tutorial</button>
+                  <div class="quiz-attempt-count" data-quiz-attempt-count="${escHtml(q.id)}" data-quiz-title="${escHtml(q.title || '')}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
+                  </div>
                 </div>
                 <!-- REVIEW ANSWERS CHECKBOX -->
                 <label data-quiz-review-toggle="${escHtml(String(q.id))}" style="display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;background:${isReviewAllowed ? '#eff6ff' : '#f8fafc'};border:1.5px solid ${isReviewAllowed ? '#bfdbfe' : '#cbd5e1'};padding:6px 12px;border-radius:10px;font-size:12px;font-weight:700;color:${isReviewAllowed ? '#1d4ed8' : '#64748b'};transition:all 0.15s ease;min-width:208px;" title="Check to allow students to see correct answers when reviewing; uncheck to hide answers">
@@ -5705,6 +5709,46 @@ function renderPage(page) {
       }
     }, 15000);
   }
+}
+
+function openInteractiveQuizTutorial(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  let overlay = document.getElementById('interactiveQuizTutorialOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'interactiveQuizTutorialOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(9,18,38,.78);backdrop-filter:blur(4px);';
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeInteractiveQuizTutorial(); });
+    overlay.addEventListener('keydown', e => { if (e.key === 'Escape') closeInteractiveQuizTutorial(); });
+    document.body.appendChild(overlay);
+  }
+  const videoUrl = `/${encodeURIComponent('Tutorial for interactive quiz.mp4')}`;
+  overlay.innerHTML = `<section role="dialog" aria-modal="true" aria-label="Interactive quiz tutorial" tabindex="-1" style="position:relative;width:min(100%,1000px);padding:16px;background:#fff;border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.35);">
+    <header style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 2px 12px;color:#102143;font-weight:800;font-size:17px;">
+      <span>Interactive Quiz Tutorial</span>
+      <button type="button" onclick="closeInteractiveQuizTutorial()" aria-label="Close tutorial" style="width:36px;height:36px;border:0;border-radius:10px;background:#eef3fb;color:#263755;font-size:24px;cursor:pointer;">&times;</button>
+    </header>
+    <video controls autoplay playsinline preload="metadata" style="display:block;width:100%;max-height:75vh;background:#0b1020;border-radius:12px;">
+      <source src="${videoUrl}" type="video/mp4">
+      Your browser does not support video playback.
+    </video>
+  </section>`;
+  overlay.style.display = 'flex';
+  overlay.querySelector('section')?.focus();
+  const video = overlay.querySelector('video');
+  if (video) video.play().catch(() => {});
+}
+
+function closeInteractiveQuizTutorial() {
+  const overlay = document.getElementById('interactiveQuizTutorialOverlay');
+  if (!overlay) return;
+  const video = overlay.querySelector('video');
+  if (video) { video.pause(); video.currentTime = 0; }
+  overlay.style.display = 'none';
+  overlay.innerHTML = '';
 }
 
 /* ── NAVIGATION LISTENERS ── */
