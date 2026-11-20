@@ -84,6 +84,7 @@
 .chat-search input::placeholder { color: #a1aed0; }
 .chat-search:focus-within { border-color: #8caeff; box-shadow: 0 0 0 3px #195cff0d; }
 .chat-filters { display: flex; flex-wrap: wrap; gap: 10px; }
+.scholaria-chat .chat-filters .chat-filter-pair { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; white-space: nowrap; }
 .scholaria-chat .chat-filters button { border: 1px solid #e4eafb; border-radius: 15px; background: #f8f9fc; padding: 7px 20px; font-size: 12px; color: #6b789d; cursor: pointer; }
 .scholaria-chat .chat-filters button.active { border-color: transparent; background: #e3ecff; color: #1455f5; font-weight: 700; }
 .scholaria-chat .contact-list { flex: 1; min-height: 0; }
