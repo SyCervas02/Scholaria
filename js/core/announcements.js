@@ -261,7 +261,7 @@ function reuseAnnouncement(id) {
 
   if (anc.priority) {
     const prioRadio = document.querySelector(`input[name="ancPriority"][value="${anc.priority}"]`);
-    if (prioRadio && !prioRadio.disabled && (ROLE !== 'teacher' || anc.priority !== 'critical')) {
+    if (prioRadio && !prioRadio.disabled) {
       prioRadio.checked = true;
     } else {
       const fallbackRadio = document.querySelector('input[name="ancPriority"][value="important"]');
@@ -825,6 +825,30 @@ function handleAncCategoryChange(val) {
     customInput.style.display = 'none';
     if (resetBtn) resetBtn.style.display = 'none';
   }
+
+  // Emergency advisories attach every hotline by default; authors can still
+  // untick individual hotlines before broadcasting.
+  if (val === 'emergency') autoCheckAncHotlines();
+}
+
+function ancCompositionIsCritical() {
+  const catSelect = document.getElementById('ancCategoryInput');
+  const prio = document.querySelector('input[name="ancPriority"]:checked');
+  return (catSelect && catSelect.value === 'emergency') || (prio && prio.value === 'critical');
+}
+
+function autoCheckAncHotlines() {
+  document.querySelectorAll('input[name="ancHotline"]').forEach(cb => { cb.checked = true; });
+}
+
+function resetAncHotlineDefaults() {
+  document.querySelectorAll('input[name="ancHotline"]').forEach(cb => { cb.checked = false; });
+  if (ancCompositionIsCritical()) autoCheckAncHotlines();
+  document.querySelectorAll('input[name="ancPriority"]').forEach(radio => {
+    radio.onchange = () => {
+      if (radio.checked && radio.value === 'critical') autoCheckAncHotlines();
+    };
+  });
 }
 
 function resetAncCategorySelect(defaultVal = 'emergency') {
@@ -952,10 +976,7 @@ function openCreateAnnouncementModal() {
   const modal = document.getElementById('ancModal');
   if (modal) modal.classList.add('active');
   const hotlineAttachmentField = document.getElementById('ancHotlineAttachmentField');
-  if (hotlineAttachmentField) hotlineAttachmentField.style.display = ROLE === 'admin' ? '' : 'none';
-  if (ROLE !== 'admin') {
-    document.querySelectorAll('input[name="ancHotline"]').forEach(cb => { cb.checked = false; });
-  }
+  if (hotlineAttachmentField) hotlineAttachmentField.style.display = '';
   const msgInput = document.getElementById('ancMessageInput');
   if (msgInput) msgInput.value = '';
   updateAncCharCount();
@@ -973,10 +994,12 @@ function openCreateAnnouncementModal() {
       emergencyOpt.hidden = true;
     }
     if (criticalRadio) {
-      criticalRadio.disabled = true;
+      criticalRadio.disabled = false;
       criticalRadio.checked = false;
       if (criticalRadio.closest('.anc-radio-label')) {
-        criticalRadio.closest('.anc-radio-label').style.display = 'none';
+        criticalRadio.closest('.anc-radio-label').style.display = '';
+        criticalRadio.closest('.anc-radio-label').style.opacity = '1';
+        criticalRadio.closest('.anc-radio-label').style.cursor = 'pointer';
       }
     }
     if (importantRadio) importantRadio.checked = true;
@@ -1029,6 +1052,7 @@ function openCreateAnnouncementModal() {
     const mi = String(now.getMinutes()).padStart(2, '0');
     expiryInput.min = `${yr}-${mo}-${dy}T${hr}:${mi}`;
   }
+  resetAncHotlineDefaults();
   handleAncAudienceToggle();
 }
 
@@ -1073,13 +1097,10 @@ function submitCreateAnnouncement(isDraft = false) {
 
   // Get selected hotlines
   const selectedHotlines = [];
-  if (ROLE === 'admin') {
-    const hlCheckboxes = document.querySelectorAll('input[name="ancHotline"]:checked');
-    hlCheckboxes.forEach(cb => {
-      const hl = (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).find(h => h.id === cb.value);
-      if (hl) selectedHotlines.push(hl);
-    });
-  }
+  document.querySelectorAll('input[name="ancHotline"]:checked').forEach(cb => {
+    const hl = (typeof getStoredHotlines === "function" ? getStoredHotlines() : []).find(h => h.id === cb.value);
+    if (hl) selectedHotlines.push(hl);
+  });
 
   // Get selected audience
   const selectedAudience = [];
@@ -1115,9 +1136,7 @@ function submitCreateAnnouncement(isDraft = false) {
     title: titleInput.value.trim(),
     category: categoryValue,
     customCategory: customCategoryName,
-    priority: (ROLE === 'teacher' && priorityInput && priorityInput.value === 'critical')
-      ? 'important'
-      : (priorityInput ? priorityInput.value : 'normal'),
+    priority: priorityInput ? priorityInput.value : 'normal',
     audience: selectedAudience.length ? selectedAudience : ['All Students', 'All Teachers'],
     message: msgInput.value.trim(),
     authorName: CURRENT_PROFILE ? CURRENT_PROFILE.full_name : 'School Administration',
@@ -1127,7 +1146,7 @@ function submitCreateAnnouncement(isDraft = false) {
     isArchived: false,
     isDraft: !!isDraft,
     status: isDraft ? 'draft' : 'active',
-    hotlines: ROLE === 'admin' ? selectedHotlines : []
+    hotlines: selectedHotlines
   };
 
   const all = getStoredAnnouncements();
