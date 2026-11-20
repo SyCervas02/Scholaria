@@ -2366,9 +2366,14 @@ function submitMultipleChoiceAnswer(val, clickedCardIdx) {
     return;
   }
 
-  if (isCorrect) interactivePlayerState.score++;
   const isTf = q.type === 'true_false' || q.type === 'tf';
   const multiplier = isTf && interactivePlayerState.doubleScoreQuestionIndex === interactivePlayerState.currentIndex ? 2 : 1;
+  if (isCorrect) {
+    interactivePlayerState.score = Math.min(
+      interactivePlayerState.totalItems,
+      interactivePlayerState.score + (isTf ? multiplier : 1)
+    );
+  }
   interactivePlayerState.userResponses[q.id] = {
     label: q.question || '',
     given, correct, isCorrect,

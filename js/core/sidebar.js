@@ -2788,7 +2788,7 @@ function studentPage(page) {
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:10px;">
-                ${!attempt && !isExpired ? `<button type="button" onclick="openInteractiveQuizTutorial(event)" style="background:#eef4ff;color:#2457c5;border:1px solid #cbdafe;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;"><span aria-hidden="true">▶</span> Play Tutorial</button>` : ''}
+                ${isInter && !attempt && !isExpired ? `<button type="button" onclick="openInteractiveQuizTutorial(event)" style="background:#eef4ff;color:#2457c5;border:1px solid #cbdafe;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;"><span aria-hidden="true">▶</span> Play Tutorial</button>` : ''}
                 <span class="status-pill ${attempt ? 'done' : isExpired ? 'low' : 'pending'}" style="${isExpired ? 'background:#fee2e2;color:#991b1b;' : ''}">${attempt ? 'Completed' : isExpired ? 'Expired' : 'Pending'}</span>
                 ${attempt ? `
                   <button class="sw-btn outline" onclick="openReviewAttempt('${q.id}')" style="padding:6px 14px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;border-radius:8px;border:1.5px solid #0284c7;color:#0284c7;background:#fff;cursor:pointer;">
@@ -3468,7 +3468,7 @@ function teacherPage(page) {
               <!-- TOP STACK: Attempts, Review toggle, Preview, Take/Play -->
               <div class="quiz-actions-stack">
                 <div style="display:flex;align-items:center;justify-content:flex-start;gap:8px;flex-wrap:wrap;">
-                  <button type="button" onclick="openInteractiveQuizTutorial(event)" style="padding:6px 10px;border:1px solid #cbdafe;border-radius:9px;background:#eef4ff;color:#2457c5;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;"><span aria-hidden="true">▶</span> Play Tutorial</button>
+                  ${isInter ? `<button type="button" onclick="openInteractiveQuizTutorial(event)" style="padding:6px 10px;border:1px solid #cbdafe;border-radius:9px;background:#eef4ff;color:#2457c5;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;"><span aria-hidden="true">▶</span> Play Tutorial</button>` : ''}
                   <div class="quiz-attempt-count" data-quiz-attempt-count="${escHtml(q.id)}" data-quiz-title="${escHtml(q.title || '')}">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     <span class="quiz-attempt-count-text">${takenStudentCount} student${takenStudentCount === 1 ? '' : 's'} took this quiz</span>
