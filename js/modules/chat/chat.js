@@ -521,6 +521,8 @@ function renderContactsList() {
   }
   box.innerHTML = filtered.map(c => {
     const archivedAt = c.isGroup ? (archivedMap[c.id] || '') : '';
+    const preview = conversationPreview(c);
+    const isUserMessagePreview = Boolean(c.lastMessage && !parseChatEvent(c.lastMessage) && !parseChatAttachment(c.lastMessage));
     const avatarInner = (c.isGroup && c.photoUrl)
       ? `<img src="${escHtml(c.photoUrl)}" alt="Group photo" onerror="this.style.display='none';this.parentElement.textContent='👥';"/>`
       : conversationInitials(c);
@@ -529,7 +531,7 @@ function renderContactsList() {
       <div class="contact-avatar ${c.isGroup ? 'group-avatar' : ''} ${c.photoUrl ? 'has-photo' : ''}">${avatarInner}</div>
       <div class="contact-info">
         <h4>${escHtml(conversationLabel(c))}</h4>
-        <span>${escHtml(conversationPreview(c))}</span>
+        <span>${isUserMessagePreview ? `<span class="chat-preview-message">${escHtml(preview)}</span>` : escHtml(preview)}</span>
       </div>
       <div class="contact-meta">
         <span class="contact-time">${formatMsgTime(c.lastMessageAt, true)}</span>

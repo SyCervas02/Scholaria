@@ -549,6 +549,8 @@ function iconInfo()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="cu
     bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.6a8 8 0 0 1-1.7 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.7-1l-1.7.6-1.4-2.4L7.3 15a8 8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.6a8 8 0 0 1 1.7-1L11 7.3h2.8l.3 1.8a8 8 0 0 1 1.7 1l1.7-.6 1.4 2.4-1.4 1.1a8 8 0 0 1-.1 2Z"/>',
     image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+    pencil: '<path d="m15 5 4 4M4 20l4.5-.8L19 8.7 15.3 5 4.8 15.5 4 20Z"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
     pin: '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/>',
@@ -579,10 +581,10 @@ function iconInfo()    { return `<svg viewBox="0 0 24 24" fill="none" stroke="cu
     '⏰':'clock','🕒':'clock','❤️':'heart','💙':'heart','💛':'heart','💚':'heart','⭐':'star','🌟':'star','✨':'spark','🎉':'spark',
     '🛡️':'shield','🔒':'shield','💬':'message','📢':'message','📣':'message','✅':'check','✔️':'check','✔':'check','✓':'check',
     '❌':'close','✖':'close','✖️':'close','✕':'close','⚡':'bolt','📞':'phone','📎':'link','🔗':'link','🚀':'upload',
-    '🏆':'trophy','🎮':'grid','📚':'book','💡':'spark','➕':'check','✏️':'file','✍️':'file','🎯':'pin',
+    '🏆':'trophy','🎮':'grid','📚':'book','💡':'spark','➕':'plus','✏️':'pencil','✍️':'file','🎯':'pin',
     '😀':'smile','😃':'smile','😄':'smile','😁':'smile','😆':'smile','😅':'smile','😂':'smile','🤣':'smile','😊':'smile','😇':'smile','🙂':'smile','🙃':'smile','😉':'smile','😌':'smile','😍':'heart','🥰':'heart','😘':'heart','😋':'smile','😎':'smile','🤔':'help','😐':'smile','😬':'smile','🙄':'smile','😢':'smile','😭':'smile','😤':'alert','😡':'alert','🥳':'spark','🤗':'hands','🙌':'hands','🙏':'hands','👏':'hands','👍':'thumbs','👎':'thumbs','💪':'thumbs','👋':'hands','🤝':'hands','✌️':'check','🔥':'flame','🚒':'hospital','🚓':'shield','🏥':'hospital','⚕️':'hospital','🧑‍🏫':'person','👨‍🏫':'person','👩‍🏫':'person'
   };
-  const ignored = 'script,style,textarea,input,select,option,[contenteditable="true"],#cwEmojiPicker,.scholaria-chat,.chat-message,.message-body,.anc-body,.announcement-content,.quiz-question,.quiz-option,.user-content';
+  const ignored = 'script,style,textarea,input,select,option,[contenteditable="true"],#cwEmojiPicker,.msg-text,.chat-preview-message,.chat-message,.message-body,.anc-body,.announcement-content,.quiz-question,.quiz-option,.user-content';
   const emojiPattern = /\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?)*(?:\u{1F3FB}-\u{1F3FF})?/gu;
   const symbolPattern = /[✓✔✕✖❌✅⚠☑🔴⚪]/gu;
   function makeIcon(emoji) {
