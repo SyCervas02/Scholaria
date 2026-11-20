@@ -2144,18 +2144,24 @@ async function approveQuiz(id) {
   if (error) { showToast('Failed to approve quiz: ' + error.message, 'error'); return; }
   showToast('Quiz approved', 'success');
   if (quiz && typeof addNotification === 'function') {
+    const approverName = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'School Administrator';
+    const approverAvatar = typeof initialsFor === 'function' ? initialsFor(approverName) : 'SA';
     addNotification({
       targetUserId: quiz.createdBy,
       targetRole: 'teacher',
       title: 'Quiz Approved',
       message: `Your quiz "${quiz.title}" has been approved by the Admin and is now live.`,
-      type: 'quiz'
+      type: 'quiz',
+      senderName: approverName,
+      senderAvatar: approverAvatar
     });
     addNotification({
       targetRole: 'student',
       title: 'New Quiz Available',
       message: `New quiz "${quiz.title}" (${quiz.subject || 'General'}) is now available under Quizzes.`,
-      type: 'quiz'
+      type: 'quiz',
+      senderName: approverName,
+      senderAvatar: approverAvatar
     });
   }
   await loadQuizzesFromDB();
@@ -2171,12 +2177,15 @@ async function rejectQuiz(id, reason) {
   const rejectedQuiz = customQuizzes.find(q => String(q.id) === String(id));
 
   if (rejectedQuiz && typeof addNotification === 'function') {
+    const denierName = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'School Administrator';
     addNotification({
       targetUserId: rejectedQuiz.createdBy,
       targetRole: 'teacher',
       title: 'Submission Denied',
       message: `Your quiz "${rejectedQuiz.title}" has been denied by the Admin.${reason ? ` Reason: ${reason}` : ''}`,
-      type: 'quiz'
+      type: 'quiz',
+      senderName: denierName,
+      senderAvatar: typeof initialsFor === 'function' ? initialsFor(denierName) : 'SA'
     });
   }
 
@@ -2203,9 +2212,9 @@ async function rejectQuiz(id, reason) {
   }
 
   if (typeof db !== 'undefined' && db) {
-    await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(() => {});
-    await db.from('quiz_attempts').delete().eq('quiz_id', id).catch(() => {});
-    await db.from('quizzes').delete().eq('id', id).catch(() => {});
+    try { await db.from('quizzes').update({ status: 'rejected' }).eq('id', id); } catch (_) {}
+    try { await db.from('quiz_attempts').delete().eq('quiz_id', id); } catch (_) {}
+    try { await db.from('quizzes').delete().eq('id', id); } catch (_) {}
   }
 
   showToast('Quiz denied and removed', 'success');
@@ -2260,9 +2269,9 @@ async function deleteQuiz(id) {
   }
 
   if (typeof db !== 'undefined' && db) {
-    await db.from('quizzes').update({ status: 'rejected' }).eq('id', id).catch(() => {});
-    await db.from('quiz_attempts').delete().eq('quiz_id', id).catch(() => {});
-    await db.from('quizzes').delete().eq('id', id).catch(() => {});
+    try { await db.from('quizzes').update({ status: 'rejected' }).eq('id', id); } catch (_) {}
+    try { await db.from('quiz_attempts').delete().eq('quiz_id', id); } catch (_) {}
+    try { await db.from('quizzes').delete().eq('id', id); } catch (_) {}
   }
 
   showToast(`Quiz "${quizTitle}" deleted successfully`, 'success');

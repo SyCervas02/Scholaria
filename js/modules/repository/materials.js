@@ -4556,6 +4556,8 @@ async function approveMaterial(id) {
   const uploaderId = backendItem?.uploaded_by || memItem?.uploaded_by;
   const itemTitle = backendItem?.title || memItem?.title || 'Material';
   const itemSub = backendItem?.subject || memItem?.subject || 'General';
+  const approverName = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'School Administrator';
+  const approverAvatar = typeof initialsFor === 'function' ? initialsFor(approverName) : 'SA';
 
   if (typeof addNotification === 'function') {
     if (uploaderId) {
@@ -4564,14 +4566,18 @@ async function approveMaterial(id) {
         targetRole: 'teacher',
         title: 'Material Approved',
         message: `Your material "${itemTitle}" has been approved by the Admin and is now live.`,
-        type: 'material'
+        type: 'material',
+        senderName: approverName,
+        senderAvatar: approverAvatar
       });
     }
     addNotification({
       targetRole: 'student',
       title: 'New Material Available',
       message: `New learning material "${itemTitle}" (${itemSub}) is now available.`,
-      type: 'material'
+      type: 'material',
+      senderName: approverName,
+      senderAvatar: approverAvatar
     });
   }
 
@@ -4613,12 +4619,15 @@ async function rejectMaterial(id, reason) {
   }
 
   if (typeof addNotification === 'function' && deniedMat && deniedMat.uploaded_by) {
+    const denierName = (typeof CURRENT_PROFILE !== 'undefined' && CURRENT_PROFILE?.full_name) || 'School Administrator';
     addNotification({
       targetUserId: deniedMat.uploaded_by,
       targetRole: 'teacher',
       title: 'Submission Denied',
       message: `Your material "${deniedMat.title || 'Material'}" was denied.${reason ? ' Reason: ' + reason : ''}`,
-      type: 'material'
+      type: 'material',
+      senderName: denierName,
+      senderAvatar: typeof initialsFor === 'function' ? initialsFor(denierName) : 'SA'
     });
   }
 
