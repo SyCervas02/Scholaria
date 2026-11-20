@@ -5600,10 +5600,8 @@ function buildChatPage(role) {
           <button class="active" aria-pressed="true" data-chat-filter="all" onclick="setChatFilter('all')">All</button>
           <button aria-pressed="false" data-chat-filter="teacher" onclick="setChatFilter('teacher')">Teachers</button>
           ${role === 'student' ? '' : '<button aria-pressed="false" data-chat-filter="student" onclick="setChatFilter(\'student\')">Students</button>'}
-          <div class="chat-filter-pair">
-            <button aria-pressed="false" data-chat-filter="group" onclick="setChatFilter('group')">Group Chats</button>
-            <button aria-pressed="false" data-chat-filter="archived" onclick="setChatFilter('archived')">Archive</button>
-          </div>
+          <button aria-pressed="false" data-chat-filter="group" onclick="setChatFilter('group')">Group Chats</button>
+          <button aria-pressed="false" data-chat-filter="archived" onclick="setChatFilter('archived')">Archive</button>
         </div>
         <div class="contact-list" id="chatContactList">
           <div class="contact-empty">Loading conversations…</div>
