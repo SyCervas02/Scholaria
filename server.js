@@ -2144,8 +2144,91 @@ app.get('/api/users', async (req, res) => {
   res.json({ users: data || [] });
 });
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+function collectGeminiApiKeys() {
+  const sources = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEYS,
+    process.env.GOOGLE_API_KEY,
+    process.env.GOOGLE_GENAI_API_KEY
+  ];
+  for (let i = 1; i <= 8; i++) sources.push(process.env[`GEMINI_API_KEY_${i}`]);
+  const keys = [];
+  sources.filter(Boolean).join(',').split(/[,;\s]+/).forEach(raw => {
+    const key = raw.trim();
+    if (key && key !== 'dummy_gemini_key' && !keys.includes(key)) keys.push(key);
+  });
+  return keys;
+}
+
+const GEMINI_API_KEYS = collectGeminiApiKeys();
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+// A key that reports quota exhaustion is parked so later requests skip it
+// briefly and use the remaining keys first.
+const GEMINI_KEY_COOLDOWN_MS = 10 * 60 * 1000;
+const geminiKeyCooldownUntil = new Map();
+
+function geminiKeysForAttempt() {
+  const now = Date.now();
+  const ready = GEMINI_API_KEYS.filter(k => (geminiKeyCooldownUntil.get(k) || 0) <= now);
+  return ready.length ? ready : GEMINI_API_KEYS;
+}
+
+async function geminiGenerateContent({ models, body, timeoutMs, label, totalBudgetMs = 45000 }) {
+  if (!GEMINI_API_KEYS.length) return { ok: false, reason: 'no-keys' };
+  const failures = [];
+  const deadline = Date.now() + totalBudgetMs;
+  for (const key of geminiKeysForAttempt()) {
+    const masked = key.length > 10 ? `${key.slice(0, 4)}…${key.slice(-4)}` : 'key';
+    for (const model of models) {
+      const remaining = deadline - Date.now();
+      if (remaining < 1500) {
+        console.warn(`[${label}] Gemini time budget exhausted after ${failures.length} attempt(s).`);
+        return { ok: false, reason: failures.join(', ') || 'time-budget' };
+      }
+      const attemptTimeoutMs = Math.min(timeoutMs, remaining);
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+      try {
+        let response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(attemptTimeoutMs),
+          body: JSON.stringify(body)
+        });
+        if (response.status === 503) {
+          console.warn(`[${label}] Gemini ${model} (${masked}) 503 spike, retrying after 1s...`);
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            response = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.timeout(Math.max(1500, Math.min(timeoutMs, deadline - Date.now()))),
+              body: JSON.stringify(body)
+            });
+          } catch (retryErr) {}
+        }
+        if (response.ok) {
+          const data = await response.json();
+          return { ok: true, data, model, key: masked };
+        }
+        const errText = await response.text();
+        console.warn(`[${label}] Gemini ${model} (${masked}) HTTP ${response.status}:`, errText.slice(0, 180));
+        failures.push(`${masked}/${model}/${response.status}`);
+        const quotaExhausted = response.status === 429 || response.status === 403 ||
+          (response.status === 400 && /API_KEY_INVALID|API key not valid|PERMISSION_DENIED/i.test(errText));
+        if (quotaExhausted) {
+          geminiKeyCooldownUntil.set(key, Date.now() + GEMINI_KEY_COOLDOWN_MS);
+          console.warn(`[${label}] Gemini key ${masked} exhausted/quota-limited — cooling down, trying next key.`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`[${label}] Gemini ${model} (${masked}) attempt error:`, err.message);
+        failures.push(`${masked}/${model}/network`);
+      }
+    }
+  }
+  return { ok: false, reason: failures.join(', ') || 'all-keys-failed' };
+}
 const ALLOWED_FORMATS = ['mc', 'id', 'match', 'tf', 'true_false', 'multiple_choice', 'identification', 'matching'];
 const MAX_TEXT_LENGTH = 35000;
 
@@ -2211,7 +2294,7 @@ const FORMAT_LABELS = {
 function buildPrompt({ title, subject, formats, count, formatCounts, distributionMode, sourceText, fileName, files = [], optionsCount = 4 }) {
   const normalizedFormats = formats.map(f => f === 'true_false' ? 'tf' : f === 'multiple_choice' ? 'mc' : f === 'identification' ? 'id' : f === 'matching' ? 'match' : f);
   const formatList = normalizedFormats.map(f => FORMAT_LABELS[f] || f).join(', ');
-  const numChoices = Math.min(6, Math.max(2, parseInt(optionsCount, 10) || 4));
+  const numChoices = Math.min(8, Math.max(2, parseInt(optionsCount, 10) || 4));
   
   let countInstruction = '';
   if (distributionMode === 'custom' && formatCounts && Object.keys(formatCounts).length > 0) {
@@ -2564,7 +2647,7 @@ const DOMAIN_DISTRACTORS = {
 function extractQuestionsFromText(params) {
   const { title = 'Quiz', fileName = '', files = [], formats = ['multiple_choice'], count = 10, sourceText = '', optionsCount = 4 } = params;
   const targetCount = typeof count === 'number' && count > 0 ? count : 10;
-  const numChoices = Math.min(6, Math.max(2, parseInt(optionsCount, 10) || 4));
+  const numChoices = Math.min(8, Math.max(2, parseInt(optionsCount, 10) || 4));
   const validFiles = Array.isArray(files) && files.length > 0
     ? files.map(f => typeof f === 'string' ? f.trim() : (f.name || '')).filter(Boolean)
     : (fileName ? fileName.split(',').map(s => s.trim()).filter(Boolean) : ['Handout Material']);
@@ -2927,86 +3010,35 @@ app.post('/api/quiz/extract-image', quizLimiter, async (req, res) => {
     const { imageBase64, mimeType, fileName } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'Missing imageBase64' });
 
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'dummy_gemini_key') {
+    if (!GEMINI_API_KEYS.length) {
       return res.status(503).json({ error: 'Gemini API not configured' });
     }
 
     const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
     const actualMime = mimeType || 'image/jpeg';
 
-    const candidateModels = [
-      'gemini-3.5-flash',
-      'gemini-3.5-flash-lite',
-      'gemini-3.6-flash'
-    ];
+    const extractTextPrompt = "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part' (for example: 'Mitochondrion: Organelle that generates chemical energy (ATP) to power the cell; the powerhouse of the cell', 'Ribosomes: Molecular machines responsible for protein synthesis', 'Nucleus: The membrane-enclosed organelle that contains genetic material and coordinates cellular activities', 'Golgi apparatus: Cellular organelle that packages and sorts proteins for secretion').\n\nDo not add conversational commentary or meta-text. Just output clean, line-separated academic terms and definitions.";
 
-    for (const model of candidateModels) {
-      try {
-        let response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(25000),
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  {
-                    text: "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part' (for example: 'Mitochondrion: Organelle that generates chemical energy (ATP) to power the cell; the powerhouse of the cell', 'Ribosomes: Molecular machines responsible for protein synthesis', 'Nucleus: The membrane-enclosed organelle that contains genetic material and coordinates cellular activities', 'Golgi apparatus: Cellular organelle that packages and sorts proteins for secretion').\n\nDo not add conversational commentary or meta-text. Just output clean, line-separated academic terms and definitions."
-                  },
-                  {
-                    inlineData: {
-                      mimeType: actualMime,
-                      data: cleanBase64
-                    }
-                  }
-                ]
-              }]
-            })
-          }
-        );
+    const result = await geminiGenerateContent({
+      label: 'ImageExtract',
+      models: ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'],
+      timeoutMs: 25000,
+      totalBudgetMs: 55000,
+      body: {
+        contents: [{
+          parts: [
+            { text: extractTextPrompt },
+            { inlineData: { mimeType: actualMime, data: cleanBase64 } }
+          ]
+        }]
+      }
+    });
 
-        if (response.status === 503) {
-          console.warn(`[ImageExtract] Gemini ${model} 503 spike, retrying after 1s...`);
-          await new Promise(r => setTimeout(r, 1000));
-          try {
-            response = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(25000),
-                body: JSON.stringify({
-                  contents: [{
-                    parts: [
-                      {
-                        text: "You are an expert academic diagram and educational OCR analyzer. Transcribe all text, labels, definitions, organelles, parts, bullet points, headers, and formulas in this image.\n\nFor diagrams (such as biological cells, organs, anatomical charts, physics, or chemistry diagrams), extract every labeled part and provide its clear definition or function formatted on its own line as 'Part Name: Description and function of this part'."
-                      },
-                      {
-                        inlineData: {
-                          mimeType: actualMime,
-                          data: cleanBase64
-                        }
-                      }
-                    ]
-                  }]
-                })
-              }
-            );
-          } catch (rErr) {}
-        }
-
-        if (response.ok) {
-          const data = await response.json();
-          let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          if (text && text.trim()) {
-            text = text.trim();
-            console.log(`[ImageExtract] Successfully extracted via vision model ${model} (${text.length} chars)`);
-            return res.json({ text, source: 'gemini-vision', model });
-          }
-        }
-      } catch (mErr) {
-        console.warn(`[ImageExtract] Model ${model} failed:`, mErr.message);
+    if (result.ok) {
+      const text = String(result.data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+      if (text) {
+        console.log(`[ImageExtract] Successfully extracted via vision model ${result.model} (${text.length} chars)`);
+        return res.json({ text, source: 'gemini-vision', model: result.model });
       }
     }
 
@@ -3030,78 +3062,40 @@ app.post('/api/quiz/generate', quizLimiter, async (req, res) => {
     console.warn('[QuizGen] buildPrompt warning:', pErr.message);
   }
 
-  // 1. Try Gemini AI if API key is provided
-  if (prompt && GEMINI_API_KEY && GEMINI_API_KEY !== 'dummy_gemini_key') {
-    const fileCount = Math.max(1, Array.isArray(req.body.files) && req.body.files.length > 0 
-      ? req.body.files.length 
-      : (req.body.fileName ? req.body.fileName.split(',').length : 1));
-    const pageMatches = (req.body.sourceText || '').match(/\[Document:[^\]|]+\|\s*Page:\s*(\d+)\]/gi);
-    const estimatedPages = pageMatches ? pageMatches.length : Math.max(1, Math.ceil((req.body.sourceText || '').length / 2200));
-
+  // 1. Try Gemini AI across every configured key
+  if (prompt && GEMINI_API_KEYS.length) {
     // Fast & responsive AI timeout (12s per model) to ensure user never hangs
     const dynamicTimeoutMs = 12000;
-    console.log(`[QuizGen] Responsive AI timeout set to ${(dynamicTimeoutMs / 1000).toFixed(0)}s`);
+    console.log(`[QuizGen] Calling Gemini with ${GEMINI_API_KEYS.length} configured key(s), timeout ${(dynamicTimeoutMs / 1000).toFixed(0)}s`);
 
-    const candidateModels = [
-      'gemini-3.5-flash',
-      'gemini-3.5-flash-lite',
-      'gemini-3.6-flash'
-    ];
-    for (const model of candidateModels) {
-      try {
-        console.log(`[QuizGen] Calling Gemini model ${model} (timeout ${(dynamicTimeoutMs / 1000).toFixed(0)}s)...`);
-        let aiResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(dynamicTimeoutMs),
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { responseMimeType: 'application/json' }
-            })
-          }
-        );
-
-        if (aiResponse.status === 503) {
-          console.warn(`[QuizGen] Gemini ${model} 503 spike, retrying after 1s...`);
-          await new Promise(r => setTimeout(r, 1000));
-          try {
-            aiResponse = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(dynamicTimeoutMs),
-                body: JSON.stringify({
-                  contents: [{ parts: [{ text: prompt }] }],
-                  generationConfig: { responseMimeType: 'application/json' }
-                })
-              }
-            );
-          } catch (rErr) {}
-        }
-
-        if (aiResponse.ok) {
-          const data = await aiResponse.json();
-          let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-          text = text.trim();
-          if (text.startsWith('```')) {
-            text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-          }
-          const parsed = JSON.parse(text);
-          const questions = sanitizeQuestions(parsed.questions, req.body.files, req.body.fileName);
-          if (questions.length > 0) {
-            console.log(`[QuizGen] Gemini (${model}) returned ${questions.length} questions`);
-            return res.json({ questions, _source: `gemini:${model}` });
-          }
-        } else {
-          const errText = await aiResponse.text();
-          console.warn(`[QuizGen] Gemini ${model} failed HTTP ${aiResponse.status}:`, errText.slice(0, 180));
-        }
-      } catch (err) {
-        console.warn(`Gemini model ${model} attempt error:`, err.message);
+    const result = await geminiGenerateContent({
+      label: 'QuizGen',
+      models: ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'],
+      timeoutMs: dynamicTimeoutMs,
+      totalBudgetMs: 25000,
+      body: {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
       }
+    });
+
+    if (result.ok) {
+      try {
+        let text = String(result.data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}').trim();
+        if (text.startsWith('```')) {
+          text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+        }
+        const parsed = JSON.parse(text);
+        const questions = sanitizeQuestions(parsed.questions, req.body.files, req.body.fileName);
+        if (questions.length > 0) {
+          console.log(`[QuizGen] Gemini (${result.model} via key ${result.key}) returned ${questions.length} questions`);
+          return res.json({ questions, _source: `gemini:${result.model}` });
+        }
+      } catch (parseErr) {
+        console.warn('[QuizGen] Gemini response could not be parsed:', parseErr.message);
+      }
+    } else {
+      console.warn('[QuizGen] All Gemini attempts failed:', result.reason);
     }
   }
 
@@ -3165,6 +3159,7 @@ module.exports = app;
 if (require.main === module) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Scholaria server running on port ${PORT}`);
+    console.log(`Gemini API keys configured: ${GEMINI_API_KEYS.length}`);
     console.log(`Access on desktop: http://localhost:${PORT}`);
     console.log(`Access on mobile (same Wi-Fi): http://<your-computer-ip>:${PORT}`);
   });

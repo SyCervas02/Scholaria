@@ -2028,16 +2028,10 @@ function usePowerupHint() {
       const j = Math.floor(Math.random() * (i + 1));
       [wrongIndices[i], wrongIndices[j]] = [wrongIndices[j], wrongIndices[i]];
     }
-    // Leave half of the choices. An odd count cannot be split evenly, so drop
-    // the extra option too (remaining = floor(n/2), but never below two and
-    // never removing the last wrong option, which would reveal the key).
+    // Remove half of the choices, rounding down on odd counts (6 -> 3, 7 -> 3,
+    // 11 -> 5). Never remove the last wrong option, which would reveal the key.
     const totalOptions = opts.length;
-    let eliminateCount = Math.min(2, Math.max(1, wrongIndices.length - 1));
-    if (totalOptions % 2 === 1) {
-      const targetRemaining = Math.max(2, Math.floor(totalOptions / 2));
-      eliminateCount = Math.max(eliminateCount, totalOptions - targetRemaining);
-      eliminateCount = Math.min(eliminateCount, Math.max(1, wrongIndices.length - 1));
-    }
+    const eliminateCount = Math.max(0, Math.min(Math.floor(totalOptions / 2), wrongIndices.length - 1));
     const toEliminate = wrongIndices.slice(0, eliminateCount);
 
     toEliminate.forEach(idx => {
@@ -2053,6 +2047,8 @@ function usePowerupHint() {
       if (typeof showToast === 'function') {
         showToast(`💡 50/50: Removed ${toEliminate.length} incorrect option${toEliminate.length > 1 ? 's' : ''}!`, 'success');
       }
+    } else if (typeof showToast === 'function') {
+      showToast('50/50 is unavailable for this question — too few wrong choices to hide.', 'warning');
     }
   } else if (curQ.type === 'true_false' || curQ.type === 'tf') {
     interactivePlayerState.doubleScoreQuestionIndex = interactivePlayerState.currentIndex;

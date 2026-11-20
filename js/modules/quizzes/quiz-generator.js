@@ -7,8 +7,8 @@ let isFetchingQuizzes = false;
 let currentQuizGenToken = 0;
 let isSavingQuiz = false;
 
-async function loadQuizzesFromDB() {
-  if (isFetchingQuizzes) return;
+async function loadQuizzesFromDB(force = false) {
+  if (isFetchingQuizzes && !force) return;
   isFetchingQuizzes = true;
   try {
     const { data, error } = await db.from('quizzes').select('*').order('created_at', { ascending: false });
@@ -71,7 +71,7 @@ const quizGen = {
   fileText: '',
   title: '', subject: '', 
   formats: new Set(['mc', 'id']),
-  optionsCount: 4, // 2 to 6 choices for MC
+  optionsCount: 4, // 2 to 8 choices for MC
   count: 'auto',
   customCount: '',
   distributionMode: 'balanced', // 'balanced' or 'custom'
@@ -1307,7 +1307,7 @@ async function generateQuiz() {
       let sourceLabel = source;
       if (source.startsWith('gemini:')) sourceLabel = '🤖 Gemini AI (' + source.split(':')[1] + ')';
       else if (source.startsWith('openai:')) sourceLabel = '🤖 OpenAI (' + source.split(':')[1] + ')';
-      else if (source === 'offline-fallback') sourceLabel = '⚠️ Offline Fallback (no AI — API keys missing/exhausted)';
+      else if (source === 'offline-fallback') sourceLabel = '⚠️ Offline Extraction (AI unavailable — quota or network)';
 
       showToast(`✅ Generated ${qCount} questions in ${elapsed}s via ${sourceLabel}`, source === 'offline-fallback' ? 'warning' : 'success');
       applyGeneratedQuestions(data.questions, false);

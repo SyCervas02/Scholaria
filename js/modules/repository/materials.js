@@ -845,8 +845,8 @@ function renderMaterialsContainer() {
   if (approvalContainer) approvalContainer.innerHTML = renderApprovalMaterialRows();
 }
 
-async function loadMaterialsFromDB() {
-  if (isFetchingMaterials) return;
+async function loadMaterialsFromDB(options = {}) {
+  if (isFetchingMaterials && !options.force) return;
   isFetchingMaterials = true;
   const { data: { session } } = await db.auth.getSession().catch(() => ({ data: {} }));
 
@@ -4230,11 +4230,40 @@ function setApprovalView(key, value) {
 }
 
 async function refreshApprovalView() {
-  await Promise.all([loadMaterialsFromDB(), typeof loadQuizzesFromDB === 'function' ? loadQuizzesFromDB() : Promise.resolve()]);
   const wrap = document.getElementById('approvalListWrap');
-  if (wrap) wrap.innerHTML = renderApprovalMaterialRows();
-  updateApprovalBadge();
+  const button = wrap ? wrap.querySelector('.ca-heading-actions .ca-button') : null;
+  if (button) {
+    button.disabled = true;
+    button.style.opacity = '0.6';
+    button.style.pointerEvents = 'none';
+  }
+  // Clear stuck in-flight guards so pressing Refresh always re-fetches.
+  isFetchingMaterials = false;
+  try { isFetchingQuizzes = false; } catch (e) {}
+  let failed = false;
+  try {
+    const results = await Promise.allSettled([
+      loadMaterialsFromDB({ force: true }),
+      typeof loadQuizzesFromDB === 'function' ? loadQuizzesFromDB(true) : Promise.resolve()
+    ]);
+    results.forEach(r => {
+      if (r.status === 'rejected') {
+        failed = true;
+        console.warn('Approval refresh partial failure:', r.reason?.message || r.reason);
+      }
+    });
+  } finally {
+    isFetchingMaterials = false;
+    try { isFetchingQuizzes = false; } catch (e) {}
+    const currentWrap = document.getElementById('approvalListWrap');
+    if (currentWrap) currentWrap.innerHTML = renderApprovalMaterialRows();
+    updateApprovalBadge();
+    if (typeof showToast === 'function') {
+      showToast(failed ? 'Refresh partially failed — showing the last loaded data.' : 'Content approval list refreshed.', failed ? 'warning' : 'success');
+    }
+  }
 }
+window.refreshApprovalView = refreshApprovalView;
 
 function renderApprovalMaterialRows() {
   const entries = approvalEntries();
