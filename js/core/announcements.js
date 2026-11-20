@@ -714,7 +714,9 @@ function buildAnnouncementsPage() {
   `;
 }
 
-function handleAncAudienceToggle() {
+const ANC_STRAND_AUDIENCES = ['STEM Strand', 'HUMSS Strand', 'ABM Strand', 'TVL Strand'];
+
+function handleAncAudienceToggle(event) {
   // Every audience option stays selectable at all times; no cross-locking.
   document.querySelectorAll('input[name="ancAudience"]').forEach(cb => {
     cb.disabled = false;
@@ -724,6 +726,26 @@ function handleAncAudienceToggle() {
       label.style.cursor = 'pointer';
     }
   });
+
+  const allStudentsCb = document.querySelector('input[name="ancAudience"][value="All Students"]');
+  if (!allStudentsCb) return;
+  const strandBoxes = ANC_STRAND_AUDIENCES
+    .map(value => document.querySelector(`input[name="ancAudience"][value="${value}"]`))
+    .filter(Boolean);
+  if (!strandBoxes.length) return;
+
+  const source = event && event.target;
+  if (source === allStudentsCb) {
+    strandBoxes.forEach(cb => { cb.checked = allStudentsCb.checked; });
+  } else if (source && strandBoxes.includes(source)) {
+    // All four strands ticked means the whole student body is covered.
+    allStudentsCb.checked = strandBoxes.every(cb => cb.checked);
+  } else if (allStudentsCb.checked) {
+    // Restoring an older advisory that only lists "All Students".
+    strandBoxes.forEach(cb => { cb.checked = true; });
+  } else {
+    allStudentsCb.checked = strandBoxes.every(cb => cb.checked);
+  }
 }
 
 function handleAncCategoryChange(val) {
@@ -1008,6 +1030,12 @@ function submitCreateAnnouncement(isDraft = false) {
       selectedAudience.push(cb.value);
     }
   });
+  // "All Students" already covers every strand, so don't store both.
+  if (selectedAudience.includes('All Students')) {
+    for (let i = selectedAudience.length - 1; i >= 0; i--) {
+      if (ANC_STRAND_AUDIENCES.includes(selectedAudience[i])) selectedAudience.splice(i, 1);
+    }
+  }
 
   const expiresAtVal = (expiryInput && expiryInput.value)
     ? new Date(expiryInput.value).toISOString()

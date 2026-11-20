@@ -953,12 +953,10 @@ function isChatMuted(u) {
   return Boolean(u.permanentlyMuted || (u.mutedUntil && new Date(u.mutedUntil) > new Date()));
 }
 
-// The Muted Accounts tab keeps accounts with any mute record (active,
-// expired, or strike history) visible instead of silently dropping them the
-// moment a temporary mute lapses.
+// Only accounts that are muted right now belong in the Muted Accounts tab.
+// Expired temporary mutes drop out automatically once they lapse.
 function hasMuteRecord(u) {
-  if (!u) return false;
-  return isChatMuted(u) || Boolean(u.mutedUntil) || Number(u.strikes) > 0;
+  return isChatMuted(u);
 }
 
 // A section created for a specific strand (e.g. ABM) must only hold students

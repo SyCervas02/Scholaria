@@ -432,12 +432,12 @@
         <div class="anc-form-field">
           <label>Select Audience</label>
           <div class="anc-checkbox-group" style="margin-top:4px;display:grid;grid-template-columns:repeat(3, 1fr);gap:8px;">
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="All Students" checked onchange="handleAncAudienceToggle()"/> All Students</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="All Students" checked onchange="handleAncAudienceToggle(event)"/> All Students</label>
             <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="All Teachers" checked/> All Teachers</label>
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="STEM Strand" checked/> STEM Strand</label>
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="HUMSS Strand" checked/> HUMSS Strand</label>
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="ABM Strand"/> ABM Strand</label>
-            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="TVL Strand"/> TVL Strand</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="STEM Strand" checked onchange="handleAncAudienceToggle(event)"/> STEM Strand</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="HUMSS Strand" checked onchange="handleAncAudienceToggle(event)"/> HUMSS Strand</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="ABM Strand" checked onchange="handleAncAudienceToggle(event)"/> ABM Strand</label>
+            <label class="anc-checkbox-label"><input type="checkbox" name="ancAudience" value="TVL Strand" checked onchange="handleAncAudienceToggle(event)"/> TVL Strand</label>
           </div>
         </div>
 
@@ -799,14 +799,14 @@
   <script src="js/core/dashboard-calendar.js?v=1"></script>
   <script src="js/core/notifications.js?v=20152"></script>
   <script src="js/core/hotlines.js?v=20061"></script>
-  <script src="js/core/announcements.js?v=20150"></script>
+  <script src="js/core/announcements.js?v=20153"></script>
   <script src="js/modules/repository/materials.js?v=20151"></script>
   <script src="js/modules/quizzes/take-quiz.js?v=20099"></script>
   <script src="js/modules/quizzes/interactive-player.js?v=20105"></script>
   <script src="js/modules/quizzes/item-analysis.js?v=20075"></script>
   <script src="js/modules/quizzes/quiz-generator.js?v=20150"></script>
   <script src="js/modules/chat/chat.js?v=20150"></script>
-  <script src="js/modules/admin/user-management.js?v=20150"></script>
+  <script src="js/modules/admin/user-management.js?v=20153"></script>
   <script src="js/modules/admin/report-generator.js?v=20090"></script>
   <script src="js/modules/admin/rooms-management.js?v=20110"></script>
   <script src="js/modules/courses.js?v=20005"></script>
