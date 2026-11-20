@@ -4721,6 +4721,30 @@ function approvalIcon(name) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.file}</svg>`;
 }
 
+function materialDisplayType(m) {
+  const raw = String((m && (m.type || m.content_type || m.file_type)) || '').trim();
+  if (raw && !raw.includes('/')) return raw;
+  const mime = raw.toLowerCase();
+  const name = String((m && (m.fileName || m.file_url || m.title)) || '').toLowerCase();
+  const extMatch = name.match(/\.([a-z0-9]{2,5})(?:$|[?#])/);
+  const ext = extMatch ? extMatch[1].toUpperCase() : '';
+  if (mime.includes('presentation') || mime.includes('powerpoint')) return 'PPTX';
+  if (mime.includes('spreadsheet') || mime.includes('excel')) return 'XLSX';
+  if (mime.includes('word')) return 'DOCX';
+  if (mime.includes('pdf')) return 'PDF';
+  if (mime.startsWith('image/')) return 'IMAGE';
+  if (mime.startsWith('video/')) return 'VIDEO';
+  if (mime.startsWith('audio/')) return 'AUDIO';
+  if (mime.startsWith('text/')) return 'TEXT';
+  if (ext) return ext;
+  return raw ? 'FILE' : 'Material';
+}
+
+function materialDisplayTitle(m) {
+  const title = String((m && (m.title || m.fileName)) || '').trim() || 'Untitled Material';
+  return title.replace(/\.(pdf|doc|docx|ppt|pptx|xls|xlsx|txt|csv|zip|png|jpe?g|gif|mp4|mov|webp)$/i, '');
+}
+
 function approvalEntries() {
   const quizzes = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
   const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
@@ -4735,8 +4759,8 @@ function approvalEntries() {
       return {
         id: m.id,
         kind: 'material',
-        title: m.title || m.fileName || 'Untitled Material',
-        type: m.content_type || m.file_type || 'Material',
+        title: materialDisplayTitle(m),
+        type: materialDisplayType(m),
         subject: m.subject || 'General',
         name: resolveMaterialUploaderName(m),
         date: m.created_at,
