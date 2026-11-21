@@ -2297,10 +2297,14 @@ function handleCourseClick(courseId) {
   const course = COURSES_DATABASE.find(c => c.id === courseId);
   if (!course) return;
 
-  const isOpen = isCourseOpenForStudent(course);
-  if (!isOpen) {
-    showToast(`🔒 "${course.title}" is locked. Your enrolled strand is ${CURRENT_PROFILE?.strand || 'STEM'}.`, 'error');
-    return;
+  // Teachers can open any subject they handle — skip the student strand lock check
+  const role = (typeof ROLE !== 'undefined' ? ROLE : (CURRENT_PROFILE?.role || 'student'));
+  if (role !== 'teacher') {
+    const isOpen = isCourseOpenForStudent(course);
+    if (!isOpen) {
+      showToast(`🔒 "${course.title}" is locked. Your enrolled strand is ${CURRENT_PROFILE?.strand || 'STEM'}.`, 'error');
+      return;
+    }
   }
 
   // Open this specific subject's individual PDF modules & materials

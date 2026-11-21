@@ -3263,9 +3263,12 @@ function teacherPage(page) {
       const teacherAssignedSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim()).filter(Boolean);
       const strands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim()).filter(Boolean);
       const go = page => `renderPage('${page}')`;
+      const goMat = courseId => courseId
+        ? `if(typeof setActiveSubjectMaterials==='function') setActiveSubjectMaterials('${courseId}'); renderPage('materials');`
+        : `renderPage('materials');`;
       const icon = (svg, tone='blue') => `<span class="td-icon td-${tone}">${svg}</span>`;
       const empty = text => `<p class="td-empty">${text}</p>`;
-      const row = (title, sub, side='', tone='purple', svg=iconQuiz(), action='quiz') => `<button type="button" class="td-row" onclick="${go(action)}">${icon(svg,tone)}<span class="td-row-copy"><strong>${escHtml(title)}</strong><small>${escHtml(sub)}</small></span><span class="td-row-side">${side}</span></button>`;
+      const row = (title, sub, side='', tone='purple', svg=iconQuiz(), action='quiz', courseId='') => `<button type="button" class="td-row" onclick="${courseId ? goMat(courseId) : go(action)}">${icon(svg,tone)}<span class="td-row-copy"><strong>${escHtml(title)}</strong><small>${escHtml(sub)}</small></span><span class="td-row-side">${side}</span></button>`;
       const panel = (title, svg, content, page, cls='') => `<section class="td-panel ${cls}"><header>${icon(svg)}<h3>${title}</h3><button type="button" class="td-link" onclick="${go(page)}">View All</button></header>${content}</section>`;
       const date = value => { const d = new Date(value); return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); };
       const unreadChatCount = demo ? 7 : (typeof getTeacherUnreadChatCount === 'function' ? getTeacherUnreadChatCount() : 0);
@@ -3296,10 +3299,10 @@ function teacherPage(page) {
       const pendingEntries = demo ? [] : [
         ...(typeof customQuizzes !== 'undefined' ? customQuizzes : [])
           .filter(q => q && String(q.status || '').toLowerCase() === 'pending' && q.createdBy && [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId, CURRENT_PROFILE?.school_id].includes(q.createdBy))
-          .map(q => ({ title: q.title, sub: `${q.subject || 'General'} · Quiz`, date: q.createdAt, page: 'quiz', svg: iconQuiz() })),
+          .map(q => ({ title: q.title, sub: `${q.subject || 'General'} · Quiz`, date: q.createdAt, page: 'quiz', svg: iconQuiz(), courseId: '' })),
         ...(Array.isArray(materialsData) ? materialsData : [])
           .filter(m => m && String(m.status || '').toLowerCase() === 'pending' && !String(m.id).startsWith('local_') && (!m.uploaded_by || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(m.uploaded_by)))
-          .map(m => ({ title: m.title, sub: `${m.subject || 'General'} · Handout`, date: m.created_at, page: 'materials', svg: iconRecord() }))
+          .map(m => ({ title: m.title, sub: `${m.subject || 'General'} · Handout`, date: m.created_at, page: 'materials', svg: iconRecord(), courseId: m.course_id || '' }))
       ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 4);
       const pending = demo ? [
         ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
@@ -3307,9 +3310,9 @@ function teacherPage(page) {
         ['Group Project Report','Research in Daily Life - Grade 11 - STEM',2,'Feb 4, 2025'],
         ['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM',4,'Feb 5, 2025']
       ].map(r=>row(r[0],r[1],`<b>${r[2]}</b> submissions<small>Due: ${r[3]}</small>`)).join('') : (pendingEntries.length
-        ? pendingEntries.map(p => row(p.title, p.sub, '<em>Pending</em>', 'orange', p.svg, p.page)).join('')
+        ? pendingEntries.map(p => row(p.title, p.sub, '<em>Pending</em>', 'orange', p.svg, p.page, p.courseId || '')).join('')
         : empty('No submissions awaiting review.'));
-      const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials')).join('') || empty('No materials uploaded yet.');
+      const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials',m.course_id||'')).join('') || empty('No materials uploaded yet.');
       const classNews = news.filter(n => n.category === 'academic' || n.category === 'emergency');
       const latestClassNews = [...classNews, ...news.filter(n => !['academic', 'emergency', 'event'].includes(n.category))];
       const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : latestClassNews.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
@@ -3725,25 +3728,33 @@ function teacherPage(page) {
         </div>
       </div>
 
-      <div class="analysis-filter-container" style="display:flex;flex-wrap:nowrap;align-items:center;gap:10px;overflow-x:auto;padding:10px 0;">
-        <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions?'active':''}" onclick="setAnalysisTab('questions')" style="flex-shrink:0;white-space:nowrap;font-size:14px;padding:8px 14px;">${iconQuiz()} Question Psychometrics <span class="analysis-tab-count">${filteredRows.length}</span></button>
-        <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions?'active':''}" onclick="setAnalysisTab('students')" style="flex-shrink:0;white-space:nowrap;font-size:14px;padding:8px 14px;">${iconUsers()} Student Submissions <span class="analysis-tab-count">${attemptCount}</span></button>
-        <div style="width:1px;height:32px;background:#e2e8f0;flex-shrink:0;"></div>
-        <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)" style="flex:1;min-width:130px;max-width:210px;font-size:13px;padding:7px 10px;height:38px;">
+      <div class="analysis-filter-container" style="display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;overflow-x:auto;padding:8px 0;">
+        <button type="button" role="tab" aria-selected="${!showingStudentSubmissions}" class="analysis-tab-btn ${!showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('questions')" style="flex-shrink:0;white-space:nowrap;">
+          <span class="analysis-tab-icon" aria-hidden="true">${iconQuiz()}</span> Question Psychometrics <span class="analysis-tab-count">${filteredRows.length}</span>
+        </button>
+        <button type="button" role="tab" aria-selected="${showingStudentSubmissions}" class="analysis-tab-btn ${showingStudentSubmissions ? 'active' : ''}" onclick="setAnalysisTab('students')" style="flex-shrink:0;white-space:nowrap;">
+          <span class="analysis-tab-icon" aria-hidden="true">${iconUsers()}</span> Student Submissions <span class="analysis-tab-count">${attemptCount}</span>
+        </button>
+        <div style="width:1px;height:28px;background:#e2e8f0;flex-shrink:0;"></div>
+        <select class="user-filter-select" aria-label="Filter by section" onchange="setAnalysisSectionFilter(this.value)" style="flex:1;min-width:120px;max-width:200px;">
           <option value="">All Handled Sections</option>
-          ${analysisFilteredSections.map(sec=>`<option value="${sec}"${analysisSectionFilter===sec?' selected':''}>${sec}</option>`).join('')}
+          ${analysisFilteredSections.map(sec => `<option value="${sec}" ${analysisSectionFilter === sec ? 'selected' : ''}>${sec}</option>`).join('')}
         </select>
-        <select class="user-filter-select" aria-label="Filter by difficulty" onchange="setAnalysisDifficultyFilter(this.value)" style="flex:1;min-width:130px;max-width:180px;font-size:13px;padding:7px 10px;height:38px;">
+        <select class="user-filter-select" aria-label="Filter by difficulty" onchange="setAnalysisDifficultyFilter(this.value)" style="flex:1;min-width:110px;max-width:170px;">
           <option value="">All Difficulty Levels</option>
-          <option value="Easy"${String(activeDifficulty).toLowerCase()==='easy'?' selected':''}>Easy</option>
-          <option value="Average"${String(activeDifficulty).toLowerCase()==='average'?' selected':''}>Average</option>
-          <option value="Difficult"${String(activeDifficulty).toLowerCase()==='difficult'?' selected':''}>Difficult</option>
-          <option value="No Data"${String(activeDifficulty).toLowerCase()==='no data'?' selected':''}>No Data</option>
+          <option value="Easy" ${String(activeDifficulty).toLowerCase() === 'easy' ? 'selected' : ''}>Easy</option>
+          <option value="Average" ${String(activeDifficulty).toLowerCase() === 'average' ? 'selected' : ''}>Average</option>
+          <option value="Difficult" ${String(activeDifficulty).toLowerCase() === 'difficult' ? 'selected' : ''}>Difficult</option>
+          <option value="No Data" ${String(activeDifficulty).toLowerCase() === 'no data' ? 'selected' : ''}>No Data</option>
         </select>
-        <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)" style="flex:2;min-width:150px;font-size:13px;padding:7px 10px;height:38px;">
-          ${displayQuizzes.map(q=>{const s=String(q.subject||'').trim();return`<option value="${q.id}"${String(q.id)===String(analysisSelectedQuizId)?' selected':''}>${escHtml(s?`${s} — ${q.title}`:q.title)}</option>`;}).join('')}
+        <select class="user-filter-select" aria-label="Select quiz" onchange="setAnalysisQuiz(this.value)" style="flex:2;min-width:140px;">
+          ${displayQuizzes.map(q => {
+            const subjectName = String(q.subject || '').trim();
+            const optionLabel = subjectName ? `${subjectName} — ${q.title}` : q.title;
+            return `<option value="${q.id}" ${String(q.id) === String(analysisSelectedQuizId) ? 'selected' : ''}>${escHtml(optionLabel)}</option>`;
+          }).join('')}
         </select>
-        <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')" style="flex-shrink:0;white-space:nowrap;font-size:13px;padding:8px 16px;">${iconRefresh()} Refresh</button>
+        <button type="button" class="add-btn analysis-refresh-btn" onclick="refreshAnalysisReport('${selectedQuiz.id}')" style="flex-shrink:0;white-space:nowrap;">${iconRefresh()} Refresh</button>
       </div>
 
       <!-- QUIZ OVERVIEW CARD -->
