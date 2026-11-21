@@ -755,9 +755,10 @@ const ANC_STRAND_AUDIENCES = ['STEM Strand', 'HUMSS Strand', 'ABM Strand', 'TVL 
 
 function teacherStrandAudienceLabels() {
   if (typeof CURRENT_PROFILE === 'undefined' || !CURRENT_PROFILE) return [];
-  return String(CURRENT_PROFILE.strand || '')
-    .split(/[,/|]/)
-    .map(part => part.trim().toUpperCase())
+  const strands = typeof getTeacherActiveHandledStrands === 'function'
+    ? getTeacherActiveHandledStrands(CURRENT_PROFILE)
+    : String(CURRENT_PROFILE.strand || '').split(/[,/|]/).map(part => part.trim().toUpperCase());
+  return strands
     .filter(code => ['STEM', 'HUMSS', 'ABM', 'TVL'].includes(code))
     .map(code => `${code} Strand`);
 }

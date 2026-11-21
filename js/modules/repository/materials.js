@@ -5552,13 +5552,11 @@ const materialUploadState = {
 };
 
 function openMaterialModal(courseId, targetSection, targetLessonId) {
-  const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+  const teacherStrands = (ROLE === 'teacher')
+    ? (typeof getTeacherActiveHandledStrands === 'function'
+        ? getTeacherActiveHandledStrands(CURRENT_PROFILE)
+        : ((CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean)))
     : [];
-  if (ROLE === 'teacher') {
-    if (!teacherStrands.includes('STEM')) teacherStrands.push('STEM');
-    if (!teacherStrands.includes('HUMSS')) teacherStrands.push('HUMSS');
-  }
 
   const teacherGrades = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.grade_level)
     ? CURRENT_PROFILE.grade_level.split(',').map(s => s.trim()).filter(Boolean)
@@ -5584,12 +5582,33 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
 
   if (targetCourse) {
     initialSubject = targetCourse.title;
-    initialStrand = (ROLE === 'teacher' && (targetCourse.track === 'Core' || targetCourse.track === 'Applied'))
-      ? 'STEM, HUMSS'
-      : (targetCourse.strand || (ROLE === 'teacher' ? 'STEM, HUMSS' : 'All Strands'));
+    if (ROLE === 'teacher') {
+      const cStrand = (targetCourse.strand || '').toUpperCase().trim();
+      if (cStrand && teacherStrands.includes(cStrand)) {
+        initialStrand = cStrand;
+      } else if (teacherStrands.length === 1) {
+        initialStrand = teacherStrands[0];
+      } else if (teacherStrands.length > 1) {
+        initialStrand = teacherStrands.join(', ');
+      } else {
+        initialStrand = targetCourse.strand || 'All Strands';
+      }
+    } else {
+      initialStrand = targetCourse.strand || 'All Strands';
+    }
     initialGrade = targetCourse.gradeLevel || initialGrade;
   } else {
-    initialStrand = (ROLE === 'teacher') ? 'STEM, HUMSS' : 'All Strands';
+    if (ROLE === 'teacher') {
+      if (teacherStrands.length === 1) {
+        initialStrand = teacherStrands[0];
+      } else if (teacherStrands.length > 1) {
+        initialStrand = teacherStrands.join(', ');
+      } else {
+        initialStrand = 'All Strands';
+      }
+    } else {
+      initialStrand = 'All Strands';
+    }
   }
 
   const teacherHasSectionField = ROLE === 'teacher' && !!(CURRENT_PROFILE && CURRENT_PROFILE.section);
@@ -5598,7 +5617,7 @@ function openMaterialModal(courseId, targetSection, targetLessonId) {
     ? new Set([chosenSection])
     : (teacherSections.length
         ? new Set(teacherSections)
-        : (ROLE === 'teacher' ? (teacherHasSectionField ? new Set() : new Set(['Section A', 'Section B'])) : new Set()));
+        : (ROLE === 'teacher' ? (teacherHasSectionField ? new Set() : new Set()) : new Set()));
 
   const courseLessons = targetCourse ? getSubjectLessons(targetCourse) : [];
   let initialLessonId = ROLE === 'teacher' ? null : (targetLessonId || null);
@@ -5666,12 +5685,22 @@ function muUpdateStrand(value) {
   materialUploadState.strand = value;
   if (ROLE === 'teacher') {
     const valUp = (value || '').toUpperCase();
-    if (valUp.includes('STEM') && valUp.includes('HUMSS')) {
-      materialUploadState.sections = new Set(['Section A', 'Section B']);
-    } else if (valUp === 'STEM') {
-      materialUploadState.sections = new Set(['Section A']);
-    } else if (valUp === 'HUMSS') {
-      materialUploadState.sections = new Set(['Section B']);
+    const activeTeacherSections = (CURRENT_PROFILE?.section || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+
+    if (activeTeacherSections.length > 0) {
+      if (valUp === 'ALL' || valUp.includes('ALL') || valUp.includes(',')) {
+        materialUploadState.sections = new Set(activeTeacherSections);
+      } else {
+        const matching = activeTeacherSections.filter(sec => {
+          const secStrand = typeof getSectionStrand === 'function' ? getSectionStrand(sec) : '';
+          return !secStrand || secStrand.toUpperCase().includes(valUp);
+        });
+        materialUploadState.sections = new Set(matching.length > 0 ? matching : activeTeacherSections);
+      }
     }
   }
   const available = getFilteredSubjects(materialUploadState.strand, materialUploadState.grade_level);
@@ -5767,13 +5796,11 @@ function renderMaterialModal() {
   if (!body || !foot) return;
 
   const subjectOptions = getFilteredSubjects(s.strand, s.grade_level);
-  const teacherStrands = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.strand)
-    ? CURRENT_PROFILE.strand.split(',').map(str => str.trim().toUpperCase()).filter(Boolean)
+  const teacherStrands = (ROLE === 'teacher')
+    ? (typeof getTeacherActiveHandledStrands === 'function'
+        ? getTeacherActiveHandledStrands(CURRENT_PROFILE)
+        : ((CURRENT_PROFILE?.strand || '').split(',').map(str => str.trim().toUpperCase()).filter(Boolean)))
     : [];
-  if (ROLE === 'teacher') {
-    if (!teacherStrands.includes('STEM')) teacherStrands.push('STEM');
-    if (!teacherStrands.includes('HUMSS')) teacherStrands.push('HUMSS');
-  }
 
   const teacherGrades = (ROLE === 'teacher' && CURRENT_PROFILE && CURRENT_PROFILE.grade_level)
     ? CURRENT_PROFILE.grade_level.split(',').map(g => g.trim()).filter(Boolean)
@@ -5812,10 +5839,15 @@ function renderMaterialModal() {
       <div class="gen-field"><label>Strand ${ROLE === 'teacher' ? '<span style="font-size:11px;color:#0284c7;font-weight:600;">(Handled Strands)</span>' : ''}</label>
         <select onchange="muUpdateStrand(this.value)">
           ${ROLE === 'teacher' ? `
-            <option value="STEM, HUMSS" ${(s.strand === 'STEM, HUMSS' || s.strand === 'Both STEM & HUMSS' || (s.strand && s.strand.includes('STEM') && s.strand.includes('HUMSS'))) ? 'selected' : ''}>Both STEM &amp; HUMSS (All Handled)</option>
-            <option value="STEM" ${s.strand === 'STEM' ? 'selected' : ''}>STEM</option>
-            <option value="HUMSS" ${s.strand === 'HUMSS' ? 'selected' : ''}>HUMSS</option>
-            ${availableStrands.filter(st => st !== 'STEM' && st !== 'HUMSS').map(st => `<option value="${st}" ${s.strand === st ? 'selected' : ''}>${st}</option>`).join('')}
+            ${teacherStrands.length > 1 ? `
+              <option value="${teacherStrands.join(', ')}" ${(s.strand === teacherStrands.join(', ') || s.strand === `Both ${teacherStrands.join(' & ')}` || (s.strand && teacherStrands.every(st => s.strand.toUpperCase().includes(st)))) ? 'selected' : ''}>All Handled (${teacherStrands.join(' & ')})</option>
+              ${teacherStrands.map(st => `<option value="${st}" ${s.strand === st ? 'selected' : ''}>${st}</option>`).join('')}
+            ` : (teacherStrands.length === 1 ? `
+              <option value="${teacherStrands[0]}" selected>${teacherStrands[0]}</option>
+            ` : `
+              <option value="All Strands" ${(!s.strand || s.strand === 'All Strands' || s.strand === 'all') ? 'selected' : ''}>All Strands (General / Core)</option>
+              ${availableStrands.map(str => `<option value="${str}" ${s.strand === str ? 'selected' : ''}>${str}</option>`).join('')}
+            `)}
           ` : `
             <option value="All Strands" ${(!s.strand || s.strand === 'All Strands' || s.strand === 'all') ? 'selected' : ''}>All Strands (General / Core)</option>
             ${availableStrands.map(str => `<option value="${str}" ${s.strand === str ? 'selected' : ''}>${str}</option>`).join('')}

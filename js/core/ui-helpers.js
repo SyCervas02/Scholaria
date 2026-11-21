@@ -38,19 +38,115 @@ let managedSections = (() => {
   }
   return sortSectionsNaturally([...DEFAULT_MANAGED_SECTIONS]);
 })();
+window.managedSections = managedSections;
 
 function isSectionArchived(secName) {
   if (!secName) return false;
   const sName = String(secName).trim().toLowerCase();
-  const list = (typeof managedSections !== 'undefined' && Array.isArray(managedSections)) ? managedSections : [];
+  const list = (typeof window !== 'undefined' && Array.isArray(window.managedSections) && window.managedSections.length)
+    ? window.managedSections
+    : ((typeof managedSections !== 'undefined' && Array.isArray(managedSections)) ? managedSections : []);
   const found = list.find(s => (s.name || '').trim().toLowerCase() === sName || (s.id || '').trim().toLowerCase() === sName);
   return Boolean(found && found.isArchived);
 }
 window.isSectionArchived = isSectionArchived;
 
+function getSectionStrand(secName) {
+  const list = (typeof window !== 'undefined' && Array.isArray(window.managedSections) && window.managedSections.length)
+    ? window.managedSections
+    : ((typeof managedSections !== 'undefined' && Array.isArray(managedSections)) ? managedSections : []);
+  const found = list.find(s => (s.name || '').toLowerCase().trim() === (secName || '').toLowerCase().trim() || (s.id || '').toLowerCase().trim() === (secName || '').toLowerCase().trim());
+  if (found && found.strand) return found.strand.toUpperCase().trim();
+  const sLow = (secName || '').toLowerCase().trim();
+  if (sLow.includes('stem')) return 'STEM';
+  if (sLow.includes('humss')) return 'HUMSS';
+  if (sLow.includes('abm')) return 'ABM';
+  if (sLow.includes('tvl')) return 'TVL';
+  if (sLow === 'section a') return 'STEM';
+  if (sLow === 'section b') return 'HUMSS';
+  if (sLow === 'section c') return 'STEM';
+  if (sLow === 'section d') return 'ABM';
+  return 'STEM';
+}
+window.getSectionStrand = getSectionStrand;
+
+function getTeacherActiveHandledStrands(profile = (typeof CURRENT_PROFILE !== 'undefined' ? CURRENT_PROFILE : null)) {
+  if (!profile) return [];
+  const role = typeof ROLE !== 'undefined' ? ROLE : (profile.role || 'teacher');
+  if (role !== 'teacher') {
+    if (role === 'student') {
+      const st = String(profile.strand || 'STEM').trim().toUpperCase();
+      return st ? [st] : ['STEM'];
+    }
+    return (typeof STRANDS !== 'undefined' && Array.isArray(STRANDS)) ? STRANDS : ['STEM', 'HUMSS', 'ABM', 'TVL'];
+  }
+
+  const rawSections = String(profile.section || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const activeTeacherSections = rawSections.filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
+  const archivedTeacherSections = rawSections.filter(sec => typeof isSectionArchived === 'function' && isSectionArchived(sec));
+
+  const activeStrandsSet = new Set();
+  const mList = (typeof window !== 'undefined' && Array.isArray(window.managedSections) && window.managedSections.length)
+    ? window.managedSections
+    : ((typeof managedSections !== 'undefined' && Array.isArray(managedSections)) ? managedSections : []);
+
+  if (activeTeacherSections.length > 0) {
+    activeTeacherSections.forEach(secName => {
+      const sNorm = secName.toLowerCase();
+      const found = mList.find(s => (s.name || '').trim().toLowerCase() === sNorm || (s.id || '').trim().toLowerCase() === sNorm);
+      if (found && !found.isArchived && found.strand) {
+        found.strand.split(/[,/&]+/).map(st => st.trim().toUpperCase()).filter(Boolean).forEach(st => activeStrandsSet.add(st));
+      } else if (typeof getSectionStrand === 'function') {
+        const st = getSectionStrand(secName);
+        if (st) activeStrandsSet.add(st.toUpperCase().trim());
+      }
+    });
+
+    if (activeStrandsSet.size > 0) {
+      return Array.from(activeStrandsSet);
+    }
+  }
+
+  // If teacher has assigned sections but all of them are archived, they handle 0 active strands
+  if (rawSections.length > 0 && activeTeacherSections.length === 0) {
+    return [];
+  }
+
+  // Fallback to profile.strand, excluding any strands that exclusively belonged to archived sections
+  const profileStrands = String(profile.strand || '')
+    .split(/[,/&]+/)
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean);
+
+  const archivedStrandsSet = new Set();
+  archivedTeacherSections.forEach(secName => {
+    const sNorm = secName.toLowerCase();
+    const found = mList.find(s => (s.name || '').trim().toLowerCase() === sNorm || (s.id || '').trim().toLowerCase() === sNorm);
+    if (found && found.strand) {
+      found.strand.split(/[,/&]+/).map(st => st.trim().toUpperCase()).filter(Boolean).forEach(st => archivedStrandsSet.add(st));
+    } else if (typeof getSectionStrand === 'function') {
+      const st = getSectionStrand(secName);
+      if (st) archivedStrandsSet.add(st.toUpperCase().trim());
+    }
+  });
+
+  const validProfileStrands = profileStrands.filter(st => !archivedStrandsSet.has(st));
+  if (validProfileStrands.length > 0) {
+    return validProfileStrands;
+  }
+
+  return profileStrands;
+}
+window.getTeacherActiveHandledStrands = getTeacherActiveHandledStrands;
+
 function saveManagedSections() {
   try {
     managedSections = sortSectionsNaturally(managedSections);
+    window.managedSections = managedSections;
     localStorage.setItem('scholaria_managed_sections', JSON.stringify(managedSections));
   } catch (e) {
     console.warn('Could not save sections to localStorage:', e);
@@ -115,6 +211,7 @@ async function loadSharedManagedSections() {
           createdAt: s.created_at,
           updatedAt: s.updated_at
         })));
+        window.managedSections = managedSections;
         try { localStorage.setItem('scholaria_managed_sections', JSON.stringify(managedSections)); } catch (_) {}
         syncSectionsArray();
         return;
@@ -130,6 +227,7 @@ async function loadSharedManagedSections() {
       const serverSections = await res.json();
       if (Array.isArray(serverSections) && serverSections.length > 0) {
         managedSections = sortSectionsNaturally(serverSections);
+        window.managedSections = managedSections;
         try { localStorage.setItem('scholaria_managed_sections', JSON.stringify(managedSections)); } catch (_) {}
         syncSectionsArray();
       }

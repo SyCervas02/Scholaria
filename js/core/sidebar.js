@@ -3360,8 +3360,14 @@ function teacherPage(page) {
     case 'quiz': {
       let filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => q.status !== 'archived');
       if (ROLE === 'teacher') {
-        const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-        const teacherSections = (CURRENT_PROFILE?.section || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+        const myStrands = typeof getTeacherActiveHandledStrands === 'function'
+          ? getTeacherActiveHandledStrands(CURRENT_PROFILE)
+          : (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        const teacherSections = (CURRENT_PROFILE?.section || '')
+          .split(',')
+          .map(s => s.trim().toLowerCase())
+          .filter(Boolean)
+          .filter(sec => typeof isSectionArchived !== 'function' || !isSectionArchived(sec));
         filtered = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => q.status !== 'archived').filter(q => {
           const isCreator = (q.createdBy && (
             q.createdBy === CURRENT_PROFILE?.id || 
@@ -3625,7 +3631,9 @@ function teacherPage(page) {
 
       let myQuizzesForAnalysis = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).slice();
       if (ROLE === 'teacher') {
-        const myStrands = (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        const myStrands = typeof getTeacherActiveHandledStrands === 'function'
+          ? getTeacherActiveHandledStrands(CURRENT_PROFILE)
+          : (CURRENT_PROFILE?.strand || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
         myQuizzesForAnalysis = (typeof customQuizzes !== 'undefined' ? customQuizzes : []).filter(q => {
           const isCreator = (q.createdBy && (
             q.createdBy === CURRENT_PROFILE?.id || 

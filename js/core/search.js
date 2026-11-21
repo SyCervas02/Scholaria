@@ -166,9 +166,10 @@
     if (role === 'admin') return true;
 
     if (role === 'teacher') {
-      const teacherStrandText = String(CURRENT_PROFILE?.strand || '').trim().toUpperCase();
-      if (!teacherStrandText) return true;
-      const teacherStrands = teacherStrandText.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+      const teacherStrands = typeof getTeacherActiveHandledStrands === 'function'
+        ? getTeacherActiveHandledStrands(CURRENT_PROFILE)
+        : String(CURRENT_PROFILE?.strand || '').trim().toUpperCase().split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+      if (!teacherStrands.length) return true;
       const courseStrands = (Array.isArray(c.strands) && c.strands.length ? c.strands : String(c.strand || '').split(/[,/&]+/))
         .map(s => String(s || '').trim().toUpperCase()).filter(Boolean);
       if (courseStrands.includes('ALL') || courseStrands.includes('GENERAL') || courseStrands.includes('ALL STRANDS')) return true;
@@ -247,9 +248,10 @@
 
       // Strand safety: filter out materials of other strands for teacher and student
       if (role === 'teacher') {
-        const teacherStrandText = String(CURRENT_PROFILE?.strand || '').trim().toUpperCase();
-        if (teacherStrandText) {
-          const teacherStrands = teacherStrandText.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+        const teacherStrands = typeof getTeacherActiveHandledStrands === 'function'
+          ? getTeacherActiveHandledStrands(CURRENT_PROFILE)
+          : String(CURRENT_PROFILE?.strand || '').trim().toUpperCase().split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+        if (teacherStrands.length) {
           const mStrand = String(m.strand || '').trim().toUpperCase();
           if (mStrand && !['ALL', 'GENERAL', 'CORE', 'COMMON', 'ALL STRANDS'].includes(mStrand)) {
             const mStrands = mStrand.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
@@ -307,9 +309,10 @@
 
       // Strand safety: filter out quizzes of other strands
       if (role === 'teacher') {
-        const teacherStrandText = String(CURRENT_PROFILE?.strand || '').trim().toUpperCase();
-        if (teacherStrandText) {
-          const teacherStrands = teacherStrandText.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+        const teacherStrands = typeof getTeacherActiveHandledStrands === 'function'
+          ? getTeacherActiveHandledStrands(CURRENT_PROFILE)
+          : String(CURRENT_PROFILE?.strand || '').trim().toUpperCase().split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+        if (teacherStrands.length) {
           const qStrand = String(quiz.strand || '').trim().toUpperCase();
           if (qStrand && !['ALL', 'GENERAL', 'CORE', 'COMMON', 'ALL STRANDS'].includes(qStrand)) {
             const qStrands = qStrand.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
