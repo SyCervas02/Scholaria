@@ -2349,7 +2349,8 @@ function renderCoursesWidgetHTML() {
       enrolledList = COURSES_DATABASE.filter(c => {
         const courseStrands = (Array.isArray(c.strands) && c.strands.length ? c.strands : String(c.strand || '').split(/[,/&]+/))
           .map(s => String(s || '').trim().toUpperCase()).filter(Boolean);
-        return teacherStrands.some(st => courseStrands.includes(st)) || (c.track || '').toLowerCase() === 'core';
+        const isGeneral = courseStrands.includes('ALL') || courseStrands.includes('GENERAL') || courseStrands.includes('ALL STRANDS');
+        return isGeneral || teacherStrands.some(st => courseStrands.includes(st));
       });
     } else {
       enrolledList = COURSES_DATABASE.slice();

@@ -157,6 +157,36 @@
     return 'student';
   }
 
+  function isCourseVisibleInSearch(c) {
+    if (!c) return false;
+    if (typeof isSubjectArchived === 'function' && isSubjectArchived(c.title, c.strand, c.gradeLevel || c.grade_level)) {
+      return false;
+    }
+    const role = getCurrentUserRole();
+    if (role === 'admin') return true;
+
+    if (role === 'teacher') {
+      const teacherStrandText = String(CURRENT_PROFILE?.strand || '').trim().toUpperCase();
+      if (!teacherStrandText) return true;
+      const teacherStrands = teacherStrandText.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+      const courseStrands = (Array.isArray(c.strands) && c.strands.length ? c.strands : String(c.strand || '').split(/[,/&]+/))
+        .map(s => String(s || '').trim().toUpperCase()).filter(Boolean);
+      if (courseStrands.includes('ALL') || courseStrands.includes('GENERAL') || courseStrands.includes('ALL STRANDS')) return true;
+      return teacherStrands.some(ts => courseStrands.includes(ts));
+    }
+
+    if (role === 'student') {
+      if (typeof isCourseAssignedToStudent === 'function') {
+        return isCourseAssignedToStudent(c, CURRENT_PROFILE);
+      }
+      const studentStrand = String(CURRENT_PROFILE?.strand || 'STEM').trim().toUpperCase();
+      const cStrand = String(c.strand || '').trim().toUpperCase();
+      return !cStrand || cStrand === 'ALL' || cStrand === 'GENERAL' || cStrand === studentStrand;
+    }
+
+    return true;
+  }
+
   // ── CORE SEARCH AGGREGATOR ──
   function executeSearch(query) {
     const dropdown = document.getElementById('searchResultsDropdown');
@@ -171,6 +201,8 @@
     const courseMatches = [];
     if (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) {
       COURSES_DATABASE.forEach(c => {
+        if (!isCourseVisibleInSearch(c)) return;
+
         const titleMatch = (c.title || '').toLowerCase().includes(q);
         const codeMatch = (c.code || '').toLowerCase().includes(q);
         const strandMatch = (c.strand || '').toLowerCase().includes(q);
@@ -186,8 +218,12 @@
             badge: c.strand || 'Subject',
             action: () => {
               closeGlobalSearch();
-              if (typeof renderPage === 'function') renderPage('materials');
-              if (typeof setActiveSubjectMaterials === 'function') setActiveSubjectMaterials(c.id);
+              if (typeof openSubjectMaterials === 'function') {
+                openSubjectMaterials(c.id);
+              } else {
+                if (typeof setActiveSubjectMaterials === 'function') setActiveSubjectMaterials(c.id);
+                if (typeof renderPage === 'function') renderPage('materials');
+              }
             }
           });
         }
@@ -209,6 +245,26 @@
       // Role safety: students only see approved materials
       if (role === 'student' && m.status && m.status !== 'approved') return;
 
+      // Strand safety: filter out materials of other strands for teacher and student
+      if (role === 'teacher') {
+        const teacherStrandText = String(CURRENT_PROFILE?.strand || '').trim().toUpperCase();
+        if (teacherStrandText) {
+          const teacherStrands = teacherStrandText.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+          const mStrand = String(m.strand || '').trim().toUpperCase();
+          if (mStrand && !['ALL', 'GENERAL', 'CORE', 'COMMON', 'ALL STRANDS'].includes(mStrand)) {
+            const mStrands = mStrand.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+            if (!teacherStrands.some(ts => mStrands.includes(ts))) return;
+          }
+        }
+      } else if (role === 'student') {
+        const studentStrand = String(CURRENT_PROFILE?.strand || 'STEM').trim().toUpperCase();
+        const mStrand = String(m.strand || '').trim().toUpperCase();
+        if (mStrand && !['ALL', 'GENERAL', 'CORE', 'COMMON', 'ALL STRANDS'].includes(mStrand)) {
+          const mStrands = mStrand.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+          if (!mStrands.includes(studentStrand)) return;
+        }
+      }
+
       const titleMatch = (m.title || '').toLowerCase().includes(q);
       const subMatch = (m.subject || '').toLowerCase().includes(q);
       const strandMatch = (m.strand || '').toLowerCase().includes(q);
@@ -224,7 +280,9 @@
           badge: m.strand || 'Handout',
           action: () => {
             closeGlobalSearch();
-            if (typeof previewOrDownloadMaterial === 'function') {
+            if (typeof openDashboardMaterial === 'function') {
+              openDashboardMaterial(m.id, m.course_id || '', m.subject || '', m.section || '');
+            } else if (typeof previewOrDownloadMaterial === 'function') {
               previewOrDownloadMaterial(m.id);
             } else if (typeof renderPage === 'function') {
               renderPage('materials');
@@ -246,6 +304,27 @@
     allQuizzes.forEach(quiz => {
       // Role safety: students only see active quizzes
       if (role === 'student' && quiz.status && quiz.status !== 'active') return;
+
+      // Strand safety: filter out quizzes of other strands
+      if (role === 'teacher') {
+        const teacherStrandText = String(CURRENT_PROFILE?.strand || '').trim().toUpperCase();
+        if (teacherStrandText) {
+          const teacherStrands = teacherStrandText.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+          const qStrand = String(quiz.strand || '').trim().toUpperCase();
+          if (qStrand && !['ALL', 'GENERAL', 'CORE', 'COMMON', 'ALL STRANDS'].includes(qStrand)) {
+            const qStrands = qStrand.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+            if (!teacherStrands.some(ts => qStrands.includes(ts))) return;
+          }
+        }
+      } else if (role === 'student') {
+        if (typeof isQuizTargetedForStudent === 'function' && !isQuizTargetedForStudent(quiz, CURRENT_PROFILE)) return;
+        const studentStrand = String(CURRENT_PROFILE?.strand || 'STEM').trim().toUpperCase();
+        const qStrand = String(quiz.strand || '').trim().toUpperCase();
+        if (qStrand && !['ALL', 'GENERAL', 'CORE', 'COMMON', 'ALL STRANDS'].includes(qStrand)) {
+          const qStrands = qStrand.split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
+          if (!qStrands.includes(studentStrand)) return;
+        }
+      }
 
       const titleMatch = (quiz.title || '').toLowerCase().includes(q);
       const subMatch = (quiz.subject || '').toLowerCase().includes(q);
@@ -297,7 +376,9 @@
           badge: anc.category || 'News',
           action: () => {
             closeGlobalSearch();
-            if (typeof openAnnouncementDetailModal === 'function') {
+            if (typeof openDashboardAnnouncement === 'function') {
+              openDashboardAnnouncement(anc.id);
+            } else if (typeof openAnnouncementDetailModal === 'function') {
               openAnnouncementDetailModal(anc.id);
             } else if (typeof renderPage === 'function') {
               renderPage('announcements');
@@ -528,7 +609,10 @@
     html += `</div>`;
 
     // Add Popular Subjects
-    if (typeof COURSES_DATABASE !== 'undefined' && COURSES_DATABASE.length) {
+    const visiblePopularCourses = (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE))
+      ? COURSES_DATABASE.filter(isCourseVisibleInSearch)
+      : [];
+    if (visiblePopularCourses.length) {
       html += `
         <div class="search-cat-header" style="margin-top:12px;">
           <span>📚</span>
@@ -536,12 +620,16 @@
         </div>
       `;
 
-      COURSES_DATABASE.slice(0, 4).forEach((c, idx) => {
+      visiblePopularCourses.slice(0, 4).forEach((c, idx) => {
         const actKey = 'course_sug_' + idx;
         window._searchActionMap[actKey] = () => {
           closeGlobalSearch();
-          if (typeof renderPage === 'function') renderPage('materials');
-          if (typeof setActiveSubjectMaterials === 'function') setActiveSubjectMaterials(c.id);
+          if (typeof openSubjectMaterials === 'function') {
+            openSubjectMaterials(c.id);
+          } else {
+            if (typeof setActiveSubjectMaterials === 'function') setActiveSubjectMaterials(c.id);
+            if (typeof renderPage === 'function') renderPage('materials');
+          }
         };
 
         html += `
