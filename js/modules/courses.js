@@ -2317,8 +2317,12 @@ function handleCourseClick(courseId) {
 }
 
 function openSubjectMaterials(courseId) {
+  const userSec = CURRENT_PROFILE?.section ? CURRENT_PROFILE.section.split(',')[0].trim() : 'Section Serenity';
   if (typeof setActiveSubjectMaterials === 'function') {
-    setActiveSubjectMaterials(courseId);
+    setActiveSubjectMaterials(courseId, userSec, false);
+  }
+  if (typeof setSubjectSubTab === 'function') {
+    setSubjectSubTab('modules');
   }
 
   // Highlight "My Materials" in sidebar
@@ -2327,7 +2331,9 @@ function openSubjectMaterials(courseId) {
     else item.classList.remove('active');
   });
 
-  renderPage('materials');
+  if (typeof renderPage === 'function') {
+    renderPage('materials');
+  }
 }
 
 function renderCoursesWidgetHTML() {

@@ -410,7 +410,8 @@ let expandedModuleMap = {}; // { [docId]: boolean }
 
 function setActiveSubjectMaterials(courseId, section, shouldRender = true) {
   activeSubjectFilter = courseId || null;
-  activeSubjectSection = (courseId && section) ? section : null;
+  const userSec = CURRENT_PROFILE?.section ? CURRENT_PROFILE.section.split(',')[0].trim() : 'Section Serenity';
+  activeSubjectSection = (courseId && section) ? section : (courseId ? userSec : null);
   window.activeSubjectFilter = activeSubjectFilter;
   window.activeSubjectSection = activeSubjectSection;
   activeSubjectSubTab = 'modules';
@@ -421,6 +422,53 @@ function setActiveSubjectMaterials(courseId, section, shouldRender = true) {
 window.setActiveSubjectMaterials = setActiveSubjectMaterials;
 window.activeSubjectFilter = null;
 window.activeSubjectSection = null;
+
+function openDashboardMaterial(materialId, courseId, subject, section) {
+  let targetCourse = null;
+  const courseList = (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE)) ? COURSES_DATABASE : [];
+  const allMats = (typeof materialsData !== 'undefined' && Array.isArray(materialsData)) ? materialsData : [];
+  const mat = materialId ? allMats.find(m => String(m.id) === String(materialId)) : null;
+
+  const effCourseId = courseId || mat?.course_id || mat?.courseId;
+  const effSubject = subject || mat?.subject;
+
+  if (effCourseId) {
+    targetCourse = courseList.find(c => String(c.id).toLowerCase() === String(effCourseId).toLowerCase() || String(c.code).toLowerCase() === String(effCourseId).toLowerCase());
+  }
+  if (!targetCourse && effSubject && typeof isMaterialMatchingCourse === 'function') {
+    targetCourse = courseList.find(c => isMaterialMatchingCourse(mat || { subject: effSubject }, c));
+  }
+  if (!targetCourse && effSubject) {
+    const sLow = String(effSubject).toLowerCase().trim();
+    targetCourse = courseList.find(c => {
+      const cTitle = (c.title || '').toLowerCase().trim();
+      const cCode = (c.code || '').toLowerCase().trim();
+      return cTitle === sLow || cCode === sLow || cTitle.includes(sLow) || sLow.includes(cTitle);
+    });
+  }
+
+  const cId = targetCourse ? targetCourse.id : (effCourseId || (courseList[0]?.id || null));
+  const userSec = CURRENT_PROFILE?.section ? CURRENT_PROFILE.section.split(',')[0].trim() : 'Section Serenity';
+  const sec = (section && section !== 'All') ? section : ((mat?.section && mat.section !== 'All') ? mat.section : userSec);
+
+  if (cId && typeof setActiveSubjectMaterials === 'function') {
+    setActiveSubjectMaterials(cId, sec, false);
+  }
+  if (typeof setSubjectSubTab === 'function') {
+    const isCurriculum = mat?.is_curriculum === true;
+    setSubjectSubTab(isCurriculum ? 'modules' : 'uploads');
+  }
+
+  document.querySelectorAll('.menu-item').forEach(item => {
+    if (item.dataset.page === 'materials') item.classList.add('active');
+    else item.classList.remove('active');
+  });
+
+  if (typeof renderPage === 'function') {
+    renderPage('materials');
+  }
+}
+window.openDashboardMaterial = openDashboardMaterial;
 
 function openTeacherCreateQuizForSubject(subject, section) {
   const url = `quiz-maker.html?subject=${encodeURIComponent(subject || '')}&section=${encodeURIComponent(section || '')}`;

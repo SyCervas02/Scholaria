@@ -2546,7 +2546,7 @@ function studentPage(page) {
                   const tagLabel = anc.category === 'emergency' ? 'SUSPENSION / EMERGENCY' : anc.category === 'academic' ? 'ACADEMIC' : anc.category === 'event' ? 'SCHOOL EVENTS' : 'ANNOUNCEMENT';
 
                   return `
-                    <div class="news-bulletin-item" onclick="openAnnouncementDetailModal('${anc.id}')" style="cursor:pointer;" title="Click to read announcement">
+                    <div class="news-bulletin-item" onclick="if(typeof openDashboardAnnouncement==='function') openDashboardAnnouncement('${anc.id}'); else { renderPage('announcements'); if(typeof openAnnouncementDetailModal==='function') openAnnouncementDetailModal('${anc.id}'); }" style="cursor:pointer;" title="Click to read announcement">
                       <span class="dashboard-news-icon ${tagClass}">${dashboardIcon(anc.category === 'academic' ? 'book' : 'news')}</span>
                       <div class="news-item-top">
                         <span class="news-tag ${tagClass}">${tagLabel}</span>
@@ -3300,10 +3300,10 @@ function teacherPage(page) {
       const pendingEntries = demo ? [] : [
         ...(typeof customQuizzes !== 'undefined' ? customQuizzes : [])
           .filter(q => q && String(q.status || '').toLowerCase() === 'pending' && q.createdBy && [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId, CURRENT_PROFILE?.school_id].includes(q.createdBy))
-          .map(q => ({ title: q.title, sub: `${q.subject || 'General'} · Quiz`, date: q.createdAt, page: 'quiz', svg: iconQuiz(), courseId: '' })),
+          .map(q => ({ title: q.title, sub: `${q.subject || 'General'} · Quiz`, date: q.createdAt, page: 'quiz', svg: iconQuiz(), isQuiz: true, id: q.id })),
         ...(Array.isArray(materialsData) ? materialsData : [])
           .filter(m => m && String(m.status || '').toLowerCase() === 'pending' && !String(m.id).startsWith('local_') && (!m.uploaded_by || [CURRENT_PROFILE?.id, CURRENT_PROFILE?.dbId].includes(m.uploaded_by)))
-          .map(m => ({ title: m.title, sub: `${m.subject || 'General'} · Handout`, date: m.created_at, page: 'materials', svg: iconRecord(), courseId: m.course_id || '' }))
+          .map(m => ({ title: m.title, sub: `${m.subject || 'General'} · Handout`, date: m.created_at, page: 'materials', svg: iconRecord(), isQuiz: false, id: m.id, courseId: m.course_id || '', subject: m.subject || '', section: m.section || '' }))
       ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0)).slice(0, 4);
       const pending = demo ? [
         ['Research Essay (Final Draft)','General Mathematics - Grade 11 - STEM',8,'Feb 2, 2025'],
@@ -3311,12 +3311,21 @@ function teacherPage(page) {
         ['Group Project Report','Research in Daily Life - Grade 11 - STEM',2,'Feb 4, 2025'],
         ['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM',4,'Feb 5, 2025']
       ].map(r=>row(r[0],r[1],`<b>${r[2]}</b> submissions<small>Due: ${r[3]}</small>`)).join('') : (pendingEntries.length
-        ? pendingEntries.map(p => row(p.title, p.sub, '<em>Pending</em>', 'orange', p.svg, p.page, p.courseId || '')).join('')
+        ? pendingEntries.map(p => {
+            const clickAttr = p.isQuiz
+              ? `renderPage('quiz'); if(typeof openQuizQuestionsPreview==='function' && '${escHtml(p.id)}') openQuizQuestionsPreview('${escHtml(p.id)}');`
+              : `if(typeof openDashboardMaterial==='function') openDashboardMaterial('${escHtml(p.id)}', '${escHtml(p.courseId || '')}', '${escHtml(p.subject || '')}', '${escHtml(p.section || '')}'); else renderPage('materials');`;
+            return `<button type="button" class="td-row" onclick="${clickAttr}">${icon(p.svg, 'orange')}<span class="td-row-copy"><strong>${escHtml(p.title)}</strong><small>${escHtml(p.sub)}</small></span><span class="td-row-side"><em>Pending</em></span></button>`;
+          }).join('')
         : empty('No submissions awaiting review.'));
-      const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m=>row(m.title,m.subject||'',escHtml(m.status||''),'purple',iconRecord(),'materials',m.course_id||'')).join('') || empty('No materials uploaded yet.');
+      const recent = demo ? [['Quadratic Functions - Handout','General Mathematics'],['Research Title Examples','Research in Daily Life'],['Filipino Culture and Identity','Komunikasyon at Pananaliksik'],['Data Gathering Methods','Research in Daily Life']].map((m,i)=>row(m[0],m[1],`<em>Published</em><small>Jan ${30-i*2}, 2025</small>`,'purple',iconRecord(),'materials')).join('') : materials.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,4).map(m => {
+        return `<button type="button" class="td-row" onclick="if(typeof openDashboardMaterial==='function') openDashboardMaterial('${escHtml(m.id || '')}', '${escHtml(m.course_id || '')}', '${escHtml(m.subject || '')}', '${escHtml(m.section || '')}'); else renderPage('materials');">${icon(iconFolder(), 'purple')}<span class="td-row-copy"><strong>${escHtml(m.title)}</strong><small>${escHtml(m.subject||'')}</small></span><span class="td-row-side">${escHtml(m.status||'')}</span></button>`;
+      }).join('') || empty('No materials uploaded yet.');
       const classNews = news.filter(n => n.category === 'academic' || n.category === 'emergency');
       const latestClassNews = [...classNews, ...news.filter(n => !['academic', 'emergency', 'event'].includes(n.category))];
-      const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : latestClassNews.slice(0,4).map(n=>row(n.title,n.message||'',date(n.timestamp),'pink',iconAnnouncement(),'announcements')).join('') || empty('No class announcements yet.');
+      const announcements = demo ? [['Reminder: Quiz 2 Next Week','General Mathematics - Please review chapters 3 and 4.'],['Group Project Guidelines','Research in Daily Life - Updated guidelines are now available.'],['Submission Extension','Deadline moved to Feb 5, 2025.'],['Class Consultation','Available this Friday, 1:00-3:00 PM (Rm. 302).']].map((n,i)=>row(n[0],n[1],`Jan ${30-i*2}, 2025`,'orange',iconAnnouncement(),'announcements')).join('') : latestClassNews.slice(0,4).map(n => {
+        return `<button type="button" class="td-row" onclick="if(typeof openDashboardAnnouncement==='function') openDashboardAnnouncement('${escHtml(n.id || '')}'); else { renderPage('announcements'); if(typeof openAnnouncementDetailModal==='function') openAnnouncementDetailModal('${escHtml(n.id || '')}'); }">${icon(iconAnnouncement(), 'pink')}<span class="td-row-copy"><strong>${escHtml(n.title)}</strong><small>${escHtml(n.message||'')}</small></span><span class="td-row-side">${date(n.timestamp)}</span></button>`;
+      }).join('') || empty('No class announcements yet.');
       const sections = (demo ? ['Grade 11 - STEM','Grade 11 - HUMSS'] : teacherAssignedSections).map((s,i)=>row(s,demo?(i?'Komunikasyon at Pananaliksik':'General Mathematics'):'Handled class',`${demo?(i?36:32)+' students - ':''}View Class`,'blue',iconUsers(),'classrec')).join('') || empty('No class sections assigned yet.');
       const assessments = demo ? [['Quiz 2 - Quadratic Functions','General Mathematics - Grade 11 - STEM'],['Essay: Role of Media in Society','Komunikasyon at Pananaliksik - Grade 11 - HUMSS'],['Quiz 1 - 21st Century Literature','Research in Daily Life - Grade 11 - STEM']].map(q=>row(q[0],q[1],'<em>Ongoing</em>')).join('') : active.slice(0,3).map(q=>row(q.title,q.subject||q.meta||'','<em>Ongoing</em>')).join('') || empty('No active quizzes right now.');
       const eventItems = demo ? [
@@ -3324,8 +3333,13 @@ function teacherPage(page) {
         {title:'Submission of Quarter 3 Grades',detail:'Faculty',when:'All Day',date:'2025-02-07'},
         {title:'Parent-Teacher Conference',detail:'Grade 11 Level',when:'1:00 PM - 4:00 PM',date:'2025-02-10'},
         {title:'Foundation Day',detail:'Whole School',when:'All Day',date:'2025-02-14'}
-      ] : news.filter(n=>n.category==='event').map(n=>({title:n.title,detail:n.message||'',when:n.event_time||n.eventTime||'Event',date:n.event_date||n.eventDate||n.timestamp})).filter(n=>new Date(n.date)>=new Date(new Date().setHours(0,0,0,0))).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,4);
-      const events = eventItems.map(e=>{const d=new Date(/^\d{4}-\d{2}-\d{2}$/.test(e.date)?e.date+'T00:00:00':e.date);const valid=!Number.isNaN(d.getTime());return `<button type="button" class="td-event" onclick="${go('announcements')}"><span class="td-event-date"><small>${valid?d.toLocaleDateString('en-US',{month:'short'}):''}</small><strong>${valid?d.getDate():''}</strong></span><span><strong>${escHtml(e.title)}</strong><small>${escHtml(e.detail)}</small><small>${escHtml(e.when)}</small></span></button>`;}).join('') || empty('No upcoming school events scheduled.');
+      ] : news.filter(n=>n.category==='event').map(n=>({id:n.id,title:n.title,detail:n.message||'',when:n.event_time||n.eventTime||'Event',date:n.event_date||n.eventDate||n.timestamp})).filter(n=>new Date(n.date)>=new Date(new Date().setHours(0,0,0,0))).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,4);
+      const events = eventItems.map(e=>{
+        const d=new Date(/^\d{4}-\d{2}-\d{2}$/.test(e.date)?e.date+'T00:00:00':e.date);
+        const valid=!Number.isNaN(d.getTime());
+        const clickAttr = e.id ? `if(typeof openDashboardAnnouncement==='function') openDashboardAnnouncement('${escHtml(e.id)}'); else renderPage('announcements');` : `renderPage('announcements');`;
+        return `<button type="button" class="td-event" onclick="${clickAttr}"><span class="td-event-date"><small>${valid?d.toLocaleDateString('en-US',{month:'short'}):''}</small><strong>${valid?d.getDate():''}</strong></span><span><strong>${escHtml(e.title)}</strong><small>${escHtml(e.detail)}</small><small>${escHtml(e.when)}</small></span></button>`;
+      }).join('') || empty('No upcoming school events scheduled.');
       return `<div class="teacher-reference-dashboard">
         <section class="td-hero"><div><h1>WELCOME BACK</h1><h2>Haven of Wisdom Academy - Teacher Portal</h2><p>Here's what needs your attention today.</p></div><img src="assets/dashboard-books.svg" alt=""/><blockquote>&ldquo; Teaching is a work of heart.<br>Thank you for making a difference<br>in every student's journey. &rdquo;</blockquote></section>
         <div class="td-metrics">${metrics.map(m=>`<button type="button" class="td-metric td-${m[5]}" onclick="${go(m[3])}">${icon(m[4],m[5])}<span><span class="td-label">${m[0]}</span><strong${m[0] === 'Unread Messages' ? ' id="teacherUnreadMessageCount"' : ''}>${m[1]}</strong><small>${m[2]}</small></span></button>`).join('')}</div>
@@ -5683,14 +5697,6 @@ function renderPage(page) {
   currentPage = page;
   window.currentPage = page;
   try { sessionStorage.setItem(`scholaria_active_page_${ROLE || 'user'}`, page); } catch (_) {}
-  if (page === 'materials') {
-    if (typeof setActiveSubjectMaterials === 'function') {
-      setActiveSubjectMaterials(null, null, false);
-    } else {
-      window.activeSubjectFilter = null;
-      window.activeSubjectSection = null;
-    }
-  }
   document.querySelectorAll('.menu-item').forEach(i => {
     if (i.dataset.page === page) i.classList.add('active');
     else i.classList.remove('active');

@@ -362,6 +362,18 @@ function closeEmergencyHotlinesModal() {
   if (modal) modal.classList.remove('active');
 }
 
+function openDashboardAnnouncement(id) {
+  if (typeof renderPage === 'function') {
+    renderPage('announcements');
+  }
+  if (id && typeof openAnnouncementDetailModal === 'function') {
+    setTimeout(() => {
+      openAnnouncementDetailModal(id);
+    }, 20);
+  }
+}
+window.openDashboardAnnouncement = openDashboardAnnouncement;
+
 function openAnnouncementDetailModal(id) {
   const all = getStoredAnnouncements();
   const anc = all.find(a => String(a.id) === String(id));
