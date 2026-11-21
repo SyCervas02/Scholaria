@@ -1942,6 +1942,7 @@ function getStudentDashboardSubjects(tab = 'enrolled') {
   const grade = gradeNumber(CURRENT_PROFILE?.grade_level || CURRENT_PROFILE?.gradeLevel);
   return COURSES_DATABASE.filter(course => {
     if (!isCourseAssignedToStudent(course, CURRENT_PROFILE)) return false;
+    if (typeof isSubjectArchived === 'function' && isSubjectArchived(course.title, course.strand, course.gradeLevel || course.grade_level)) return false;
     const courseGrade = gradeNumber(course.gradeLevel);
     const completed = course.status === 'completed' || (grade && courseGrade && courseGrade < grade);
     if (tab === 'completed') return Boolean(completed);

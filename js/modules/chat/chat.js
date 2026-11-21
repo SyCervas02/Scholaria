@@ -1443,6 +1443,17 @@ async function sendChatRawMessage(text) {
 
   // 2. Direct database insert fallback
   if (!sentData) {
+    // Never let the fallback bypass moderation: the server is the authority on
+    // mute state, but an API outage must not become a mute escape hatch.
+    if (CURRENT_PROFILE.permanently_muted || (CURRENT_PROFILE.muted_until && new Date(CURRENT_PROFILE.muted_until) > new Date())) {
+      if (box) {
+        const failedBubble = box.querySelector(`[data-mid="${tempId}"]`);
+        if (failedBubble) failedBubble.remove();
+      }
+      await refreshOwnMuteStatus();
+      renderInputArea();
+      return;
+    }
     const { data: directMsg, error: directErr } = await db
       .from('messages')
       .insert({

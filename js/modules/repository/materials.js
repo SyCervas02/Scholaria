@@ -162,8 +162,9 @@ const SUBJECTS_BY_STRAND_AND_GRADE = {
 
 /* ── CURRICULUM SUBJECT ARCHIVE SYSTEM ── */
 const ARCHIVED_SUBJECTS_STORAGE_KEY = 'scholaria_archived_subjects_v1';
+let sharedArchivedSubjects = null;
 
-function getArchivedSubjectsList() {
+function readArchivedSubjectsCache() {
   try {
     const raw = localStorage.getItem(ARCHIVED_SUBJECTS_STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
@@ -172,35 +173,104 @@ function getArchivedSubjectsList() {
   }
 }
 
+function getArchivedSubjectsList() {
+  if (Array.isArray(sharedArchivedSubjects)) return sharedArchivedSubjects;
+  return readArchivedSubjectsCache();
+}
+
 function saveArchivedSubjectsList(list) {
+  sharedArchivedSubjects = list;
   try {
     localStorage.setItem(ARCHIVED_SUBJECTS_STORAGE_KEY, JSON.stringify(list));
   } catch (e) {}
+  if (typeof ROLE !== 'undefined' && ROLE === 'admin') persistArchivedSubjectsToServer(list);
 }
+
+async function persistArchivedSubjectsToServer(list) {
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session?.access_token) return;
+    const response = await fetch(`${API_BASE}/api/curriculum-subjects/archived`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ archives: list })
+    });
+    if (!response.ok) console.warn('Archived subjects could not be synced to the server.');
+  } catch (err) {
+    console.warn('Archived subjects could not be synced to the server:', err.message);
+  }
+}
+
+async function loadSharedCurriculumArchive() {
+  try {
+    const { data: { session } } = await db.auth.getSession();
+    if (!session?.access_token) return;
+    const response = await fetch(`${API_BASE}/api/curriculum-subjects/archived`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: 'no-store'
+    });
+    if (!response.ok) return;
+    const payload = await response.json();
+    const serverList = Array.isArray(payload.archives) ? payload.archives : [];
+    const localList = readArchivedSubjectsCache();
+    // First run after upgrading: keep archives that only exist in this browser
+    // and seed the shared copy with them.
+    if (!payload.updatedAt && localList.length && !serverList.length) {
+      sharedArchivedSubjects = localList;
+      if (typeof ROLE !== 'undefined' && ROLE === 'admin') persistArchivedSubjectsToServer(localList);
+      return;
+    }
+    sharedArchivedSubjects = serverList;
+    try {
+      localStorage.setItem(ARCHIVED_SUBJECTS_STORAGE_KEY, JSON.stringify(serverList));
+    } catch (e) {}
+  } catch (err) {
+    console.warn('Archived subjects could not be loaded:', err.message);
+  }
+}
+window.loadSharedCurriculumArchive = loadSharedCurriculumArchive;
 
 function isSubjectArchived(title, strand, gradeLevel) {
   if (!title) return false;
   const list = getArchivedSubjectsList();
   if (!list.length) return false;
   const tNorm = String(title).trim().toLowerCase();
-  const sNorm = strand ? String(strand).trim().toUpperCase() : '';
+  const sTokens = String(strand || '').toUpperCase().split(/[,/&]+/).map(s => s.trim()).filter(Boolean);
   const gNorm = gradeLevel ? String(gradeLevel).trim() : '';
+  const strandMatches = itemStrand => {
+    const itemTokens = String(itemStrand || '').toUpperCase().split(/[,/&]+/).map(s => s.trim()).filter(s => s && s !== 'ALL');
+    if (!sTokens.length || !itemTokens.length) return true;
+    return itemTokens.some(token => sTokens.includes(token));
+  };
 
   return list.some(item => {
     if (typeof item === 'string') {
       const iNorm = item.trim().toLowerCase();
       if (iNorm === tNorm) return true;
-      if (sNorm && gNorm && iNorm === `${sNorm}::${gNorm}::${tNorm}`.toLowerCase()) return true;
+      if (sTokens.length && gNorm && iNorm === `${sTokens[0]}::${gNorm}::${tNorm}`.toLowerCase()) return true;
       return false;
     }
     const itemTitle = String(item.title || '').trim().toLowerCase();
     if (itemTitle !== tNorm) return false;
-    if (sNorm && item.strand && item.strand !== 'all' && item.strand.toUpperCase() !== sNorm) return false;
+    if (!strandMatches(item.strand)) return false;
     if (gNorm && item.gradeLevel && item.gradeLevel !== 'all' && item.gradeLevel !== gNorm) return false;
     return true;
   });
 }
 window.isSubjectArchived = isSubjectArchived;
+
+function splitSubjectStrands(strandValue, strandsList) {
+  const raw = Array.isArray(strandsList) && strandsList.length ? strandsList : String(strandValue || '').split(/[,/&]+/);
+  return [...new Set(raw.map(s => String(s || '').trim().toUpperCase()).filter(Boolean))]
+    .filter(s => s !== 'ALL' && s !== 'ALL STRANDS' && s !== 'GENERAL');
+}
+
+function subjectStrandMatches(courseStrand, strandsList, targetStrand) {
+  const courseTokens = splitSubjectStrands(courseStrand, strandsList);
+  const targetTokens = splitSubjectStrands(targetStrand);
+  if (!courseTokens.length || !targetTokens.length) return true;
+  return targetTokens.some(token => courseTokens.includes(token));
+}
 
 function getFilteredSubjects(strand, gradeLevel) {
   let targetStrands = [];
@@ -978,12 +1048,13 @@ function renderMaterialsList(role) {
   }
   let enrolledCourses = (typeof COURSES_DATABASE !== 'undefined')
     ? (role === 'teacher'
-        ? (materialsStrandFilter ? COURSES_DATABASE.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase()) : COURSES_DATABASE.slice())
+        ? (materialsStrandFilter ? COURSES_DATABASE.filter(c => subjectStrandMatches(c.strand, c.strands, materialsStrandFilter)) : COURSES_DATABASE.slice())
         : COURSES_DATABASE.filter(c => typeof isCourseAssignedToStudent === 'function'
             ? isCourseAssignedToStudent(c, CURRENT_PROFILE)
             : (c.strand || '').toUpperCase() === studentStrand &&
               String(c.gradeLevel || '').match(/\d+/)?.[0] === String(CURRENT_PROFILE?.grade_level || CURRENT_PROFILE?.gradeLevel || '').match(/\d+/)?.[0]))
     : [];
+  enrolledCourses = enrolledCourses.filter(c => !isSubjectArchived(c.title, c.strand, c.gradeLevel));
 
   if (role === 'teacher' && typeof materialsStrandFilter !== 'undefined' && materialsStrandFilter) {
     enrolledCourses = enrolledCourses.filter(c => (c.strand || '').toUpperCase() === materialsStrandFilter.toUpperCase());
@@ -1800,9 +1871,13 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
     const officialTitles = (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined' && SUBJECTS_BY_STRAND_AND_GRADE[secStrand]?.[secGrade])
       ? SUBJECTS_BY_STRAND_AND_GRADE[secStrand][secGrade].filter(title => !isSubjectArchived(title, secStrand, secGrade))
       : [];
-    const customSubjects = currentRole === 'admin' 
-      ? getCustomMaterialsSubjects().filter(c => c.strand === secStrand && c.gradeLevel === secGrade && c.section === sec && !isSubjectArchived(c.title, c.strand, c.gradeLevel)) 
-      : [];
+    const customSubjects = getCustomMaterialsSubjects().filter(c => {
+      if (!subjectStrandMatches(c.strand, c.strands, secStrand)) return false;
+      if (String(c.gradeLevel || c.grade_level || '').trim() !== secGrade) return false;
+      const sections = String(c.section || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+      if (sections.length && !sections.includes(sec.toLowerCase()) && !sections.includes('all sections')) return false;
+      return !isSubjectArchived(c.title, c.strand, c.gradeLevel || c.grade_level);
+    });
     const subjectTitles = [...officialTitles, ...customSubjects.map(c => c.title).filter(title => !officialTitles.some(t => t.toLowerCase() === title.toLowerCase()))];
 
     if (subjectTitles.length > 0) {
@@ -1851,7 +1926,7 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
       });
     } else {
       // Fallback in case of custom strand
-      (courses || []).forEach(course => {
+      (courses || []).filter(course => !isSubjectArchived(course.title, course.strand, course.gradeLevel)).forEach(course => {
         let secCode = course.code || 'SUBJ-1101';
         classCards.push({
           ...course,
@@ -1872,14 +1947,72 @@ function getTeacherHandledClassCards(courses, currentRole = (typeof ROLE !== 'un
 }
 
 const CUSTOM_MATERIALS_SUBJECTS_KEY = 'scholaria_custom_materials_subjects';
+
+function mergeCurriculumSubjectRows(rows) {
+  const groups = new Map();
+  (rows || []).forEach(row => {
+    if (!row) return;
+    const title = String(row.title || '').trim();
+    if (!title) return;
+    const gradeLevel = String(row.grade_level || row.gradeLevel || 'Grade 11').trim();
+    const code = String(row.code || '').trim();
+    const key = `${code.toLowerCase()}::${gradeLevel.toLowerCase()}::${title.toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, { rows: [], strands: [], sections: [] });
+    const group = groups.get(key);
+    group.rows.push(row);
+    splitSubjectStrands(row.strand, row.strands).forEach(st => {
+      if (!group.strands.includes(st)) group.strands.push(st);
+    });
+    const section = String(row.section || '').trim();
+    if (section && !group.sections.includes(section)) group.sections.push(section);
+  });
+  return [...groups.values()].map(group => {
+    const first = group.rows[0];
+    const strands = group.strands.length ? group.strands : splitSubjectStrands(first.strand);
+    const tracks = [...new Set(group.rows.map(r => String(r.track || '').trim()).filter(Boolean))];
+    const covers = group.rows.map(r => r.cover).filter(Boolean);
+    const gradeLevel = String(first.grade_level || first.gradeLevel || 'Grade 11').trim();
+    const track = tracks[0] || first.track || 'Specialized';
+    return {
+      ...first,
+      id: first.id,
+      courseIds: [...new Set(group.rows.flatMap(r => (Array.isArray(r.courseIds) && r.courseIds.length) ? r.courseIds : (r.id ? [r.id] : [])))],
+      gradeLevel,
+      strand: strands.join(', ') || 'General',
+      strands,
+      track,
+      section: group.sections.join(', '),
+      description: `${gradeLevel} ${strands.join('/')} ${track} subject.`,
+      isCustomSubject: true,
+      cover: covers[0] || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80'
+    };
+  });
+}
+
 function getCustomMaterialsSubjects() {
   let localSubjects = [];
   try { localSubjects = JSON.parse(localStorage.getItem(CUSTOM_MATERIALS_SUBJECTS_KEY) || '[]'); }
   catch (_) {}
+  if (!Array.isArray(localSubjects)) localSubjects = [];
   const sharedSubjects = (typeof COURSES_DATABASE !== 'undefined' && Array.isArray(COURSES_DATABASE))
     ? COURSES_DATABASE.filter(course => course.isCustomSubject)
     : [];
-  return [...localSubjects, ...sharedSubjects.filter(shared => !localSubjects.some(local => local.id === shared.id))];
+  return mergeCurriculumSubjectRows([...localSubjects, ...sharedSubjects]);
+}
+
+function upsertCustomCourseSubject(subject) {
+  if (typeof COURSES_DATABASE === 'undefined' || !Array.isArray(COURSES_DATABASE) || !subject) return;
+  const ids = Array.isArray(subject.courseIds) ? subject.courseIds : [];
+  const index = COURSES_DATABASE.findIndex(course =>
+    (course.id && ids.includes(course.id)) ||
+    course.id === subject.id ||
+    (course.isCustomSubject &&
+      String(course.code || '').toLowerCase() === String(subject.code || '').toLowerCase() &&
+      String(course.gradeLevel || '').trim() === subject.gradeLevel &&
+      String(course.title || '').trim().toLowerCase() === String(subject.title || '').trim().toLowerCase())
+  );
+  if (index === -1) COURSES_DATABASE.push(subject);
+  else COURSES_DATABASE[index] = { ...COURSES_DATABASE[index], ...subject };
 }
 
 async function loadSharedCurriculumSubjects() {
@@ -1891,43 +2024,43 @@ async function loadSharedCurriculumSubjects() {
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || 'Unable to load subjects');
-  payload.forEach(row => {
-    const subject = {
-      ...row,
-      id: row.id,
-      gradeLevel: row.grade_level,
-      isCustomSubject: true,
-      cover: row.cover || 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80'
-    };
-    const index = COURSES_DATABASE.findIndex(course => course.id === subject.id);
-    if (index === -1) COURSES_DATABASE.push(subject);
-    else COURSES_DATABASE[index] = { ...COURSES_DATABASE[index], ...subject };
-  });
+  // One admin subject can be stored as one row per strand; merge those rows so
+  // the platform shows a single subject that targets every selected strand.
+  mergeCurriculumSubjectRows(Array.isArray(payload) ? payload : []).forEach(upsertCustomCourseSubject);
 }
 window.loadSharedCurriculumSubjects = loadSharedCurriculumSubjects;
 
 function openAddSubjectModal() {
   if (ROLE !== 'admin') return;
-  const sections = (typeof managedSections !== 'undefined' && Array.isArray(managedSections))
-    ? managedSections.filter(s => !s.isArchived).map(s => s.name)
-    : (typeof SECTIONS !== 'undefined' && Array.isArray(SECTIONS) ? SECTIONS : []);
-  const sectionOptions = (sections.length ? sections : ['Section A', 'Section B']).map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
   closeAddSubjectModal();
-  const html = `<div class="modal-overlay active" id="addSubjectModal" onclick="if(event.target===this)closeAddSubjectModal()"><form class="modal-card" onsubmit="saveCustomMaterialsSubject(event)" style="max-width:560px" onclick="event.stopPropagation()"><div class="modal-head"><div><h3 style="margin:0">Add Subject</h3><span>Add a subject to the master curriculum repository.</span></div><button type="button" class="modal-x" aria-label="Close" onclick="closeAddSubjectModal()">&times;</button></div><div class="modal-body"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject name<input name="title" required maxlength="100" placeholder="e.g. Practical Research 1" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject code<input name="code" required maxlength="30" placeholder="e.g. PR1-1101" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Grade level<select name="gradeLevel" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option value="Grade 11">Grade 11</option><option value="Grade 12">Grade 12</option></select></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Strand<select name="strand" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option>STEM</option><option>HUMSS</option><option>ABM</option><option>TVL</option></select></label></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Track<select name="track" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option>Core</option><option>Applied</option><option>Specialized</option><option>Elective</option></select></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Section<select name="section" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px">${sectionOptions}</select></label></div></div><div class="modal-foot" style="justify-content:flex-end"><button type="button" class="foot-btn-secondary" onclick="closeAddSubjectModal()">Cancel</button><button type="submit" class="add-btn" style="background:#4338ca;color:white">Add Subject</button></div></form></div>`;
+  const strandChoices = ['STEM', 'HUMSS', 'ABM', 'TVL'].map(st => `<label style="display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border:1.5px solid #cbd5e1;border-radius:999px;font-size:12.5px;font-weight:700;color:#334155;cursor:pointer;background:#fff;">
+      <input type="checkbox" name="strands" value="${st}" style="accent-color:#4338ca;width:14px;height:14px;"> ${st}
+    </label>`).join('');
+  const html = `<div class="modal-overlay active" id="addSubjectModal" onclick="if(event.target===this)closeAddSubjectModal()"><form class="modal-card" onsubmit="saveCustomMaterialsSubject(event)" style="max-width:560px" onclick="event.stopPropagation()"><div class="modal-head"><div><h3 style="margin:0">Add Subject</h3><span>Add a subject to the master curriculum repository.</span></div><button type="button" class="modal-x" aria-label="Close" onclick="closeAddSubjectModal()">&times;</button></div><div class="modal-body"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject name<input name="title" required maxlength="100" placeholder="e.g. Practical Research 1" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Subject code<input name="code" required maxlength="30" placeholder="e.g. PR1-1101" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;box-sizing:border-box"></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Grade level<select name="gradeLevel" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option value="Grade 11">Grade 11</option><option value="Grade 12">Grade 12</option></select></label><label style="display:grid;gap:6px;font-size:13px;font-weight:700">Track<select name="track" required style="padding:10px;border:1px solid #cbd5e1;border-radius:9px"><option>Core</option><option>Applied</option><option>Specialized</option><option>Elective</option></select></label></div><div style="display:grid;gap:8px;font-size:13px;font-weight:700;">Strands <span style="font-weight:500;color:#64748b;font-size:12px;">(select every strand this subject applies to)</span><div id="addSubjectStrands" style="display:flex;gap:8px;flex-wrap:wrap;">${strandChoices}</div><span style="font-size:11.5px;font-weight:500;color:#94a3b8;">Students and teachers in the selected strands will see this subject. Handouts uploaded to a specific section stay limited to that section.</span></div></div><div class="modal-foot" style="justify-content:flex-end"><button type="button" class="foot-btn-secondary" onclick="closeAddSubjectModal()">Cancel</button><button type="submit" class="add-btn" style="background:#4338ca;color:white">Add Subject</button></div></form></div>`;
   document.body.insertAdjacentHTML('beforeend', html);
 }
 function closeAddSubjectModal() { document.getElementById('addSubjectModal')?.remove(); }
 async function saveCustomMaterialsSubject(event) {
   event.preventDefault();
   const submitButton = event.currentTarget.querySelector('[type="submit"]');
+  const resetButton = () => {
+    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Add Subject'; }
+  };
   if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Saving…'; }
   const form = event.currentTarget;
-  const values = Object.fromEntries(new FormData(form).entries());
+  const formData = new FormData(form);
+  const values = Object.fromEntries(formData.entries());
+  const strands = formData.getAll('strands').map(v => String(v || '').trim().toUpperCase()).filter(Boolean);
+  if (!strands.length) {
+    if (typeof showToast === 'function') showToast('Select at least one strand for this subject.', 'error');
+    resetButton();
+    return;
+  }
   const subjects = getCustomMaterialsSubjects();
-  if (subjects.some(s => s.code.toLowerCase() === values.code.trim().toLowerCase() && s.section === values.section)) {
-    if (typeof showToast === 'function') showToast('A subject with this code already exists in that section.', 'error');
-    else alert('A subject with this code already exists in that section.');
-    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Add Subject'; }
+  if (subjects.some(s => String(s.code || '').toLowerCase() === values.code.trim().toLowerCase() && String(s.gradeLevel || '').trim() === values.gradeLevel)) {
+    if (typeof showToast === 'function') showToast('A subject with this code already exists for that grade.', 'error');
+    else alert('A subject with this code already exists for that grade.');
+    resetButton();
     return;
   }
   try {
@@ -1936,19 +2069,35 @@ async function saveCustomMaterialsSubject(event) {
     const response = await fetch(`${API_BASE}/api/curriculum-subjects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ title: values.title.trim(), code: values.code.trim(), gradeLevel: values.gradeLevel, strand: values.strand, track: values.track, section: values.section })
+      body: JSON.stringify({ title: values.title.trim(), code: values.code.trim(), gradeLevel: values.gradeLevel, track: values.track, strands })
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'Unable to add subject.');
-    const subject = { ...payload, gradeLevel: payload.grade_level, isCustomSubject: true, cover: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80' };
-    if (typeof COURSES_DATABASE !== 'undefined' && !COURSES_DATABASE.some(course => course.id === subject.id)) COURSES_DATABASE.push(subject);
+    const rows = Array.isArray(payload.subjects) ? payload.subjects : (payload.id ? [payload] : []);
+    if (!rows.length) throw new Error('The subject could not be saved.');
+    if (payload.local_only) {
+      try {
+        const localRows = JSON.parse(localStorage.getItem(CUSTOM_MATERIALS_SUBJECTS_KEY) || '[]');
+        const list = Array.isArray(localRows) ? localRows : [];
+        rows.forEach(row => {
+          const normalized = { ...row, gradeLevel: row.grade_level || row.gradeLevel };
+          const existing = list.findIndex(item => String(item.code || '').toLowerCase() === String(normalized.code || '').toLowerCase() && String(item.strand || '').toUpperCase() === String(normalized.strand || '').toUpperCase() && String(item.gradeLevel || item.grade_level || '') === String(normalized.gradeLevel || ''));
+          if (existing >= 0) list[existing] = normalized;
+          else list.push(normalized);
+        });
+        localStorage.setItem(CUSTOM_MATERIALS_SUBJECTS_KEY, JSON.stringify(list));
+      } catch (_) {}
+    }
+    const subject = mergeCurriculumSubjectRows(rows)[0];
+    upsertCustomCourseSubject(subject);
     closeAddSubjectModal();
-    renderPage('materials');
-    if (typeof showToast === 'function') showToast('Subject added and shared with matching students.', 'success');
+    if (typeof renderPage === 'function') renderPage('materials');
+    const skipped = Array.isArray(payload.skipped) && payload.skipped.length ? ` (already existed for ${payload.skipped.join(', ')})` : '';
+    if (typeof showToast === 'function') showToast(`Subject added for ${strands.join(', ')}${skipped}.`, 'success');
   } catch (error) {
     if (typeof showToast === 'function') showToast(error.message || 'Unable to add subject.', 'error');
     else alert(error.message || 'Unable to add subject.');
-    if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Add Subject'; }
+    resetButton();
   }
 }
 window.openAddSubjectModal = openAddSubjectModal;
@@ -1960,60 +2109,62 @@ const archiveSubjectModalState = {
   strand: 'all',
   grade: 'all',
   tab: 'all',
-  search: ''
+  search: '',
+  rows: []
 };
 
 function getAllCurriculumSubjectsList() {
-  const subjects = [];
-  const seen = new Set();
+  const groups = new Map();
+  const addRow = row => {
+    const title = String(row.title || '').trim();
+    if (!title) return;
+    const gradeLevel = String(row.gradeLevel || row.grade_level || 'Grade 11').trim();
+    const key = `${gradeLevel.toLowerCase()}::${title.toLowerCase()}`;
+    if (!groups.has(key)) groups.set(key, { title, gradeLevel, strands: [], tracks: [], codes: [], ids: [], isOfficial: false });
+    const group = groups.get(key);
+    splitSubjectStrands(row.strand, row.strands).forEach(st => {
+      if (!group.strands.includes(st)) group.strands.push(st);
+    });
+    const track = String(row.track || '').trim();
+    if (track && !group.tracks.includes(track)) group.tracks.push(track);
+    const code = String(row.code || '').trim();
+    if (code && !group.codes.includes(code)) group.codes.push(code);
+    if (row.id) group.ids.push(row.id);
+    if (row.isOfficial) group.isOfficial = true;
+  };
 
   if (typeof SUBJECTS_BY_STRAND_AND_GRADE !== 'undefined') {
     ['STEM', 'HUMSS', 'ABM', 'TVL'].forEach(st => {
       const grades = SUBJECTS_BY_STRAND_AND_GRADE[st] || {};
       ['Grade 11', 'Grade 12'].forEach(gr => {
         (grades[gr] || []).forEach(title => {
-          const key = `${st}::${gr}::${title.toLowerCase().trim()}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            const isArch = isSubjectArchived(title, st, gr);
-            const track = (typeof getTrackForSubjectTitle === 'function') ? getTrackForSubjectTitle(title, st) : 'Core';
-            subjects.push({
-              title,
-              strand: st,
-              gradeLevel: gr,
-              track,
-              isOfficial: true,
-              isArchived: isArch
-            });
-          }
+          const track = (typeof getTrackForSubjectTitle === 'function') ? getTrackForSubjectTitle(title, st) : 'Core';
+          addRow({ title, strand: st, gradeLevel: gr, track, isOfficial: true });
         });
       });
     });
   }
 
   const custom = (typeof getCustomMaterialsSubjects === 'function') ? getCustomMaterialsSubjects() : [];
-  custom.forEach(c => {
-    const st = c.strand || 'General';
-    const gr = c.gradeLevel || c.grade_level || 'Grade 11';
-    const key = `${st}::${gr}::${(c.title || '').toLowerCase().trim()}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      const isArch = isSubjectArchived(c.title, st, gr);
-      subjects.push({
-        id: c.id,
-        title: c.title,
-        code: c.code,
-        strand: st,
-        gradeLevel: gr,
-        track: c.track || 'Specialized',
-        section: c.section,
-        isOfficial: false,
-        isArchived: isArch
-      });
-    }
-  });
+  custom.forEach(c => addRow({ ...c, strand: c.strand, strands: c.strands, gradeLevel: c.gradeLevel || c.grade_level }));
 
-  return subjects;
+  const strandOrder = ['STEM', 'HUMSS', 'ABM', 'TVL'];
+  return [...groups.values()].map(group => {
+    const strands = group.strands.slice().sort((a, b) => strandOrder.indexOf(a) - strandOrder.indexOf(b));
+    return {
+      title: group.title,
+      gradeLevel: group.gradeLevel,
+      strands: strands.length ? strands : ['General'],
+      strand: strands.join(', ') || 'General',
+      tracks: group.tracks.length ? group.tracks : ['Core'],
+      track: group.tracks.join(' / ') || 'Core',
+      codes: group.codes,
+      code: group.codes.join(', '),
+      ids: group.ids,
+      isOfficial: group.isOfficial,
+      isArchived: isSubjectArchived(group.title, '', group.gradeLevel)
+    };
+  });
 }
 
 function openArchiveSubjectModal() {
@@ -2078,36 +2229,36 @@ function setArchiveSubjectSearch(val) {
 function toggleArchiveSubject(title, strand, gradeLevel, shouldArchive) {
   let list = getArchivedSubjectsList();
   const tNorm = String(title).trim().toLowerCase();
-  const sNorm = strand ? String(strand).trim().toUpperCase() : '';
   const gNorm = gradeLevel ? String(gradeLevel).trim() : '';
-  const fullKey = `${sNorm}::${gNorm}::${tNorm}`;
+  // Subjects are archived as a single unit across every strand, so the stored
+  // entry intentionally has no strand value.
+  const fullKey = `::${gNorm}::${tNorm}`;
 
   if (shouldArchive) {
     const exists = list.some(item => {
       if (typeof item === 'string') return item.toLowerCase() === fullKey.toLowerCase() || item.toLowerCase() === tNorm;
-      return (item.title || '').toLowerCase() === tNorm && (!item.strand || item.strand === sNorm) && (!item.gradeLevel || item.gradeLevel === gNorm);
+      return (item.title || '').trim().toLowerCase() === tNorm && (!item.gradeLevel || item.gradeLevel === 'all' || item.gradeLevel === gNorm);
     });
     if (!exists) {
       list.push({
         key: fullKey,
         title,
-        strand: sNorm,
+        strand: '',
         gradeLevel: gNorm,
         archived_at: new Date().toISOString()
       });
       saveArchivedSubjectsList(list);
     }
-    if (typeof showToast === 'function') showToast(`"${title}" (${sNorm} · ${gNorm}) archived. It will no longer appear in future assignments.`, 'info');
+    if (typeof showToast === 'function') showToast(`"${title}" (${gNorm}) archived for all strands. It will no longer appear for students or teachers.`, 'info');
   } else {
     list = list.filter(item => {
       if (typeof item === 'string') return item.toLowerCase() !== fullKey.toLowerCase() && item.toLowerCase() !== tNorm;
-      const matchTitle = (item.title || '').toLowerCase() === tNorm;
-      const matchStrand = !item.strand || item.strand === 'all' || item.strand.toUpperCase() === sNorm;
+      const matchTitle = (item.title || '').trim().toLowerCase() === tNorm;
       const matchGrade = !item.gradeLevel || item.gradeLevel === 'all' || item.gradeLevel === gNorm;
-      return !(matchTitle && matchStrand && matchGrade);
+      return !(matchTitle && matchGrade);
     });
     saveArchivedSubjectsList(list);
-    if (typeof showToast === 'function') showToast(`"${title}" (${sNorm} · ${gNorm}) restored to active curriculum.`, 'success');
+    if (typeof showToast === 'function') showToast(`"${title}" (${gNorm}) restored to the active curriculum.`, 'success');
   }
 
   renderArchiveSubjectModalContent();
@@ -2115,6 +2266,15 @@ function toggleArchiveSubject(title, strand, gradeLevel, shouldArchive) {
   if (typeof renderMaterialsContainer === 'function') renderMaterialsContainer();
   if (typeof applyTeacherClassFilter === 'function') applyTeacherClassFilter();
 }
+
+function toggleArchiveSubjectRow(index, shouldArchive) {
+  const row = (archiveSubjectModalState.rows || [])[index];
+  if (!row) return;
+  archiveSubjectModalState.page = archiveSubjectModalState.page || 1;
+  toggleArchiveSubject(row.title, '', row.gradeLevel, shouldArchive);
+}
+window.toggleArchiveSubjectRow = toggleArchiveSubjectRow;
+window.toggleArchiveSubject = toggleArchiveSubject;
 
 function renderArchiveSubjectModalContent() {
   const body = document.getElementById('archiveSubjectModalBody');
@@ -2130,18 +2290,19 @@ function renderArchiveSubjectModalContent() {
   const q = archiveSubjectModalState.search;
 
   let filtered = allSubjects.filter(s => {
-    if (currentStrand !== 'all' && s.strand !== currentStrand) return false;
+    if (currentStrand !== 'all' && !(s.strands || []).includes(currentStrand)) return false;
     if (currentGrade !== 'all' && s.gradeLevel !== currentGrade) return false;
     if (currentTab === 'active' && s.isArchived) return false;
     if (currentTab === 'archived' && !s.isArchived) return false;
     if (q) {
-      const haystack = `${s.title} ${s.code || ''} ${s.strand} ${s.gradeLevel} ${s.track || ''}`.toLowerCase();
+      const haystack = `${s.title} ${s.code || ''} ${(s.strands || []).join(' ')} ${s.gradeLevel} ${s.track || ''}`.toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;
   });
 
   filtered.sort((a, b) => a.title.localeCompare(b.title));
+  archiveSubjectModalState.rows = filtered;
 
   body.innerHTML = `
     <!-- NOTICE BANNER -->
@@ -2202,7 +2363,7 @@ function renderArchiveSubjectModalContent() {
           </tr>
         </thead>
         <tbody>
-          ${filtered.length > 0 ? filtered.map(s => {
+          ${filtered.length > 0 ? filtered.map((s, idx) => {
             return `
               <tr style="border-bottom:1px solid #f1f5f9;${s.isArchived ? 'background:#fffafa;' : ''}">
                 <td style="padding:10px 14px;">
@@ -2210,11 +2371,15 @@ function renderArchiveSubjectModalContent() {
                   ${s.code ? `<div style="font-size:11px;color:#94a3b8;font-family:monospace;">${escHtml(s.code)}</div>` : ''}
                 </td>
                 <td style="padding:10px 14px;">
-                  <span style="background:#e0f2fe;color:#0369a1;font-weight:700;font-size:11px;padding:2px 8px;border-radius:6px;">${escHtml(s.strand)}</span>
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    ${(s.strands || ['General']).map(st => `<span style="background:#e0f2fe;color:#0369a1;font-weight:700;font-size:11px;padding:2px 8px;border-radius:6px;">${escHtml(st)}</span>`).join('')}
+                  </div>
                 </td>
                 <td style="padding:10px 14px;font-weight:600;color:#334155;">${escHtml(s.gradeLevel)}</td>
                 <td style="padding:10px 14px;">
-                  <span style="font-size:11.5px;color:#64748b;background:#f1f5f9;padding:2px 6px;border-radius:4px;">${escHtml(s.track || 'Core')}</span>
+                  <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                    ${(s.tracks || [s.track || 'Core']).map(track => `<span style="font-size:11.5px;color:#64748b;background:#f1f5f9;padding:2px 6px;border-radius:4px;">${escHtml(track)}</span>`).join('')}
+                  </div>
                 </td>
                 <td style="padding:10px 14px;">
                   ${s.isArchived ? `
@@ -2229,11 +2394,11 @@ function renderArchiveSubjectModalContent() {
                 </td>
                 <td style="padding:10px 14px;text-align:right;">
                   ${s.isArchived ? `
-                    <button type="button" onclick="toggleArchiveSubject('${escHtml(s.title)}', '${escHtml(s.strand)}', '${escHtml(s.gradeLevel)}', false)" style="background:#ecfdf5;color:#047857;border:1.5px solid #a7f3d0;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                    <button type="button" onclick="toggleArchiveSubjectRow(${idx}, false)" style="background:#ecfdf5;color:#047857;border:1.5px solid #a7f3d0;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
                       ↺ Restore
                     </button>
                   ` : `
-                    <button type="button" onclick="toggleArchiveSubject('${escHtml(s.title)}', '${escHtml(s.strand)}', '${escHtml(s.gradeLevel)}', true)" style="background:#fff1f2;color:#be123c;border:1.5px solid #fecdd3;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                    <button type="button" onclick="toggleArchiveSubjectRow(${idx}, true)" style="background:#fff1f2;color:#be123c;border:1.5px solid #fecdd3;padding:5px 12px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
                       📦 Archive
                     </button>
                   `}
@@ -2261,7 +2426,6 @@ window.setArchiveSubjectFilterStrand = setArchiveSubjectFilterStrand;
 window.setArchiveSubjectFilterGrade = setArchiveSubjectFilterGrade;
 window.setArchiveSubjectFilterTab = setArchiveSubjectFilterTab;
 window.setArchiveSubjectSearch = setArchiveSubjectSearch;
-window.toggleArchiveSubject = toggleArchiveSubject;
 window.renderArchiveSubjectModalContent = renderArchiveSubjectModalContent;
 
 
@@ -3950,6 +4114,535 @@ function downloadSubjectPdf(courseId, docId) {
   downloadMaterial(docId);
 }
 
+// ── Inline PowerPoint preview ─────────────────────────────────────────────
+// PPTX files are ZIP archives, so the deck can be rendered locally from the
+// same bytes the download button serves. No external viewer iframe needed.
+const PPTX_NS_P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+const PPTX_NS_A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+const PPTX_NS_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const PPTX_EMU_PER_PX = 9525;
+const PPTX_SCHEME_COLORS = {
+  tx1: '#000000', dk1: '#000000', tx2: '#44546a', dk2: '#44546a',
+  bg1: '#ffffff', lt1: '#ffffff', bg2: '#e7e6e6', lt2: '#e7e6e6',
+  accent1: '#4472c4', accent2: '#ed7d31', accent3: '#a5a5a5',
+  accent4: '#ffc000', accent5: '#5b9bd5', accent6: '#70ad47',
+  hlink: '#0563c1', folHlink: '#954f72'
+};
+
+function pptxParseXml(text) {
+  return new DOMParser().parseFromString(text, 'application/xml');
+}
+
+function pptxAll(root, ns, name) {
+  return root ? Array.from(root.getElementsByTagNameNS(ns, name)) : [];
+}
+
+function pptxFirst(root, ns, name) {
+  return root ? (root.getElementsByTagNameNS(ns, name)[0] || null) : null;
+}
+
+function pptxNum(el, attr, fallback) {
+  if (!el) return fallback;
+  const n = parseFloat(el.getAttribute(attr));
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function pptxNsAttr(el, attr) {
+  if (!el) return '';
+  return el.getAttributeNS(PPTX_NS_R, attr) || el.getAttribute('r:' + attr) || '';
+}
+
+function pptxResolvePath(baseDir, target) {
+  const out = [];
+  `${baseDir}/${target || ''}`.split('/').forEach(part => {
+    if (!part || part === '.') return;
+    if (part === '..') { out.pop(); return; }
+    out.push(part);
+  });
+  return out.join('/');
+}
+
+async function pptxReadRels(zip, path) {
+  const map = {};
+  const file = zip.file(path);
+  if (!file) return map;
+  const xml = pptxParseXml(await file.async('text'));
+  Array.from(xml.getElementsByTagName('Relationship')).forEach(rel => {
+    map[rel.getAttribute('Id')] = { target: rel.getAttribute('Target') || '' };
+  });
+  return map;
+}
+
+let PPTX_ACTIVE_COLORS = PPTX_SCHEME_COLORS;
+
+async function pptxLoadThemeColors(zip) {
+  const colors = Object.assign({}, PPTX_SCHEME_COLORS);
+  const file = zip.file('ppt/theme/theme1.xml');
+  if (file) {
+    const xml = pptxParseXml(await file.async('text'));
+    const scheme = xml.getElementsByTagNameNS(PPTX_NS_A, 'clrScheme')[0];
+    if (scheme) {
+      Array.from(scheme.children).forEach(slot => {
+        const srgb = slot.getElementsByTagNameNS(PPTX_NS_A, 'srgbClr')[0];
+        const sys = slot.getElementsByTagNameNS(PPTX_NS_A, 'sysClr')[0];
+        const hex = srgb
+          ? '#' + (srgb.getAttribute('val') || '')
+          : (sys ? '#' + (sys.getAttribute('lastClr') || '000000') : '');
+        if (hex) colors[slot.localName] = hex;
+      });
+    }
+  }
+  colors.tx1 = colors.dk1 || colors.tx1;
+  colors.bg1 = colors.lt1 || colors.bg1;
+  colors.tx2 = colors.dk2 || colors.tx2;
+  colors.bg2 = colors.lt2 || colors.bg2;
+  return colors;
+}
+
+function pptxColorFromNode(node) {
+  // `node` is a colour element: a:srgbClr / a:schemeClr / a:sysClr.
+  if (!node) return '';
+  let hex = '';
+  if (node.localName === 'srgbClr') hex = '#' + (node.getAttribute('val') || '');
+  else if (node.localName === 'schemeClr') hex = PPTX_ACTIVE_COLORS[node.getAttribute('val')] || '';
+  else if (node.localName === 'sysClr') hex = '#' + (node.getAttribute('lastClr') || '000000');
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return '';
+  const rgb = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  const lumMod = pptxNum(pptxFirst(node, PPTX_NS_A, 'lumMod'), 'val', 100000) / 100000;
+  const lumOff = pptxNum(pptxFirst(node, PPTX_NS_A, 'lumOff'), 'val', 0) / 100000;
+  if (lumMod !== 1 || lumOff !== 0) {
+    for (let i = 0; i < 3; i++) rgb[i] = Math.max(0, Math.min(255, Math.round(rgb[i] * lumMod + 255 * lumOff)));
+  }
+  const alpha = pptxNum(pptxFirst(node, PPTX_NS_A, 'alpha'), 'val', 100000) / 100000;
+  if (alpha < 1) return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${Math.max(0, alpha).toFixed(3)})`;
+  return hex;
+}
+
+function pptxSolidColor(el) {
+  if (!el) return '';
+  const fill = pptxFirst(el, PPTX_NS_A, 'solidFill');
+  if (fill && fill.children.length) return pptxColorFromNode(fill.children[0]);
+  if (['srgbClr', 'schemeClr', 'sysClr'].includes(el.localName)) return pptxColorFromNode(el);
+  return '';
+}
+
+async function pptxMediaDataUrl(zip, path, cache) {
+  if (!path) return '';
+  if (cache.has(path)) return cache.get(path);
+  const job = (async () => {
+    let url = '';
+    const file = zip.file(path);
+    if (file) {
+      const ext = (path.split('.').pop() || '').toLowerCase();
+      const mime = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+        bmp: 'image/bmp', svg: 'image/svg+xml', webp: 'image/webp'
+      }[ext] || 'image/png';
+      url = `data:${mime};base64,${await file.async('base64')}`;
+    }
+    return url;
+  })();
+  cache.set(path, job);
+  return job;
+}
+
+function pptxParagraphHtml(p, fontScale, defaultColor) {
+  const pPr = p.firstElementChild && p.firstElementChild.localName === 'pPr' ? p.firstElementChild : null;
+  const aligned = { l: 'left', ctr: 'center', r: 'right', just: 'justify' }[(pPr && pPr.getAttribute('algn')) || ''] || '';
+  const hasBullet = !!(pPr && (pptxFirst(pPr, PPTX_NS_A, 'buChar') || pptxFirst(pPr, PPTX_NS_A, 'buAutoNum')));
+  const runs = [];
+  let baseSz = 0;
+  Array.from(p.children).forEach(child => {
+    if (child.namespaceURI !== PPTX_NS_A) return;
+    if (child.localName === 'r' || child.localName === 'fld') {
+      const t = pptxFirst(child, PPTX_NS_A, 't');
+      const rPr = pptxFirst(child, PPTX_NS_A, 'rPr');
+      const sz = pptxNum(rPr, 'sz', 0);
+      if (!baseSz && sz) baseSz = sz;
+      runs.push({
+        text: t ? t.textContent : '',
+        sz,
+        bold: rPr && rPr.getAttribute('b') === '1',
+        italic: rPr && rPr.getAttribute('i') === '1',
+        color: rPr ? pptxSolidColor(rPr) : ''
+      });
+    } else if (child.localName === 'br') {
+      runs.push({ br: true });
+    }
+  });
+  if (!baseSz) baseSz = pptxNum(pptxFirst(p, PPTX_NS_A, 'endParaRPr'), 'sz', 1800);
+  const toPx = sz => Math.max(6, (sz / 100) * (96 / 72) * fontScale);
+  const inner = runs.map(run => {
+    if (run.br) return '<br>';
+    if (!run.text) return '';
+    const color = run.color || defaultColor;
+    const styles = [];
+    if (run.bold) styles.push('font-weight:700');
+    if (run.italic) styles.push('font-style:italic');
+    if (color) styles.push(`color:${color}`);
+    if (run.sz && run.sz !== baseSz) styles.push(`font-size:${toPx(run.sz).toFixed(1)}px`);
+    return styles.length ? `<span style="${styles.join(';')}">${escHtml(run.text)}</span>` : escHtml(run.text);
+  }).join('');
+  return `<div style="font-size:${toPx(baseSz).toFixed(1)}px;line-height:1.28;white-space:pre-wrap;${aligned ? `text-align:${aligned};` : ''}${defaultColor ? `color:${defaultColor};` : ''}">${hasBullet ? '• ' : ''}${inner || '&nbsp;'}</div>`;
+}
+
+function pptxTextLayer(node) {
+  const txBody = pptxFirst(node, PPTX_NS_P, 'txBody');
+  if (!txBody) return '';
+  const style = pptxFirst(node, PPTX_NS_P, 'style');
+  const defaultColor = style ? pptxSolidColor(pptxFirst(style, PPTX_NS_A, 'fontRef')) : '';
+  const bodyPr = pptxFirst(txBody, PPTX_NS_A, 'bodyPr');
+  const anchor = (bodyPr && bodyPr.getAttribute('anchor')) || 't';
+  const autofit = pptxFirst(bodyPr, PPTX_NS_A, 'normAutofit');
+  const fontScale = autofit ? Math.min(1, pptxNum(autofit, 'fontScale', 100000) / 100000) : 1;
+  const justify = { t: 'flex-start', ctr: 'center', b: 'flex-end', dist: 'space-between' }[anchor] || 'flex-start';
+  const ins = {
+    t: pptxNum(bodyPr, 'tIns', 45720) / PPTX_EMU_PER_PX,
+    r: pptxNum(bodyPr, 'rIns', 91440) / PPTX_EMU_PER_PX,
+    b: pptxNum(bodyPr, 'bIns', 45720) / PPTX_EMU_PER_PX,
+    l: pptxNum(bodyPr, 'lIns', 91440) / PPTX_EMU_PER_PX
+  };
+  const paragraphs = Array.from(txBody.children)
+    .filter(c => c.namespaceURI === PPTX_NS_A && c.localName === 'p')
+    .map(p => pptxParagraphHtml(p, fontScale, defaultColor))
+    .join('');
+  return `<div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:${justify};padding:${ins.t}px ${ins.r}px ${ins.b}px ${ins.l}px;overflow:hidden;">${paragraphs}</div>`;
+}
+
+function pptxShapeRect(node, xf) {
+  const xfrm = node.localName === 'graphicFrame'
+    ? Array.from(node.children).find(c => c.namespaceURI === PPTX_NS_P && c.localName === 'xfrm') || null
+    : pptxFirst(pptxFirst(node, PPTX_NS_P, 'spPr'), PPTX_NS_A, 'xfrm');
+  const off = pptxFirst(xfrm, PPTX_NS_A, 'off');
+  const ext = pptxFirst(xfrm, PPTX_NS_A, 'ext');
+  if (!off || !ext) return null;
+  return {
+    x: xf.ox + pptxNum(off, 'x', 0) * xf.sx,
+    y: xf.oy + pptxNum(off, 'y', 0) * xf.sy,
+    w: pptxNum(ext, 'cx', 0) * xf.sx,
+    h: pptxNum(ext, 'cy', 0) * xf.sy,
+    rot: pptxNum(xfrm, 'rot', 0) / 60000
+  };
+}
+
+function pptxPlaceholderRect(node, slideW, slideH) {
+  const ph = pptxFirst(node, PPTX_NS_P, 'ph');
+  if (!ph) return null;
+  const type = ph.getAttribute('type') || 'body';
+  if (type === 'title' || type === 'ctrTitle') {
+    return { x: slideW * 0.07, y: slideH * 0.05, w: slideW * 0.86, h: slideH * 0.17, rot: 0 };
+  }
+  if (type === 'subTitle') {
+    return { x: slideW * 0.12, y: slideH * 0.3, w: slideW * 0.76, h: slideH * 0.33, rot: 0 };
+  }
+  return { x: slideW * 0.09, y: slideH * 0.27, w: slideW * 0.82, h: slideH * 0.6, rot: 0 };
+}
+
+function pptxCollectShapes(container, xf, out) {
+  if (!container) return out;
+  Array.from(container.children).forEach(node => {
+    if (node.namespaceURI !== PPTX_NS_P) return;
+    if (node.localName === 'grpSp') {
+      const xfrm = pptxFirst(node, PPTX_NS_A, 'xfrm');
+      const off = pptxFirst(xfrm, PPTX_NS_A, 'off');
+      const ext = pptxFirst(xfrm, PPTX_NS_A, 'ext');
+      const chOff = pptxFirst(xfrm, PPTX_NS_A, 'chOff');
+      const chExt = pptxFirst(xfrm, PPTX_NS_A, 'chExt');
+      let childXf = xf;
+      if (off && ext && chExt) {
+        const sx = xf.sx * (pptxNum(ext, 'cx', 1) / Math.max(1, pptxNum(chExt, 'cx', 1)));
+        const sy = xf.sy * (pptxNum(ext, 'cy', 1) / Math.max(1, pptxNum(chExt, 'cy', 1)));
+        const rot = pptxNum(xfrm, 'rot', 0) / 60000;
+        childXf = {
+          ox: xf.ox + pptxNum(off, 'x', 0) * xf.sx - pptxNum(chOff, 'x', 0) * sx,
+          oy: xf.oy + pptxNum(off, 'y', 0) * xf.sy - pptxNum(chOff, 'y', 0) * sy,
+          sx,
+          sy,
+          rot: (xf.rot || 0) + rot,
+          pivotX: xf.ox + (pptxNum(off, 'x', 0) + pptxNum(ext, 'cx', 0) / 2) * xf.sx,
+          pivotY: xf.oy + (pptxNum(off, 'y', 0) + pptxNum(ext, 'cy', 0) / 2) * xf.sy
+        };
+      }
+      pptxCollectShapes(node, childXf, out);
+      return;
+    }
+    if (node.localName === 'sp' || node.localName === 'pic' || node.localName === 'graphicFrame') {
+      out.push({ node, xf });
+    }
+  });
+  return out;
+}
+
+function pptxTableHtml(tbl) {
+  const rows = pptxAll(tbl, PPTX_NS_A, 'tr');
+  if (!rows.length) return '';
+  let fontSize = 0;
+  const body = rows.map(tr => {
+    const cells = Array.from(tr.children).filter(c => c.namespaceURI === PPTX_NS_A && c.localName === 'tc');
+    return `<tr>${cells.map(tc => {
+      const tcPr = pptxFirst(tc, PPTX_NS_A, 'tcPr');
+      const fill = pptxSolidColor(tcPr);
+      const span = Math.max(1, pptxNum(tcPr, 'gridSpan', 1));
+      if (!fontSize) {
+        const firstSz = pptxNum(pptxFirst(tc, PPTX_NS_A, 'rPr'), 'sz', 0);
+        fontSize = firstSz || 0;
+      }
+      const text = pptxAll(tc, PPTX_NS_A, 't').map(t => t.textContent).join(' ').trim();
+      return `<td${span > 1 ? ` colspan="${span}"` : ''} style="border:1px solid #b8c2cc;padding:6px 8px;vertical-align:middle;${fill ? `background:${fill};` : ''}">${escHtml(text)}</td>`;
+    }).join('')}</tr>`;
+  }).join('');
+  const px = fontSize ? Math.max(8, (fontSize / 100) * (96 / 72)) : 16;
+  return `<table style="width:100%;height:100%;border-collapse:collapse;table-layout:fixed;font-size:${px.toFixed(1)}px;color:#1e293b;">${body}</table>`;
+}
+
+async function pptxSlideCanvasHtml(zip, slideText, rels, mediaCache, slideW, slideH) {
+  const xml = pptxParseXml(slideText);
+  const bg = pptxFirst(xml, PPTX_NS_P, 'bg');
+  const bgPr = pptxFirst(bg, PPTX_NS_P, 'bgPr');
+  const bgRef = pptxFirst(bg, PPTX_NS_P, 'bgRef');
+  const bgColor = (bgPr && pptxSolidColor(bgPr)) || (bgRef && pptxColorFromNode(bgRef.children[0])) || '#ffffff';
+  const spTree = pptxFirst(xml, PPTX_NS_P, 'spTree');
+  const shapes = pptxCollectShapes(spTree, { ox: 0, oy: 0, sx: 1, sy: 1 }, []);
+  const layers = [];
+
+  for (const { node, xf } of shapes) {
+    const rect = pptxShapeRect(node, xf) || pptxPlaceholderRect(node, slideW, slideH);
+    if (!rect || rect.w <= 0 || rect.h <= 0) continue;
+
+    const spPr = pptxFirst(node, PPTX_NS_P, 'spPr');
+    const ln = pptxFirst(spPr, PPTX_NS_A, 'ln');
+    const fill = pptxSolidColor(spPr);
+    const borderColor = pptxSolidColor(ln);
+    const borderPx = ln ? Math.max(1, pptxNum(ln, 'w', PPTX_EMU_PER_PX) / PPTX_EMU_PER_PX) : 0;
+    const prst = pptxFirst(pptxFirst(spPr, PPTX_NS_A, 'prstGeom'), PPTX_NS_A, 'prst');
+    const prstName = prst ? prst.getAttribute('prst') : '';
+    const radius = prstName === 'ellipse' ? '50%' : (prstName === 'roundRect' ? '12px' : '');
+    const totalRot = (xf.rot || 0) + (rect.rot || 0);
+    const rotStyle = totalRot ? `transform:rotate(${totalRot.toFixed(2)}deg);` : '';
+
+    let content = '';
+    const blip = pptxFirst(spPr, PPTX_NS_A, 'blip');
+    if (blip) {
+      const rel = rels[pptxNsAttr(blip, 'embed')];
+      const dataUrl = await pptxMediaDataUrl(zip, rel ? pptxResolvePath('ppt/slides', rel.target) : '', mediaCache);
+      if (dataUrl) {
+        content = `<img src="${dataUrl}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;display:block;" />`;
+      }
+      content += pptxTextLayer(node);
+    } else if (node.localName === 'pic') {
+      const rel = rels[pptxNsAttr(pptxFirst(node, PPTX_NS_A, 'blip'), 'embed')];
+      const mediaPath = rel ? pptxResolvePath('ppt/slides', rel.target) : '';
+      const dataUrl = await pptxMediaDataUrl(zip, mediaPath, mediaCache);
+      if (dataUrl) {
+        content = `<img src="${dataUrl}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;" />`;
+      }
+    } else if (node.localName === 'graphicFrame') {
+      const tbl = pptxFirst(node, PPTX_NS_A, 'tbl');
+      if (tbl) content = pptxTableHtml(tbl);
+    } else {
+      content = pptxTextLayer(node);
+    }
+    if (!content) continue;
+
+    let left = rect.x / PPTX_EMU_PER_PX;
+    let top = rect.y / PPTX_EMU_PER_PX;
+    const width = rect.w / PPTX_EMU_PER_PX;
+    const height = rect.h / PPTX_EMU_PER_PX;
+    if (xf.rot && Number.isFinite(xf.pivotX)) {
+      const cx = rect.x + rect.w / 2;
+      const cy = rect.y + rect.h / 2;
+      const rad = xf.rot * Math.PI / 180;
+      const dx = cx - xf.pivotX;
+      const dy = cy - xf.pivotY;
+      left = (xf.pivotX + dx * Math.cos(rad) - dy * Math.sin(rad)) / PPTX_EMU_PER_PX - width / 2;
+      top = (xf.pivotY + dx * Math.sin(rad) + dy * Math.cos(rad)) / PPTX_EMU_PER_PX - height / 2;
+    }
+
+    const style = [
+      'position:absolute',
+      `left:${left.toFixed(1)}px`,
+      `top:${top.toFixed(1)}px`,
+      `width:${width.toFixed(1)}px`,
+      `height:${height.toFixed(1)}px`,
+      fill ? `background:${fill}` : '',
+      borderColor ? `border:${borderPx.toFixed(2)}px solid ${borderColor}` : '',
+      radius ? `border-radius:${radius}` : '',
+      'box-sizing:border-box',
+      rotStyle
+    ].filter(Boolean).join(';');
+    layers.push(`<div style="${style}">${content}</div>`);
+  }
+
+  return `<div style="position:absolute;inset:0;background:${bgColor};overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;color:#1e293b;">${layers.join('')}</div>`;
+}
+
+function fitPptxFrames(scope) {
+  (scope || document).querySelectorAll('.pptx-frame').forEach(frame => {
+    const canvas = frame.querySelector('.pptx-canvas');
+    if (!canvas) return;
+    const w = parseFloat(frame.dataset.w) || 1280;
+    const h = parseFloat(frame.dataset.h) || 720;
+    const available = frame.clientWidth;
+    if (!available) return;
+    const k = available / w;
+    canvas.style.transform = `scale(${k})`;
+    frame.style.height = Math.round(h * k) + 'px';
+  });
+}
+
+if (typeof window !== 'undefined' && !window.__pptxFitBound) {
+  window.__pptxFitBound = true;
+  window.addEventListener('resize', () => fitPptxFrames(document));
+}
+
+function materialPreviewSpinnerHtml() {
+  return `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:360px;gap:12px;color:#64748b;">
+      <div style="width:36px;height:36px;border:3px solid #cbd5e1;border-top-color:#0284c7;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+      <p style="font-size:14px;font-weight:600;margin:0;">Loading document preview...</p>
+    </div>
+  `;
+}
+
+function materialPreviewFallbackHtml(m, title, fileType, note) {
+  return `
+    <div style="padding:48px 24px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;display:flex;flex-direction:column;align-items:center;gap:12px;">
+      <div style="width:54px;height:54px;border-radius:14px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:26px;">📁</div>
+      <h4 style="margin:0;font-size:17px;font-weight:700;color:#0f172a;">${escHtml(m.fileName || title)}</h4>
+      <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;">${note || `This document format (${fileType || 'Document'}) cannot be previewed inline in the browser. You can download the file to view it on your device.`}</p>
+      <button class="pf-save" onclick="downloadMaterial('${m.id}')" style="background:#0284c7;display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border-radius:8px;font-weight:600;margin-top:6px;cursor:pointer;">
+        <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download File to View
+      </button>
+    </div>
+  `;
+}
+
+async function fetchMaterialPreviewBytes(fileUrl) {
+  const res = await fetch(fileUrl);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.arrayBuffer();
+}
+
+async function renderPptxPreview(bodyEl, fileUrl, m, title) {
+  bodyEl.innerHTML = materialPreviewSpinnerHtml();
+  try {
+    if (typeof JSZip === 'undefined') throw new Error('JSZip is not available');
+    const zip = await JSZip.loadAsync(await fetchMaterialPreviewBytes(fileUrl));
+    PPTX_ACTIVE_COLORS = await pptxLoadThemeColors(zip);
+    const presFile = zip.file('ppt/presentation.xml');
+    if (!presFile) throw new Error('Not a PPTX package');
+    const pres = pptxParseXml(await presFile.async('text'));
+    const presRels = await pptxReadRels(zip, 'ppt/_rels/presentation.xml.rels');
+    const sldSz = pptxFirst(pres, PPTX_NS_P, 'sldSz');
+    const slideW = pptxNum(sldSz, 'cx', 12192000);
+    const slideH = pptxNum(sldSz, 'cy', 6858000);
+    const baseW = Math.round(slideW / PPTX_EMU_PER_PX);
+    const baseH = Math.round(slideH / PPTX_EMU_PER_PX);
+
+    let slidePaths = pptxAll(pres, PPTX_NS_P, 'sldId')
+      .map(sldId => {
+        const rel = presRels[pptxNsAttr(sldId, 'id')];
+        return rel ? pptxResolvePath('ppt', rel.target) : '';
+      })
+      .filter(p => p && zip.file(p));
+    if (!slidePaths.length) {
+      slidePaths = Object.keys(zip.files)
+        .filter(k => /^ppt\/slides\/slide\d+\.xml$/i.test(k))
+        .sort((a, b) => (parseInt(a.replace(/\D/g, ''), 10) || 0) - (parseInt(b.replace(/\D/g, ''), 10) || 0));
+    }
+    if (!slidePaths.length) throw new Error('No slides found');
+
+    const mediaCache = new Map();
+    const slides = await Promise.all(slidePaths.map(async (path, i) => {
+      const rels = await pptxReadRels(zip, path.replace(/([^/]+)$/, '_rels/$1.rels'));
+      const canvas = await pptxSlideCanvasHtml(
+        zip,
+        await zip.file(path).async('text'),
+        rels,
+        mediaCache,
+        slideW,
+        slideH
+      );
+      return `
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:11.5px;font-weight:700;color:#64748b;letter-spacing:0.4px;text-transform:uppercase;">Slide ${i + 1} of ${slidePaths.length}</div>
+          <div class="pptx-frame" data-w="${baseW}" data-h="${baseH}" style="position:relative;width:100%;max-width:900px;margin:0 auto;aspect-ratio:${baseW}/${baseH};background:#e2e8f0;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,0.08);">
+            <div class="pptx-canvas" style="position:absolute;top:0;left:0;width:${baseW}px;height:${baseH}px;transform-origin:top left;">${canvas}</div>
+          </div>
+        </div>
+      `;
+    }));
+
+    bodyEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#fff;padding:8px 14px;border-radius:8px;border:1px solid #e2e8f0;font-size:12.5px;color:#475569;">
+          <span style="font-weight:600;">📊 ${escHtml(m.fileName || title)} · ${slidePaths.length} slide${slidePaths.length === 1 ? '' : 's'}</span>
+          <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color:#0284c7;font-weight:600;text-decoration:none;">Open file ↗</a>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:18px;">${slides.join('')}</div>
+      </div>
+    `;
+    fitPptxFrames(bodyEl);
+    setTimeout(() => fitPptxFrames(bodyEl), 150);
+  } catch (err) {
+    console.warn('PPTX preview failed:', err);
+    bodyEl.innerHTML = materialPreviewFallbackHtml(
+      m,
+      title,
+      'PPTX',
+      'The slide deck could not be rendered inline. You can download the file to view it on your device.'
+    );
+  }
+}
+
+function sanitizeDocxHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const allowed = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I', 'U', 'BR', 'HR', 'A', 'IMG', 'SPAN', 'DIV', 'BLOCKQUOTE', 'PRE', 'CODE', 'SUP', 'SUB']);
+  Array.from(doc.body.querySelectorAll('*')).forEach(el => {
+    if (!allowed.has(el.tagName)) {
+      el.replaceWith(...el.childNodes);
+      return;
+    }
+    Array.from(el.attributes).forEach(attr => {
+      const name = attr.name.toLowerCase();
+      if (name === 'href' || name === 'src') {
+        if (!/^(https?:|mailto:|data:image\/)/i.test(attr.value.trim())) el.removeAttribute(attr.name);
+        return;
+      }
+      if (name !== 'alt' && name !== 'colspan' && name !== 'rowspan') el.removeAttribute(attr.name);
+    });
+    if (el.tagName === 'A') {
+      el.setAttribute('target', '_blank');
+      el.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  return doc.body.innerHTML;
+}
+
+async function renderDocxPreview(bodyEl, fileUrl, m, title) {
+  bodyEl.innerHTML = materialPreviewSpinnerHtml();
+  try {
+    if (typeof mammoth === 'undefined') throw new Error('mammoth is not available');
+    const result = await mammoth.convertToHtml({ arrayBuffer: await fetchMaterialPreviewBytes(fileUrl) });
+    const safeHtml = sanitizeDocxHtml(result.value || '');
+    if (!safeHtml.trim()) throw new Error('Empty document');
+    bodyEl.innerHTML = `
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:30px 36px;max-width:820px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;font-size:14.5px;line-height:1.65;color:#1e293b;box-shadow:0 2px 10px rgba(15,23,42,0.06);">
+        ${safeHtml}
+      </div>
+    `;
+  } catch (err) {
+    console.warn('DOCX preview failed:', err);
+    bodyEl.innerHTML = materialPreviewFallbackHtml(
+      m,
+      title,
+      'DOCX',
+      'The Word document could not be rendered inline. You can download the file to view it on your device.'
+    );
+  }
+}
+
 async function previewSubjectUploadedMaterial(id) {
   let m = materialsData.find(mat => String(mat.id) === String(id)) || 
             getCustomMaterialsFromStorage().find(mat => String(mat.id) === String(id)) ||
@@ -4046,6 +4739,18 @@ async function previewSubjectUploadedMaterial(id) {
 
   const isPdf = fileType.includes('pdf') || (m.fileName && m.fileName.toLowerCase().endsWith('.pdf')) || (m.title && m.title.toLowerCase().endsWith('.pdf')) || m.type === 'PDF';
   const isImage = fileType.includes('image') || /\.(jpe?g|png|gif|webp|svg)$/i.test(m.fileName || m.title || '');
+  const nameHint = m.fileName || m.title || '';
+  const isPptx = !isPdf && !isImage && (fileType.includes('presentation') || fileType.includes('powerpoint') || /\.(pptx|ppsx|potx)$/i.test(nameHint) || m.type === 'PPTX');
+  const isDocx = !isPdf && !isImage && !isPptx && (fileType.includes('wordprocessingml') || fileType.includes('msword') || /\.docx$/i.test(nameHint) || m.type === 'DOCX');
+
+  if (dlBtn) {
+    const label = isPptx ? 'PowerPoint Presentation'
+      : (isDocx ? 'Word Document'
+      : (isImage ? 'Image'
+      : (isPdf ? 'PDF Document' : 'File')));
+    const textNode = Array.from(dlBtn.childNodes).reverse().find(n => n.nodeType === 3);
+    if (textNode) textNode.textContent = ` Download ${label}`;
+  }
 
   if (!fileUrl && !serverMissing && (m.file_url || m.url)) {
     const candidate = String(m.file_url || m.url);
@@ -4082,18 +4787,12 @@ async function previewSubjectUploadedMaterial(id) {
         <img src="${fileUrl}" alt="${escHtml(title)}" style="max-width:100%;max-height:70vh;object-fit:contain;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,0.08);" />
       </div>
     `;
+  } else if (isPptx) {
+    await renderPptxPreview(bodyEl, fileUrl, m, title);
+  } else if (isDocx) {
+    await renderDocxPreview(bodyEl, fileUrl, m, title);
   } else {
-    bodyEl.innerHTML = `
-      <div style="padding:48px 24px;text-align:center;background:#fff;border-radius:12px;border:1px solid #e2e8f0;display:flex;flex-direction:column;align-items:center;gap:12px;">
-        <div style="width:54px;height:54px;border-radius:14px;background:#e0f2fe;color:#0284c7;display:flex;align-items:center;justify-content:center;font-size:26px;">📁</div>
-        <h4 style="margin:0;font-size:17px;font-weight:700;color:#0f172a;">${escHtml(m.fileName || title)}</h4>
-        <p style="margin:0;font-size:13px;color:#64748b;max-width:440px;">This document format (${fileType || 'Document'}) cannot be previewed inline in the browser. You can download the file to view it on your device.</p>
-        <button class="pf-save" onclick="downloadMaterial('${m.id}')" style="background:#0284c7;display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border-radius:8px;font-weight:600;margin-top:6px;cursor:pointer;">
-          <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2.5;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download File to View
-        </button>
-      </div>
-    `;
+    bodyEl.innerHTML = materialPreviewFallbackHtml(m, title, fileType);
   }
 }
 
@@ -4186,6 +4885,30 @@ function approvalIcon(name) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.file}</svg>`;
 }
 
+function materialDisplayType(m) {
+  const raw = String((m && (m.type || m.content_type || m.file_type)) || '').trim();
+  if (raw && !raw.includes('/')) return raw;
+  const mime = raw.toLowerCase();
+  const name = String((m && (m.fileName || m.file_url || m.title)) || '').toLowerCase();
+  const extMatch = name.match(/\.([a-z0-9]{2,5})(?:$|[?#])/);
+  const ext = extMatch ? extMatch[1].toUpperCase() : '';
+  if (mime.includes('presentation') || mime.includes('powerpoint')) return 'PPTX';
+  if (mime.includes('spreadsheet') || mime.includes('excel')) return 'XLSX';
+  if (mime.includes('word')) return 'DOCX';
+  if (mime.includes('pdf')) return 'PDF';
+  if (mime.startsWith('image/')) return 'IMAGE';
+  if (mime.startsWith('video/')) return 'VIDEO';
+  if (mime.startsWith('audio/')) return 'AUDIO';
+  if (mime.startsWith('text/')) return 'TEXT';
+  if (ext) return ext;
+  return raw ? 'FILE' : 'Material';
+}
+
+function materialDisplayTitle(m) {
+  const title = String((m && (m.title || m.fileName)) || '').trim() || 'Untitled Material';
+  return title.replace(/\.(pdf|doc|docx|ppt|pptx|xls|xlsx|txt|csv|zip|png|jpe?g|gif|mp4|mov|webp)$/i, '');
+}
+
 function approvalEntries() {
   const quizzes = typeof customQuizzes !== 'undefined' ? customQuizzes : [];
   const users = typeof registeredUsers !== 'undefined' ? registeredUsers : [];
@@ -4200,8 +4923,8 @@ function approvalEntries() {
       return {
         id: m.id,
         kind: 'material',
-        title: m.title || m.fileName || 'Untitled Material',
-        type: m.content_type || m.file_type || 'Material',
+        title: materialDisplayTitle(m),
+        type: materialDisplayType(m),
         subject: m.subject || 'General',
         name: resolveMaterialUploaderName(m),
         date: m.created_at,
